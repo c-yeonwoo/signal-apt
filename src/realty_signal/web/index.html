@@ -109,17 +109,39 @@ function renderZoneLegend(){
   });
 }
 
+const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#4ade80', WATCH:'#fbbf24',
+                  NEUTRAL:'#94a3b8', SELL_RISK:'#f87171'};
+
 async function selectRegion(region){
   selected = region; renderList();
   const r = allSignals.find(x => x.region===region);
   document.getElementById('sigbadge').innerHTML = `<b>${region}</b> ${badge(r.signal)}`;
-  document.getElementById('reasons').innerHTML =
-    (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join('');
+  document.getElementById('reasons').innerHTML = `최신 ${meta.last_date} 기준`;
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
-  drawChart(region, d.metrics);
+  drawChart(region, d.metrics, r);
 }
 
-function drawChart(region, m){
+function reasonGraphic(region, sig){
+  const reasons = (sig['근거']||'').split(' · ').filter(Boolean);
+  const head = `${region}  ▸  ${sig.signal}`;
+  const lines = reasons.map(x => '• ' + x);
+  const maxCh = Math.max(head.length, ...lines.map(l => l.length), 8);
+  const W = Math.min(380, Math.max(190, Math.round(maxCh * 8.2) + 22));
+  const H = 30 + lines.length * 17 + 12;
+  return [{
+    type:'group', left:56, top:30, z:100, silent:true,
+    children:[
+      {type:'rect', shape:{width:W, height:H, r:8},
+       style:{fill:'rgba(15,17,21,0.85)', stroke:'#2b3340', lineWidth:1}},
+      {type:'text', left:12, top:9,
+       style:{text:head, fill:SIGCOLOR[sig.signal]||'#fff', font:'bold 14px sans-serif'}},
+      {type:'text', left:12, top:32,
+       style:{text:lines.join('\n'), fill:'#cbd5e1', fontSize:11.5, lineHeight:17}},
+    ],
+  }];
+}
+
+function drawChart(region, m, sig){
   const colors = {jeonse_supply:"#38bdf8", buyer_superiority:"#a78bfa", buyer_demand:"#f472b6",
                   sale_change:"#fbbf24", jeonse_change:"#34d399"};
   const series = [];
@@ -158,6 +180,7 @@ function drawChart(region, m){
             { name:'증감%', splitLine:{show:false} } ],
     dataZoom:[ { type:'inside', startValue:z0, endValue:last },
                { type:'slider', startValue:z0, endValue:last, height:22, bottom:14 } ],
+    graphic: sig ? reasonGraphic(region, sig) : [],
     series
   }, true);
 }
