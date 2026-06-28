@@ -11,13 +11,45 @@ from pathlib import Path
 
 import pandas as pd
 
-from realty_signal.ingest import kb_datahub, kb_supply, kb_weekly
+from realty_signal import config
+from realty_signal.ingest import kb_datahub, kb_supply, kb_weekly, locality
 from realty_signal.ingest.kb_weekly import KBWeekly
 
 CACHE_DIR = Path("data/cache")
 CACHE_FILE = CACHE_DIR / "long.parquet"
 SUPPLY_FILE = CACHE_DIR / "supply.parquet"
 CODES_FILE = CACHE_DIR / "codes.json"
+LOCALITY_FILE = CACHE_DIR / "locality.parquet"
+
+
+def _recent_months(n: int = 3) -> list[str]:
+    """실거래 신고지연 감안, 직전 n개월 YYYYMM."""
+    from datetime import date
+
+    y, m = date.today().year, date.today().month
+    out = []
+    for _ in range(n):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        out.append(f"{y}{m:02d}")
+    return out
+
+
+def build_localities(out: Path = LOCALITY_FILE) -> "pd.DataFrame":
+    """수도권 시군구 입지·가격 수집 → 저평가 랭킹 캐시 (느림: 수 분, 외부 API)."""
+    config.load_env()
+    codes = json.loads(CODES_FILE.read_text(encoding="utf-8")) if CODES_FILE.exists() else {}
+    sg = {r: c for r, c in codes.items() if c and c.isdigit() and c[:2] in ("11", "41", "28")}
+    rows = locality.build_localities(sg, _recent_months(3))
+    df = pd.DataFrame(rows)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(out, index=False)
+    return df
+
+
+def load_localities(cache: Path = LOCALITY_FILE) -> "pd.DataFrame":
+    return pd.read_parquet(cache) if cache.exists() else pd.DataFrame()
 
 
 def _save(kb: KBWeekly, out: Path) -> KBWeekly:

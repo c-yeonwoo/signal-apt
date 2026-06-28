@@ -61,7 +61,7 @@
   .row.lv1 { padding-left:22px; } .row.lv2 { padding-left:38px; }
   .zsw { font-size:11px; padding:2px 8px; border-radius:10px; cursor:help; color:#0f1115; font-weight:600; }
   /* 경매 */
-  #view-auction { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
+  #view-auction, #view-undervalued { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#cbd5e1; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
@@ -98,6 +98,7 @@
   <div class="tabs">
     <button class="tab on" data-tab="signal" onclick="switchTab('signal')">📊 시그널</button>
     <button class="tab" data-tab="auction" onclick="switchTab('auction')">🔨 경매</button>
+    <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">💎 저평가</button>
   </div>
   <div class="right">
     <span class="date" id="date"></span>
@@ -171,6 +172,28 @@
   </div>
 </div>
 
+<!-- 저평가 탭 -->
+<div id="view-undervalued" style="display:none">
+  <div class="sec">
+    <h3>💎 저평가 지역 추천 — 입지(교통·학군·환경) 대비 가격</h3>
+    <p style="color:var(--dim);font-size:12px;margin:-2px 0 0">
+      업무지구(강남·광화문·여의도) 대중교통 소요시간 + 학원밀도 + 주거환경(공원·하천·마트)으로 <b>입지점수</b>를 만들고,
+      입지 대비 실제 평단가가 낮을수록 <b>저평가</b>. 산점도 회귀선(적정가) 아래 점이 저평가 지역입니다.
+      <i>※ 시군구 단위라 단지별 신축/구축 차이는 반영 안 됨 — 숏리스트용.</i></p>
+  </div>
+  <div id="uvchart" style="height:340px"></div>
+  <div class="sec" style="margin-top:14px">
+    <table>
+      <thead><tr>
+        <th class="l">지역</th><th>입지점수</th><th>평단가</th><th>적정가</th><th>저평가도</th>
+        <th>업무지구</th><th>학원수</th><th>공원</th>
+      </tr></thead>
+      <tbody id="uvRows"></tbody>
+    </table>
+    <p id="uvEmpty" style="color:var(--dim)"></p>
+  </div>
+</div>
+
 <dialog id="calcDlg" style="width:760px">
   <h3 id="calcTitle"></h3>
   <div id="calcBreak" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px"></div>
@@ -217,10 +240,56 @@ const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math
 function switchTab(t){
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
-  document.getElementById('view-signal').style.display = t==='signal'?'':'none';
-  document.getElementById('view-auction').style.display = t==='auction'?'':'none';
+  ['signal','auction','undervalued'].forEach(v=>
+    document.getElementById('view-'+v).style.display = v===t?'':'none');
   if(t==='signal') chart.resize();
   if(t==='auction') loadAuction();
+  if(t==='undervalued') loadUndervalued();
+}
+
+let uvChart;
+async function loadUndervalued(){
+  const d = await (await fetch('/api/undervalued')).json();
+  const tb = document.getElementById('uvRows'); tb.innerHTML='';
+  const empty = document.getElementById('uvEmpty');
+  if(!d.ready || !d.listings.length){
+    empty.textContent = '저평가 데이터가 아직 없습니다. 터미널에서 `signal localities` 를 실행하세요(수 분 소요).';
+    if(uvChart) uvChart.clear(); return;
+  }
+  empty.textContent='';
+  d.listings.forEach(r=>{
+    const uv=r['저평가도'], tr=document.createElement('tr');
+    tr.innerHTML = `<td class="l">${r.region} ${r['시그널']?badge(r['시그널']):''}</td>
+      <td>${r['입지점수']}</td><td>${won(r.price)}/평</td><td>${won(r['적정가'])}/평</td>
+      <td style="color:${uv>=0?'#4ade80':'#f87171'};font-weight:700">${uv>0?'+':''}${uv}%</td>
+      <td>${r['transit_min']??'–'}분</td><td>${r['school']}</td><td>${r['공원']}</td>`;
+    tb.appendChild(tr);
+  });
+  drawUvScatter(d.listings);
+}
+function drawUvScatter(rows){
+  if(!uvChart) uvChart = echarts.init(document.getElementById('uvchart'), 'dark');
+  // 라벨은 눈에 띄는 지역만(저평가 상위·고평가 상위) — 가운데 군집 겹침 방지
+  const sorted = [...rows].sort((a,b)=>b['저평가도']-a['저평가도']);
+  const notable = new Set([...sorted.slice(0,8), ...sorted.slice(-6)].map(r=>r.region));
+  const pts = rows.map(r=>({value:[r['입지점수'], r.price], name:r.region, uv:r['저평가도'],
+    label:{show:notable.has(r.region), formatter:r.region, position:'right', fontSize:9, color:'#aab2c5'}}));
+  const line = rows.map(r=>[r['입지점수'], r['적정가']]).sort((a,b)=>a[0]-b[0]);
+  uvChart.setOption({
+    tooltip:{formatter:p=> p.seriesType==='scatter'
+      ? `<b>${p.data.name}</b><br/>입지점수 ${p.data.value[0]} · 평단 ${won(p.data.value[1])}/평<br/>저평가도 ${p.data.uv>0?'+':''}${p.data.uv}%` : '적정가(입지 기준 회귀선)'},
+    grid:{left:64, right:30, top:30, bottom:44},
+    graphic:[{type:'text', right:30, top:6, style:{
+      text:'🟢 저평가(회귀선 아래)   🔴 고평가(위)   ┈ 적정가', fill:'#8b93a7', fontSize:11}}],
+    xAxis:{name:'입지점수 →', nameLocation:'middle', nameGap:26, type:'value', min:0, max:100, splitLine:{lineStyle:{opacity:.08}}},
+    yAxis:{name:'평단가(만원/평)', type:'value', splitLine:{lineStyle:{opacity:.08}}},
+    series:[
+      {type:'line', data:line, showSymbol:false, lineStyle:{color:'#8b93a7', type:'dashed'}, z:1, silent:true},
+      {type:'scatter', data:pts, symbolSize:12, z:2,
+       itemStyle:{color:p=> p.data.uv>=0 ? '#4ade80' : '#f87171', opacity:.85,
+                  borderColor:'#0f1115', borderWidth:1}},
+    ]
+  }, true);
 }
 
 /* ---------- 시그널 탭 ---------- */

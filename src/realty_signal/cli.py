@@ -105,6 +105,17 @@ def watch(
 
 
 @app.command()
+def localities():
+    """수도권 시군구 저평가 분석 데이터 수집 (국토부·ODsay·상가·OSM, 수 분 소요)."""
+    console.print("[dim]수도권 시군구 입지·가격 수집 중… (수 분)[/dim]")
+    df = store.build_localities()
+    console.print(f"[green]완료[/green] → {store.LOCALITY_FILE} ({len(df)}개 지역)")
+    if len(df):
+        top = df.nlargest(5, "저평가도")[["region", "입지점수", "price", "저평가도"]]
+        console.print(top.to_string(index=False))
+
+
+@app.command()
 def serve(
     host: str = typer.Option(lambda: os.environ.get("HOST", "127.0.0.1")),
     port: int = typer.Option(lambda: int(os.environ.get("PORT", "8765"))),

@@ -13,11 +13,91 @@
 from __future__ import annotations
 
 import json
+import statistics
+import time
 import urllib.parse
 import urllib.request
 
+from realty_signal import config
+
 # 주요 업무지구 좌표 (lat, lng)
 HUBS = {"강남": (37.4979, 127.0276), "광화문": (37.5759, 126.9769), "여의도": (37.5215, 126.9249)}
+_SIDO = {"11": "서울특별시", "41": "경기도", "28": "인천광역시"}
+
+
+def _fetch(url: str, headers: dict | None = None, timeout: int = 30) -> str:
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": _UA})
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+        return r.read().decode("utf-8", "replace")
+
+
+# ---------- 지오코딩: OSM Nominatim (키 불필요, 1req/s) ----------
+def geocode(region: str, code: str) -> tuple[float, float] | None:
+    sido = _SIDO.get((code or "")[:2], "")
+    q = f"{sido} {region}".strip()
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
+        {"q": q, "format": "json", "limit": 1, "countrycodes": "kr"})
+    try:
+        data = json.loads(_fetch(url))
+        if data:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+    except Exception:
+        pass
+    return None
+
+
+# ---------- 가격: 국토부 아파트 매매 실거래가 → 시군구 중위 평단가(만원/평) ----------
+def price_per_pyeong(lawd_cd: str, ym_list: list[str]) -> float | None:
+    import xml.etree.ElementTree as ET
+
+    key = config.public_data_key()
+    base = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
+    ppp = []
+    for ym in ym_list:
+        url = f"{base}?serviceKey={key}&LAWD_CD={lawd_cd}&DEAL_YMD={ym}&numOfRows=500&pageNo=1"
+        try:
+            root = ET.fromstring(_fetch(url))
+        except Exception:
+            continue
+        for it in root.iter("item"):
+            try:
+                amt = float(it.findtext("dealAmount", "").replace(",", "").strip())  # 만원
+                area = float(it.findtext("excluUseAr", "").strip())                  # ㎡
+                if amt > 0 and area > 0:
+                    ppp.append(amt / (area * 0.3025))   # 만원/평
+            except (ValueError, AttributeError):
+                continue
+    return round(statistics.median(ppp)) if ppp else None
+
+
+# ---------- 접근성: ODsay 대중교통 소요시간(분), 3개 업무지구 최솟값 ----------
+def transit_min(lat: float, lng: float) -> int | None:
+    key = config.odsay_key()
+    best = None
+    for hlat, hlng in HUBS.values():
+        url = ("https://api.odsay.com/v1/api/searchPubTransPathT?apiKey="
+               + urllib.parse.quote(key, safe="")
+               + f"&SX={lng}&SY={lat}&EX={hlng}&EY={hlat}")
+        try:
+            j = json.loads(_fetch(url))
+            t = j["result"]["path"][0]["info"]["totalTime"]
+            best = t if best is None else min(best, t)
+        except Exception:
+            continue
+        time.sleep(0.2)
+    return best
+
+
+# ---------- 학군: 소상공인 상가정보, 반경 내 교육(P1) 점포수 ----------
+def school_count(lat: float, lng: float, radius: int = 1500) -> int | None:
+    key = config.public_data_key()
+    url = ("http://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
+           f"?serviceKey={key}&radius={radius}&cx={lng}&cy={lat}&indsLclsCd=P1"
+           "&numOfRows=1&pageNo=1&type=json")
+    try:
+        return json.loads(_fetch(url)).get("body", {}).get("totalCount")
+    except Exception:
+        return None
 
 # 입지점수 가중치 (조정 가능)
 WEIGHTS = {"accessibility": 0.5, "school": 0.25, "env": 0.25}
@@ -26,22 +106,32 @@ _UA = "realty-signal/1.0"
 
 
 # ---------- 주거환경: OSM Overpass (키 불필요) ----------
+_OVERPASS = ["https://overpass-api.de/api/interpreter",
+             "https://overpass.kumi.systems/api/interpreter",
+             "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
+
+
 def osm_environment(lat: float, lng: float, radius: int = 2000) -> dict:
-    """반경 내 공원·물(하천/호수)·대형마트 개수."""
+    """반경 내 공원·물(하천/호수)·대형마트 개수. 장애 시 미러 재시도, 끝내 실패하면 0."""
     q = f"""[out:json][timeout:25];
     ( way["leisure"="park"](around:{radius},{lat},{lng});
       way["natural"="water"](around:{radius},{lat},{lng});
       node["shop"="supermarket"](around:{radius},{lat},{lng});
       way["shop"="mall"](around:{radius},{lat},{lng}); );
     out tags;"""
-    url = "https://overpass-api.de/api/interpreter?data=" + urllib.parse.quote(q)
-    req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=40) as r:  # noqa: S310
-        els = json.load(r).get("elements", [])
-    parks = sum(1 for e in els if e.get("tags", {}).get("leisure") == "park")
-    water = sum(1 for e in els if e.get("tags", {}).get("natural") == "water")
-    marts = sum(1 for e in els if e.get("tags", {}).get("shop") in ("supermarket", "mall"))
-    return {"공원": parks, "물": water, "대형마트": marts}
+    data = urllib.parse.quote(q)
+    for base in _OVERPASS:
+        try:
+            els = json.loads(_fetch(f"{base}?data={data}",
+                             {"User-Agent": _UA, "Accept": "application/json"}, timeout=50)).get("elements", [])
+            return {
+                "공원": sum(1 for e in els if e.get("tags", {}).get("leisure") == "park"),
+                "물": sum(1 for e in els if e.get("tags", {}).get("natural") == "water"),
+                "대형마트": sum(1 for e in els if e.get("tags", {}).get("shop") in ("supermarket", "mall")),
+            }
+        except Exception:
+            time.sleep(1.0)
+    return {"공원": 0, "물": 0, "대형마트": 0}
 
 
 # ---------- 저평가 엔진 (순수 함수, 키 불필요) ----------
@@ -78,12 +168,50 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
         r["입지점수"] = round(
             acc[i] * WEIGHTS["accessibility"] + sch[i] * WEIGHTS["school"] + env[i] * WEIGHTS["env"], 1)
 
+    # 가격은 곱셈적 → 로그가격 회귀(헤도닉 표준). 적정가 항상 양수.
+    import math
+
     xs = [r["입지점수"] for r in rows]
-    ys = [r["price"] for r in rows]
+    ys = [math.log(r["price"]) for r in rows]
     a, b = _linfit(xs, ys)
     for r in rows:
-        fair = a + b * r["입지점수"]
+        fair = math.exp(a + b * r["입지점수"])
         r["적정가"] = round(fair)
-        r["저평가도"] = round((fair - r["price"]) / fair * 100, 1) if fair > 0 else 0.0
+        r["저평가도"] = round((fair - r["price"]) / fair * 100, 1)
     rows.sort(key=lambda r: r["저평가도"], reverse=True)
     return rows
+
+
+def build_localities(codes: dict, ym_list: list[str], limit: int | None = None) -> list[dict]:
+    """수도권 시군구별 가격·접근성·학군·환경 수집 후 저평가 랭킹.
+
+    codes: {지역명: 법정동코드10}. 실거래 없는(집계/시 단위) 지역은 자동 제외.
+    """
+    config.load_env()
+    targets = [(r, c or "") for r, c in codes.items() if (c or "").isdigit() and (c or "")[:2] in _SIDO]
+    rows, n, total = [], 0, len(targets)
+    for idx, (region, code) in enumerate(targets, 1):
+        print(f"  [{idx}/{total}] {region}", flush=True)
+        coord = geocode(region, code)
+        time.sleep(1.0)  # Nominatim 예의 (1req/s)
+        if not coord:
+            continue
+        lat, lng = coord
+        price = price_per_pyeong(code[:5], ym_list)
+        if not price:
+            continue  # 실거래 없는 집계/시단위 제외
+        acc = transit_min(lat, lng)
+        sch = school_count(lat, lng)
+        env = osm_environment(lat, lng)
+        time.sleep(0.4)
+        rows.append({
+            "region": region, "price": price,
+            "transit_min": acc, "accessibility": -(acc if acc is not None else 999),
+            "school": sch or 0,
+            "공원": env["공원"], "물": env["물"], "대형마트": env["대형마트"],
+            "env": env["공원"] + env["물"] * 0.5 + env["대형마트"],
+        })
+        n += 1
+        if limit and n >= limit:
+            break
+    return score_undervaluation(rows)

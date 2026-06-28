@@ -190,6 +190,19 @@ def asdict_listing(lst):
     return asdict(lst)
 
 
+@app.get("/api/undervalued")
+def undervalued():
+    """수도권 시군구 저평가 랭킹 (입지 대비 가격). 시그널 등급 병합."""
+    df = store.load_localities()
+    if df.empty:
+        return {"ready": False, "listings": []}
+    sig = _signal_map()
+    recs = json.loads(df.to_json(orient="records", force_ascii=False))
+    for r in recs:
+        r["시그널"] = sig.get(r["region"], "")
+    return {"ready": True, "listings": recs}
+
+
 @app.get("/api/series/{region}")
 def series(region: str):
     kb = _kb()
