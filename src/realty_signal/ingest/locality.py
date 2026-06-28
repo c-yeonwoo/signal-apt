@@ -165,6 +165,7 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
     sch = _minmax([r["school"] for r in rows])
     env = _minmax([r["env"] for r in rows])
     for i, r in enumerate(rows):
+        r["_acc"], r["_sch"], r["_env"] = round(acc[i]), round(sch[i]), round(env[i])
         r["입지점수"] = round(
             acc[i] * WEIGHTS["accessibility"] + sch[i] * WEIGHTS["school"] + env[i] * WEIGHTS["env"], 1)
 
@@ -178,8 +179,36 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
         fair = math.exp(a + b * r["입지점수"])
         r["적정가"] = round(fair)
         r["저평가도"] = round((fair - r["price"]) / fair * 100, 1)
+        r["해설"] = _interpret_locality(r)
     rows.sort(key=lambda r: r["저평가도"], reverse=True)
     return rows
+
+
+def _interpret_locality(r: dict) -> str:
+    """지역별 저평가 해설 — 입지 강점 + 가격 위치를 1~2문장으로."""
+    comps = [("업무지구 접근성", r["_acc"]), ("학군(학원 밀도)", r["_sch"]), ("주거환경", r["_env"])]
+    comps.sort(key=lambda x: x[1], reverse=True)
+    strong, weak = comps[0], comps[-1]
+    tmin = r.get("transit_min")
+    acc_txt = f"주요 업무지구까지 약 {tmin}분" if tmin else "업무지구 접근성"
+
+    lead = f"{acc_txt}, {strong[0]}이(가) 상대적 강점인 지역"
+    if strong[1] >= 60 and weak[1] <= 40:
+        lead += f" (단, {weak[0]}은(는) 약함)"
+
+    uv = r["저평가도"]
+    ratio = round(r["price"] / r["적정가"] * 100) if r["적정가"] else 100
+    if uv >= 25:
+        tail = f"입지 대비 평단가가 적정가의 {ratio}% 수준으로 **크게 저평가** — 가성비 후보"
+    elif uv >= 8:
+        tail = f"입지 대비 {ratio}% 수준으로 다소 저평가된 편"
+    elif uv <= -25:
+        tail = f"입지 대비 평단가가 적정가의 {ratio}% 수준으로 **고평가** — 프리미엄이 충분히 반영됨"
+    elif uv <= -8:
+        tail = f"입지 대비 {ratio}% 수준으로 다소 고평가된 편"
+    else:
+        tail = "입지에 가격이 대체로 부합(적정)"
+    return f"{lead}. {tail}입니다."
 
 
 def build_localities(codes: dict, ym_list: list[str], limit: int | None = None) -> list[dict]:

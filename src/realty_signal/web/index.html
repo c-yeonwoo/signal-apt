@@ -182,6 +182,8 @@
       <i>※ 시군구 단위라 단지별 신축/구축 차이는 반영 안 됨 — 숏리스트용.</i></p>
   </div>
   <div id="uvchart" style="height:340px"></div>
+  <div id="uvHaesol" style="margin:6px 2px 0;padding:10px 14px;background:var(--panel);
+       border:1px solid var(--line);border-radius:10px;font-size:13px;color:#dbe2ee;min-height:20px"></div>
   <div class="sec" style="margin-top:14px">
     <table>
       <thead><tr>
@@ -257,8 +259,12 @@ async function loadUndervalued(){
     if(uvChart) uvChart.clear(); return;
   }
   empty.textContent='';
+  window._uv = {};
   d.listings.forEach(r=>{
+    window._uv[r.region] = r;
     const uv=r['저평가도'], tr=document.createElement('tr');
+    tr.style.cursor='pointer';
+    tr.onclick = () => showUvHaesol(r.region);
     tr.innerHTML = `<td class="l">${r.region} ${r['시그널']?badge(r['시그널']):''}</td>
       <td>${r['입지점수']}</td><td>${won(r.price)}/평</td><td>${won(r['적정가'])}/평</td>
       <td style="color:${uv>=0?'#4ade80':'#f87171'};font-weight:700">${uv>0?'+':''}${uv}%</td>
@@ -266,6 +272,14 @@ async function loadUndervalued(){
     tb.appendChild(tr);
   });
   drawUvScatter(d.listings);
+  showUvHaesol(d.listings[0].region);  // 기본: 저평가 1위
+}
+function showUvHaesol(region){
+  const r = window._uv?.[region]; if(!r) return;
+  const uv = r['저평가도'];
+  const txt = (r['해설']||'').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  document.getElementById('uvHaesol').innerHTML =
+    `💡 <b>${region}</b> <span style="color:${uv>=0?'#4ade80':'#f87171'}">저평가도 ${uv>0?'+':''}${uv}%</span> · ${txt}`;
 }
 function drawUvScatter(rows){
   if(!uvChart) uvChart = echarts.init(document.getElementById('uvchart'), 'dark');
@@ -290,6 +304,8 @@ function drawUvScatter(rows){
                   borderColor:'#0f1115', borderWidth:1}},
     ]
   }, true);
+  uvChart.off('click');
+  uvChart.on('click', p => { if(p.data && p.data.name) showUvHaesol(p.data.name); });
 }
 
 /* ---------- 시그널 탭 ---------- */
