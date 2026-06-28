@@ -274,7 +274,7 @@ def macro_trend(macro: dict) -> dict:
 
 def evaluate(
     kb: KBWeekly, config: SignalConfig | None = None, supply: pd.DataFrame | None = None,
-    macro: dict | None = None,
+    macro: dict | None = None, volumes: dict | None = None,
 ) -> pd.DataFrame:
     """지역별 최신 시그널 테이블 산출. supply: 입주물량 공급압력 테이블(선택)."""
     c = config or SignalConfig()
@@ -341,6 +341,13 @@ def evaluate(
         if inherited_from:
             reasons.append(f"※수급·심리는 {inherited_from} 광역 기준")
             해설 = f"({inherited_from} 광역 수급 + {region} 매매흐름) " + 해설
+        vr = (volumes or {}).get(region, {}).get("거래량비")
+        if vr is not None:
+            if vr >= 1.2:
+                reasons.append(f"거래량 급증({vr}배)")
+                해설 += f" 최근 거래량이 평소의 {vr}배로 매수세가 유입되고 있습니다."
+            elif vr <= 0.8:
+                reasons.append(f"거래량 위축({vr}배)")
         if macro_clause:
             해설 += f" {macro_clause}입니다." if not 해설.rstrip().endswith("입니다.") else f" ({macro_clause})"
 
@@ -358,6 +365,7 @@ def evaluate(
                 "매매모멘텀": sale_mom,
                 f"전세{c.momentum_weeks}주": round(jeonse_avg, 3) if pd.notna(jeonse_avg) else None,
                 "공급압력": round(sp, 2) if pd.notna(sp) else None,
+                "거래량비": vr,
                 "근거": " · ".join(reasons),
             }
         )

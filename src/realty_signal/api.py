@@ -48,7 +48,7 @@ def _kb():
 
 @lru_cache(maxsize=1)
 def _signals_df():
-    return evaluate(_kb(), SignalConfig(), store.load_supply(), store.load_macro())
+    return evaluate(_kb(), SignalConfig(), store.load_supply(), store.load_macro(), store.load_volumes())
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -238,4 +238,7 @@ def series(region: str):
             "dates": [str(d.date()) for d in s.index],
             "values": [round(float(v), 3) for v in s.values],
         }
+    vol = store.load_volumes().get(region)  # 월별 거래량(시군구)
+    if vol:
+        out["volume"] = vol
     return out

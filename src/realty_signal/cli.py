@@ -116,6 +116,14 @@ def localities():
 
 
 @app.command()
+def volumes():
+    """시군구 월별 거래량 수집 (국토부, 수 분 소요)."""
+    console.print("[dim]시군구 거래량 수집 중…[/dim]")
+    v = store.build_volumes()
+    console.print(f"[green]완료[/green] → {store.VOLUME_FILE} ({len(v)}개 지역)")
+
+
+@app.command()
 def serve(
     host: str = typer.Option(lambda: os.environ.get("HOST", "127.0.0.1")),
     port: int = typer.Option(lambda: int(os.environ.get("PORT", "8765"))),

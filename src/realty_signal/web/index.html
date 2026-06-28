@@ -472,7 +472,7 @@ async function selectRegion(region){
   document.getElementById('reasons').innerHTML =
     (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join('');
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
-  _lastM = d.metrics; _lastSig = r;
+  _lastM = d.metrics; _lastSig = r; _lastVol = d.volume || null;
   if(_showHist && !_histCache[region]){
     _histCache[region] = (await (await fetch(`/api/signal-history/${encodeURIComponent(region)}`)).json()).intervals;
   }
@@ -528,6 +528,12 @@ function drawChart(region, m, sig){
       lineStyle:{width:1.4, color:'#fb7185'}, itemStyle:{color:'#fb7185'},
       data: mc.dates.map((dt,i)=>[dt, mc.대출금리?.[i]]) });
   }
+  // 거래량(월별 거래건수) 막대 — 시군구만
+  if(_lastVol?.counts){
+    series.push({ name:'거래량(건)', type:'bar', yAxisIndex:3, z:-1, barWidth:'55%',
+      itemStyle:{color:'rgba(56,189,248,0.28)'},
+      data: _lastVol.dates.map((dt,i)=>[dt, _lastVol.counts[i]]) });
+  }
   // 지난 시그널(STRONG_BUY/BUY) 구간 반투명 오버레이
   if(_showHist && _histCache[region]?.length){
     series.push({ name:'시그널구간', type:'line', data:[], yAxisIndex:0, silent:true,
@@ -539,10 +545,11 @@ function drawChart(region, m, sig){
   const last = meta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
   const z0 = start.toISOString().slice(0,10);
   chart.setOption({ tooltip:{trigger:'axis'}, legend:{top:6, right:96, textStyle:{fontSize:11}},
-    grid:{left:46, right:96, top:40, bottom:64}, xAxis:{type:'time'},
+    grid:{left:46, right:140, top:40, bottom:64}, xAxis:{type:'time'},
     yAxis:[{name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}}},
            {name:'증감%', position:'right', splitLine:{show:false}},
-           {name:'금리%', position:'right', offset:48, min:0, splitLine:{show:false}, axisLabel:{color:'#fb7185'}, nameTextStyle:{color:'#fb7185'}}],
+           {name:'금리%', position:'right', offset:48, min:0, splitLine:{show:false}, axisLabel:{color:'#fb7185'}, nameTextStyle:{color:'#fb7185'}},
+           {name:'거래량', position:'right', offset:96, min:0, splitLine:{show:false}, axisLabel:{color:'#38bdf8'}, nameTextStyle:{color:'#38bdf8'}}],
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
     graphic: sig ? reasonGraphic(region, sig) : [], series }, true);
 }
@@ -566,7 +573,7 @@ async function loadData(){
   const keep = selected && allSignals.find(r=>r.region===selected);
   selectRegion(keep ? selected : (allSignals.find(r=>active.has(r.signal))||allSignals[0]).region);
 }
-let _showHist=false, _histCache={}, _lastM=null, _lastSig=null;
+let _showHist=false, _histCache={}, _lastM=null, _lastSig=null, _lastVol=null;
 async function toggleHist(){
   _showHist=!_showHist;
   document.getElementById('histBtn').classList.toggle('on', _showHist);

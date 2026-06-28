@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from realty_signal import config
-from realty_signal.ingest import kb_datahub, kb_supply, kb_weekly, locality
+from realty_signal.ingest import kb_datahub, kb_supply, kb_weekly, locality, volume
 from realty_signal.ingest.kb_weekly import KBWeekly
 
 CACHE_DIR = Path("data/cache")
@@ -21,6 +21,7 @@ SUPPLY_FILE = CACHE_DIR / "supply.parquet"
 CODES_FILE = CACHE_DIR / "codes.json"
 LOCALITY_FILE = CACHE_DIR / "locality.parquet"
 MACRO_FILE = CACHE_DIR / "macro.json"
+VOLUME_FILE = CACHE_DIR / "volume.json"
 
 
 def _recent_months(n: int = 3) -> list[str]:
@@ -54,6 +55,20 @@ def load_localities(cache: Path = LOCALITY_FILE) -> "pd.DataFrame":
 
 
 def load_macro(cache: Path = MACRO_FILE) -> dict:
+    return json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
+
+
+def build_volumes(out: Path = VOLUME_FILE) -> dict:
+    """시군구별 월별 거래량 수집 → volume.json (느림: 수 분, 국토부)."""
+    config.load_env()
+    codes = json.loads(CODES_FILE.read_text(encoding="utf-8")) if CODES_FILE.exists() else {}
+    vols = volume.build_volumes(codes, config.public_data_key(), months=24)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(vols, ensure_ascii=False), encoding="utf-8")
+    return vols
+
+
+def load_volumes(cache: Path = VOLUME_FILE) -> dict:
     return json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
 
 
