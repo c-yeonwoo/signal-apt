@@ -238,6 +238,15 @@ def series(region: str):
             "dates": [str(d.date()) for d in s.index],
             "values": [round(float(v), 3) for v in s.values],
         }
+    # 누적 매매가격지수(KB 증감률 누적, 시작=100) — 시그널 검증용
+    from realty_signal.signals.engine import price_index_from
+    pidx = price_index_from(kb.series(region, "sale_change"))
+    if not pidx.empty:
+        out["metrics"]["price_index"] = {
+            "label": "매매가격지수",
+            "dates": [str(d.date()) for d in pidx.index],
+            "values": [round(float(v), 1) for v in pidx.values],
+        }
     vol = store.load_volumes().get(region)  # 월별 거래량(시군구)
     if vol:
         out["volume"] = vol

@@ -502,7 +502,7 @@ function reasonGraphic(region, sig){
 }
 function drawChart(region, m, sig){
   const colors = {jeonse_supply:"#38bdf8", buyer_superiority:"#a78bfa", buyer_demand:"#f472b6",
-                  sale_change:"#fbbf24", jeonse_change:"#34d399"};
+                  sale_change:"#fbbf24", jeonse_change:"#34d399", price_index:"#f1f5f9"};
   const series = [];
   const mk = (k, axis, extra={}) => { if(!m[k]) return;
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
@@ -517,6 +517,7 @@ function drawChart(region, m, sig){
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#4ade80'}}]}});
   mk("sale_change", 1); mk("jeonse_change", 1);
+  mk("price_index", 0, { lineStyle:{width:2.4, color:'#f1f5f9'}, z:3 });  // 누적 매매가격지수(실제 가격)
 
   // 거시 오버레이: 주택구매력(지수축) + 주택담보대출금리(금리축)
   const mc = window._macro;
@@ -538,7 +539,10 @@ function drawChart(region, m, sig){
   if(_showHist && _histCache[region]?.length){
     series.push({ name:'시그널구간', type:'line', data:[], yAxisIndex:0, silent:true,
       markArea:{ data: _histCache[region].map(h=>[
-        {xAxis:h.start, itemStyle:{color: h.signal==='STRONG_BUY'?'rgba(34,197,94,0.20)':'rgba(74,222,128,0.10)'}},
+        {xAxis:h.start, itemStyle:{color: h.signal==='STRONG_BUY'?'rgba(34,197,94,0.20)':'rgba(74,222,128,0.10)'},
+         label:{show: h.during_pct!=null, position:'insideTop', fontSize:10, color:'#dbeafe',
+                formatter: (h.during_pct!=null?`기간 ${h.during_pct>0?'+':''}${h.during_pct}%`:'')
+                          + (h.after12w_pct!=null?`\n이후 ${h.after12w_pct>0?'+':''}${h.after12w_pct}%`:'')}},
         {xAxis:h.end}]) }});
   }
 

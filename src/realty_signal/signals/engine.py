@@ -234,6 +234,7 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
     sale = kb.series(region, "sale_change")
     if sale.empty:
         return []
+    idx = price_index_from(sale)  # 누적 매매가격지수(검증용)
 
     dates = list(sale.index)
     intervals, cur = [], None
@@ -256,7 +257,24 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
     if cur is not None:
         cur["end"] = str(dates[-1].date())
         intervals.append(cur)
+
+    # 각 구간: 기간 중 상승률 + 이후 12주 변화율 (실제 결과 검증)
+    for iv in intervals:
+        s, e = pd.Timestamp(iv["start"]), pd.Timestamp(iv["end"])
+        i0, i1 = idx.asof(s), idx.asof(e)
+        if pd.notna(i0) and pd.notna(i1) and i0:
+            iv["during_pct"] = round((i1 / i0 - 1) * 100, 1)
+        after = idx[idx.index > e]
+        a = after.iloc[min(11, len(after) - 1)] if len(after) else None
+        if a is not None and pd.notna(i1) and i1:
+            iv["after12w_pct"] = round((a / i1 - 1) * 100, 1)
     return intervals
+
+
+def price_index_from(sale: "pd.Series") -> "pd.Series":
+    """주간 매매증감률(%) → 누적 매매가격지수(시작=100)."""
+    s = sale.sort_index().dropna()
+    return (1 + s / 100).cumprod() * 100 if not s.empty else s
 
 
 def macro_trend(macro: dict) -> dict:
