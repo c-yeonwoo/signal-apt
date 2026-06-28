@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>아파트 시그널 맵</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ee; --dim:#8b93a7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+         background:var(--bg); color:var(--txt); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; }
+  header h1 { font-size:18px; margin:0; }
+  header .date { color:var(--dim); font-size:13px; }
+  .filters { margin-left:auto; display:flex; gap:6px; }
+  .chip { padding:4px 10px; border:1px solid var(--line); border-radius:14px; cursor:pointer;
+          background:var(--panel); color:var(--dim); font-size:12px; user-select:none; }
+  .chip.on { color:#fff; border-color:#3b82f6; }
+  .wrap { display:flex; height:calc(100vh - 53px); }
+  .side { width:340px; border-right:1px solid var(--line); overflow:auto; }
+  .side input { width:100%; padding:8px 12px; background:var(--panel); border:none;
+                border-bottom:1px solid var(--line); color:var(--txt); outline:none; }
+  .row { padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex;
+         align-items:center; gap:8px; }
+  .row:hover, .row.sel { background:#1d2230; }
+  .row .nm { font-weight:600; }
+  .row .mn { margin-left:auto; color:var(--dim); font-size:12px; }
+  .badge { font-size:11px; padding:2px 7px; border-radius:5px; font-weight:700; white-space:nowrap; }
+  .STRONG_BUY{background:#16a34a;color:#fff;} .BUY{background:#22c55e33;color:#4ade80;}
+  .WATCH{background:#eab30833;color:#fbbf24;} .NEUTRAL{background:#33415533;color:#94a3b8;}
+  .SELL_RISK{background:#ef444433;color:#f87171;}
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #chart { flex:1; }
+  .reason { padding:10px 18px; color:var(--dim); font-size:13px; border-top:1px solid var(--line); }
+  .reason b { color:var(--txt); }
+</style>
+</head>
+<body>
+<header>
+  <h1>아파트 매수·매도 시그널 맵</h1>
+  <span class="date" id="date"></span>
+  <div class="filters" id="filters"></div>
+</header>
+<div class="wrap">
+  <div class="side">
+    <input id="search" placeholder="지역 검색…" />
+    <div id="list"></div>
+  </div>
+  <div class="main">
+    <div id="chart"></div>
+    <div class="reason" id="reason"></div>
+  </div>
+</div>
+<script>
+const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
+let active = new Set(["STRONG_BUY","BUY","WATCH"]);
+let allSignals = [], selected = null, meta = null;
+const chart = echarts.init(document.getElementById('chart'), 'dark');
+window.addEventListener('resize', () => chart.resize());
+
+function badge(s){ return `<span class="badge ${s}">${s}</span>`; }
+
+function renderFilters(){
+  const f = document.getElementById('filters');
+  f.innerHTML = '';
+  SIGNALS.forEach(s => {
+    const el = document.createElement('span');
+    el.className = 'chip' + (active.has(s)?' on':'');
+    el.textContent = s;
+    el.onclick = () => { active.has(s)?active.delete(s):active.add(s); renderFilters(); renderList(); };
+    f.appendChild(el);
+  });
+}
+
+function renderList(){
+  const q = document.getElementById('search').value.trim();
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  allSignals
+    .filter(r => active.has(r.signal))
+    .filter(r => !q || r.region.includes(q))
+    .forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'row' + (selected===r.region?' sel':'');
+      const idx = r['매수우위지수']==null?'–':r['매수우위지수'];
+      const js = r['전세수급']==null?'–':r['전세수급'];
+      row.innerHTML = `<span class="nm">${r.region}</span>${badge(r.signal)}
+        <span class="mn">전세 ${js} · 매수우위 ${idx}</span>`;
+      row.onclick = () => selectRegion(r.region);
+      list.appendChild(row);
+    });
+}
+
+async function selectRegion(region){
+  selected = region;
+  renderList();
+  const r = allSignals.find(x => x.region===region);
+  document.getElementById('reason').innerHTML =
+    `<b>${region}</b> · ${badge(r.signal)} &nbsp; ${r['근거']||''}`;
+  const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
+  drawChart(region, d.metrics);
+}
+
+function drawChart(region, m){
+  const idxKeys = ["jeonse_supply","buyer_superiority","buyer_demand"];
+  const pctKeys = ["sale_change","jeonse_change"];
+  const colors = {jeonse_supply:"#38bdf8", buyer_superiority:"#a78bfa", buyer_demand:"#f472b6",
+                  sale_change:"#fbbf24", jeonse_change:"#34d399"};
+  const series = [];
+  const mk = (k, axis, extra={}) => {
+    if(!m[k]) return;
+    series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
+      lineStyle:{width:1.4}, itemStyle:{color:colors[k]},
+      data:m[k].dates.map((dt,i)=>[dt, m[k].values[i]]), ...extra });
+  };
+  // 임계선: 전세난(170)·매매전이(190), 매수세우위 매수신호(20)
+  mk("jeonse_supply", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
+      lineStyle:{type:'dashed',opacity:.5}, data:[
+        {yAxis:170,name:'전세난',lineStyle:{color:'#fbbf24'}},
+        {yAxis:190,name:'매매전이',lineStyle:{color:'#f87171'}}]}});
+  mk("buyer_superiority", 0);
+  mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
+      lineStyle:{type:'dashed',opacity:.5},
+      data:[{yAxis:20,name:'매수신호',lineStyle:{color:'#4ade80'}}]}});
+  mk("sale_change", 1);
+  mk("jeonse_change", 1);
+
+  const last = meta.last_date;
+  const start = new Date(last); start.setFullYear(start.getFullYear()-3);
+  chart.setOption({
+    title:{ text:region, left:14, top:6, textStyle:{fontSize:14} },
+    tooltip:{ trigger:'axis' },
+    legend:{ top:6, right:14, textStyle:{fontSize:11} },
+    grid:{ left:46, right:52, top:44, bottom:64 },
+    xAxis:{ type:'time' },
+    yAxis:[ { name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.15}} },
+            { name:'증감%', splitLine:{show:false} } ],
+    dataZoom:[ { type:'inside', startValue:start.toISOString().slice(0,10), endValue:last },
+               { type:'slider', startValue:start.toISOString().slice(0,10), endValue:last, height:22, bottom:14 } ],
+    series
+  }, true);
+}
+
+(async function init(){
+  meta = await (await fetch('/api/meta')).json();
+  document.getElementById('date').textContent = `최신 ${meta.last_date}`;
+  allSignals = await (await fetch('/api/signals')).json();
+  renderFilters(); renderList();
+  document.getElementById('search').oninput = renderList;
+  const first = allSignals.find(r => active.has(r.signal));
+  if(first) selectRegion(first.region);
+})();
+</script>
+</body>
+</html>

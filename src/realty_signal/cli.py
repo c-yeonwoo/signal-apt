@@ -1,9 +1,11 @@
-"""CLI — KB 주간 시계열 엑셀에서 지역별 매수·매도 시그널 리포트 생성.
+"""CLI — KB 주간 시계열 엑셀에서 지역별 매수·매도 시그널 리포트/대시보드.
 
 사용:
-  signal <엑셀경로>                      # 시그널 요약 테이블
-  signal <엑셀경로> --region 서울         # 특정 지역 시계열 추이
-  signal <엑셀경로> --only STRONG_BUY,BUY
+  signal report <엑셀경로>                 # 시그널 요약 테이블
+  signal report <엑셀경로> --region 서울    # 특정 지역 시계열 추이
+  signal report <엑셀경로> --only STRONG_BUY,BUY
+  signal build  <엑셀경로>                 # parquet 캐시 생성(대시보드용)
+  signal serve                            # 대시보드 웹서버 실행
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from realty_signal import store
 from realty_signal.ingest import kb_weekly
 from realty_signal.signals.engine import SignalConfig, evaluate
 
@@ -27,6 +30,27 @@ _COLOR = {
     "NEUTRAL": "white",
     "SELL_RISK": "bold red",
 }
+
+
+@app.command()
+def build(path: Path = typer.Argument(..., exists=True, help="KB 주간 시계열 .xlsx")):
+    """엑셀을 파싱해 parquet 캐시 생성 (대시보드/반복조회용)."""
+    console.print(f"[dim]파싱: {path.name}[/dim]")
+    kb = store.build(path)
+    console.print(f"[green]캐시 저장 완료[/green] → {store.CACHE_FILE} "
+                  f"(지역 {len(kb.regions)} · 최신 {kb.last_date.date()})")
+
+
+@app.command()
+def serve(host: str = "127.0.0.1", port: int = 8765):
+    """대시보드 웹서버 실행 (먼저 `signal build` 필요)."""
+    import uvicorn
+
+    if not store.CACHE_FILE.exists():
+        console.print("[red]캐시 없음.[/red] 먼저 `signal build <xlsx>` 실행하세요.")
+        raise typer.Exit(1)
+    console.print(f"[green]대시보드:[/green] http://{host}:{port}")
+    uvicorn.run("realty_signal.api:app", host=host, port=port, log_level="warning")
 
 
 @app.command()

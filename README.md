@@ -11,9 +11,10 @@ KB 주간 시계열 기반 **아파트 매수·매도 시그널** 분석 엔진.
   - 176개 지역 · 2008~현재 주간 · 축약 날짜 자동 복원
 - ✅ 임계값 기반 시그널 엔진 (전세수급 밴드 / 매수우위 / 모멘텀 / 종합 시그널)
 - ✅ CLI 리포트 (지역별 시그널 테이블 + 지역 추이)
-- ⬜ 웹 서비스 (FastAPI + React) — 예정
-- ⬜ KB 엑셀 자동 다운로드 — 예정
+- ✅ 웹 대시보드 (FastAPI + ECharts) — 지역별 시계열 + 시그널 + 임계선
+- ⬜ KB 데이터허브 자동 수집 (`PublicDataReader` / weekBuyAdvIdx 등) — 예정
 - ⬜ 입주물량/시장강도(부동산지인·아실) 연동 → 매도/끝물 시그널 — 예정
+- ⬜ React 전환 — 예정
 
 ## 설치 & 실행
 
@@ -21,13 +22,17 @@ KB 주간 시계열 기반 **아파트 매수·매도 시그널** 분석 엔진.
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
 # 시그널 리포트 (KB 주간 시계열 엑셀 경로)
-.venv/bin/signal data/raw/kb_weekly.xlsx
+.venv/bin/signal report data/raw/kb_weekly.xlsx
 
 # 매수 후보만
-.venv/bin/signal data/raw/kb_weekly.xlsx --only STRONG_BUY,BUY
+.venv/bin/signal report data/raw/kb_weekly.xlsx --only STRONG_BUY,BUY
 
-# 특정 지역 추이
-.venv/bin/signal data/raw/kb_weekly.xlsx --region 서울
+# 특정 지역 추이 (터미널)
+.venv/bin/signal report data/raw/kb_weekly.xlsx --region 서울
+
+# 웹 대시보드 (시계열 시각화)
+.venv/bin/signal build data/raw/kb_weekly.xlsx   # parquet 캐시 생성
+.venv/bin/signal serve                            # http://127.0.0.1:8765
 
 # 테스트
 .venv/bin/pytest -q
