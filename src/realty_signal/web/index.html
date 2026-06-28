@@ -166,6 +166,19 @@
       <input id="csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)">
       <span class="pill">CSV: 단지명,region,감정가,최저매각가,시세,전용면적,입찰기일…</span>
     </div>
+    <details style="margin-top:10px;font-size:13px;color:var(--dim)">
+      <summary style="cursor:pointer;color:#bfdbfe">계산식 설명 (옥션홈즈 입찰가 산정 모델)</summary>
+      <div style="padding:10px 4px;line-height:1.9">
+        • <b>경매 총매입</b> = 입찰가 + 등기비(입찰가×취득세율+법무비) + 명도비(전용평×15만) + 미납관리비 + 수리비 + 보유이자(대출금×금리×개월/12)<br>
+        • <b>일반매매 총매입</b> = 시세 + 취득세 + 중개수수료 + 법무비<br>
+        • <b>시세차익률</b> = (일반매매총매입 − 경매총매입) ÷ 경매총매입 &nbsp;<span style="color:#94a3b8">(낙찰받아 시세로 되팔 때 차익률)</span><br>
+        • <b>권장 입찰가</b> = 낙찰가율을 1%씩 올리며 만든 표에서 <b>목표 시세차익률을 만족하는 최대 입찰가</b><br>
+        • <b>실투자금</b> = 경매총매입 − 대출금(입찰가×대출비율) &nbsp;|&nbsp;
+          <b>임대수익률</b> = (월세×12 − 연이자) ÷ (실투자금 − 임대보증금) &nbsp;|&nbsp;
+          <b>단기매도수익률</b> = (매도가 − 경매총매입 − 매도중개보수) ÷ 실투자금<br>
+        <span style="color:#94a3b8">※ 시세 미입력 시 감정가로 대체. 위 파라미터(목표차익률·대출·보유개월)를 바꾸면 즉시 재계산됩니다.</span>
+      </div>
+    </details>
   </div>
   <div class="sec">
     <h3>경매 전략 (입찰기일 기준)</h3>
@@ -200,9 +213,10 @@
        border:1px solid var(--line);border-radius:10px;font-size:13px;color:#dbe2ee;min-height:20px"></div>
   <div class="sec" style="margin-top:14px">
     <table>
-      <thead><tr>
-        <th class="l">지역</th><th>입지점수</th><th>평단가</th><th>적정가</th><th>저평가도</th>
-        <th>업무지구</th><th>학원수</th><th>공원</th>
+      <thead><tr id="uvHead">
+        <th class="l" data-k="region">지역</th><th data-k="입지점수">입지점수</th>
+        <th data-k="price">평단가</th><th data-k="적정가">적정가</th><th data-k="저평가도">저평가도</th>
+        <th data-k="transit_min">업무지구</th><th data-k="school">학원수</th><th data-k="공원">공원</th>
       </tr></thead>
       <tbody id="uvRows"></tbody>
     </table>
@@ -263,19 +277,44 @@ function switchTab(t){
   if(t==='undervalued') loadUndervalued();
 }
 
-let uvChart;
+let uvChart, _uvList=[], _uvSort={k:'저평가도', asc:false};
 async function loadUndervalued(){
   const d = await (await fetch('/api/undervalued')).json();
-  const tb = document.getElementById('uvRows'); tb.innerHTML='';
   const empty = document.getElementById('uvEmpty');
   if(!d.ready || !d.listings.length){
+    document.getElementById('uvRows').innerHTML='';
     empty.textContent = '저평가 데이터가 아직 없습니다. 터미널에서 `signal localities` 를 실행하세요(수 분 소요).';
     if(uvChart) uvChart.clear(); return;
   }
   empty.textContent='';
+  _uvList = d.listings;
   window._uv = {};
-  d.listings.forEach(r=>{
-    window._uv[r.region] = r;
+  d.listings.forEach(r=> window._uv[r.region]=r);
+  document.querySelectorAll('#uvHead th').forEach(th=>{
+    th.style.cursor='pointer';
+    th.onclick = () => uvSort(th.dataset.k);
+  });
+  renderUvRows();
+  drawUvScatter(d.listings);
+  showUvHaesol([..._uvList].sort((a,b)=>b['저평가도']-a['저평가도'])[0].region);
+}
+function uvSort(k){
+  _uvSort = {k, asc: _uvSort.k===k ? !_uvSort.asc : (k==='region')};
+  renderUvRows();
+}
+function renderUvRows(){
+  const {k, asc} = _uvSort;
+  const arr = [..._uvList].sort((a,b)=>{
+    const x=a[k], y=b[k];
+    const c = typeof x==='string' ? x.localeCompare(y) : (x??-1e9)-(y??-1e9);
+    return asc ? c : -c;
+  });
+  document.querySelectorAll('#uvHead th').forEach(th=>{
+    const base=th.textContent.replace(/[ ▲▼]+$/,'');
+    th.textContent = th.dataset.k===k ? base+(asc?' ▲':' ▼') : base;
+  });
+  const tb = document.getElementById('uvRows'); tb.innerHTML='';
+  arr.forEach(r=>{
     const uv=r['저평가도'], tr=document.createElement('tr');
     tr.style.cursor='pointer';
     tr.onclick = () => showUvHaesol(r.region);
@@ -285,8 +324,6 @@ async function loadUndervalued(){
       <td>${r['transit_min']??'–'}분</td><td>${r['school']}</td><td>${r['공원']}</td>`;
     tb.appendChild(tr);
   });
-  drawUvScatter(d.listings);
-  showUvHaesol(d.listings[0].region);  // 기본: 저평가 1위
 }
 function showUvHaesol(region){
   const r = window._uv?.[region]; if(!r) return;
