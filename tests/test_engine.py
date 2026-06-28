@@ -3,10 +3,10 @@ import pandas as pd
 from realty_signal.ingest.kb_weekly import _clean_region, _normalize_dates
 from realty_signal.signals.engine import (
     SignalConfig,
+    _classify,
     _demand_state,
     _jeonse_state,
     _momentum,
-    _overall,
 )
 
 
@@ -57,10 +57,24 @@ def test_momentum_labels():
     assert _momentum(flat, c)[1] == "보합"
 
 
-def test_overall_signals():
+def test_classify_chart_priority():
     c = SignalConfig()
-    assert _overall("전세난", "매수신호", "상승", c)[0] == "STRONG_BUY"
-    assert _overall("보통", "매수신호", "보합", c)[0] == "BUY"  # 20↑ 단독으로 매수
-    assert _overall("전세난", "강함", "보합", c)[0] == "BUY"
-    assert _overall("공급우위", "매우약함", "하락", c)[0] == "SELL_RISK"
-    assert _overall("보통", "약함", "보합", c)[0] == "NEUTRAL"
+    # 차트 3박자: 전세난 + 매수우위지수 강세 + 매매상승
+    sig, reasons = _classify(180, 75, 12, "전세난", "상승", c)
+    assert sig == "STRONG_BUY"
+    assert any("전세난" in r for r in reasons)
+    assert any("매수우위지수" in r for r in reasons)
+    # 차트 2개 → BUY
+    assert _classify(180, 75, 3, "전세난", "보합", c)[0] == "BUY"
+    # 차트 1개 → WATCH
+    assert _classify(160, 40, 3, "타이트", "보합", c)[0] == "WATCH"
+    # 하락 + 매수우위 약함 → SELL_RISK
+    assert _classify(90, 30, 2, "공급우위", "하락", c)[0] == "SELL_RISK"
+
+
+def test_classify_memo_is_reference_only():
+    c = SignalConfig()
+    # 매수세우위 20↑ 여도 차트 조건 없으면 등급은 NEUTRAL, 근거에만 [참고]로 표기
+    sig, reasons = _classify(120, 40, 25, "보통", "보합", c)
+    assert sig == "NEUTRAL"
+    assert any("[참고]" in r and "매수세우위" in r for r in reasons)

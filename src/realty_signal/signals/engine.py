@@ -38,7 +38,10 @@ class SignalConfig:
     jeonse_tight: float = 140.0
     jeonse_crunch: float = 170.0
     jeonse_spillover: float = 190.0
-    # 매수세우위(raw) 사다리 — 원본 메모 "5/10/15/20, 20↑ 매수". KB 실측 median≈3~5.
+    # 매수우위지수(차트 기준, 우선) — KB 실측 median≈46, p75≈70, 100↑은 활황.
+    buyeridx_mid: float = 50.0   # 중립 이상
+    buyeridx_strong: float = 70.0  # 강세(상위권)
+    # 매수세우위(raw) 사다리 — 원본 메모 "5/10/15/20, 20↑ 매수"(참고용). median≈3~5.
     demand_l1: float = 5.0   # 약함
     demand_l2: float = 10.0  # 보통
     demand_l3: float = 15.0  # 강함
@@ -87,24 +90,60 @@ def _momentum(series: pd.Series, c: SignalConfig) -> tuple[float, str]:
     return avg, "보합"
 
 
-def _overall(jeonse: str, demand: str, sale_mom: str, c: SignalConfig) -> tuple[str, str]:
-    """지역별 종합 시그널 + 근거 문장. 매수 트리거는 매수세우위(사다리) 기준."""
-    crunch = jeonse in ("전세난", "매매전이")
-    strong_demand = demand == "매수신호"          # 매수세우위 ≥20
-    rising_demand = demand in ("강함", "매수신호")  # ≥15
-    rising = sale_mom == "상승"
+def _classify(
+    js: float, bs: float, bd: float, jeonse_state: str, sale_mom: str, c: SignalConfig
+) -> tuple[str, list[str]]:
+    """OR 조건 종합 시그널 + 조건별 근거 리스트.
 
-    if crunch and strong_demand and rising:
-        return "STRONG_BUY", "전세난+매수세우위 20↑+매매상승 — 3박자 매수 시그널"
-    if strong_demand:
-        return "BUY", "매수세우위 20↑ — 적극 매수 구간"
-    if crunch and (rising_demand or rising):
-        return "BUY", "전세난 진행 + 매수세/가격 반응 시작"
-    if jeonse == "타이트" and (rising_demand or rising):
-        return "WATCH", "전세 타이트 — 전세난 전환 여부 관찰"
-    if sale_mom == "하락" and demand in ("매우약함", "약함"):
-        return "SELL_RISK", "매수세 위축 + 가격 하락 — 매도/관망 구간"
-    return "NEUTRAL", "뚜렷한 시그널 없음"
+    차트 기준(전세수급·매수우위지수·매매모멘텀)을 우선 판정하고,
+    메모 기준(매수세우위 사다리)은 [참고] 근거로만 덧붙인다.
+    """
+    reasons: list[str] = []
+
+    # --- 차트 기준 (우선) ---
+    crunch = jeonse_state in ("전세난", "매매전이")
+    if jeonse_state == "매매전이":
+        reasons.append(f"전세난→매매전이(전세수급 {js:.0f})")
+    elif jeonse_state == "전세난":
+        reasons.append(f"전세난(전세수급 {js:.0f})")
+    elif jeonse_state == "타이트":
+        reasons.append(f"전세 타이트(전세수급 {js:.0f})")
+
+    idx_strong = pd.notna(bs) and bs >= c.buyeridx_strong
+    idx_mid = pd.notna(bs) and bs >= c.buyeridx_mid
+    if idx_strong:
+        reasons.append(f"매수우위지수 강세({bs:.0f})")
+    elif idx_mid:
+        reasons.append(f"매수우위지수 중립↑({bs:.0f})")
+
+    rising = sale_mom == "상승"
+    if rising:
+        reasons.append("매매 상승세")
+    elif sale_mom == "하락":
+        reasons.append("매매 하락세")
+
+    # --- 메모 기준 (참고) ---
+    if pd.notna(bd) and bd >= c.demand_buy:
+        reasons.append(f"[참고] 매수세우위 20↑({bd:.0f})")
+    elif pd.notna(bd) and bd >= c.demand_l3:
+        reasons.append(f"[참고] 매수세우위 강함({bd:.0f})")
+
+    # 차트 기준 강세 조건 개수로 등급 결정 (OR)
+    chart_bull = sum([crunch, idx_strong, rising])
+    if chart_bull >= 3:
+        signal = "STRONG_BUY"
+    elif chart_bull == 2:
+        signal = "BUY"
+    elif chart_bull == 1 or jeonse_state == "타이트":
+        signal = "WATCH"
+    elif sale_mom == "하락" and not idx_mid:
+        signal = "SELL_RISK"
+    else:
+        signal = "NEUTRAL"
+
+    if not reasons:
+        reasons.append("뚜렷한 시그널 없음")
+    return signal, reasons
 
 
 def evaluate(kb: KBWeekly, config: SignalConfig | None = None) -> pd.DataFrame:
@@ -125,7 +164,7 @@ def evaluate(kb: KBWeekly, config: SignalConfig | None = None) -> pd.DataFrame:
 
         jeonse_state = _jeonse_state(js, c) if pd.notna(js) else "—"
         demand_state = _demand_state(bd, c) if pd.notna(bd) else "—"
-        signal, reason = _overall(jeonse_state, demand_state, sale_mom, c)
+        signal, reasons = _classify(js, bs, bd, jeonse_state, sale_mom, c)
 
         rows.append(
             {
@@ -139,7 +178,7 @@ def evaluate(kb: KBWeekly, config: SignalConfig | None = None) -> pd.DataFrame:
                 f"매매{c.momentum_weeks}주": round(sale_avg, 3) if pd.notna(sale_avg) else None,
                 "매매모멘텀": sale_mom,
                 f"전세{c.momentum_weeks}주": round(jeonse_avg, 3) if pd.notna(jeonse_avg) else None,
-                "근거": reason,
+                "근거": " · ".join(reasons),
             }
         )
 
