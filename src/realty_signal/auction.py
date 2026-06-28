@@ -1,14 +1,22 @@
-"""경매 매물 관리 + 입찰가 계산 + 우선순위/전략.
+"""경매 매물 관리 + 입찰가 산정 + 우선순위/전략.
 
-매물은 수동입력/CSV 로 받아 JSON(data/cache/auction.json)에 저장한다.
-입찰가 공식은 _bid_calc 한 곳에 모아 두었으며, 사용자 고유 공식으로 교체하기 쉽다.
+입찰가 계산은 옥션홈즈 '입찰가 산정표'를 그대로 옮긴 모델이다:
+  - 경매 총매입비용 = 입찰가 + 등기비 + 명도비 + 미납관리비 + 수리비 + 대리입찰 + 인수보증금 + 보유이자
+  - 일반매매 총매입비용 = 시세 + 취득세 + 중개수수료 + 법무비
+  - 시세차익 = 일반매매총매입 − 경매총매입,  시세차익률 = 시세차익 / 경매총매입
+  - 실투자금 = 경매총매입 − 대출금(=입찰가×대출비율)
+  - 임대수익률 = (월세×12 − 대출금×금리) / (실투자금 − 임대보증금)
+  - 단기매도 순수익 = 매도가 − 경매총매입 − 매도중개보수
+낙찰가율(감정가 대비)을 1%씩 변화시킨 민감도 표를 만들고,
+목표 시세차익률을 만족하는 '권장 입찰가'를 도출한다.
 
-⚠️ 현재 공식은 합리적 기본값(목표수익률·예상낙찰가율·저감률 조정 가능)이며,
-   사용자 확정 공식으로 교체 예정.
+매물은 수동입력/CSV → data/cache/auction.json.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -16,66 +24,124 @@ from pathlib import Path
 
 AUCTION_FILE = Path("data/cache/auction.json")
 
-# 입찰가 계산 기본 파라미터 (조정 가능)
-DEFAULT_TARGET_RETURN = 0.12   # 목표 수익률 12%
-DEFAULT_WIN_RATE = 0.85        # 예상 낙찰가율 (시세 대비)
-DEFAULT_DROP_METRO = 0.20      # 수도권 유찰 1회당 저감률
-DEFAULT_DROP_LOCAL = 0.30      # 지방 유찰 1회당 저감률
+# 계산 기본 파라미터 (옥션홈즈 표 기준값; 모두 조정 가능)
+DEFAULTS = {
+    "취득세율": 0.011,        # 등기비: 입찰가×취득세율 + 법무비
+    "매수중개율": 0.005,      # 일반매매 취득 시 중개수수료
+    "매도중개율": 0.005,      # 단기매도 시 중개보수
+    "법무비": 1_000_000,
+    "명도_평당": 150_000,     # 전용 평당 명도비(강제집행 기준)
+    "㎡_평": 0.3025,
+    "대출비율": 0.7,
+    "대출금리": 0.05,
+    "보유개월": 6,            # 단기매도/이자 가정 개월
+    "목표시세차익률": 0.10,   # 권장 입찰가 산정 기준
+}
 
-# CSV 헤더 → 필드
-CSV_FIELDS = ["사건번호", "단지명", "region", "감정가", "최저매각가",
-              "유찰횟수", "입찰기일", "시세", "예상비용", "면적", "메모"]
+CSV_FIELDS = ["사건번호", "단지명", "region", "감정가", "최저매각가", "유찰횟수",
+              "입찰기일", "시세", "전용면적", "대출비율", "월임대료", "임대보증금",
+              "매도가", "미납관리비", "수리비", "메모"]
 
 
 @dataclass
 class Listing:
     사건번호: str = ""
     단지명: str = ""
-    region: str = ""            # BUY+ 시그널 지역명
+    region: str = ""
     감정가: float = 0.0          # 만원
-    최저매각가: float | None = None  # 만원 (없으면 감정가·유찰로 산정)
+    최저매각가: float | None = None
     유찰횟수: int = 0
-    입찰기일: str = ""           # YYYY-MM-DD
-    시세: float | None = None    # 만원 (없으면 감정가로 대체)
-    예상비용: float = 0.0        # 만원 (명도·수리·세금 등)
-    면적: str = ""
+    입찰기일: str = ""
+    시세: float | None = None
+    전용면적: float = 0.0        # ㎡
+    대출비율: float | None = None
+    대출금리: float | None = None
+    월임대료: float = 0.0        # 만원
+    임대보증금: float = 0.0      # 만원
+    매도가: float = 0.0          # 단기매도 예상가(만원)
+    미납관리비: float = 0.0
+    수리비: float = 0.0
+    인수보증금: float = 0.0
+    대리입찰비: float = 0.0
     메모: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 
 
-def _drop_rate(region: str) -> float:
-    metro = ("서울", "경기", "인천", "수도권")
-    return DEFAULT_DROP_METRO if any(region.startswith(m) for m in metro) else DEFAULT_DROP_LOCAL
+def _p(overrides: dict | None = None) -> dict:
+    p = dict(DEFAULTS)
+    if overrides:
+        p.update({k: v for k, v in overrides.items() if v is not None})
+    return p
 
 
-def bid_calc(lst: Listing, target_return: float = DEFAULT_TARGET_RETURN,
-             win_rate: float = DEFAULT_WIN_RATE) -> dict:
-    """입찰가 산정. (공식 교체 지점)"""
-    appraisal = lst.감정가 or 0.0
-    market = lst.시세 or appraisal           # 시세 없으면 감정가로 대체
-    drop = _drop_rate(lst.region)
-    min_bid = lst.최저매각가
-    if min_bid is None:
-        min_bid = round(appraisal * (1 - drop) ** max(lst.유찰횟수, 0))
+def breakdown(lst: Listing, 입찰가: float, p: dict) -> dict:
+    """주어진 입찰가에 대한 전체 비용·수익 분해."""
+    loan_ratio = lst.대출비율 if lst.대출비율 is not None else p["대출비율"]
+    rate = lst.대출금리 if lst.대출금리 is not None else p["대출금리"]
+    market = lst.시세 or lst.감정가
 
-    expected_win = round(market * win_rate)          # 예상 낙찰가
-    my_cap = round(market * (1 - target_return) - lst.예상비용)  # 목표수익 상한
-    # 권장 입찰가: 최저가 이상 + 상한 이내에서 예상낙찰가 근처
-    recommend = min(my_cap, max(min_bid, expected_win))
-    margin = round((market - recommend - lst.예상비용) / market * 100, 1) if market else 0.0
-    profitable = my_cap >= min_bid
+    등기비 = 입찰가 * p["취득세율"] + p["법무비"] / 10000  # 법무비는 원→만원
+    명도비 = lst.전용면적 * p["㎡_평"] * p["명도_평당"] / 10000
+    부대 = 등기비 + 명도비 + lst.미납관리비 + lst.수리비 + lst.대리입찰비 + lst.인수보증금
+    대출금 = 입찰가 * loan_ratio
+    보유이자 = 대출금 * rate / 12 * p["보유개월"]
+    경매총매입 = 입찰가 + 부대 + 보유이자
 
+    매매총매입 = market * (1 + p["취득세율"] + p["매수중개율"]) + p["법무비"] / 10000
+    시세차익 = 매매총매입 - 경매총매입
+    시세차익률 = 시세차익 / 경매총매입 if 경매총매입 else 0.0
+    실투자금 = 경매총매입 - 대출금
+
+    # 임대수익률
+    임대순수익 = lst.월임대료 * 12 - 대출금 * rate
+    임대실투자 = 실투자금 - lst.임대보증금
+    임대수익률 = 임대순수익 / 임대실투자 if 임대실투자 > 0 else None
+
+    # 단기매도 순수익
+    매도순수익 = 매도수익률 = None
+    if lst.매도가:
+        매도순수익 = lst.매도가 - 경매총매입 - lst.매도가 * p["매도중개율"]
+        매도수익률 = 매도순수익 / 실투자금 if 실투자금 else None
+
+    rnd = lambda x: None if x is None else round(x)
+    pct = lambda x: None if x is None else round(x * 100, 1)
     return {
-        "최저매각가": min_bid,
-        "예상낙찰가": expected_win,
-        "나의입찰상한": my_cap,
-        "권장입찰가": recommend,
-        "안전마진%": margin,
-        "수익가능": profitable,
+        "입찰가": rnd(입찰가), "등기비": rnd(등기비), "명도비": rnd(명도비),
+        "대출금": rnd(대출금), "보유이자": rnd(보유이자), "경매총매입": rnd(경매총매입),
+        "매매총매입": rnd(매매총매입), "시세차익": rnd(시세차익), "시세차익률": pct(시세차익률),
+        "실투자금": rnd(실투자금), "임대수익률": pct(임대수익률),
+        "매도순수익": rnd(매도순수익), "매도수익률": pct(매도수익률),
     }
 
 
-# --- 저장소 (JSON) ---
+def _floor_rate(lst: Listing) -> float:
+    if lst.감정가 and lst.최저매각가:
+        return lst.최저매각가 / lst.감정가
+    return 0.7  # 최저가 미상 시 70% 가정
+
+
+def table(lst: Listing, p: dict, span: float = 0.30, step: float = 0.01) -> list[dict]:
+    """낙찰가율(감정가 대비)별 민감도 표 (낮은 입찰가→높은 입찰가)."""
+    floor = _floor_rate(lst)
+    rows = []
+    r = floor
+    while r <= min(1.0, floor + span) + 1e-9:
+        bid = round(lst.감정가 * r)
+        rows.append({"낙찰가율": round(r * 100, 1), **breakdown(lst, bid, p)})
+        r += step
+    return rows
+
+
+def recommend(lst: Listing, p: dict) -> dict:
+    """목표 시세차익률을 만족하는 최대 입찰가(권장)와 그 분해."""
+    rows = table(lst, p)
+    target = p["목표시세차익률"] * 100
+    ok = [row for row in rows if row["시세차익률"] is not None and row["시세차익률"] >= target]
+    chosen = max(ok, key=lambda x: x["입찰가"]) if ok else rows[0]
+    return chosen
+
+
+# --- 저장소 ---
 def load() -> list[Listing]:
     if not AUCTION_FILE.exists():
         return []
@@ -85,9 +151,7 @@ def load() -> list[Listing]:
 def save(listings: list[Listing]) -> None:
     AUCTION_FILE.parent.mkdir(parents=True, exist_ok=True)
     AUCTION_FILE.write_text(
-        json.dumps([asdict(x) for x in listings], ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+        json.dumps([asdict(x) for x in listings], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def add(data: dict) -> Listing:
@@ -103,14 +167,11 @@ def remove(listing_id: str) -> None:
 
 
 def import_csv(text: str) -> int:
-    """CSV(헤더 포함) → 매물 추가. 추가 건수 반환."""
-    import csv
-    import io
-
     n = 0
     for row in csv.DictReader(io.StringIO(text)):
         clean = {k: v for k, v in row.items() if k in Listing.__dataclass_fields__ and v not in ("", None)}
-        for num in ("감정가", "최저매각가", "유찰횟수", "시세", "예상비용"):
+        for num in ("감정가", "최저매각가", "유찰횟수", "시세", "전용면적", "대출비율",
+                    "월임대료", "임대보증금", "매도가", "미납관리비", "수리비"):
             if num in clean:
                 try:
                     clean[num] = float(str(clean[num]).replace(",", ""))
@@ -126,18 +187,24 @@ def import_csv(text: str) -> int:
 _SIG_WEIGHT = {"STRONG_BUY": 2, "BUY": 1}
 
 
-def enrich(listings: list[Listing], signals: dict[str, str],
-           target_return: float = DEFAULT_TARGET_RETURN,
-           win_rate: float = DEFAULT_WIN_RATE) -> list[dict]:
-    """매물 + 계산 + 지역 시그널 + 우선순위 점수."""
+def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | None = None) -> list[dict]:
+    """매물 + 권장입찰가/시세차익률 + 지역시그널 + 우선순위 점수."""
+    p = _p(overrides)
     out = []
     for lst in listings:
-        calc = bid_calc(lst, target_return, win_rate)
+        rec = recommend(lst, p)
         sig = signals.get(lst.region, "")
-        # 우선순위 = 신호가중*10 + 안전마진 (수익불가면 강한 감점)
-        score = _SIG_WEIGHT.get(sig, 0) * 10 + calc["안전마진%"]
-        if not calc["수익가능"]:
-            score -= 100
-        out.append({**asdict(lst), **calc, "지역시그널": sig, "우선순위점수": round(score, 1)})
+        margin = rec["시세차익률"] or 0.0
+        score = _SIG_WEIGHT.get(sig, 0) * 10 + margin
+        if margin < p["목표시세차익률"] * 100:
+            score -= 100  # 목표 미달 매물은 후순위
+        out.append({
+            **asdict(lst), "지역시그널": sig, "권장입찰가": rec["입찰가"],
+            "예상낙찰가": rec["입찰가"], "시세차익": rec["시세차익"], "시세차익률": rec["시세차익률"],
+            "임대수익률": rec["임대수익률"], "매도수익률": rec["매도수익률"],
+            "최저매각가": rec.get("최저매각가") or lst.최저매각가,
+            "우선순위점수": round(score, 1),
+            "목표달성": margin >= p["목표시세차익률"] * 100,
+        })
     out.sort(key=lambda r: r["우선순위점수"], reverse=True)
     return out

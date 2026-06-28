@@ -1,36 +1,54 @@
-from realty_signal.auction import Listing, bid_calc, enrich, import_csv, save
+from realty_signal.auction import Listing, _p, breakdown, enrich, recommend, table
 
 
-def test_bid_calc_basic():
-    lst = Listing(단지명="테스트", region="서울", 감정가=100000, 유찰횟수=1, 시세=100000, 예상비용=2000)
-    c = bid_calc(lst, target_return=0.12, win_rate=0.85)
-    # 최저매각가 = 10만 * 0.8^1 = 80000
-    assert c["최저매각가"] == 80000
-    assert c["예상낙찰가"] == 85000          # 시세*0.85
-    assert c["나의입찰상한"] == 100000 * 0.88 - 2000  # 86000
-    assert c["수익가능"] is True
-    assert c["권장입찰가"] == 85000          # min(상한86000, max(80000,85000))
+def test_breakdown_matches_excel_model():
+    # 시세 3.4억, 입찰가 2.8억, 전용 59㎡, 대출 70%/5%, 6개월 보유
+    lst = Listing(단지명="t", region="서울", 감정가=340000000/10000, 시세=340000000/10000,
+                  전용면적=59, 대출비율=0.7, 대출금리=0.05)
+    p = _p({"보유개월": 6})
+    b = breakdown(lst, 28000, p)  # 입찰가 2.8억(만원)
+    # 등기비 = 28000*1.1% + 100 = 408
+    assert b["등기비"] == round(28000 * 0.011 + 100)
+    # 명도비 = 59*0.3025*15만/만 = 약 268만
+    assert b["명도비"] == round(59 * 0.3025 * 150000 / 10000)
+    # 대출금 = 28000*0.7
+    assert b["대출금"] == round(28000 * 0.7)
+    # 시세차익 = 매매총매입 - 경매총매입
+    assert b["시세차익"] == b["매매총매입"] - b["경매총매입"]
 
 
-def test_bid_calc_min_bid_override_and_unprofitable():
-    lst = Listing(region="대구", 감정가=50000, 최저매각가=49000, 시세=50000, 예상비용=8000)
-    c = bid_calc(lst, target_return=0.12, win_rate=0.85)
-    assert c["최저매각가"] == 49000          # 직접 입력 우선
-    # 상한 = 50000*0.88 - 8000 = 36000 < 최저가 49000 → 수익불가
-    assert c["수익가능"] is False
+def test_table_spans_from_floor_rate():
+    lst = Listing(감정가=10000, 최저매각가=6400, 시세=12000, region="서울")
+    t = table(lst, _p(), span=0.30, step=0.01)
+    assert abs(t[0]["낙찰가율"] - 64.0) < 0.01          # 최저가율 = 6400/10000
+    assert t[0]["입찰가"] < t[-1]["입찰가"]              # 낮은→높은 입찰가
+    # 입찰가 오를수록 시세차익률 하락
+    assert t[0]["시세차익률"] > t[-1]["시세차익률"]
 
 
-def test_enrich_priority_orders_by_signal_and_margin():
-    a = Listing(단지명="A", region="서울", 감정가=100000, 시세=100000, 유찰횟수=1)
-    b = Listing(단지명="B", region="대구", 감정가=100000, 시세=100000, 유찰횟수=1)
+def test_recommend_picks_highest_bid_meeting_target():
+    lst = Listing(감정가=10000, 최저매각가=6400, 시세=12000, region="서울")
+    p = _p({"목표시세차익률": 0.10})
+    rec = recommend(lst, p)
+    assert rec["시세차익률"] >= 10.0
+    # 권장보다 1%p 높은 입찰가는 목표 미달이어야(=최대 입찰가)
+    rows = table(lst, p)
+    higher = [r for r in rows if r["입찰가"] > rec["입찰가"]]
+    assert all(r["시세차익률"] < 10.0 for r in higher)
+
+
+def test_enrich_priority(tmp_path, monkeypatch):
+    import realty_signal.auction as au
+    monkeypatch.setattr(au, "AUCTION_FILE", tmp_path / "a.json")
+    a = Listing(단지명="A", region="서울", 감정가=10000, 최저매각가=6400, 시세=14000)
+    b = Listing(단지명="B", region="대구", 감정가=10000, 최저매각가=6400, 시세=14000)
     rows = enrich([b, a], {"서울": "STRONG_BUY", "대구": "BUY"})
-    assert rows[0]["단지명"] == "A"          # STRONG_BUY 가 우선
-    assert rows[0]["우선순위점수"] > rows[1]["우선순위점수"]
+    assert rows[0]["단지명"] == "A"  # STRONG_BUY 우선
 
 
 def test_import_csv(tmp_path, monkeypatch):
     import realty_signal.auction as au
     monkeypatch.setattr(au, "AUCTION_FILE", tmp_path / "a.json")
-    csv = "단지명,region,감정가,유찰횟수,입찰기일\n래미안,서울,120000,1,2026-07-10\n자이,경기,90000,0,2026-07-15\n"
-    assert au.import_csv(csv) == 2
-    assert len(au.load()) == 2
+    csv = "단지명,region,감정가,최저매각가,시세,입찰기일\n래미안,서울,120000,80000,140000,2026-07-10\n"
+    assert au.import_csv(csv) == 1
+    assert au.load()[0].단지명 == "래미안"

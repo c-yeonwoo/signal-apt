@@ -117,13 +117,36 @@ def buy_regions():
     return [{"region": r["region"], "signal": r["signal"]} for _, r in hot.iterrows()]
 
 
+def _overrides(target_margin, loan_ratio, loan_rate, hold_months):
+    return {"목표시세차익률": target_margin, "대출비율": loan_ratio,
+            "대출금리": loan_rate, "보유개월": hold_months}
+
+
 @app.get("/api/auction/listings")
-def auction_listings(target_return: float = auction.DEFAULT_TARGET_RETURN,
-                     win_rate: float = auction.DEFAULT_WIN_RATE):
-    """매물 + 입찰가 계산 + 우선순위(높은순)."""
+def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익률"],
+                     loan_ratio: float | None = None, loan_rate: float | None = None,
+                     hold_months: int | None = None):
+    """매물 + 권장입찰가/시세차익률 + 우선순위(높은순)."""
+    ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
     return {
-        "params": {"target_return": target_return, "win_rate": win_rate},
-        "listings": auction.enrich(auction.load(), _signal_map(), target_return, win_rate),
+        "params": {"target_margin": target_margin},
+        "listings": auction.enrich(auction.load(), _signal_map(), ov),
+    }
+
+
+@app.get("/api/auction/calc/{listing_id}")
+def auction_calc(listing_id: str, target_margin: float = auction.DEFAULTS["목표시세차익률"],
+                 loan_ratio: float | None = None, loan_rate: float | None = None,
+                 hold_months: int | None = None):
+    """단일 매물의 비용분해 + 낙찰가율 민감도 표 + 권장 입찰가."""
+    lst = next((x for x in auction.load() if x.id == listing_id), None)
+    if lst is None:
+        raise HTTPException(404, "listing not found")
+    p = auction._p(_overrides(target_margin, loan_ratio, loan_rate, hold_months))
+    return {
+        "listing": asdict_listing(lst),
+        "recommend": auction.recommend(lst, p),
+        "table": auction.table(lst, p),
     }
 
 
