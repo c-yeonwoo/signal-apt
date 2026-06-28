@@ -8,10 +8,10 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from realty_signal import store
+from realty_signal import auction, store
 from realty_signal.signals.engine import SignalConfig, evaluate
 
 log = logging.getLogger("realty_signal")
@@ -102,6 +102,51 @@ def signals(only: str | None = None):
         df = df[df["signal"].isin(keep)]
     # pandas to_json 이 NaN → null 로 안전 변환 (float NaN 직렬화 오류 회피)
     return json.loads(df.to_json(orient="records", force_ascii=False))
+
+
+def _signal_map() -> dict:
+    df = _signals_df()
+    return dict(zip(df["region"], df["signal"]))
+
+
+@app.get("/api/auction/buy-regions")
+def buy_regions():
+    """STRONG_BUY/BUY 시그널 지역 — 매물 탐색 가이드."""
+    df = _signals_df()
+    hot = df[df["signal"].isin(["STRONG_BUY", "BUY"])]
+    return [{"region": r["region"], "signal": r["signal"]} for _, r in hot.iterrows()]
+
+
+@app.get("/api/auction/listings")
+def auction_listings(target_return: float = auction.DEFAULT_TARGET_RETURN,
+                     win_rate: float = auction.DEFAULT_WIN_RATE):
+    """매물 + 입찰가 계산 + 우선순위(높은순)."""
+    return {
+        "params": {"target_return": target_return, "win_rate": win_rate},
+        "listings": auction.enrich(auction.load(), _signal_map(), target_return, win_rate),
+    }
+
+
+@app.post("/api/auction/listings")
+def auction_add(data: dict = Body(...)):
+    return asdict_listing(auction.add(data))
+
+
+@app.delete("/api/auction/listings/{listing_id}")
+def auction_delete(listing_id: str):
+    auction.remove(listing_id)
+    return {"ok": True}
+
+
+@app.post("/api/auction/import")
+async def auction_import(request: Request):
+    text = (await request.body()).decode("utf-8")
+    return {"added": auction.import_csv(text)}
+
+
+def asdict_listing(lst):
+    from dataclasses import asdict
+    return asdict(lst)
 
 
 @app.get("/api/series/{region}")

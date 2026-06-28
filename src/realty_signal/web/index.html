@@ -10,20 +10,26 @@
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
          background:var(--bg); color:var(--txt); }
-  header { padding:10px 18px; border-bottom:1px solid var(--line); display:flex;
-           align-items:center; gap:14px; flex-wrap:wrap; }
-  header h1 { font-size:17px; margin:0; white-space:nowrap; }
-  header .date { color:var(--dim); font-size:12px; white-space:nowrap; }
-  #search { flex:0 0 200px; padding:7px 12px; background:var(--panel); border:1px solid var(--line);
+  header { padding:9px 18px; border-bottom:1px solid var(--line); display:flex;
+           align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; white-space:nowrap; }
+  .tabs { display:flex; gap:4px; }
+  .tab { padding:6px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel);
+         color:var(--dim); cursor:pointer; font-size:13px; font-weight:600; }
+  .tab.on { color:#fff; background:#1e293b; border-color:#3b82f6; }
+  .date { color:var(--dim); font-size:12px; white-space:nowrap; }
+  #search { flex:0 0 180px; padding:7px 12px; background:var(--panel); border:1px solid var(--line);
             border-radius:8px; color:var(--txt); outline:none; }
   .filters { display:flex; gap:6px; flex-wrap:wrap; }
   .chip { padding:4px 10px; border:1px solid var(--line); border-radius:14px; cursor:pointer;
           background:var(--panel); color:var(--dim); font-size:12px; user-select:none; }
   .chip.on { color:#fff; border-color:#3b82f6; }
-  #refresh { margin-left:auto; padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
+  #refresh { padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
              background:#1e293b; color:#bfdbfe; cursor:pointer; font-size:13px; white-space:nowrap; }
   #refresh:disabled { opacity:.5; cursor:wait; }
-  .wrap { display:flex; height:calc(100vh - 53px); }
+  body.tab-auction .signal-ctl { display:none !important; }
+  .right { margin-left:auto; display:flex; gap:10px; align-items:center; }
+  .wrap { display:flex; height:calc(100vh - 52px); }
   .side { width:248px; border-right:1px solid var(--line); overflow:auto; }
   .row { padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex;
          align-items:center; gap:8px; flex-wrap:wrap; }
@@ -38,40 +44,146 @@
   #chart { flex:1; }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
-  .reasons { display:flex; gap:6px; flex-wrap:wrap; }
-  .rchip { font-size:12px; padding:3px 9px; border-radius:12px; background:#1d2230;
-           border:1px solid var(--line); }
-  .zlegend { display:flex; gap:4px; margin-left:auto; }
+  #reasons { color:var(--dim); font-size:12px; }
+  .zlegend { display:flex; gap:4px; margin-left:auto; align-items:center; }
   .zsw { font-size:11px; padding:2px 8px; border-radius:10px; cursor:help; color:#0f1115; font-weight:600; }
+  /* 경매 */
+  #view-auction { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
+  .sec { margin-bottom:18px; }
+  .sec h3 { font-size:14px; margin:0 0 8px; color:#cbd5e1; }
+  .hot { display:flex; gap:6px; flex-wrap:wrap; }
+  .params { display:flex; gap:18px; align-items:center; background:var(--panel); padding:10px 14px;
+            border:1px solid var(--line); border-radius:10px; flex-wrap:wrap; }
+  .params label { font-size:12px; color:var(--dim); }
+  .params input { width:64px; background:#0f1115; border:1px solid var(--line); color:var(--txt);
+                  border-radius:6px; padding:4px 6px; }
+  .btn { padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#1e293b;
+         color:#cbd5e1; cursor:pointer; font-size:13px; }
+  .btn.primary { border-color:#3b82f6; color:#bfdbfe; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { padding:7px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  th:first-child,td:first-child,th.l,td.l { text-align:left; }
+  thead th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--bg); }
+  tr.imminent { background:#3b1d1d33; } tr.unprofit td { opacity:.5; }
+  .pill { font-size:10px; padding:1px 6px; border-radius:8px; background:#1d2230; color:var(--dim); }
+  .strat { display:flex; gap:12px; flex-wrap:wrap; }
+  .scard { flex:1; min-width:180px; background:var(--panel); border:1px solid var(--line);
+           border-radius:10px; padding:12px 14px; }
+  .scard .big { font-size:22px; font-weight:700; }
+  dialog { background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:12px;
+           padding:18px; width:520px; max-width:92vw; }
+  dialog h3 { margin:0 0 12px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
+  .grid2 label { font-size:12px; color:var(--dim); display:flex; flex-direction:column; gap:3px; }
+  .grid2 input { background:#0f1115; border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:5px 7px; }
+  .dlg-foot { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
 </style>
 </head>
-<body>
+<body class="tab-signal">
 <header>
-  <h1>아파트 매수·매도 시그널 맵</h1>
+  <h1>아파트 시그널 맵</h1>
+  <div class="tabs">
+    <button class="tab on" data-tab="signal" onclick="switchTab('signal')">📊 시그널</button>
+    <button class="tab" data-tab="auction" onclick="switchTab('auction')">🔨 경매</button>
+  </div>
   <span class="date" id="date"></span>
-  <input id="search" placeholder="지역 검색…" />
-  <div class="filters" id="filters"></div>
-  <button id="refresh" onclick="doRefresh()">↻ 데이터 갱신</button>
+  <input id="search" class="signal-ctl" placeholder="지역 검색…" />
+  <div class="filters signal-ctl" id="filters"></div>
+  <div class="right">
+    <button id="refresh" class="signal-ctl" onclick="doRefresh()">↻ 데이터 갱신</button>
+  </div>
 </header>
-<div class="wrap">
-  <div class="side"><div id="list"></div></div>
-  <div class="main">
-    <div id="chart"></div>
-    <div class="footer">
-      <span id="sigbadge"></span>
-      <div class="reasons" id="reasons"></div>
-      <div class="zlegend" id="zlegend"></div>
+
+<!-- 시그널 탭 -->
+<div id="view-signal">
+  <div class="wrap">
+    <div class="side"><div id="list"></div></div>
+    <div class="main">
+      <div id="chart"></div>
+      <div class="footer">
+        <span id="sigbadge"></span>
+        <span id="reasons"></span>
+        <div class="zlegend" id="zlegend"></div>
+      </div>
     </div>
   </div>
 </div>
+
+<!-- 경매 탭 -->
+<div id="view-auction" style="display:none">
+  <div class="sec">
+    <h3>🔥 BUY+ 시그널 지역 (이 지역 매물을 탐색하세요)</h3>
+    <div class="hot" id="hotRegions"></div>
+  </div>
+  <div class="sec">
+    <h3>⚙️ 입찰가 계산 기준 <span class="pill">공식 조정 가능</span></h3>
+    <div class="params">
+      <label>목표 수익률 % <input id="pTarget" type="number" value="12" step="1" oninput="loadAuction()"></label>
+      <label>예상 낙찰가율 % <input id="pWin" type="number" value="85" step="1" oninput="loadAuction()"></label>
+      <button class="btn primary" onclick="openAdd()">+ 매물 추가</button>
+      <button class="btn" onclick="document.getElementById('csv').click()">CSV 임포트</button>
+      <input id="csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)">
+      <span class="pill" id="csvHint">CSV 헤더: 단지명,region,감정가,유찰횟수,입찰기일,시세,예상비용…</span>
+    </div>
+  </div>
+  <div class="sec">
+    <h3>🎯 경매 전략 (입찰기일 기준)</h3>
+    <div class="strat" id="strat"></div>
+  </div>
+  <div class="sec">
+    <h3>📋 관심 매물 — 우선순위순</h3>
+    <table>
+      <thead><tr>
+        <th class="l">단지명</th><th class="l">지역</th><th>감정가</th><th>최저매각가</th>
+        <th>예상낙찰가</th><th>권장입찰가</th><th>안전마진</th><th class="l">입찰기일</th>
+        <th>우선순위</th><th></th>
+      </tr></thead>
+      <tbody id="auctionRows"></tbody>
+    </table>
+    <p id="emptyMsg" style="color:var(--dim)"></p>
+  </div>
+</div>
+
+<dialog id="addDlg">
+  <h3>매물 추가</h3>
+  <div class="grid2">
+    <label>단지명<input id="f_단지명"></label>
+    <label>지역(시그널)<input id="f_region" placeholder="예: 서울, 강남구"></label>
+    <label>사건번호<input id="f_사건번호"></label>
+    <label>입찰기일<input id="f_입찰기일" type="date"></label>
+    <label>감정가(만원)<input id="f_감정가" type="number"></label>
+    <label>최저매각가(만원, 선택)<input id="f_최저매각가" type="number"></label>
+    <label>유찰횟수<input id="f_유찰횟수" type="number" value="0"></label>
+    <label>시세(만원, 선택)<input id="f_시세" type="number"></label>
+    <label>예상비용(만원)<input id="f_예상비용" type="number" value="0"></label>
+    <label>면적<input id="f_면적"></label>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" onclick="document.getElementById('addDlg').close()">취소</button>
+    <button class="btn primary" onclick="submitAdd()">추가</button>
+  </div>
+</dialog>
+
 <script>
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
+const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#4ade80', WATCH:'#fbbf24', NEUTRAL:'#94a3b8', SELL_RISK:'#f87171'};
 let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
 let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'), 'dark');
 window.addEventListener('resize', () => chart.resize());
 const badge = s => `<span class="badge ${s}">${s}</span>`;
+const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
 
+function switchTab(t){
+  document.body.className = 'tab-'+t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
+  document.getElementById('view-signal').style.display = t==='signal'?'':'none';
+  document.getElementById('view-auction').style.display = t==='auction'?'':'none';
+  if(t==='signal') chart.resize();
+  if(t==='auction') loadAuction();
+}
+
+/* ---------- 시그널 탭 ---------- */
 function renderFilters(){
   const f = document.getElementById('filters'); f.innerHTML = '';
   SIGNALS.forEach(s => {
@@ -81,26 +193,22 @@ function renderFilters(){
     f.appendChild(el);
   });
 }
-
 function renderList(){
   const q = document.getElementById('search').value.trim();
   const list = document.getElementById('list'); list.innerHTML = '';
-  allSignals.filter(r => active.has(r.signal)).filter(r => !q || r.region.includes(q))
-    .forEach(r => {
-      const row = document.createElement('div');
-      row.className = 'row' + (selected===r.region?' sel':'');
-      const js = r['전세수급']==null?'–':r['전세수급'];
-      const idx = r['매수우위지수']==null?'–':r['매수우위지수'];
-      const sp = r['공급압력']==null?'':` · 입주 ${r['공급압력']}x`;
-      row.innerHTML = `<span class="nm">${r.region}</span>${badge(r.signal)}
-        <span class="mn">전세 ${js} · 매수우위 ${idx}${sp}</span>`;
-      row.onclick = () => selectRegion(r.region);
-      list.appendChild(row);
-    });
+  allSignals.filter(r => active.has(r.signal)).filter(r => !q || r.region.includes(q)).forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'row' + (selected===r.region?' sel':'');
+    const sp = r['공급압력']==null?'':` · 입주 ${r['공급압력']}x`;
+    row.innerHTML = `<span class="nm">${r.region}</span>${badge(r.signal)}
+      <span class="mn">전세 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}${sp}</span>`;
+    row.onclick = () => selectRegion(r.region);
+    list.appendChild(row);
+  });
 }
-
 function renderZoneLegend(){
-  const z = document.getElementById('zlegend'); z.innerHTML = '<span style="color:var(--dim);font-size:11px">전세수급 구간:</span>';
+  const z = document.getElementById('zlegend');
+  z.innerHTML = '<span style="color:var(--dim);font-size:11px">전세수급 구간:</span>';
   (meta.zones.jeonse_supply||[]).forEach(zn => {
     const s = document.createElement('span');
     s.className = 'zsw'; s.style.background = zn.color; s.textContent = zn.label;
@@ -108,10 +216,6 @@ function renderZoneLegend(){
     z.appendChild(s);
   });
 }
-
-const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#4ade80', WATCH:'#fbbf24',
-                  NEUTRAL:'#94a3b8', SELL_RISK:'#f87171'};
-
 async function selectRegion(region){
   selected = region; renderList();
   const r = allSignals.find(x => x.region===region);
@@ -120,7 +224,6 @@ async function selectRegion(region){
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
   drawChart(region, d.metrics, r);
 }
-
 function reasonGraphic(region, sig){
   const reasons = (sig['근거']||'').split(' · ').filter(Boolean);
   const head = `${region}  ▸  ${sig.signal}`;
@@ -128,74 +231,43 @@ function reasonGraphic(region, sig){
   const maxCh = Math.max(head.length, ...lines.map(l => l.length), 8);
   const W = Math.min(380, Math.max(190, Math.round(maxCh * 8.2) + 22));
   const H = 30 + lines.length * 17 + 12;
-  return [{
-    type:'group', left:56, top:30, z:100, silent:true,
-    children:[
-      {type:'rect', shape:{width:W, height:H, r:8},
-       style:{fill:'rgba(15,17,21,0.85)', stroke:'#2b3340', lineWidth:1}},
-      {type:'text', left:12, top:9,
-       style:{text:head, fill:SIGCOLOR[sig.signal]||'#fff', font:'bold 14px sans-serif'}},
-      {type:'text', left:12, top:32,
-       style:{text:lines.join('\n'), fill:'#cbd5e1', fontSize:11.5, lineHeight:17}},
-    ],
-  }];
+  return [{ type:'group', left:56, top:30, z:100, silent:true, children:[
+    {type:'rect', shape:{width:W, height:H, r:8}, style:{fill:'rgba(15,17,21,0.85)', stroke:'#2b3340', lineWidth:1}},
+    {type:'text', left:12, top:9, style:{text:head, fill:SIGCOLOR[sig.signal]||'#fff', font:'bold 14px sans-serif'}},
+    {type:'text', left:12, top:32, style:{text:lines.join('\n'), fill:'#cbd5e1', fontSize:11.5, lineHeight:17}},
+  ]}];
 }
-
 function drawChart(region, m, sig){
   const colors = {jeonse_supply:"#38bdf8", buyer_superiority:"#a78bfa", buyer_demand:"#f472b6",
                   sale_change:"#fbbf24", jeonse_change:"#34d399"};
   const series = [];
-  const mk = (k, axis, extra={}) => {
-    if(!m[k]) return;
+  const mk = (k, axis, extra={}) => { if(!m[k]) return;
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
-      lineStyle:{width:1.5}, itemStyle:{color:colors[k]},
-      data:m[k].dates.map((dt,i)=>[dt, m[k].values[i]]), ...extra });
-  };
-
-  // 전세수급 구간 배경 밴드(색=강도) — 전세수급 시리즈에 markArea 부착
+      lineStyle:{width:1.5}, itemStyle:{color:colors[k]}, data:m[k].dates.map((dt,i)=>[dt, m[k].values[i]]), ...extra }); };
   const zones = meta.zones.jeonse_supply || [];
   const bandArea = m.jeonse_supply ? { silent:true, data: zones.map(z=>(
       [{yAxis:z.from, itemStyle:{color:z.color, opacity:0.16}}, {yAxis:z.to}])) } : undefined;
-
   mk("jeonse_supply", 0, bandArea ? { markArea: bandArea,
       markPoint:{ symbolSize:42, data:[{type:'max',label:{fontSize:10}}] } } : {});
   mk("buyer_superiority", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4},
-      data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#a78bfa'}}]}});
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#a78bfa'}}]}});
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4},
-      data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#4ade80'}}]}});
-  mk("sale_change", 1);
-  mk("jeonse_change", 1);
-
-  const last = meta.last_date;
-  const start = new Date(last); start.setFullYear(start.getFullYear()-3);
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#4ade80'}}]}});
+  mk("sale_change", 1); mk("jeonse_change", 1);
+  const last = meta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
   const z0 = start.toISOString().slice(0,10);
-  chart.setOption({
-    tooltip:{ trigger:'axis' },
-    legend:{ top:6, right:14, textStyle:{fontSize:11} },
-    grid:{ left:46, right:52, top:40, bottom:64 },
-    xAxis:{ type:'time' },
-    yAxis:[ { name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}} },
-            { name:'증감%', splitLine:{show:false} } ],
-    dataZoom:[ { type:'inside', startValue:z0, endValue:last },
-               { type:'slider', startValue:z0, endValue:last, height:22, bottom:14 } ],
-    graphic: sig ? reasonGraphic(region, sig) : [],
-    series
-  }, true);
+  chart.setOption({ tooltip:{trigger:'axis'}, legend:{top:6, right:14, textStyle:{fontSize:11}},
+    grid:{left:46, right:52, top:40, bottom:64}, xAxis:{type:'time'},
+    yAxis:[{name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}}}, {name:'증감%', splitLine:{show:false}}],
+    dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
+    graphic: sig ? reasonGraphic(region, sig) : [], series }, true);
 }
-
 async function doRefresh(){
-  const btn = document.getElementById('refresh');
-  btn.disabled = true; const old = btn.textContent; btn.textContent = '갱신 중…';
-  try {
-    const r = await (await fetch('/api/refresh', {method:'POST'})).json();
-    await loadData();
-    btn.textContent = `✓ ${r.last_date}`;
-    setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
-  } catch(e) { btn.textContent = '갱신 실패'; setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500); }
+  const btn = document.getElementById('refresh'); btn.disabled = true; const old = btn.textContent; btn.textContent = '갱신 중…';
+  try { const r = await (await fetch('/api/refresh', {method:'POST'})).json(); await loadData();
+    btn.textContent = `✓ ${r.last_date}`; } catch(e){ btn.textContent = '갱신 실패'; }
+  setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
 }
-
 async function loadData(){
   meta = await (await fetch('/api/meta')).json();
   document.getElementById('date').textContent = `최신 ${meta.last_date}`;
@@ -203,6 +275,79 @@ async function loadData(){
   renderZoneLegend(); renderList();
   const keep = selected && allSignals.find(r=>r.region===selected);
   selectRegion(keep ? selected : (allSignals.find(r=>active.has(r.signal))||allSignals[0]).region);
+}
+
+/* ---------- 경매 탭 ---------- */
+function openAdd(){ document.getElementById('addDlg').showModal(); }
+async function submitAdd(){
+  const f = id => document.getElementById('f_'+id).value;
+  const data = {};
+  ['단지명','region','사건번호','입찰기일','면적'].forEach(k=>{ if(f(k)) data[k]=f(k); });
+  ['감정가','최저매각가','유찰횟수','시세','예상비용'].forEach(k=>{ if(f(k)!=='') data[k]=parseFloat(f(k)); });
+  await fetch('/api/auction/listings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  document.getElementById('addDlg').close();
+  document.querySelectorAll('#addDlg input').forEach(i=>i.value = i.id==='f_유찰횟수'||i.id==='f_예상비용'?'0':'');
+  loadAuction();
+}
+async function importCsv(input){
+  const file = input.files[0]; if(!file) return;
+  const text = await file.text();
+  const r = await (await fetch('/api/auction/import', {method:'POST', body:text})).json();
+  input.value=''; alert(`${r.added}건 추가됨`); loadAuction();
+}
+async function delListing(id){ await fetch('/api/auction/listings/'+id, {method:'DELETE'}); loadAuction(); }
+
+async function loadAuction(){
+  // BUY+ 지역 가이드
+  const hot = await (await fetch('/api/auction/buy-regions')).json();
+  document.getElementById('hotRegions').innerHTML = hot.length
+    ? hot.map(h=>`<span class="badge ${h.signal}" style="cursor:pointer" onclick="prefillRegion('${h.region}')">${h.region}</span>`).join('')
+    : '<span style="color:var(--dim)">현재 BUY+ 지역 없음</span>';
+
+  const tr = (+document.getElementById('pTarget').value||12)/100;
+  const wr = (+document.getElementById('pWin').value||85)/100;
+  const res = await (await fetch(`/api/auction/listings?target_return=${tr}&win_rate=${wr}`)).json();
+  renderAuction(res.listings);
+}
+function prefillRegion(r){ switchTab('auction'); openAdd(); document.getElementById('f_region').value = r; }
+
+function daysTo(d){ if(!d) return null; return Math.ceil((new Date(d) - new Date())/86400000); }
+
+function renderAuction(rows){
+  const tb = document.getElementById('auctionRows'); tb.innerHTML='';
+  document.getElementById('emptyMsg').textContent = rows.length ? '' :
+    '관심 매물이 없습니다. BUY+ 지역의 경매 매물을 "+ 매물 추가" 또는 CSV로 등록하세요.';
+  rows.forEach(r=>{
+    const dleft = daysTo(r['입찰기일']);
+    const imminent = dleft!=null && dleft>=0 && dleft<=7;
+    const tr2 = document.createElement('tr');
+    tr2.className = (imminent?'imminent ':'') + (r['수익가능']?'':'unprofit');
+    const dtxt = r['입찰기일'] ? `${r['입찰기일']}${dleft!=null?` <span class="pill">${dleft<0?'지남':'D-'+dleft}</span>`:''}` : '–';
+    tr2.innerHTML = `<td class="l">${r['단지명']||'–'} ${r['수익가능']?'':'<span class="pill">수익X</span>'}</td>
+      <td class="l">${r['region']||''} ${r['지역시그널']?badge(r['지역시그널']):''}</td>
+      <td>${won(r['감정가'])}</td><td>${won(r['최저매각가'])}</td><td>${won(r['예상낙찰가'])}</td>
+      <td style="color:#4ade80;font-weight:600">${won(r['권장입찰가'])}</td>
+      <td style="color:${r['안전마진%']>=0?'#4ade80':'#f87171'}">${r['안전마진%']}%</td>
+      <td class="l">${dtxt}</td><td>${r['우선순위점수']}</td>
+      <td><span class="btn" style="padding:2px 8px" onclick="delListing('${r['id']}')">✕</span></td>`;
+    tb.appendChild(tr2);
+  });
+  renderStrategy(rows);
+}
+function renderStrategy(rows){
+  const withDate = rows.filter(r=>r['입찰기일'] && daysTo(r['입찰기일'])>=0);
+  const wk = withDate.filter(r=>daysTo(r['입찰기일'])<=7);
+  const wk2 = withDate.filter(r=>{const d=daysTo(r['입찰기일']); return d>7 && d<=14;});
+  const profit = rows.filter(r=>r['수익가능']);
+  const top = profit[0];
+  const card = (t, big, sub) => `<div class="scard"><div style="color:var(--dim);font-size:12px">${t}</div>
+     <div class="big">${big}</div><div style="color:var(--dim);font-size:12px">${sub}</div></div>`;
+  document.getElementById('strat').innerHTML =
+    card('이번 주 입찰(7일내)', wk.length+'건', wk.map(r=>r['단지명']).slice(0,3).join(', ')||'없음') +
+    card('2주 내 입찰', wk2.length+'건', wk2.map(r=>r['단지명']).slice(0,3).join(', ')||'없음') +
+    card('수익가능 매물', profit.length+'건', `전체 ${rows.length}건 중`) +
+    card('🥇 최우선 단지', top?top['단지명']:'–',
+         top?`${top['region']} · 권장 ${won(top['권장입찰가'])} · 마진 ${top['안전마진%']}%`:'매물을 등록하세요');
 }
 
 (async function init(){
