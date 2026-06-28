@@ -44,7 +44,8 @@
   #chart { flex:1; }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
-  #reasons { color:var(--txt); font-size:13px; flex:1 1 420px; min-width:280px; }
+  #reasons { display:flex; gap:6px; flex-wrap:wrap; flex:1 1 360px; min-width:240px; }
+  .rchip { font-size:12px; padding:3px 9px; border-radius:12px; background:#1d2230; border:1px solid var(--line); }
   .zlegend { display:flex; gap:4px; margin-left:auto; align-items:center; }
   /* 지역 트리 */
   .ghead { padding:8px 12px; font-weight:700; font-size:13px; cursor:pointer; background:#12151c;
@@ -305,22 +306,32 @@ async function selectRegion(region){
   selected = region; renderList();
   const r = allSignals.find(x => x.region===region);
   document.getElementById('sigbadge').innerHTML = `<b>${region}</b> ${badge(r.signal)}`;
+  // footer: 지표 근거 칩
   document.getElementById('reasons').innerHTML =
-    `<span style="color:#e6e8ee">💡 ${r['해설']||''}</span>`;
+    (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join('');
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
   drawChart(region, d.metrics, r);
 }
+function wrapKo(s, n){
+  const out=[]; let cur='';
+  for(const tok of s.split(/(\s+)/)){
+    if((cur+tok).length>n && cur.trim()){ out.push(cur.trim()); cur=tok.replace(/^\s+/,''); }
+    else cur+=tok;
+    while(cur.length>n){ out.push(cur.slice(0,n)); cur=cur.slice(n); }
+  }
+  if(cur.trim()) out.push(cur.trim());
+  return out;
+}
 function reasonGraphic(region, sig){
-  const reasons = (sig['근거']||'').split(' · ').filter(Boolean);
+  // 차트 위: 시그널 + 종합 해설(문장)
   const head = `${region}  ▸  ${sig.signal}`;
-  const lines = reasons.map(x => '• ' + x);
-  const maxCh = Math.max(head.length, ...lines.map(l => l.length), 8);
-  const W = Math.min(380, Math.max(190, Math.round(maxCh * 8.2) + 22));
-  const H = 30 + lines.length * 17 + 12;
+  const lines = wrapKo(sig['해설']||'', 28);
+  const W = 366;
+  const H = 32 + lines.length * 18 + 12;
   return [{ type:'group', left:56, top:30, z:100, silent:true, children:[
-    {type:'rect', shape:{width:W, height:H, r:8}, style:{fill:'rgba(15,17,21,0.85)', stroke:'#2b3340', lineWidth:1}},
+    {type:'rect', shape:{width:W, height:H, r:8}, style:{fill:'rgba(15,17,21,0.88)', stroke:'#2b3340', lineWidth:1}},
     {type:'text', left:12, top:9, style:{text:head, fill:SIGCOLOR[sig.signal]||'#fff', font:'bold 14px sans-serif'}},
-    {type:'text', left:12, top:32, style:{text:lines.join('\n'), fill:'#cbd5e1', fontSize:11.5, lineHeight:17}},
+    {type:'text', left:12, top:34, style:{text:'💡 '+lines.join('\n'), fill:'#dbe2ee', fontSize:12, lineHeight:18}},
   ]}];
 }
 function drawChart(region, m, sig){
