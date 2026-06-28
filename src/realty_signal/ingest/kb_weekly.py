@@ -23,10 +23,12 @@ from openpyxl import load_workbook
 
 DATA_START_ROW = 5  # 실데이터 시작 행 (1-indexed)
 
-# (시트명, 지수 서브헤더 라벨, 산출 metric 키)
+# 시트명 → {서브헤더 라벨: metric 키}. 3열 그룹(우위/열위/지수)에서 필요한 열만 추출.
+#   buyer_demand(매수세우위 raw)는 "5/10/15/20" 사다리용,
+#   buyer_superiority(매수우위지수)는 차트용 — 별개 지표로 다룬다.
 GROUPED_SHEETS = {
-    "매수매도": ("매수우위지수", "buyer_superiority"),
-    "전세수급": ("전세수급지수", "jeonse_supply"),
+    "매수매도": {"매수세우위": "buyer_demand", "매수우위지수": "buyer_superiority"},
+    "전세수급": {"전세수급지수": "jeonse_supply"},
 }
 # (시트명, metric 키) — 지역당 1열, 헤더행은 '전국'으로 자동 탐지
 CHANGE_SHEETS = {
@@ -112,8 +114,8 @@ class KBWeekly:
         return s
 
 
-def _parse_grouped(ws, index_label: str, metric: str, dates: list[pd.Timestamp]) -> pd.DataFrame:
-    """3열 그룹(우위/열위/지수) 시트에서 '지수' 열만 뽑아 long 으로."""
+def _parse_grouped(ws, label_map: dict[str, str], dates: list[pd.Timestamp]) -> pd.DataFrame:
+    """3열 그룹(우위/열위/지수) 시트에서 label_map 에 지정한 서브헤더 열들을 long 으로."""
     region_at: dict[int, str] = {
         c: _clean_region(ws.cell(row=2, column=c).value)
         for c in range(1, ws.max_column + 1)
@@ -122,7 +124,8 @@ def _parse_grouped(ws, index_label: str, metric: str, dates: list[pd.Timestamp])
     cols = sorted(region_at)
     rows = []
     for c in range(1, ws.max_column + 1):
-        if str(ws.cell(row=3, column=c).value).strip() != index_label:
+        metric = label_map.get(str(ws.cell(row=3, column=c).value).strip())
+        if metric is None:
             continue
         region = next((region_at[rc] for rc in reversed(cols) if rc <= c), None)
         if not region:
@@ -183,9 +186,9 @@ def load(path: str | Path) -> KBWeekly:
             best_dates, n_rows = dates, rows
 
     frames = []
-    for sh, (label, metric) in GROUPED_SHEETS.items():
+    for sh, label_map in GROUPED_SHEETS.items():
         if sh in wb.sheetnames:
-            frames.append(_parse_grouped(wb[sh], label, metric, best_dates[:n_rows]))
+            frames.append(_parse_grouped(wb[sh], label_map, best_dates[:n_rows]))
     for sh, metric in CHANGE_SHEETS.items():
         if sh in wb.sheetnames:
             frames.append(_parse_change(wb[sh], metric, best_dates[:n_rows]))

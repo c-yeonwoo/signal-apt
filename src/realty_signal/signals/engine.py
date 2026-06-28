@@ -38,12 +38,11 @@ class SignalConfig:
     jeonse_tight: float = 140.0
     jeonse_crunch: float = 170.0
     jeonse_spillover: float = 190.0
-    # 매수우위지수: KB 실측 분포 기준 보정값(전국 median≈46, 100↑은 역대급 활황).
-    # 100 중립 가정은 KB 데이터에서 거의 항상 '매도우위'로 찍혀 무의미 → 분위 기반 밴드 사용.
-    # ※ 원본 메모의 "5/10/15/20" 사다리는 스케일 불명 → 사용자 확인 후 재조정 대상.
-    buyer_weak: float = 40.0   # ~p25 미만: 매수세 위축
-    buyer_neutral: float = 60.0  # p25~p60: 중립
-    buyer_strong: float = 80.0  # ~p75 이상: 매수세 강함
+    # 매수세우위(raw) 사다리 — 원본 메모 "5/10/15/20, 20↑ 매수". KB 실측 median≈3~5.
+    demand_l1: float = 5.0   # 약함
+    demand_l2: float = 10.0  # 보통
+    demand_l3: float = 15.0  # 강함
+    demand_buy: float = 20.0  # 매수신호 ("빨리 사야한다")
     # 모멘텀 산정 주(week) 수, 증감률 임계(%)
     momentum_weeks: int = 4
     momentum_up: float = 0.05
@@ -62,14 +61,17 @@ def _jeonse_state(v: float, c: SignalConfig) -> str:
     return "매매전이"
 
 
-def _buyer_state(v: float, c: SignalConfig) -> str:
-    if v >= c.buyer_strong:
-        return "매수강세"
-    if v >= c.buyer_neutral:
-        return "매수우위"
-    if v >= c.buyer_weak:
-        return "매도우위"
-    return "매수위축"
+def _demand_state(v: float, c: SignalConfig) -> str:
+    """매수세우위(raw) 사다리 라벨."""
+    if v >= c.demand_buy:
+        return "매수신호"
+    if v >= c.demand_l3:
+        return "강함"
+    if v >= c.demand_l2:
+        return "보통"
+    if v >= c.demand_l1:
+        return "약함"
+    return "매우약함"
 
 
 def _momentum(series: pd.Series, c: SignalConfig) -> tuple[float, str]:
@@ -85,19 +87,22 @@ def _momentum(series: pd.Series, c: SignalConfig) -> tuple[float, str]:
     return avg, "보합"
 
 
-def _overall(jeonse: str, buyer: str, sale_mom: str, c: SignalConfig) -> tuple[str, str]:
-    """지역별 종합 시그널 + 근거 문장."""
+def _overall(jeonse: str, demand: str, sale_mom: str, c: SignalConfig) -> tuple[str, str]:
+    """지역별 종합 시그널 + 근거 문장. 매수 트리거는 매수세우위(사다리) 기준."""
     crunch = jeonse in ("전세난", "매매전이")
-    buy_pressure = buyer in ("매수우위", "매수강세")
+    strong_demand = demand == "매수신호"          # 매수세우위 ≥20
+    rising_demand = demand in ("강함", "매수신호")  # ≥15
     rising = sale_mom == "상승"
 
-    if crunch and buy_pressure and rising:
-        return "STRONG_BUY", "전세난+매수우위+매매상승 — 3박자 매수 시그널"
-    if crunch and (buy_pressure or rising):
+    if crunch and strong_demand and rising:
+        return "STRONG_BUY", "전세난+매수세우위 20↑+매매상승 — 3박자 매수 시그널"
+    if strong_demand:
+        return "BUY", "매수세우위 20↑ — 적극 매수 구간"
+    if crunch and (rising_demand or rising):
         return "BUY", "전세난 진행 + 매수세/가격 반응 시작"
-    if jeonse == "타이트" and (buy_pressure or rising):
+    if jeonse == "타이트" and (rising_demand or rising):
         return "WATCH", "전세 타이트 — 전세난 전환 여부 관찰"
-    if sale_mom == "하락" and buyer == "매수위축":
+    if sale_mom == "하락" and demand in ("매우약함", "약함"):
         return "SELL_RISK", "매수세 위축 + 가격 하락 — 매도/관망 구간"
     return "NEUTRAL", "뚜렷한 시그널 없음"
 
@@ -107,18 +112,20 @@ def evaluate(kb: KBWeekly, config: SignalConfig | None = None) -> pd.DataFrame:
     c = config or SignalConfig()
     latest = kb.latest()
 
+    def _get(region, metric):
+        return latest.at[region, metric] if metric in latest and region in latest.index else float("nan")
+
     rows = []
     for region in latest.index:
-        js = latest.at[region, "jeonse_supply"] if "jeonse_supply" in latest else float("nan")
-        bs = latest.at[region, "buyer_superiority"] if "buyer_superiority" in latest else float("nan")
-        sale_series = kb.series(region, "sale_change")
-        jeonse_series = kb.series(region, "jeonse_change")
-        sale_avg, sale_mom = _momentum(sale_series, c)
-        jeonse_avg, jeonse_mom = _momentum(jeonse_series, c)
+        js = _get(region, "jeonse_supply")
+        bd = _get(region, "buyer_demand")        # 매수세우위(raw) — 사다리/시그널 트리거
+        bs = _get(region, "buyer_superiority")   # 매수우위지수 — 참고용(별개)
+        sale_avg, sale_mom = _momentum(kb.series(region, "sale_change"), c)
+        jeonse_avg, _ = _momentum(kb.series(region, "jeonse_change"), c)
 
         jeonse_state = _jeonse_state(js, c) if pd.notna(js) else "—"
-        buyer_st = _buyer_state(bs, c) if pd.notna(bs) else "—"
-        signal, reason = _overall(jeonse_state, buyer_st, sale_mom, c)
+        demand_state = _demand_state(bd, c) if pd.notna(bd) else "—"
+        signal, reason = _overall(jeonse_state, demand_state, sale_mom, c)
 
         rows.append(
             {
@@ -126,8 +133,9 @@ def evaluate(kb: KBWeekly, config: SignalConfig | None = None) -> pd.DataFrame:
                 "signal": signal,
                 "전세수급": round(js, 1) if pd.notna(js) else None,
                 "전세상태": jeonse_state,
-                "매수우위": round(bs, 1) if pd.notna(bs) else None,
-                "매수상태": buyer_st,
+                "매수세우위": round(bd, 1) if pd.notna(bd) else None,
+                "매수상태": demand_state,
+                "매수우위지수": round(bs, 1) if pd.notna(bs) else None,
                 f"매매{c.momentum_weeks}주": round(sale_avg, 3) if pd.notna(sale_avg) else None,
                 "매매모멘텀": sale_mom,
                 f"전세{c.momentum_weeks}주": round(jeonse_avg, 3) if pd.notna(jeonse_avg) else None,

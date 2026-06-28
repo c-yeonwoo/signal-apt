@@ -74,10 +74,11 @@ def _region_trend(kb, region: str, weeks: int):
 
     table = Table(title=f"{region} — 최근 {weeks}주", header_style="bold")
     table.add_column("주")
-    metrics = [m for m in ["jeonse_supply", "buyer_superiority", "sale_change", "jeonse_change"]
-               if m in kb.metrics]
-    label = {"jeonse_supply": "전세수급", "buyer_superiority": "매수우위",
-             "sale_change": "매매증감%", "jeonse_change": "전세증감%"}
+    metrics = [m for m in ["jeonse_supply", "buyer_demand", "buyer_superiority",
+                           "sale_change", "jeonse_change"] if m in kb.metrics]
+    label = {"jeonse_supply": "전세수급", "buyer_demand": "매수세우위",
+             "buyer_superiority": "매수우위지수", "sale_change": "매매증감%",
+             "jeonse_change": "전세증감%"}
     for m in metrics:
         table.add_column(label[m])
 

@@ -3,7 +3,7 @@ import pandas as pd
 from realty_signal.ingest.kb_weekly import _clean_region, _normalize_dates
 from realty_signal.signals.engine import (
     SignalConfig,
-    _buyer_state,
+    _demand_state,
     _jeonse_state,
     _momentum,
     _overall,
@@ -38,12 +38,13 @@ def test_jeonse_state_bands():
     assert _jeonse_state(195, c) == "매매전이"
 
 
-def test_buyer_state_bands():
+def test_demand_state_ladder():
     c = SignalConfig()
-    assert _buyer_state(30, c) == "매수위축"
-    assert _buyer_state(50, c) == "매도우위"
-    assert _buyer_state(70, c) == "매수우위"
-    assert _buyer_state(90, c) == "매수강세"
+    assert _demand_state(3, c) == "매우약함"
+    assert _demand_state(7, c) == "약함"
+    assert _demand_state(12, c) == "보통"
+    assert _demand_state(17, c) == "강함"
+    assert _demand_state(25, c) == "매수신호"
 
 
 def test_momentum_labels():
@@ -56,9 +57,10 @@ def test_momentum_labels():
     assert _momentum(flat, c)[1] == "보합"
 
 
-def test_overall_strong_buy():
+def test_overall_signals():
     c = SignalConfig()
-    sig, _ = _overall("전세난", "매수우위", "상승", c)
-    assert sig == "STRONG_BUY"
-    sig, _ = _overall("공급우위", "매수위축", "하락", c)
-    assert sig == "SELL_RISK"
+    assert _overall("전세난", "매수신호", "상승", c)[0] == "STRONG_BUY"
+    assert _overall("보통", "매수신호", "보합", c)[0] == "BUY"  # 20↑ 단독으로 매수
+    assert _overall("전세난", "강함", "보합", c)[0] == "BUY"
+    assert _overall("공급우위", "매우약함", "하락", c)[0] == "SELL_RISK"
+    assert _overall("보통", "약함", "보합", c)[0] == "NEUTRAL"
