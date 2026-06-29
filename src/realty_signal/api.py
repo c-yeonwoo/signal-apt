@@ -365,12 +365,23 @@ def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7):
         })
     ps_by = defaultdict(list)
     for d in _presale():
-        if d.get("시그널") in ("STRONG_BUY", "BUY"):
+        if d.get("시그널") in ("STRONG_BUY", "BUY") and d.get("상태") in ("접수중", "접수예정"):
             ps_by[d["지역"]].append({
-                "단지명": d["단지명"], "지역급지": d.get("지역급지"),
-                "최저분양가": d.get("최저분양가"), "최대분양가": d.get("최대분양가"),
-                "분양시작": d.get("분양시작"), "구분": d.get("구분"), "정비사업": d.get("정비사업"),
+                "단지명": d["단지명"], "관리번호": d.get("관리번호"),
+                "주택구분": d.get("주택구분"), "상태": d.get("상태"), "Dday": d.get("Dday"),
+                "총세대": d.get("총세대"), "정비사업": d.get("정비사업"),
             })
+    # 지역별 급매(baroezip 레이더 캐시) — 급매갭 깊은 순
+    quick_by = defaultdict(list)
+    if QUICKSALE_FILE.exists():
+        for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
+            quick_by[m.get("지역")].append({
+                "단지명": m.get("단지명"), "평형": m.get("평형"), "층": m.get("층"),
+                "호가": m.get("호가"), "급매갭": m.get("급매갭"),
+            })
+    for v in quick_by.values():
+        v.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
+
     regions = _regime().get("regions", {})
     rank = {"STRONG_BUY": 2, "BUY": 1}
 
@@ -392,7 +403,9 @@ def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7):
             "예산내": affordable, "저평가도": uv, "입지점수": lr.get("입지점수"),
             "지역급지": rg.get("급지"), "해설": lr.get("해설"),
             "경매단지": auc_by.get(region, []), "청약단지": ps_by.get(region, []),
+            "급매단지": quick_by.get(region, []),
             "경매건수": len(auc_by.get(region, [])), "청약건수": len(ps_by.get(region, [])),
+            "급매건수": len(quick_by.get(region, [])),
             "_score": round(score, 1),
         })
     # 예산 내 우선 → 점수순

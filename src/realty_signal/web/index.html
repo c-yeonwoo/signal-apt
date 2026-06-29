@@ -446,7 +446,7 @@ async function loadConclusion(){
     const af = c['예산내'];
     const uv = c['저평가도'];
     const haesol = (c['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
-    const subs = renderSubListings(c['경매단지']||[], c['청약단지']||[]);
+    const subs = renderSubListings(c['경매단지']||[], c['청약단지']||[], c['급매단지']||[]);
     const card = document.createElement('div');
     card.style.cssText = `border:1px solid ${af?'var(--accent)':'var(--line)'};border-radius:10px;padding:14px 16px;background:#0f1115;${af?'':'opacity:.55'}`;
     card.innerHTML = `
@@ -470,25 +470,28 @@ async function loadConclusion(){
     box.appendChild(card);
   });
 }
-// 결론 카드 인라인 — 이 지역 경매/청약 단지 직접 표시 (급지·가격)
-function renderSubListings(auc, ps){
+// 결론 카드 인라인 — 이 지역 경매/급매/청약 매물 직접 표시 (3대 매수채널)
+function renderSubListings(auc, ps, quick){
   const eok = n => (n==null||n<=0)?'–':(n/10000).toFixed(1)+'억';
+  const line = (onclick, left, right) => `<div onclick="${onclick}" style="cursor:pointer;display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>${left}</span><span>${right}</span></div>`;
   let h = '';
-  if(auc.length){
-    h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">경매 매물 ${auc.length}건</div>`
-      + auc.slice(0,4).map(a=>`<div onclick="switchTab('auction')" style="cursor:pointer;display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
-          <span>${gradeBadge(a['단지급지'])} ${a['단지명']}</span>
-          <span>권장 <b>${eok(a['권장입찰가'])}</b>${a['시세차익률']!=null?` <span style="color:${a['시세차익률']>=0?'#4ade80':'#f87171'}">차익 ${a['시세차익률']>0?'+':''}${a['시세차익률']}%</span>`:''}</span>
-        </div>`).join('');
+  if(auc && auc.length){
+    h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">🔨 경매 ${auc.length}건</div>`
+      + auc.slice(0,3).map(a=>line("switchTab('auction')",
+          `${gradeBadge(a['단지급지'])} ${a['단지명']}`,
+          `권장 <b>${eok(a['권장입찰가'])}</b>${a['시세차익률']!=null?` <span style="color:${a['시세차익률']>=0?'#4ade80':'#f87171'}">차익 ${a['시세차익률']>0?'+':''}${a['시세차익률']}%</span>`:''}`)).join('');
   }
-  if(ps.length){
-    h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">청약 단지 ${ps.length}건</div>`
-      + ps.slice(0,4).map(p=>{
-          const price = (p['최저분양가']||p['최대분양가']) ? `${eok(p['최저분양가'])}~${eok(p['최대분양가'])}` : '미정';
-          return `<div onclick="switchTab('presale')" style="cursor:pointer;display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
-            <span>${p['지역급지']?regionGradeBadge(p['지역급지']):''} ${p['단지명']} ${p['정비사업']?'<span class="pill">정비</span>':''}</span>
-            <span>분양 <b>${price}</b></span></div>`;
-        }).join('');
+  if(quick && quick.length){
+    h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">🏷️ 급매 ${quick.length}건</div>`
+      + quick.slice(0,3).map(q=>line("switchTab('quicksale')",
+          `${q['단지명']} <span style="color:var(--dim)">${q['평형']||''}평</span>`,
+          `<b>${eok(q['호가'])}</b>${q['급매갭']!=null?` <span style="color:${q['급매갭']<=-5?'#ef4444':'#fb923c'}">${q['급매갭']}%</span>`:''}`)).join('');
+  }
+  if(ps && ps.length){
+    h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">🏠 청약 ${ps.length}건 (접수중·예정)</div>`
+      + ps.slice(0,3).map(p=>line("switchTab('presale')",
+          `${p['단지명']} ${p['정비사업']?'<span class="pill">정비</span>':''}`,
+          `${psStatusBadge(p['상태'], p['Dday'])}`)).join('');
   }
   return h;
 }
