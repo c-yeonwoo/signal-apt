@@ -62,7 +62,7 @@
   .row.lv1 { padding-left:22px; } .row.lv2 { padding-left:38px; }
   .zsw { font-size:11px; padding:2px 8px; border-radius:10px; cursor:help; color:#0f1115; font-weight:600; }
   /* 경매 */
-  #view-auction, #view-undervalued { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
+  #view-auction, #view-undervalued, #view-presale { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#cbd5e1; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
@@ -113,6 +113,7 @@
     <button class="tab on" data-tab="signal" onclick="switchTab('signal')">시그널</button>
     <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
     <button class="tab" data-tab="auction" onclick="switchTab('auction')">경매</button>
+    <button class="tab" data-tab="presale" onclick="switchTab('presale')">청약</button>
   </div>
   <div class="right">
     <span class="date" id="date"></span>
@@ -227,6 +228,26 @@
   </div>
 </div>
 
+<!-- 청약 탭 -->
+<div id="view-presale" style="display:none">
+  <div class="sec">
+    <h3>청약·분양 단지 <span class="pill">KB 분양 일정</span></h3>
+    <p style="color:var(--dim);font-size:12px;margin:-2px 0 8px">
+      전국 분양(예정·접수·완료) 단지. BUY+ 시그널 지역이 위로 정렬됩니다.
+      <label style="margin-left:10px"><input type="checkbox" id="psBuyOnly" onchange="renderPresale()"> BUY+ 지역만</label>
+      <label style="margin-left:8px"><input type="checkbox" id="psRedev" onchange="renderPresale()"> 재건축/재개발만</label>
+    </p>
+    <table>
+      <thead><tr>
+        <th class="l">단지명</th><th class="l">지역</th><th class="l">주소</th><th class="l">구분</th>
+        <th class="l">분양일정</th><th class="l">입주</th><th>총세대</th><th>분양가(만)</th>
+      </tr></thead>
+      <tbody id="psRows"></tbody>
+    </table>
+    <p id="psEmpty" style="color:var(--dim)"></p>
+  </div>
+</div>
+
 <dialog id="calcDlg" style="width:760px">
   <h3 id="calcTitle"></h3>
   <div id="calcBreak" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px"></div>
@@ -291,11 +312,38 @@ const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math
 function switchTab(t){
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
-  ['signal','auction','undervalued'].forEach(v=>
+  ['signal','auction','undervalued','presale'].forEach(v=>
     document.getElementById('view-'+v).style.display = v===t?'':'none');
   if(t==='signal') chart.resize();
   if(t==='auction') loadAuction();
   if(t==='undervalued') loadUndervalued();
+  if(t==='presale') loadPresale();
+}
+let _presaleList=[];
+async function loadPresale(){
+  _presaleList = await (await fetch('/api/presale')).json();
+  renderPresale();
+}
+function renderPresale(){
+  const buyOnly = document.getElementById('psBuyOnly').checked;
+  const redev = document.getElementById('psRedev').checked;
+  const rows = _presaleList
+    .filter(r => !buyOnly || ['STRONG_BUY','BUY'].includes(r['시그널']))
+    .filter(r => !redev || r['정비사업']);
+  const tb = document.getElementById('psRows'); tb.innerHTML='';
+  document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 분양 단지가 없습니다.';
+  const won0 = n => (!n||n<=0) ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : n+'만');
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    const sched = [r['분양시작'], r['분양종료']].filter(Boolean).join('~') || r['구분'];
+    const price = (r['최저분양가']||r['최대분양가']) ? `${won0(r['최저분양가'])}~${won0(r['최대분양가'])}` : '–';
+    tr.innerHTML = `<td class="l">${r['단지명']} ${r['정비사업']?'<span class="pill">정비</span>':''}</td>
+      <td class="l">${r['지역']||''} ${r['시그널']?badge(r['시그널']):''}</td>
+      <td class="l" style="color:var(--dim)">${r['주소']||''}</td>
+      <td class="l">${r['구분']||''}</td><td class="l">${sched}</td><td class="l">${r['입주']||'–'}</td>
+      <td>${r['총세대']??'–'}</td><td>${price}</td>`;
+    tb.appendChild(tr);
+  });
 }
 
 let uvChart, _uvList=[], _uvSort={k:'저평가도', asc:false};

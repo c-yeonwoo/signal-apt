@@ -72,6 +72,7 @@ def refresh():
     _kb.cache_clear()
     _signals_df.cache_clear()
     _regime.cache_clear()
+    _presale.cache_clear()
     return {"ok": True, "last_date": str(kb.last_date.date()), "regions": len(kb.regions)}
 
 
@@ -220,6 +221,35 @@ def undervalued():
     for r in recs:
         r["시그널"] = sig.get(r["region"], "")
     return {"ready": True, "listings": recs}
+
+
+_SIDO = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주", "30": "대전",
+         "31": "울산", "36": "세종", "41": "경기", "43": "충북", "44": "충남", "45": "전북",
+         "46": "전남", "47": "경북", "48": "경남", "50": "제주", "51": "강원", "52": "전북"}
+
+
+@lru_cache(maxsize=1)
+def _presale():
+    from realty_signal.ingest import presale
+    sig = _signal_map()
+    codes = _kb().codes or {}
+    sgg = {c[:5]: r for r, c in codes.items() if c and c.isdigit() and c[2:5] != "000"}
+    out = []
+    for d in presale.fetch_presale():
+        code = d["법정동코드"]
+        region = sgg.get(code[:5]) or _SIDO.get(code[:2])
+        d["지역"] = region or d.get("주소", "")
+        d["시그널"] = sig.get(region, "")
+        out.append(d)
+    return out
+
+
+@app.get("/api/presale")
+def presale_list():
+    """분양/청약 단지 — 지역 시그널 결합. BUY+ 우선."""
+    rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "": 5}
+    items = sorted(_presale(), key=lambda d: (rank.get(d["시그널"], 5), d.get("분양시작") or "zzz"))
+    return items
 
 
 @app.get("/api/regime")
