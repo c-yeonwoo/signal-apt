@@ -245,18 +245,28 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
         mom = sale.iloc[max(0, i - c.momentum_weeks + 1): i + 1].mean()
         mom_lbl = "상승" if mom >= c.momentum_up else ("하락" if mom <= c.momentum_down else "보합")
         sig, _ = _classify(jv, bv, dv, _jeonse_state(jv, c) if pd.notna(jv) else "—", mom_lbl, c)
-        hot = sig in ("STRONG_BUY", "BUY")
-        if hot and cur is None:
-            cur = {"start": str(d.date()), "signal": sig}
-        elif hot:
-            cur["signal"] = "STRONG_BUY" if "STRONG_BUY" in (cur["signal"], sig) else cur["signal"]
+        # 상태: 매수(hot) / 매도(매매 하락 지속) / 중립
+        if sig in ("STRONG_BUY", "BUY"):
+            state = sig
+        elif mom_lbl == "하락":
+            state = "SELL"
+        else:
+            state = None
+        kind = "SELL" if state == "SELL" else ("BUY" if state else None)  # 같은 종류끼리 연결
+        if state and cur is None:
+            cur = {"start": str(d.date()), "signal": sig if state != "SELL" else "SELL", "_kind": kind}
+        elif state and cur["_kind"] == kind:
+            if state == "STRONG_BUY":
+                cur["signal"] = "STRONG_BUY"
         elif cur is not None:
             cur["end"] = str(dates[i - 1].date())
             intervals.append(cur)
-            cur = None
+            cur = {"start": str(d.date()), "signal": sig if state != "SELL" else "SELL", "_kind": kind} if state else None
     if cur is not None:
         cur["end"] = str(dates[-1].date())
         intervals.append(cur)
+    for iv in intervals:
+        iv.pop("_kind", None)
 
     # 각 구간: 기간 중 상승률 + 이후 12주 변화율 (실제 결과 검증)
     for iv in intervals:
@@ -375,6 +385,26 @@ def evaluate(
             해설 += " 하급지인데 최근 급등해 유동성 끝물의 막차 위험이 있습니다."
         elif rg and (regime or {}).get("endgame"):
             reasons.append("권역 끝물(급지역전)")
+
+        # 매도(끝물) 강화 — 공급과잉 + 유동성감소(금리상승·거래량위축·급지역전·매매하락)
+        bear = 0.0
+        if sale_mom == "하락":
+            bear += 1
+        if pd.notna(sp) and sp >= c.supply_glut:
+            bear += 1
+        if vr is not None and vr <= 0.8:
+            bear += 1
+        if rg and rg.get("막차"):
+            bear += 1
+        if (regime or {}).get("endgame"):
+            bear += 0.5
+        if mt.get("rate_dir") == "상승":
+            bear += 0.5
+        endgame_glut = (regime or {}).get("endgame") and pd.notna(sp) and sp >= c.supply_glut
+        if signal not in ("STRONG_BUY", "BUY") and bear >= 2 and (sale_mom == "하락" or endgame_glut):
+            signal = "SELL_RISK"
+            해설 = "공급과잉·유동성 감소가 겹치는 매도/관망 구간입니다. " + 해설
+
         if macro_clause:
             해설 += f" {macro_clause}입니다." if not 해설.rstrip().endswith("입니다.") else f" ({macro_clause})"
 

@@ -142,7 +142,7 @@
       <div id="chart"></div>
       <div class="footer">
         <span id="sigbadge"></span>
-        <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap">지난 시그널 보기</button>
+        <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap">지난 시그널(매수/매도) 보기</button>
         <span id="reasons"></span>
         <div class="zlegend" id="zlegend"></div>
       </div>
@@ -538,10 +538,13 @@ function drawChart(region, m, sig){
   }
   // 지난 시그널(STRONG_BUY/BUY) 구간 반투명 오버레이
   if(_showHist && _histCache[region]?.length){
+    const bandColor = s => s==='STRONG_BUY' ? 'rgba(34,197,94,0.20)'
+                         : s==='SELL' ? 'rgba(239,68,68,0.16)' : 'rgba(74,222,128,0.10)';
     series.push({ name:'시그널구간', type:'line', data:[], yAxisIndex:0, silent:true,
       markArea:{ data: _histCache[region].map(h=>[
-        {xAxis:h.start, itemStyle:{color: h.signal==='STRONG_BUY'?'rgba(34,197,94,0.20)':'rgba(74,222,128,0.10)'},
-         label:{show: h.during_pct!=null, position:'insideTop', fontSize:10, color:'#dbeafe',
+        {xAxis:h.start, itemStyle:{color: bandColor(h.signal)},
+         label:{show: h.during_pct!=null, position:'insideTop', fontSize:10,
+                color: h.signal==='SELL'?'#fecaca':'#dbeafe',
                 formatter: (h.during_pct!=null?`기간 ${h.during_pct>0?'+':''}${h.during_pct}%`:'')
                           + (h.after12w_pct!=null?`\n이후 ${h.after12w_pct>0?'+':''}${h.after12w_pct}%`:'')}},
         {xAxis:h.end}]) }});
