@@ -24,3 +24,7 @@ def public_data_key() -> str | None:
 
 def odsay_key() -> str | None:
     return os.environ.get("ODSAY_KEY")
+
+
+def seoul_key() -> str | None:
+    return os.environ.get("SEOUL_OPENAPI_KEY")

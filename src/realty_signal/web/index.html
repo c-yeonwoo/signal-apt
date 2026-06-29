@@ -79,7 +79,7 @@
   .zrow { display:flex; align-items:center; gap:8px; margin:4px 0; }
   .zsw-sm { width:15px; height:15px; border-radius:3px; flex:0 0 auto; }
   /* 경매 */
-  #view-auction, #view-undervalued, #view-presale, #view-conclusion, #view-quicksale { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
+  #view-auction, #view-undervalued, #view-presale, #view-conclusion, #view-quicksale, #view-redev { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#cbd5e1; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
@@ -132,6 +132,7 @@
     <button class="tab" data-tab="auction" onclick="switchTab('auction')">경매</button>
     <button class="tab" data-tab="quicksale" onclick="switchTab('quicksale')">급매</button>
     <button class="tab" data-tab="presale" onclick="switchTab('presale')">청약</button>
+    <button class="tab" data-tab="redev" onclick="switchTab('redev')">재건축</button>
     <button class="tab" data-tab="conclusion" onclick="switchTab('conclusion')">결론</button>
   </div>
   <div class="right">
@@ -296,6 +297,49 @@
   <p id="qsEmpty" style="color:var(--dim)"></p>
 </div>
 
+<div id="view-redev" style="display:none">
+  <h2 style="margin:0 0 4px">재건축 · 재개발</h2>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">오래되고(연식↑)·용적률 낮고·대단지·고시세 단지가 재건축 사업성↑. 정비구역 현황 + 잠재력 스크리너 + 가치 계산기.
+    <span style="color:#fb923c">※ 사업단계(조합·관리처분) timeline·분담금은 공개데이터 부재 → 가치계산기는 입력 기반.</span></p>
+
+  <div class="sec">
+    <h3>① 재건축 잠재력 스크리너 <span class="pill">국토부+건축물대장</span></h3>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label>지역 <select id="rdRegion" onchange="loadRedevCands()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"></select></label>
+      <span id="rdCandStatus" style="color:var(--dim);font-size:12px"></span>
+    </div>
+    <table><thead><tr>
+      <th class="l">단지명</th><th>잠재력</th><th>연식</th><th>용적률</th><th>세대수</th><th>평단가</th><th class="l">점수구성</th>
+    </tr></thead><tbody id="rdCandRows"></tbody></table>
+    <p id="rdCandEmpty" style="color:var(--dim)"></p>
+  </div>
+
+  <div class="sec">
+    <h3>② 재건축 가치 계산기 <span class="pill">입력 기반 ROI</span></h3>
+    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;background:#0f1115;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px">
+      <label>현재 매수가<br><input id="rv_cur" type="number" value="100000" style="width:100px"> 만</label>
+      <label>전용 평형<br><input id="rv_py" type="number" value="25" style="width:60px"> 평</label>
+      <label>예상 분양 평단가<br><input id="rv_ps" type="number" value="6000" style="width:90px"> 만/평</label>
+      <label>추가분담금<br><input id="rv_con" type="number" value="30000" style="width:90px"> 만</label>
+      <label>보유<br><input id="rv_mon" type="number" value="60" style="width:60px"> 개월</label>
+      <button class="btn" onclick="calcRedevValue()" style="background:var(--accent);color:#000;font-weight:700">계산</button>
+    </div>
+    <div id="rvResult" style="font-size:13px"></div>
+  </div>
+
+  <div class="sec">
+    <h3>③ 서울 정비구역 현황 <span class="pill">upisRebuild</span></h3>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label>구분 <select id="rdZoneType" onchange="loadRedevZones()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
+        <option value="">전체</option><option value="재건축">재건축</option><option value="재개발">재개발</option><option value="도시환경">도시환경</option><option value="주거환경">주거환경</option></select></label>
+      <input id="rdZoneQ" placeholder="🔍 위치·구역명" onkeyup="if(event.key==='Enter')loadRedevZones()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px 10px">
+      <span id="rdZoneStatus" style="color:var(--dim);font-size:12px"></span>
+    </div>
+    <table><thead><tr><th class="l">구역명</th><th>구분</th><th class="l">위치</th><th>면적(㎡)</th></tr></thead>
+      <tbody id="rdZoneRows"></tbody></table>
+  </div>
+</div>
+
 <div id="view-conclusion" style="display:none">
   <h2 style="margin:0 0 4px">종합 추천 — 가용자본으로 어디를 살까</h2>
   <p style="color:var(--dim);font-size:13px;margin:0 0 14px">매수 시그널(STRONG_BUY/BUY) 지역 × 저평가도 × 단지급지를 종합해 매수가능 범위 내 우선순위를 매깁니다. 경매·청약은 "그 지역에 N건" 포인터로 첨부.</p>
@@ -393,7 +437,7 @@ function regionGradeBadge(g, pyeong){
 function switchTab(t){
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
-  ['signal','auction','undervalued','presale','conclusion','quicksale'].forEach(v=>
+  ['signal','auction','undervalued','presale','conclusion','quicksale','redev'].forEach(v=>
     document.getElementById('view-'+v).style.display = v===t?'':'none');
   if(t==='signal') chart.resize();
   if(t==='auction') loadAuction();
@@ -401,6 +445,71 @@ function switchTab(t){
   if(t==='presale') loadPresale();
   if(t==='conclusion') loadConclusion();
   if(t==='quicksale') loadQuicksale();
+  if(t==='redev') loadRedev();
+}
+let _redevInit=false;
+async function loadRedev(){
+  if(!_redevInit){
+    const sel=document.getElementById('rdRegion');
+    try{ const buy=await (await fetch('/api/auction/buy-regions')).json();
+      const regs = buy.length?buy.map(b=>b.region):[];
+      (regs.length?regs:['강남구','노원구','송파구']).forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o);});
+    }catch(e){}
+    _redevInit=true; loadRedevCands(); loadRedevZones();
+  }
+}
+async function loadRedevCands(){
+  const region=document.getElementById('rdRegion').value;
+  const tb=document.getElementById('rdCandRows'); const st=document.getElementById('rdCandStatus');
+  if(!region){ st.textContent='지역을 선택하세요.'; return; }
+  st.textContent='분석 중… (국토부+건축물대장 조회, 수십초)'; tb.innerHTML='';
+  const d=await (await fetch('/api/redevelopment/candidates/'+encodeURIComponent(region))).json();
+  st.innerHTML=`${region} ${d['시그널']?badge(d['시그널']):''} · 구축 ${d.candidates.length}개 단지`;
+  document.getElementById('rdCandEmpty').textContent = d.candidates.length?'':'구축 단지 데이터가 없습니다.';
+  d.candidates.slice(0,40).forEach(c=>{
+    const col = c['잠재력']>=65?'#4ade80':c['잠재력']>=50?'#fbbf24':'#94a3b8';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="l">${c['단지명']}</td>
+      <td style="color:${col};font-weight:700">${c['잠재력']}</td>
+      <td>${c['연식년']}년</td>
+      <td>${c['용적률']?c['용적률']+'%':'–'}</td>
+      <td>${c['세대수']?c['세대수'].toLocaleString():'–'}</td>
+      <td>${c['평단가']?c['평단가']+'만':'–'}</td>
+      <td class="l" style="font-size:11px;color:var(--dim)">연식${c['_age']}·용적${c['_far']}·규모${c['_size']}·입지${c['_loc']}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function calcRedevValue(){
+  const q=`current_price=${+rv_cur.value}&pyeong=${+rv_py.value}&presale_pyeong_price=${+rv_ps.value}&contribution=${+rv_con.value}&hold_months=${+rv_mon.value}`;
+  fetch('/api/redevelopment/value-calc?'+q).then(r=>r.json()).then(d=>{
+    const eok=n=>n==null?'–':(n/10000).toFixed(2)+'억';
+    const col=d.ROI>=0?'#4ade80':'#f87171';
+    document.getElementById('rvResult').innerHTML=
+      `<div style="display:flex;gap:18px;flex-wrap:wrap">
+        <span>신축 추정가치 <b>${eok(d['신축추정가치'])}</b></span>
+        <span>총투입(현재가+분담금) <b>${eok(d['총투입'])}</b></span>
+        <span>예상차익 <b style="color:${col}">${eok(d['예상차익'])}</b></span>
+        <span>ROI <b style="color:${col}">${d.ROI}%</b></span>
+        <span>연환산 <b style="color:${col}">${d['연환산ROI']}%</b> (${d['보유개월']}개월)</span>
+      </div>`;
+  });
+}
+async function loadRedevZones(){
+  const type=document.getElementById('rdZoneType').value, q=document.getElementById('rdZoneQ').value;
+  const st=document.getElementById('rdZoneStatus'); const tb=document.getElementById('rdZoneRows');
+  st.textContent='불러오는 중…'; tb.innerHTML='';
+  const params=new URLSearchParams(); if(type)params.set('type',type); if(q)params.set('q',q);
+  const d=await (await fetch('/api/redevelopment/zones?'+params)).json();
+  st.innerHTML=`총 ${d.total}건 · `+Object.entries(d.by_type||{}).map(([k,v])=>`${k} ${v}`).join(' / ');
+  const tcol={'재건축':'#4ade80','재개발':'#60a5fa','도시환경':'#a78bfa','주거환경':'#fb923c'};
+  d.zones.forEach(z=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="l">${z['구역명']||'–'}</td>
+      <td><span style="color:${tcol[z['구분']]||'#94a3b8'};font-weight:700">${z['구분']}</span></td>
+      <td class="l" style="color:var(--dim)">${z['위치']||''}</td>
+      <td>${z['면적']?z['면적'].toLocaleString():'–'}</td>`;
+    tb.appendChild(tr);
+  });
 }
 let _qsList=[];
 async function loadQuicksale(){

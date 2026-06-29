@@ -459,6 +459,53 @@ QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
 
 
+@lru_cache(maxsize=1)
+def _redev_zones():
+    """서울 정비구역(재건축/재개발) — upisRebuild. 캐시."""
+    from realty_signal.ingest import redevelopment as rd
+    config.load_env()
+    key = config.seoul_key()
+    return rd.fetch_zones(key) if key else []
+
+
+@app.get("/api/redevelopment/zones")
+def redev_zones(type: str | None = None, q: str | None = None):
+    """정비구역 목록. type=재건축/재개발/..., q=위치·구역명 검색."""
+    zones = _redev_zones()
+    if type:
+        zones = [z for z in zones if z["구분"] == type]
+    if q:
+        zones = [z for z in zones if q in z["위치"] or q in z["구역명"]]
+    from collections import Counter
+    return {"total": len(zones), "by_type": dict(Counter(z["구분"] for z in _redev_zones())),
+            "zones": zones[:500]}
+
+
+@lru_cache(maxsize=64)
+def _redev_candidates(region: str):
+    from realty_signal.ingest import redevelopment as rd
+    code = _kb().codes.get(region, "")
+    if not (code and code.isdigit() and code[2:5] != "000"):
+        return []
+    config.load_env()
+    return rd.rebuild_candidates(code[:5], config.public_data_key())
+
+
+@app.get("/api/redevelopment/candidates/{region}")
+def redev_candidates(region: str):
+    """지역 내 재건축 잠재력 단지 랭킹 (구축, 연식·용적률·세대수·시세 기반)."""
+    sig = _signal_map()
+    return {"region": region, "시그널": sig.get(region, ""), "candidates": _redev_candidates(region)}
+
+
+@app.get("/api/redevelopment/value-calc")
+def redev_value_calc(current_price: float, pyeong: float, presale_pyeong_price: float,
+                     contribution: float, hold_months: int = 60):
+    """재건축 가치 계산 — 현재가·평형·예상분양평단가·분담금 → ROI."""
+    from realty_signal.ingest import redevelopment as rd
+    return rd.value_calc(current_price, pyeong, presale_pyeong_price, contribution, hold_months)
+
+
 def _region_centroid(region: str, code: str) -> tuple[float, float] | None:
     """시군구 중심좌표 (geocode 결과 캐시)."""
     geo = {}
