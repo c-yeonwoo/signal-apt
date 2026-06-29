@@ -52,7 +52,7 @@
   .row .nm { font-weight:600; }
   .row .mn { width:100%; color:var(--dim); font-size:11px; }
   .badge { font-size:11px; padding:2px 7px; border-radius:5px; font-weight:700; white-space:nowrap; }
-  .STRONG_BUY{background:#16a34a;color:#fff;} .BUY{background:#22c55e33;color:#16a34a;}
+  .STRONG_BUY{background:#22c55e;color:#fff;} .BUY{background:#22c55e33;color:#16a34a;}
   .WATCH{background:#ca8a0433;color:#d97706;} .NEUTRAL{background:#33415533;color:#94a3b8;}
   .SELL_RISK{background:#ef444433;color:#dc2626;}
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
@@ -118,7 +118,7 @@
   .btn { padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#eef2f7;
          color:#475569; cursor:pointer; font-size:13px; }
   .btn.primary { border-color:#3b82f6; color:#1d4ed8; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
   th,td { padding:7px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th:first-child,td:first-child,th.l,td.l { text-align:left; }
   thead th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--bg); }
@@ -258,14 +258,14 @@
 <div id="view-undervalued" style="display:none">
   <div class="sec">
     <h3>저평가 지역 추천 — 입지(교통·학군·환경) 대비 가격</h3>
-    <p style="color:var(--dim);font-size:12px;margin:-2px 0 0">
+    <p style="color:var(--dim);font-size:13px;margin:-2px 0 0">
       업무지구(강남·광화문·여의도) 대중교통 소요시간 + 학원밀도 + 주거환경(공원·하천·마트)으로 <b>입지점수</b>를 만들고,
       입지 대비 실제 평단가가 낮을수록 <b>저평가</b>. 산점도 회귀선(적정가) 아래 점이 저평가 지역입니다.
       <i>※ 시군구 단위라 단지별 신축/구축 차이는 반영 안 됨 — 숏리스트용.</i></p>
   </div>
   <div id="uvchart" style="height:340px"></div>
   <div id="uvHaesol" style="margin:6px 2px 0;padding:10px 14px;background:var(--panel);
-       border:1px solid var(--line);border-radius:10px;font-size:13px;color:#334155;min-height:20px"></div>
+       border:1px solid var(--line);border-radius:10px;font-size:14px;color:#334155;min-height:20px"></div>
   <div class="sec" style="margin-top:14px">
     <table>
       <thead><tr id="uvHead">
@@ -301,7 +301,7 @@
   <p style="color:var(--dim);font-size:13px;margin:0 0 6px">시세(중위호가) 대비 싸게 나온 매물을 지역별로 모읍니다. 급매갭 = (호가−중위시세)/중위시세, 음수가 클수록 저가.</p>
   <p style="color:#ea580c;font-size:11px;margin:0 0 12px">⚠ 출처는 네이버 부동산 매물(baroezip 공개 API 경유). 개인 참고용이며 재배포/상업이용 금지.</p>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-    <button class="btn" onclick="refreshQuicksale()" id="qsBtn" style="background:var(--accent);color:#000;font-weight:700">BUY+ 지역 급매 스캔</button>
+    <button class="btn" onclick="refreshQuicksale()" id="qsBtn" style="background:var(--accent);color:#fff;font-weight:700">BUY+ 지역 급매 스캔</button>
     <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
     <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
       <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
@@ -352,7 +352,7 @@
       <label>예상 분양 평단가<br><input id="rv_ps" type="number" value="6000" style="width:90px"> 만/평</label>
       <label>추가분담금<br><input id="rv_con" type="number" value="30000" style="width:90px"> 만</label>
       <label>보유<br><input id="rv_mon" type="number" value="60" style="width:60px"> 개월</label>
-      <button class="btn" onclick="calcRedevValue()" style="background:var(--accent);color:#000;font-weight:700">계산</button>
+      <button class="btn" onclick="calcRedevValue()" style="background:var(--accent);color:#fff;font-weight:700">계산</button>
     </div>
     <div id="rvResult" style="font-size:13px"></div>
   </div>
@@ -381,7 +381,7 @@
     <label>기준 평형<br><select id="ccPyeong" class="ctrl">
       <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
     </select></label>
-    <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#000;font-weight:700">분석</button>
+    <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
     <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
   </div>
   <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
