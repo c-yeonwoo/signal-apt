@@ -245,33 +245,98 @@ _SIDO = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "
          "46": "전남", "47": "경북", "48": "경남", "50": "제주", "51": "강원", "52": "전북"}
 
 
+def _presale_since() -> str:
+    """최근 ~4개월 공고부터 (진행중·예정 위주)."""
+    from datetime import date
+    y, m = date.today().year, date.today().month
+    m -= 4
+    if m <= 0:
+        y, m = y - 1, m + 12
+    return f"{y}-{m:02d}-01"
+
+
+def _presale_status(d: dict, today: str) -> tuple[str, str | None]:
+    """청약 진행상태 + 다음 일정일자. 날짜 문자열 비교(YYYY-MM-DD)."""
+    def ok(s):
+        return s if (s and len(str(s)) == 10 and str(s)[4] == "-") else None
+    sp_s, sp_e = ok(d["특공접수시작"]), ok(d["특공접수마감"])
+    r_s, r_e = ok(d["청약접수시작"]), ok(d["청약접수마감"])
+    win, ct_e = ok(d["당첨발표"]), ok(d["계약종료"])
+    starts = [x for x in (sp_s, r_s) if x]
+    ends = [x for x in (sp_e, r_e) if x]
+    first, last = (min(starts) if starts else None), (max(ends) if ends else None)
+    if first and today < first:
+        return "접수예정", first
+    if first and last and first <= today <= last:
+        return "접수중", last
+    if win and today < win:
+        return "발표대기", win
+    if win and ct_e and today <= ct_e:
+        return "계약중", ct_e
+    if ct_e and today > ct_e:
+        return "완료", None
+    return "공고", win or last
+
+
 @lru_cache(maxsize=1)
 def _presale():
-    from realty_signal.ingest import presale
+    from realty_signal.ingest import applyhome
+    from datetime import date
+    config.load_env()
+    applyhome.set_key(config.public_data_key())
     sig = _signal_map()
-    codes = _kb().codes or {}
-    sgg = {c[:5]: r for r, c in codes.items() if c and c.isdigit() and c[2:5] != "000"}
     regions = _regime().get("regions", {})
+    codes = _kb().codes or {}
+    region_sido = {r: _SIDO.get((c or "")[:2]) for r, c in codes.items()}  # 시군구→시도 (동명이군 구분)
+    today = date.today().isoformat()
     out = []
-    for d in presale.fetch_presale():
-        code = d["법정동코드"]
-        region = sgg.get(code[:5]) or _SIDO.get(code[:2])
-        d["지역"] = region or d.get("주소", "")
+    for d in applyhome.fetch_pblanc(_presale_since()):
+        sgg = d["시군구"]
+        # 시군구명 + 시도 둘 다 일치할 때만 결합(부산 강서구↔서울 강서구 오매칭 방지)
+        region = sgg if (sgg in sig and region_sido.get(sgg) == d["시도"]) else None
+        d["지역"] = sgg or d["시도"] or ""
         d["시그널"] = sig.get(region, "")
-        rg = regions.get(region)  # 시군구 급지(평단가 분위 A~D) + 지역 평단가
-        if rg:
-            d["지역급지"] = rg.get("급지")
-            d["지역평단가"] = rg.get("평단가")
+        rg = regions.get(region) if region else None
+        d["지역급지"] = rg.get("급지") if rg else None
+        d["지역평단가"] = rg.get("평단가") if rg else None
+        nm = d["단지명"] or ""
+        d["정비사업"] = any(k in nm for k in ("재건축", "재개발", "정비사업", "구역"))
+        st, nxt = _presale_status(d, today)
+        d["상태"] = st
+        d["다음일정"] = nxt
+        d["Dday"] = (date.fromisoformat(nxt) - date.today()).days if nxt else None
         out.append(d)
     return out
 
 
 @app.get("/api/presale")
 def presale_list():
-    """분양/청약 단지 — 지역 시그널 결합. BUY+ 우선."""
-    rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "": 5}
-    items = sorted(_presale(), key=lambda d: (rank.get(d["시그널"], 5), d.get("분양시작") or "zzz"))
-    return items
+    """청약 단지(청약홈) — 지역 시그널 결합. 임박(접수예정/접수중·D-day) → BUY+ 우선."""
+    sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "": 5}
+    st_rank = {"접수중": 0, "접수예정": 1, "발표대기": 2, "계약중": 3, "공고": 4, "완료": 5}
+
+    def key(d):
+        return (st_rank.get(d["상태"], 6), d["Dday"] if d["Dday"] is not None else 999,
+                sig_rank.get(d["시그널"], 5))
+    return sorted(_presale(), key=key)
+
+
+@app.get("/api/presale/{manage_no}/types")
+def presale_types(manage_no: str):
+    """단지 평형별 분양가·특별공급 + 주변시세(지역평단가) 대비 메리트."""
+    from realty_signal.ingest import applyhome
+    config.load_env()
+    applyhome.set_key(config.public_data_key())
+    d = next((x for x in _presale() if str(x["관리번호"]) == str(manage_no)), None)
+    지역평단가 = d.get("지역평단가") if d else None
+    types = applyhome.fetch_types(manage_no)
+    for t in types:
+        # 메리트 = (분양평단가 − 지역평단가)/지역평단가. 음수 = 주변시세보다 싸다(안전마진)
+        if t["분양평단가"] and 지역평단가:
+            t["메리트"] = round((t["분양평단가"] / 지역평단가 - 1) * 100)
+        else:
+            t["메리트"] = None
+    return {"관리번호": manage_no, "지역평단가": 지역평단가, "types": types}
 
 
 @app.get("/api/conclusion")

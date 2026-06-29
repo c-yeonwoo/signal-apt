@@ -237,16 +237,16 @@
 <!-- 청약 탭 -->
 <div id="view-presale" style="display:none">
   <div class="sec">
-    <h3>청약·분양 단지 <span class="pill">KB 분양 일정</span></h3>
+    <h3>청약·분양 단지 <span class="pill">청약홈</span></h3>
     <p style="color:var(--dim);font-size:12px;margin:-2px 0 8px">
-      전국 분양(예정·접수·완료) 단지. BUY+ 시그널 지역이 위로 정렬됩니다.
+      최근~예정 청약. 접수중·임박(D-day) → BUY+ 순. 단지 클릭 시 평형별 분양가·특별공급·시세대비 메리트.
       <label style="margin-left:10px"><input type="checkbox" id="psBuyOnly" onchange="renderPresale()"> BUY+ 지역만</label>
-      <label style="margin-left:8px"><input type="checkbox" id="psRedev" onchange="renderPresale()"> 재건축/재개발만</label>
+      <label style="margin-left:8px"><input type="checkbox" id="psOpen" onchange="renderPresale()"> 접수중·예정만</label>
     </p>
     <table>
       <thead><tr>
-        <th class="l">단지명</th><th class="l">지역</th><th>지역급지</th><th class="l">주소</th><th class="l">구분</th>
-        <th class="l">분양일정</th><th class="l">입주</th><th>총세대</th><th>분양가(만)</th>
+        <th class="l">단지명</th><th class="l">지역</th><th>시그널</th><th class="l">주택구분</th>
+        <th>상태</th><th class="l">청약접수</th><th class="l">입주</th><th>총세대</th>
       </tr></thead>
       <tbody id="psRows"></tbody>
     </table>
@@ -525,36 +525,67 @@ function subAddr(addr, region){
     !/(특별자치시|특별자치도|특별시|광역시|도)$/.test(t) && !regToks.includes(t));
   return toks.join(' ') || addr;
 }
-// 청약 진행상태 배지 (라이프사이클 색상)
-function psStatusBadge(g){
-  if(!g) return '–';
-  const green=['특별공급','1순위','2순위','분양중','무순위','접수'];  // 진행중
-  const gray=['당첨','계약','완료'];                                  // 마감단계
-  let col = green.some(k=>g.includes(k)) ? '#4ade80'
-          : gray.some(k=>g.includes(k)) ? '#94a3b8' : '#60a5fa';     // 그 외=예정(blue)
-  return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${g}</span>`;
+// 청약 진행상태 배지 (라이프사이클 색상 + D-day)
+function psStatusBadge(st, dday){
+  if(!st) return '–';
+  const col = {'접수중':'#4ade80','접수예정':'#60a5fa','발표대기':'#fb923c','계약중':'#a78bfa','완료':'#64748b','공고':'#94a3b8'}[st]||'#94a3b8';
+  const dd = (dday!=null && dday>=0 && st!=='완료') ? ` D-${dday}` : '';
+  return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${st}${dd}</span>`;
 }
 function renderPresale(){
   const buyOnly = document.getElementById('psBuyOnly').checked;
-  const redev = document.getElementById('psRedev').checked;
+  const openOnly = document.getElementById('psOpen').checked;
   const rows = _presaleList
     .filter(r => !buyOnly || ['STRONG_BUY','BUY'].includes(r['시그널']))
-    .filter(r => !redev || r['정비사업']);
+    .filter(r => !openOnly || ['접수중','접수예정'].includes(r['상태']));
   const tb = document.getElementById('psRows'); tb.innerHTML='';
-  document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 분양 단지가 없습니다.';
-  const won0 = n => (!n||n<=0) ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : n+'만');
+  document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 청약 단지가 없습니다.';
   rows.forEach(r=>{
-    const tr=document.createElement('tr');
-    const sched = [r['분양시작'], r['분양종료']].filter(Boolean).join('~') || r['구분'];
-    const price = (r['최저분양가']||r['최대분양가']) ? `${won0(r['최저분양가'])}~${won0(r['최대분양가'])}` : '–';
-    tr.innerHTML = `<td class="l">${r['단지명']} ${r['정비사업']?'<span class="pill">정비</span>':''}</td>
-      <td class="l">${r['지역']||''} ${r['시그널']?badge(r['시그널']):''}</td>
-      <td>${regionGradeBadge(r['지역급지'], r['지역평단가'])}</td>
-      <td class="l" style="color:var(--dim)">${subAddr(r['주소'], r['지역'])}</td>
-      <td class="l">${psStatusBadge(r['구분'])}</td><td class="l">${sched}</td><td class="l">${r['입주']||'–'}</td>
-      <td>${r['총세대']??'–'}</td><td>${price}</td>`;
+    const tr=document.createElement('tr'); tr.style.cursor='pointer';
+    tr.onclick = ()=> expandPsTypes(r['관리번호'], tr);
+    const sched = [r['청약접수시작'], r['청약접수마감']].filter(Boolean).join(' ~ ') || '–';
+    const sub = subAddr(r['주소'], r['지역']);
+    tr.innerHTML = `<td class="l">${r['단지명']||'–'} ${r['정비사업']?'<span class="pill">정비</span>':''}
+        <span class="pill" style="border-color:var(--accent);color:var(--accent)">평형 ▾</span>
+        ${sub!=='–'?`<div style="font-size:11px;color:var(--dim)">${sub}</div>`:''}</td>
+      <td class="l">${r['지역']||''} ${r['지역급지']?regionGradeBadge(r['지역급지'],r['지역평단가']):''}</td>
+      <td>${r['시그널']?badge(r['시그널']):'–'}</td>
+      <td class="l">${r['주택구분']||'–'}</td>
+      <td>${psStatusBadge(r['상태'], r['Dday'])}</td>
+      <td class="l" style="font-size:12px">${sched}</td>
+      <td class="l">${r['입주예정']||'–'}</td>
+      <td>${r['총세대']?Number(r['총세대']).toLocaleString():'–'}</td>`;
     tb.appendChild(tr);
   });
+}
+// 단지 평형별 분양가·특별공급·시세대비 메리트 펼치기
+async function expandPsTypes(no, tr){
+  if(tr.nextSibling && tr.nextSibling.classList?.contains('ps-detail')){ tr.nextSibling.remove(); return; }
+  const det=document.createElement('tr'); det.className='ps-detail';
+  det.innerHTML=`<td colspan="8" style="background:#0f1115;color:var(--dim)">평형별 분양가 불러오는 중…</td>`;
+  tr.after(det);
+  const d = await (await fetch('/api/presale/'+encodeURIComponent(no)+'/types')).json();
+  const eok=n=>(!n||n<=0)?'–':(n/10000).toFixed(2)+'억';
+  const ts=d.types||[];
+  if(!ts.length){ det.innerHTML=`<td colspan="8" style="background:#0f1115;color:var(--dim);padding:10px">평형별 데이터가 없습니다.</td>`; return; }
+  const rows = ts.map(t=>{
+    const spc = Object.entries(t['특공유형']||{}).map(([k,v])=>`${k} ${v}`).join(' · ');
+    const m=t['메리트'];
+    const mtxt = m==null?'' : `<span style="color:${m<0?'#4ade80':'#f87171'};font-weight:700">시세대비 ${m>0?'+':''}${m}%</span>`;
+    return `<tr>
+      <td class="l">${t['주택형']} <span style="color:var(--dim)">(${t['평']}평/${t['공급면적']}㎡)</span></td>
+      <td><b>${eok(t['분양가'])}</b></td>
+      <td style="color:var(--dim)">${t['분양평단가']?t['분양평단가']+'만/평':'–'}</td>
+      <td>${mtxt}</td>
+      <td>일반 ${t['일반세대']} · 특공 ${t['특공세대']}</td>
+      <td class="l" style="font-size:11px;color:var(--dim)">${spc||'–'}</td></tr>`;
+  }).join('');
+  const mref = d['지역평단가'] ? `주변시세 ${d['지역평단가']}만/평 기준` : '주변시세 미상(메리트 계산 불가)';
+  det.innerHTML=`<td colspan="8" style="background:#0f1115;padding:10px">
+    <div style="font-size:11px;color:var(--dim);margin-bottom:6px">${mref} · 메리트 음수=시세보다 저렴(안전마진)</div>
+    <table style="width:100%"><thead><tr style="font-size:11px;color:var(--dim)">
+      <th class="l">주택형</th><th>분양가</th><th>평단가</th><th>시세대비</th><th>공급세대</th><th class="l">특별공급</th>
+    </tr></thead><tbody>${rows}</tbody></table></td>`;
 }
 
 let uvChart, _uvList=[], _uvSort={k:'저평가도', asc:false};
