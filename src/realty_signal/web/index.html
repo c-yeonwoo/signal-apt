@@ -11,7 +11,16 @@
 <style>
   :root { --bg:#f8fafc; --panel:#ffffff; --line:#e2e8f0; --txt:#1e293b; --dim:#64748b; --accent:#0d9488; }
   * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+  /* 통일 컨트롤: 셀렉트·인풋·필터바 */
+  select, input[type=number], input[type=text], .ctrl {
+    font-size:14px; padding:7px 11px; border:1px solid var(--line); border-radius:8px;
+    background:#fff; color:var(--txt); outline:none; }
+  select:focus, input:focus, .ctrl:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(13,148,136,.12); }
+  .filterbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+    background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; margin-bottom:14px; }
+  .filterbar label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:7px; white-space:nowrap; }
+  .filterbar .status { color:var(--dim); font-size:12.5px; margin-left:auto; }
+  body { margin:0; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
          background:var(--bg); color:var(--txt); }
   header { padding:9px 18px; border-bottom:1px solid var(--line); display:flex;
            align-items:center; gap:12px; flex-wrap:wrap; }
@@ -206,9 +215,9 @@
       <label>대출비율 % <input id="pLoan" type="number" value="70" step="5" oninput="loadAuction()"></label>
       <label>대출금리 % <input id="pRate" type="number" value="5" step="0.1" oninput="loadAuction()"></label>
       <label>보유개월 <input id="pHold" type="number" value="6" step="1" oninput="loadAuction()"></label>
-      <label>평형 <select id="fSize" onchange="loadAuction()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+      <label>평형 <select id="fSize" onchange="loadAuction()" class="ctrl">
         <option value="">전체</option><option value="s">소형(≤60㎡)</option><option value="m">중형(60~85)</option><option value="l">대형(>85)</option></select></label>
-      <label>연식 <select id="fAge" onchange="loadAuction()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+      <label>연식 <select id="fAge" onchange="loadAuction()" class="ctrl">
         <option value="">전체</option><option value="new">신축(≤10년)</option><option value="mid">준신축(10~20)</option><option value="old">구축(>20)</option></select></label>
       <button class="btn primary" onclick="openAdd()">+ 매물 추가</button>
       <button class="btn" onclick="document.getElementById('csv').click()">CSV 임포트</button>
@@ -293,8 +302,8 @@
   <p style="color:#ea580c;font-size:11px;margin:0 0 12px">⚠ 출처는 네이버 부동산 매물(baroezip 공개 API 경유). 개인 참고용이며 재배포/상업이용 금지.</p>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
     <button class="btn" onclick="refreshQuicksale()" id="qsBtn" style="background:var(--accent);color:#000;font-weight:700">BUY+ 지역 급매 스캔</button>
-    <label>특정 지역만 <select id="qsRegion" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"><option value="">— BUY+ 전체 —</option></select></label>
-    <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
+    <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
+    <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
       <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
     <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
   </div>
@@ -317,7 +326,7 @@
   <div class="sec" id="rsec-screener">
     <h3>재건축 잠재력 스크리너 <span class="pill">국토부+건축물대장</span></h3>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <label>지역 <select id="rdRegion" onchange="loadRedevCands()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"></select></label>
+      <label>지역 <select id="rdRegion" onchange="loadRedevCands()" class="ctrl"></select></label>
       <span id="rdCandStatus" style="color:var(--dim);font-size:12px"></span>
     </div>
     <div class="mapsplit" style="height:400px;min-height:400px">
@@ -351,7 +360,7 @@
   <div class="sec" id="rsec-zones" style="display:none">
     <h3>서울 정비구역 현황 <span class="pill">upisRebuild</span></h3>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <label>구분 <select id="rdZoneType" onchange="loadRedevZones()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
+      <label>구분 <select id="rdZoneType" onchange="loadRedevZones()" class="ctrl">
         <option value="">전체</option><option value="뉴타운">뉴타운(재정비촉진)</option><option value="재건축">재건축</option><option value="재개발">재개발</option><option value="도시환경">도시환경</option><option value="주거환경">주거환경</option></select></label>
       <input id="rdZoneQ" placeholder="🔍 위치·구역명" onkeyup="if(event.key==='Enter')loadRedevZones()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px 10px">
       <span id="rdZoneStatus" style="color:var(--dim);font-size:12px"></span>
@@ -369,14 +378,14 @@
     <label>대출비율(LTV)<br><input id="ccLtv" type="number" value="70" min="0" max="90" style="width:70px"> %</label>
     <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
     <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
-    <label>기준 평형<br><select id="ccPyeong" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px">
+    <label>기준 평형<br><select id="ccPyeong" class="ctrl">
       <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
     </select></label>
     <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#000;font-weight:700">분석</button>
     <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
   </div>
   <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
-  <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+  <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
   <p id="ccEmpty" style="color:var(--dim)"></p>
 </div>
 
@@ -395,7 +404,7 @@
       <label>LTV % <input id="ln_ltv" type="number" value="80" step="5" style="width:56px" oninput="recalcLoan()"></label>
       <label>금리 % <input id="ln_rate" type="number" value="3.5" step="0.1" style="width:56px" oninput="recalcLoan()"></label>
       <label>기간(년) <input id="ln_years" type="number" value="30" step="1" style="width:52px" oninput="recalcLoan()"></label>
-      <label>상환 <select id="ln_method" onchange="recalcLoan()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+      <label>상환 <select id="ln_method" onchange="recalcLoan()" class="ctrl">
         <option value="원금균등">원금균등</option><option value="원리금균등">원리금균등</option></select></label>
     </div>
     <div id="ln_out" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"></div>
@@ -604,11 +613,12 @@ function renderQuicksale(){
   const rows = _qsList.filter(m=> minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap));
   document.getElementById('qsEmpty').textContent = rows.length?'':'조건에 맞는 급매가 없습니다. (스캔 먼저 / 갭 기준 완화)';
   mapSplit('qsList','qsMap',rows,{
-    summary:m=>({nm:m['단지명']||'–', right:`<b style="color:${m['급매갭']<=-8?'#ef4444':'#ea580c'}">${m['급매갭']}%</b>`,
+    summary:m=>({nm:`${m['단지명']||'–'} ${m['시그널']?badge(m['시그널']):''}`,
+      right:`<b style="color:${m['급매갭']<=-8?'#ef4444':'#ea580c'}">${m['급매갭']}%</b>`,
       sub:`${m['지역']||''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span>${m['시그널']?'<span>'+badge(m['시그널'])+'</span>':''}</div>${loanBtn(m['호가'],m['단지명'])}`,
+      <span>연식 ${m['연식']||'–'}</span></div>${loanBtn(m['호가'],m['단지명'])}`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
     label:m=>`<b>${m['단지명']}</b><br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:#ea580c">(${m['급매갭']}%)</span>`,
@@ -659,13 +669,13 @@ function plotPins(mapId, items, coords, opt){
     const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(opt.label(it));
     st.markers[i]=mk; });
   const ms=Object.values(st.markers);
-  if(ms.length){ const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:12}); }
+  if(ms.length){ const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
   setTimeout(()=>st.map.invalidateSize(),150);
 }
 // 핀 클릭: 항상 지도 중앙 + 반경 ~10km(zoom 12) 뷰
 function focusPin(mapId,i){ const st=_ms[mapId]; if(!st) return; const mk=st.markers[i];
   if(st.sel!=null && st.markers[st.sel]){ const e=st.markers[st.sel].getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.remove('sel');} }
-  if(mk){ st.map.setView(mk.getLatLng(),12,{animate:true}); mk.openPopup();
+  if(mk){ st.map.setView(mk.getLatLng(),14,{animate:true}); mk.openPopup();
     const e=mk.getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.add('sel');} st.sel=i; } }
 // ===== 범용 대출계산기 (경매/급매/청약/재건축 공통) =====
 function openLoanCalc(price, label, ltv){
@@ -814,12 +824,12 @@ function renderPresale(){
     .filter(r => !openOnly || ['접수중','접수예정'].includes(r['상태']));
   document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 청약 단지가 없습니다.';
   mapSplit('psList','psMap',rows,{
-    summary:r=>({nm:`${r['단지명']||'–'} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
+    summary:r=>({nm:`${r['단지명']||'–'} ${r['시그널']?badge(r['시그널']):''} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
       right:psStatusBadge(r['상태'],r['Dday']),
       sub:`${r['지역']||''} ${r['지역급지']?'· '+r['지역급지']+'급지':''} · ${r['주택구분']||''} · ${subAddr(r['주소'],r['지역'])}`}),
     detail:r=>{ const id='psd'+r['관리번호']; loadPsTypes(r['관리번호'],id);
       const sched=[r['청약접수시작'],r['청약접수마감']].filter(Boolean).join(' ~ ')||'–';
-      return `<div class="kv"><span>${r['시그널']?badge(r['시그널']):''}</span><span>접수 ${sched}</span>
+      return `<div class="kv"><span>접수 ${sched}</span>
         <span>입주 ${r['입주예정']||'–'}</span><span>총 ${r['총세대']?Number(r['총세대']).toLocaleString():'–'}세대</span></div>
         <div id="${id}" style="margin-top:7px;color:var(--dim)">평형별 분양가 불러오는 중…</div>`; },
     geoq:r=>r['주소']||(r['지역']+' '+r['단지명']),
@@ -1300,11 +1310,11 @@ function renderAuction(rows){
     '관심 매물이 없습니다. BUY+ 지역의 경매 매물을 "+ 매물 추가" 또는 CSV로 등록하세요.';
   mapSplit('auctionList','auctionMap',rows,{
     summary:r=>{ const dl=daysTo(r['입찰기일']);
-      return {nm:`${r['단지명']||'–'} ${r['목표달성']?'':'<span class="pill">목표미달</span>'}`,
+      return {nm:`${r['단지명']||'–'} ${r['지역시그널']?badge(r['지역시그널']):''} ${r['목표달성']?'':'<span class="pill">목표미달</span>'}`,
         right:`<b style="color:${r['시세차익률']>=0?'#16a34a':'#dc2626'}">${r['시세차익률']}%</b>`,
         sub:`${r['region']||''} ${r['단지급지']?'· '+r['단지급지']+'급지':''} · 권장 ${won(r['권장입찰가'])} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
     detail:r=>`<div class="kv">
-      <span>${r['지역시그널']?badge(r['지역시그널']):''}</span>${r['단지급지']?'<span>'+gradeBadge(r['단지급지'],r['급지상위'])+'</span>':''}
+      ${r['단지급지']?'<span>'+gradeBadge(r['단지급지'],r['급지상위'])+'</span>':''}
       <span>평형 ${r['전용면적']?Math.round(r['전용면적'])+'㎡('+(r['전용면적']/3.3058).toFixed(0)+'평)':'–'}</span>
       <span>연식 ${r['건축년도']?(2026-r['건축년도'])+'년':'–'}</span><span>세대 ${r['세대수']?r['세대수'].toLocaleString():'–'}</span>
       <span>용적 ${r['용적률']?r['용적률']+'%':'–'}</span></div>
