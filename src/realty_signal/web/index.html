@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ee; --dim:#8b93a7; }
+  :root { --bg:#f8fafc; --panel:#ffffff; --line:#e2e8f0; --txt:#1e293b; --dim:#64748b; --accent:#0d9488; }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
          background:var(--bg); color:var(--txt); }
@@ -19,50 +19,50 @@
   .tabs { display:flex; gap:4px; }
   .tab { padding:6px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel);
          color:var(--dim); cursor:pointer; font-size:13px; font-weight:600; }
-  .tab.on { color:#fff; background:#1e293b; border-color:#3b82f6; }
+  .tab.on { color:#fff; background:#0d9488; border-color:#0d9488; }
   .date { color:var(--dim); font-size:12px; white-space:nowrap; }
   #refresh { padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
-             background:#1e293b; color:#bfdbfe; cursor:pointer; font-size:13px; white-space:nowrap; }
+             background:#eef2f7; color:#1d4ed8; cursor:pointer; font-size:13px; white-space:nowrap; }
   #refresh:disabled { opacity:.5; cursor:wait; }
   .right { margin-left:auto; display:flex; gap:12px; align-items:center; }
   .wrap { display:flex; height:calc(100vh - 52px); }
   .side { width:264px; border-right:1px solid var(--line); display:flex; flex-direction:column; }
   /* 사이드바 필터 */
-  .sfilters { padding:10px 12px; border-bottom:1px solid var(--line); background:#12151c;
+  .sfilters { padding:10px 12px; border-bottom:1px solid var(--line); background:#f1f5f9;
               display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
-  .sfilters #search, .sfilters #groupFilter { width:100%; padding:7px 10px; background:#0f1115;
+  .sfilters #search, .sfilters #groupFilter { width:100%; padding:7px 10px; background:#ffffff;
               border:1px solid var(--line); border-radius:8px; color:var(--txt); outline:none; font-size:13px; }
   .filters { display:flex; gap:5px; flex-wrap:wrap; }
   .chip { padding:3px 9px; border:1px solid var(--line); border-radius:12px; cursor:pointer;
           background:var(--panel); color:var(--dim); font-size:11px; user-select:none; }
-  .chip.on { color:#fff; border-color:#3b82f6; background:#1e293b; }
+  .chip.on { color:#fff; border-color:#3b82f6; background:#eef2f7; }
   #list { flex:1; overflow:auto; }
   .row { padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex;
          align-items:center; gap:8px; flex-wrap:wrap; }
-  .row:hover, .row.sel { background:#1d2230; }
+  .row:hover, .row.sel { background:#eef2f7; }
   .row .nm { font-weight:600; }
   .row .mn { width:100%; color:var(--dim); font-size:11px; }
   .badge { font-size:11px; padding:2px 7px; border-radius:5px; font-weight:700; white-space:nowrap; }
-  .STRONG_BUY{background:#16a34a;color:#fff;} .BUY{background:#22c55e33;color:#4ade80;}
-  .WATCH{background:#eab30833;color:#fbbf24;} .NEUTRAL{background:#33415533;color:#94a3b8;}
-  .SELL_RISK{background:#ef444433;color:#f87171;}
+  .STRONG_BUY{background:#16a34a;color:#fff;} .BUY{background:#22c55e33;color:#16a34a;}
+  .WATCH{background:#ca8a0433;color:#d97706;} .NEUTRAL{background:#33415533;color:#94a3b8;}
+  .SELL_RISK{background:#ef444433;color:#dc2626;}
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
   #chart { flex:1; }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
   #reasons { display:flex; gap:6px; flex-wrap:wrap; flex:1 1 360px; min-width:240px; }
-  .rchip { font-size:12px; padding:3px 9px; border-radius:12px; background:#1d2230; border:1px solid var(--line); }
+  .rchip { font-size:12px; padding:3px 9px; border-radius:12px; background:#eef2f7; border:1px solid var(--line); }
   .zlegend { display:flex; gap:4px; margin-left:auto; align-items:center; }
   /* 지역 트리 */
-  .ghead { padding:8px 12px; font-weight:700; font-size:13px; cursor:pointer; background:#12151c;
+  .ghead { padding:8px 12px; font-weight:700; font-size:13px; cursor:pointer; background:#f1f5f9;
            border-bottom:1px solid var(--line); display:flex; align-items:center; gap:6px; position:sticky; top:0; }
   .ghead .cnt { color:var(--dim); font-weight:400; font-size:11px; }
   .shead { padding:6px 12px 6px 22px; font-weight:600; cursor:pointer; display:flex; align-items:center;
-           gap:6px; border-bottom:1px solid var(--line); background:#0d1014; }
+           gap:6px; border-bottom:1px solid var(--line); background:#ffffff; }
   .caret { display:inline-block; width:10px; color:var(--dim); transition:transform .1s; }
   .caret.open { transform:rotate(90deg); }
   .row.lv1 { padding-left:22px; } .row.lv2 { padding-left:38px; }
-  .zsw { font-size:11px; padding:2px 8px; border-radius:10px; cursor:help; color:#0f1115; font-weight:600; }
+  .zsw { font-size:11px; padding:2px 8px; border-radius:10px; cursor:help; color:#ffffff; font-weight:600; }
   /* 시그널 차트 — 사이드바 토글 / 상단바 / 해설패널 / 구간 팝오버 */
   .side { transition:width .15s ease; }
   .side.collapsed { width:0; min-width:0; border:none; overflow:hidden; }
@@ -71,10 +71,10 @@
   #sideToggle { background:var(--panel); border:1px solid var(--line); color:var(--dim);
                 border-radius:6px; cursor:pointer; padding:3px 9px; font-size:12px; white-space:nowrap; }
   #sideToggle:hover { color:#fff; }
-  .haesol-panel { padding:11px 14px; border-bottom:1px solid var(--line); background:#0f1115;
+  .haesol-panel { padding:11px 14px; border-bottom:1px solid var(--line); background:#ffffff;
                   font-size:13px; line-height:1.65; display:none; }
   .haesol-panel.open { display:block; }
-  .zinfo-pop { position:absolute; z-index:50; top:42px; right:12px; background:#12151c;
+  .zinfo-pop { position:absolute; z-index:50; top:42px; right:12px; background:#f1f5f9;
                border:1px solid var(--line); border-radius:8px; padding:11px 13px; font-size:12px;
                max-width:320px; display:none; box-shadow:0 6px 20px rgba(0,0,0,.5); }
   .zinfo-pop.open { display:block; }
@@ -84,37 +84,37 @@
   #view-auction, #view-undervalued, #view-presale, #view-conclusion, #view-quicksale, #view-redev { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:12px; height:calc(100vh - 178px); min-height:420px; }
-  .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#0d1014; }
+  .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
   .ms-map { flex:1; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(45,212,191,0.06); }
   .ms-row { padding:10px 13px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
-  .ms-row:hover { background:#161b26; }
-  .ms-row.sel { background:#17241f; box-shadow:inset 3px 0 0 var(--accent); }
+  .ms-row:hover { background:#eef2f7; }
+  .ms-row.sel { background:#e7f7ef; box-shadow:inset 3px 0 0 var(--accent); }
   .ms-row .r1 { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
   .ms-row .nm { font-weight:700; font-size:13.5px; }
   .ms-row .sub { color:var(--dim); font-size:11.5px; margin-top:2px; }
-  .ms-detail { padding:10px 13px 12px; background:#0f1419; border-bottom:1px solid var(--line); font-size:12px; line-height:1.6; }
+  .ms-detail { padding:10px 13px 12px; background:#f1f5f9; border-bottom:1px solid var(--line); font-size:12px; line-height:1.6; }
   .ms-detail .kv { display:flex; flex-wrap:wrap; gap:5px 14px; }
-  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#11161f; color:#e5edf5; box-shadow:0 4px 18px rgba(0,0,0,.5); }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#ffffff; color:#1e293b; box-shadow:0 4px 18px rgba(0,0,0,.5); }
   .leaflet-popup-content { font-size:12px; line-height:1.4; }
   .mpin { width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.25), 0 0 10px rgba(45,212,191,.5); }
   .mpin.sel { width:22px; height:22px; box-shadow:0 0 0 4px rgba(45,212,191,.35), 0 0 16px rgba(45,212,191,.9); z-index:1000; }
   .sec { margin-bottom:18px; }
-  .sec h3 { font-size:14px; margin:0 0 8px; color:#cbd5e1; }
+  .sec h3 { font-size:14px; margin:0 0 8px; color:#475569; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
   .params { display:flex; gap:18px; align-items:center; background:var(--panel); padding:10px 14px;
             border:1px solid var(--line); border-radius:10px; flex-wrap:wrap; }
   .params label { font-size:12px; color:var(--dim); }
-  .params input { width:64px; background:#0f1115; border:1px solid var(--line); color:var(--txt);
+  .params input { width:64px; background:#ffffff; border:1px solid var(--line); color:var(--txt);
                   border-radius:6px; padding:4px 6px; }
-  .btn { padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#1e293b;
-         color:#cbd5e1; cursor:pointer; font-size:13px; }
-  .btn.primary { border-color:#3b82f6; color:#bfdbfe; }
+  .btn { padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#eef2f7;
+         color:#475569; cursor:pointer; font-size:13px; }
+  .btn.primary { border-color:#3b82f6; color:#1d4ed8; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th,td { padding:7px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th:first-child,td:first-child,th.l,td.l { text-align:left; }
   thead th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--bg); }
-  tr.imminent { background:#3b1d1d33; } tr.unprofit td { opacity:.5; }
-  .pill { font-size:10px; padding:1px 6px; border-radius:8px; background:#1d2230; color:var(--dim); }
+  tr.imminent { background:#fee2e233; } tr.unprofit td { opacity:.5; }
+  .pill { font-size:10px; padding:1px 6px; border-radius:8px; background:#eef2f7; color:var(--dim); }
   .strat { display:flex; gap:12px; flex-wrap:wrap; }
   .scard { flex:1; min-width:180px; background:var(--panel); border:1px solid var(--line);
            border-radius:10px; padding:12px 14px; }
@@ -124,7 +124,7 @@
   dialog h3 { margin:0 0 12px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
   .grid2 label { font-size:12px; color:var(--dim); display:flex; flex-direction:column; gap:3px; }
-  .grid2 input { background:#0f1115; border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:5px 7px; }
+  .grid2 input { background:#ffffff; border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:5px 7px; }
   .dlg-foot { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
 </style>
 </head>
@@ -206,9 +206,9 @@
       <label>대출비율 % <input id="pLoan" type="number" value="70" step="5" oninput="loadAuction()"></label>
       <label>대출금리 % <input id="pRate" type="number" value="5" step="0.1" oninput="loadAuction()"></label>
       <label>보유개월 <input id="pHold" type="number" value="6" step="1" oninput="loadAuction()"></label>
-      <label>평형 <select id="fSize" onchange="loadAuction()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+      <label>평형 <select id="fSize" onchange="loadAuction()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
         <option value="">전체</option><option value="s">소형(≤60㎡)</option><option value="m">중형(60~85)</option><option value="l">대형(>85)</option></select></label>
-      <label>연식 <select id="fAge" onchange="loadAuction()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+      <label>연식 <select id="fAge" onchange="loadAuction()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
         <option value="">전체</option><option value="new">신축(≤10년)</option><option value="mid">준신축(10~20)</option><option value="old">구축(>20)</option></select></label>
       <button class="btn primary" onclick="openAdd()">+ 매물 추가</button>
       <button class="btn" onclick="document.getElementById('csv').click()">CSV 임포트</button>
@@ -217,7 +217,7 @@
       <span class="pill">CSV: 단지명,region,감정가,최저매각가,시세,전용면적,입찰기일…</span>
     </div>
     <details style="margin-top:10px;font-size:13px;color:var(--dim)">
-      <summary style="cursor:pointer;color:#bfdbfe">계산식 설명 (입찰가 산정 모델)</summary>
+      <summary style="cursor:pointer;color:#1d4ed8">계산식 설명 (입찰가 산정 모델)</summary>
       <div style="padding:10px 4px;line-height:1.9">
         • <b>경매 총매입</b> = 입찰가 + 등기비(입찰가×취득세율+법무비) + 명도비(전용평×15만) + 미납관리비 + 수리비 + 보유이자(대출금×금리×개월/12)<br>
         • <b>일반매매 총매입</b> = 시세 + 취득세 + 중개수수료 + 법무비<br>
@@ -256,7 +256,7 @@
   </div>
   <div id="uvchart" style="height:340px"></div>
   <div id="uvHaesol" style="margin:6px 2px 0;padding:10px 14px;background:var(--panel);
-       border:1px solid var(--line);border-radius:10px;font-size:13px;color:#dbe2ee;min-height:20px"></div>
+       border:1px solid var(--line);border-radius:10px;font-size:13px;color:#334155;min-height:20px"></div>
   <div class="sec" style="margin-top:14px">
     <table>
       <thead><tr id="uvHead">
@@ -290,11 +290,11 @@
 <div id="view-quicksale" style="display:none">
   <h2 style="margin:0 0 4px">급매 레이더 <span style="font-size:12px;color:var(--dim);font-weight:400">개인용 · 로컬 확인</span></h2>
   <p style="color:var(--dim);font-size:13px;margin:0 0 6px">시세(중위호가) 대비 싸게 나온 매물을 지역별로 모읍니다. 급매갭 = (호가−중위시세)/중위시세, 음수가 클수록 저가.</p>
-  <p style="color:#fb923c;font-size:11px;margin:0 0 12px">⚠ 출처는 네이버 부동산 매물(baroezip 공개 API 경유). 개인 참고용이며 재배포/상업이용 금지.</p>
+  <p style="color:#ea580c;font-size:11px;margin:0 0 12px">⚠ 출처는 네이버 부동산 매물(baroezip 공개 API 경유). 개인 참고용이며 재배포/상업이용 금지.</p>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
     <button class="btn" onclick="refreshQuicksale()" id="qsBtn" style="background:var(--accent);color:#000;font-weight:700">BUY+ 지역 급매 스캔</button>
-    <label>특정 지역만 <select id="qsRegion" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"><option value="">— BUY+ 전체 —</option></select></label>
-    <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
+    <label>특정 지역만 <select id="qsRegion" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"><option value="">— BUY+ 전체 —</option></select></label>
+    <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
       <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
     <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
   </div>
@@ -306,14 +306,18 @@
 </div>
 
 <div id="view-redev" style="display:none">
-  <h2 style="margin:0 0 4px">재건축 · 재개발</h2>
-  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">오래되고(연식↑)·용적률 낮고·대단지·고시세 단지가 재건축 사업성↑. 정비구역 현황 + 잠재력 스크리너 + 가치 계산기.
-    <span style="color:#fb923c">※ 사업단계(조합·관리처분) timeline·분담금은 공개데이터 부재 → 가치계산기는 입력 기반.</span></p>
+  <h2 style="margin:0 0 8px">재건축 · 재개발</h2>
+  <div class="tabs" style="margin-bottom:14px">
+    <button class="tab on" data-rtab="screener" onclick="redevTab('screener')">잠재력 스크리너</button>
+    <button class="tab" data-rtab="stages" onclick="redevTab('stages')">단계 현황</button>
+    <button class="tab" data-rtab="calc" onclick="redevTab('calc')">가치 계산기</button>
+    <button class="tab" data-rtab="zones" onclick="redevTab('zones')">정비구역</button>
+  </div>
 
-  <div class="sec">
-    <h3>① 재건축 잠재력 스크리너 <span class="pill">국토부+건축물대장</span></h3>
+  <div class="sec" id="rsec-screener">
+    <h3>재건축 잠재력 스크리너 <span class="pill">국토부+건축물대장</span></h3>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <label>지역 <select id="rdRegion" onchange="loadRedevCands()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"></select></label>
+      <label>지역 <select id="rdRegion" onchange="loadRedevCands()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px"></select></label>
       <span id="rdCandStatus" style="color:var(--dim);font-size:12px"></span>
     </div>
     <div class="mapsplit" style="height:400px;min-height:400px">
@@ -323,17 +327,17 @@
     <p id="rdCandEmpty" style="color:var(--dim)"></p>
   </div>
 
-  <div class="sec">
-    <h3>② 정비사업 단계 현황 <span class="pill">서울 정보몽땅</span></h3>
+  <div class="sec" id="rsec-stages" style="display:none">
+    <h3>정비사업 단계 현황 <span class="pill">서울 정보몽땅</span></h3>
     <p style="color:var(--dim);font-size:12px;margin:-4px 0 8px">단계가 진행될수록 불확실성↓·가격↑. 위 지역 선택과 연동(미선택 시 서울 전체).</p>
     <div id="rdStageDist" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
     <div style="font-size:12px;color:var(--dim);margin-bottom:4px">단계 평균 소요기간 (학습 인사이트)</div>
     <div id="rdStageDur" style="display:flex;gap:8px;flex-wrap:wrap"></div>
   </div>
 
-  <div class="sec">
-    <h3>③ 재건축 가치 계산기 <span class="pill">입력 기반 ROI</span></h3>
-    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;background:#0f1115;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px">
+  <div class="sec" id="rsec-calc" style="display:none">
+    <h3>재건축 가치 계산기 <span class="pill">입력 기반 ROI</span></h3>
+    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px">
       <label>현재 매수가<br><input id="rv_cur" type="number" value="100000" style="width:100px"> 만</label>
       <label>전용 평형<br><input id="rv_py" type="number" value="25" style="width:60px"> 평</label>
       <label>예상 분양 평단가<br><input id="rv_ps" type="number" value="6000" style="width:90px"> 만/평</label>
@@ -344,12 +348,12 @@
     <div id="rvResult" style="font-size:13px"></div>
   </div>
 
-  <div class="sec">
-    <h3>④ 서울 정비구역 현황 <span class="pill">upisRebuild</span></h3>
+  <div class="sec" id="rsec-zones" style="display:none">
+    <h3>서울 정비구역 현황 <span class="pill">upisRebuild</span></h3>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <label>구분 <select id="rdZoneType" onchange="loadRedevZones()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
+      <label>구분 <select id="rdZoneType" onchange="loadRedevZones()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px">
         <option value="">전체</option><option value="뉴타운">뉴타운(재정비촉진)</option><option value="재건축">재건축</option><option value="재개발">재개발</option><option value="도시환경">도시환경</option><option value="주거환경">주거환경</option></select></label>
-      <input id="rdZoneQ" placeholder="🔍 위치·구역명" onkeyup="if(event.key==='Enter')loadRedevZones()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px 10px">
+      <input id="rdZoneQ" placeholder="🔍 위치·구역명" onkeyup="if(event.key==='Enter')loadRedevZones()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px 10px">
       <span id="rdZoneStatus" style="color:var(--dim);font-size:12px"></span>
     </div>
     <table><thead><tr><th class="l">구역명</th><th>구분</th><th class="l">위치</th><th>면적(㎡)</th></tr></thead>
@@ -360,12 +364,12 @@
 <div id="view-conclusion" style="display:none">
   <h2 style="margin:0 0 4px">종합 추천 — 가용자본으로 어디를 살까</h2>
   <p style="color:var(--dim);font-size:13px;margin:0 0 14px">매수 시그널(STRONG_BUY/BUY) 지역 × 저평가도 × 단지급지를 종합해 매수가능 범위 내 우선순위를 매깁니다. 경매·청약은 "그 지역에 N건" 포인터로 첨부.</p>
-  <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#0f1115;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+  <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
     <label>가용자본(자기자본)<br><input id="ccCapital" type="number" value="30000" style="width:120px"> <span style="color:var(--dim)">만원</span></label>
     <label>대출비율(LTV)<br><input id="ccLtv" type="number" value="70" min="0" max="90" style="width:70px"> %</label>
     <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
     <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
-    <label>기준 평형<br><select id="ccPyeong" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px">
+    <label>기준 평형<br><select id="ccPyeong" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px">
       <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
     </select></label>
     <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#000;font-weight:700">분석</button>
@@ -391,7 +395,7 @@
       <label>LTV % <input id="ln_ltv" type="number" value="80" step="5" style="width:56px" oninput="recalcLoan()"></label>
       <label>금리 % <input id="ln_rate" type="number" value="3.5" step="0.1" style="width:56px" oninput="recalcLoan()"></label>
       <label>기간(년) <input id="ln_years" type="number" value="30" step="1" style="width:52px" oninput="recalcLoan()"></label>
-      <label>상환 <select id="ln_method" onchange="recalcLoan()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+      <label>상환 <select id="ln_method" onchange="recalcLoan()" style="background:#ffffff;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
         <option value="원금균등">원금균등</option><option value="원리금균등">원리금균등</option></select></label>
     </div>
     <div id="ln_out" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"></div>
@@ -401,6 +405,22 @@
     <table id="calcTable"></table>
   </div>
   <div class="dlg-foot"><button class="btn" onclick="document.getElementById('calcDlg').close()">닫기</button></div>
+</dialog>
+
+<dialog id="loanDlg" style="width:520px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h3 id="loanTitle" style="margin:0">대출 계산기</h3>
+    <span class="btn" style="padding:2px 10px" onclick="document.getElementById('loanDlg').close()">✕</span>
+  </div>
+  <p id="loanCtx" style="color:var(--dim);font-size:12px;margin:0 0 12px"></p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+    <label>매물가(만원)<br><input id="ln_price" type="number" oninput="calcLoan()" style="width:100%"></label>
+    <label>대출비율 LTV(%)<br><input id="ln_ltv" type="number" value="70" oninput="calcLoan()" style="width:100%"></label>
+    <label>대출금리(%)<br><input id="ln_rate" type="number" value="4.0" step="0.1" oninput="calcLoan()" style="width:100%"></label>
+    <label>상환기간(년)<br><input id="ln_yrs" type="number" value="30" oninput="calcLoan()" style="width:100%"></label>
+  </div>
+  <div id="loanOut" style="margin-top:14px"></div>
+  <p style="color:var(--dim);font-size:11px;margin-top:10px">원리금균등 기준. 취득세·중개비 등 부대비용은 제외(개략 계산).</p>
 </dialog>
 
 <dialog id="addDlg">
@@ -429,24 +449,24 @@
 
 <script>
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
-const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#4ade80', WATCH:'#fbbf24', NEUTRAL:'#94a3b8', SELL_RISK:'#f87171'};
+const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};
 let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
 let allSignals = [], selected = null, meta = null;
-const chart = echarts.init(document.getElementById('chart'), 'dark');
+const chart = echarts.init(document.getElementById('chart'));
 window.addEventListener('resize', () => chart.resize());
 const badge = s => `<span class="badge ${s}">${s}</span>`;
 const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
 // 단지단위 급지(지역 내 평단가 순위) 1=최상급~5=하급
 function gradeBadge(g, top){
   if(!g) return '–';
-  const col = {1:'#eab308',2:'#4ade80',3:'#94a3b8',4:'#fb923c',5:'#f87171'}[g];
+  const col = {1:'#ca8a04',2:'#16a34a',3:'#94a3b8',4:'#ea580c',5:'#dc2626'}[g];
   const t = top!=null ? ` <span style="color:var(--dim);font-size:10px">상위${top}%</span>` : '';
   return `<span title="지역 내 평단가 순위" style="color:${col};font-weight:700">${g}급지</span>${t}`;
 }
 // 시군구 급지(평단가 분위 A~D, A=상급) — 청약 지역 맥락
 function regionGradeBadge(g, pyeong){
   if(!g) return '–';
-  const col = {A:'#eab308',B:'#4ade80',C:'#94a3b8',D:'#60a5fa'}[g] || '#94a3b8';
+  const col = {A:'#ca8a04',B:'#16a34a',C:'#94a3b8',D:'#2563eb'}[g] || '#94a3b8';
   const p = pyeong ? ` <span style="color:var(--dim);font-size:10px">${pyeong}만/평</span>` : '';
   return `<span title="시군구 평단가 분위" style="color:${col};font-weight:700">${g}급지</span>${p}`;
 }
@@ -463,6 +483,13 @@ function switchTab(t){
   if(t==='conclusion') loadConclusion();
   if(t==='quicksale') loadQuicksale();
   if(t==='redev') loadRedev();
+}
+function redevTab(name){
+  ['screener','stages','calc','zones'].forEach(n=>
+    document.getElementById('rsec-'+n).style.display = n===name?'':'none');
+  document.querySelectorAll('#view-redev .tab').forEach(b=>b.classList.toggle('on', b.dataset.rtab===name));
+  const mid = name==='screener'?'rdCandMap':null;
+  if(mid && _ms[mid]) setTimeout(()=>_ms[mid].map.invalidateSize(),60);
 }
 let _redevInit=false;
 async function loadRedev(){
@@ -486,14 +513,14 @@ async function loadRedevCands(){
   const d=await (await fetch('/api/redevelopment/candidates/'+encodeURIComponent(region))).json();
   st.innerHTML=`${region} ${d['시그널']?badge(d['시그널']):''} · 구축 ${d.candidates.length}개 단지`;
   document.getElementById('rdCandEmpty').textContent = d.candidates.length?'':'구축 단지 데이터가 없습니다.';
-  const gcol=c=>c['잠재력']>=65?'#4ade80':c['잠재력']>=50?'#fbbf24':'#94a3b8';
+  const gcol=c=>c['잠재력']>=65?'#16a34a':c['잠재력']>=50?'#d97706':'#94a3b8';
   mapSplit('rdCandList','rdCandMap',d.candidates.slice(0,40),{
     summary:c=>({nm:c['단지명'], right:`<b style="color:${gcol(c)}">${c['잠재력']}</b>`,
       sub:`${c['연식년']}년 · ${c['용적률']?c['용적률']+'%':'용적미상'} · ${c['세대수']?c['세대수'].toLocaleString()+'세대':''} · ${c['평단가']}만/평`}),
     detail:c=>`<div class="kv"><span>잠재력 <b style="color:${gcol(c)}">${c['잠재력']}</b></span>
       <span>연식 ${c['연식년']}년</span><span>용적률 ${c['용적률']?c['용적률']+'%':'–'}</span>
       <span>세대 ${c['세대수']?c['세대수'].toLocaleString():'–'}</span><span>평단 ${c['평단가']}만</span></div>
-      <div style="margin-top:5px;font-size:11px;color:var(--dim)">점수구성 — 연식 ${c['_age']} · 용적 ${c['_far']} · 규모 ${c['_size']} · 입지 ${c['_loc']}</div>`,
+      <div style="margin-top:5px;font-size:11px;color:var(--dim)">점수구성 — 연식 ${c['_age']} · 용적 ${c['_far']} · 규모 ${c['_size']} · 입지 ${c['_loc']}</div>${loanBtn(c['평단가']*25,c['단지명']+' (25평 추정)')}`,
     geoq:c=>`${region} ${c['단지명']}`,
     color:c=>gcol(c),
     label:c=>`<b>${c['단지명']}</b><br>재건축 잠재력 ${c['잠재력']} · ${c['연식년']}년`,
@@ -506,17 +533,17 @@ async function loadRedevStages(){
   const d=await (await fetch('/api/redevelopment/stages'+(region?'?region='+encodeURIComponent(region):''))).json();
   const late=['관리처분인가','이주','철거신고','착공신고','일반분양승인','준공인가','이전고시','조합해산'];
   dist.innerHTML=`<span style="color:var(--dim);font-size:12px;align-self:center">${d.region} ${d['사업수']}개 사업 →</span>`+
-    (d['단계분포']||[]).map(s=>{const c=late.includes(s['단계'])?'#4ade80':'#60a5fa';
+    (d['단계분포']||[]).map(s=>{const c=late.includes(s['단계'])?'#16a34a':'#2563eb';
       return `<span style="background:${c}22;color:${c};border:1px solid ${c}55;border-radius:10px;padding:2px 9px;font-size:11px;font-weight:600">${s['단계']} ${s['사업수']}</span>`;}).join('');
   dur.innerHTML=(d['평균소요']||[]).slice(0,7).map(t=>
-    `<span style="background:#1e293b;border:1px solid var(--line);border-radius:8px;padding:3px 9px;font-size:11px">${t['전이']} <b style="color:var(--accent)">${t['평균개월']}개월</b></span>`).join('')
+    `<span style="background:#eef2f7;border:1px solid var(--line);border-radius:8px;padding:3px 9px;font-size:11px">${t['전이']} <b style="color:var(--accent)">${t['평균개월']}개월</b></span>`).join('')
     || '<span style="color:var(--dim);font-size:12px">소요기간 데이터 부족</span>';
 }
 function calcRedevValue(){
   const q=`current_price=${+rv_cur.value}&pyeong=${+rv_py.value}&presale_pyeong_price=${+rv_ps.value}&contribution=${+rv_con.value}&hold_months=${+rv_mon.value}`;
   fetch('/api/redevelopment/value-calc?'+q).then(r=>r.json()).then(d=>{
     const eok=n=>n==null?'–':(n/10000).toFixed(2)+'억';
-    const col=d.ROI>=0?'#4ade80':'#f87171';
+    const col=d.ROI>=0?'#16a34a':'#dc2626';
     document.getElementById('rvResult').innerHTML=
       `<div style="display:flex;gap:18px;flex-wrap:wrap">
         <span>신축 추정가치 <b>${eok(d['신축추정가치'])}</b></span>
@@ -534,7 +561,7 @@ async function loadRedevZones(){
   const params=new URLSearchParams(); if(type)params.set('type',type); if(q)params.set('q',q);
   const d=await (await fetch('/api/redevelopment/zones?'+params)).json();
   st.innerHTML=`총 ${d.total}건 · `+Object.entries(d.by_type||{}).map(([k,v])=>`${k} ${v}`).join(' / ');
-  const tcol={'재건축':'#4ade80','재개발':'#60a5fa','도시환경':'#a78bfa','주거환경':'#fb923c'};
+  const tcol={'재건축':'#16a34a','재개발':'#2563eb','도시환경':'#7c3aed','주거환경':'#ea580c'};
   d.zones.forEach(z=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td class="l">${z['구역명']||'–'}</td>
@@ -577,14 +604,14 @@ function renderQuicksale(){
   const rows = _qsList.filter(m=> minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap));
   document.getElementById('qsEmpty').textContent = rows.length?'':'조건에 맞는 급매가 없습니다. (스캔 먼저 / 갭 기준 완화)';
   mapSplit('qsList','qsMap',rows,{
-    summary:m=>({nm:m['단지명']||'–', right:`<b style="color:${m['급매갭']<=-8?'#ef4444':'#fb923c'}">${m['급매갭']}%</b>`,
+    summary:m=>({nm:m['단지명']||'–', right:`<b style="color:${m['급매갭']<=-8?'#ef4444':'#ea580c'}">${m['급매갭']}%</b>`,
       sub:`${m['지역']||''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span>${m['시그널']?'<span>'+badge(m['시그널'])+'</span>':''}</div>`,
+      <span>연식 ${m['연식']||'–'}</span>${m['시그널']?'<span>'+badge(m['시그널'])+'</span>':''}</div>${loanBtn(m['호가'],m['단지명'])}`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
-    color:m=>m['급매갭']<=-8?'#ef4444':'#fb923c',
-    label:m=>`<b>${m['단지명']}</b><br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:#fb923c">(${m['급매갭']}%)</span>`,
+    color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
+    label:m=>`<b>${m['단지명']}</b><br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:#ea580c">(${m['급매갭']}%)</span>`,
   });
 }
 // ===== 재사용 좌우 분할 지도 컴포넌트 (Leaflet + CartoDB dark) =====
@@ -618,7 +645,7 @@ async function mapSplit(listId, mapId, items, opt){
 function initMap(mapId){
   let st=_ms[mapId];
   if(!st){ const map=L.map(mapId,{scrollWheelZoom:true,zoomControl:true});
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
     map.setView([37.55,126.99],11);
     st=_ms[mapId]={map,markers:{},sel:null}; }
   return st;
@@ -627,18 +654,44 @@ function plotPins(mapId, items, coords, opt){
   const st=initMap(mapId);
   Object.values(st.markers).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
   items.forEach((it,i)=>{ const c=coords[i]; if(!c) return;
-    const color=(opt.color&&opt.color(it))||'#2dd4bf';
+    const color=(opt.color&&opt.color(it))||'#0d9488';
     const icon=L.divIcon({className:'',html:`<div class="mpin" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
     const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(opt.label(it));
     st.markers[i]=mk; });
   const ms=Object.values(st.markers);
-  if(ms.length){ const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18)); }
+  if(ms.length){ const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:12}); }
   setTimeout(()=>st.map.invalidateSize(),150);
 }
+// 핀 클릭: 항상 지도 중앙 + 반경 ~10km(zoom 12) 뷰
 function focusPin(mapId,i){ const st=_ms[mapId]; if(!st) return; const mk=st.markers[i];
   if(st.sel!=null && st.markers[st.sel]){ const e=st.markers[st.sel].getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.remove('sel');} }
-  if(mk){ st.map.setView(mk.getLatLng(),16,{animate:true}); mk.openPopup();
+  if(mk){ st.map.setView(mk.getLatLng(),12,{animate:true}); mk.openPopup();
     const e=mk.getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.add('sel');} st.sel=i; } }
+// ===== 범용 대출계산기 (경매/급매/청약/재건축 공통) =====
+function openLoanCalc(price, label, ltv){
+  document.getElementById('loanTitle').textContent='대출 계산기';
+  document.getElementById('loanCtx').textContent=label||'';
+  document.getElementById('ln_price').value=Math.round(price||0);
+  if(ltv) document.getElementById('ln_ltv').value=ltv;
+  calcLoan(); document.getElementById('loanDlg').showModal();
+}
+function calcLoan(){
+  const P=+document.getElementById('ln_price').value||0, ltv=(+document.getElementById('ln_ltv').value||0)/100;
+  const r=(+document.getElementById('ln_rate').value||0)/100/12, n=(+document.getElementById('ln_yrs').value||1)*12;
+  const loan=P*ltv, own=P-loan;
+  const pay = r>0 ? loan*r/(1-Math.pow(1+r,-n)) : loan/n;   // 만원/월
+  const totalInt = pay*n - loan;
+  const eok=v=>(v/10000).toFixed(2)+'억';
+  const won=v=>Math.round(v).toLocaleString()+'만';
+  document.getElementById('loanOut').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:#f1f5f9;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">대출금</div><b style="font-size:16px">${eok(loan)}</b></div>
+      <div style="background:#ecfdf5;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">자기자본(실투자)</div><b style="font-size:16px;color:#0d9488">${eok(own)}</b></div>
+      <div style="background:#f1f5f9;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">월 상환액</div><b style="font-size:16px">${won(pay)}</b></div>
+      <div style="background:#f1f5f9;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">총 이자(${document.getElementById('ln_yrs').value}년)</div><b style="font-size:16px;color:#dc2626">${eok(totalInt)}</b></div>
+    </div>`;
+}
+const loanBtn=(price,label)=>`<span class="btn" style="padding:3px 11px;margin-top:7px;display:inline-block;background:var(--accent);color:#fff" onclick="event.stopPropagation();openLoanCalc(${Math.round(price||0)},'${(label||'').replace(/'/g,'')}')">💰 대출계산</span>`;
 let _ccBudget=0, _ccPyeong=25.7;
 async function loadConclusion(){
   const capital = +document.getElementById('ccCapital').value || 0;
@@ -654,7 +707,7 @@ async function loadConclusion(){
   _ccBudget = d.budget; _ccPyeong = pyeong;
   const eok = n => n==null?'–':(n/10000).toFixed(1)+'억';
   const dt = d.detail || {};
-  const dsrNote = dt['DSR제약'] ? ' <span style="color:#fb923c">·DSR한도 적용</span>' : '';
+  const dsrNote = dt['DSR제약'] ? ' <span style="color:#ea580c">·DSR한도 적용</span>' : '';
   document.getElementById('ccBudget').innerHTML =
     `매수가능 <b style="color:var(--accent)">${eok(d.budget)}</b> `
     + `<span style="color:var(--dim)">= 자본 ${eok(d.capital)} + 대출 ${eok(dt['대출'])} − 취득세 ${eok(dt['취득세'])} − 중개 ${eok(dt['중개비'])}</span>${dsrNote} · 기준 ${pyeong}평`;
@@ -666,7 +719,7 @@ async function loadConclusion(){
     const haesol = (c['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
     const subs = renderSubListings(c['경매단지']||[], c['청약단지']||[], c['급매단지']||[]);
     const card = document.createElement('div');
-    card.style.cssText = `border:1px solid ${af?'var(--accent)':'var(--line)'};border-radius:10px;padding:14px 16px;background:#0f1115;${af?'':'opacity:.55'}`;
+    card.style.cssText = `border:1px solid ${af?'var(--accent)':'var(--line)'};border-radius:10px;padding:14px 16px;background:#ffffff;${af?'':'opacity:.55'}`;
     card.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <span style="font-size:16px;font-weight:700">${af?`#${i+1} `:''}${c.region}</span>
@@ -675,7 +728,7 @@ async function loadConclusion(){
       <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:8px">
         <span>예상매수가 <b>${eok(c['예상매수가'])}</b></span>
         <span style="color:var(--dim)">평단 ${c['평단가']}만</span>
-        <span style="color:${uv>=0?'#4ade80':'#f87171'}">저평가 ${uv>0?'+':''}${uv}%</span>
+        <span style="color:${uv>=0?'#16a34a':'#dc2626'}">저평가 ${uv>0?'+':''}${uv}%</span>
         ${c['지역급지']?regionGradeBadge(c['지역급지']):''}
         ${af?'':'<span class="pill">예산초과</span>'}
       </div>
@@ -697,13 +750,13 @@ function renderSubListings(auc, ps, quick){
     h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">🔨 경매 ${auc.length}건</div>`
       + auc.slice(0,3).map(a=>line("switchTab('auction')",
           `${gradeBadge(a['단지급지'])} ${a['단지명']}`,
-          `권장 <b>${eok(a['권장입찰가'])}</b>${a['시세차익률']!=null?` <span style="color:${a['시세차익률']>=0?'#4ade80':'#f87171'}">차익 ${a['시세차익률']>0?'+':''}${a['시세차익률']}%</span>`:''}`)).join('');
+          `권장 <b>${eok(a['권장입찰가'])}</b>${a['시세차익률']!=null?` <span style="color:${a['시세차익률']>=0?'#16a34a':'#dc2626'}">차익 ${a['시세차익률']>0?'+':''}${a['시세차익률']}%</span>`:''}`)).join('');
   }
   if(quick && quick.length){
     h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">🏷️ 급매 ${quick.length}건</div>`
       + quick.slice(0,3).map(q=>line("switchTab('quicksale')",
           `${q['단지명']} <span style="color:var(--dim)">${q['평형']||''}평</span>`,
-          `<b>${eok(q['호가'])}</b>${q['급매갭']!=null?` <span style="color:${q['급매갭']<=-5?'#ef4444':'#fb923c'}">${q['급매갭']}%</span>`:''}`)).join('');
+          `<b>${eok(q['호가'])}</b>${q['급매갭']!=null?` <span style="color:${q['급매갭']<=-5?'#ef4444':'#ea580c'}">${q['급매갭']}%</span>`:''}`)).join('');
   }
   if(ps && ps.length){
     h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">🏠 청약 ${ps.length}건 (접수중·예정)</div>`
@@ -749,7 +802,7 @@ function subAddr(addr, region){
 // 청약 진행상태 배지 (라이프사이클 색상 + D-day)
 function psStatusBadge(st, dday){
   if(!st) return '–';
-  const col = {'접수중':'#4ade80','접수예정':'#60a5fa','발표대기':'#fb923c','계약중':'#a78bfa','완료':'#64748b','공고':'#94a3b8'}[st]||'#94a3b8';
+  const col = {'접수중':'#16a34a','접수예정':'#2563eb','발표대기':'#ea580c','계약중':'#7c3aed','완료':'#64748b','공고':'#94a3b8'}[st]||'#94a3b8';
   const dd = (dday!=null && dday>=0 && st!=='완료') ? ` D-${dday}` : '';
   return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${st}${dd}</span>`;
 }
@@ -770,7 +823,7 @@ function renderPresale(){
         <span>입주 ${r['입주예정']||'–'}</span><span>총 ${r['총세대']?Number(r['총세대']).toLocaleString():'–'}세대</span></div>
         <div id="${id}" style="margin-top:7px;color:var(--dim)">평형별 분양가 불러오는 중…</div>`; },
     geoq:r=>r['주소']||(r['지역']+' '+r['단지명']),
-    color:r=>r['상태']==='접수중'?'#4ade80':r['상태']==='접수예정'?'#60a5fa':'#94a3b8',
+    color:r=>r['상태']==='접수중'?'#16a34a':r['상태']==='접수예정'?'#2563eb':'#94a3b8',
     label:r=>`<b>${r['단지명']}</b><br>${r['지역']||''} · ${psStatusBadge(r['상태'],r['Dday'])}`,
   });
 }
@@ -782,15 +835,16 @@ async function loadPsTypes(no, elId){
   const ts=d.types||[];
   if(!ts.length){ el.innerHTML='평형별 데이터가 없습니다.'; return; }
   const rows=ts.map(t=>{ const m=t['메리트'];
-    const mtxt=m==null?'':`<span style="color:${m<0?'#4ade80':'#f87171'};font-weight:700">시세대비 ${m>0?'+':''}${m}%</span>`;
+    const mtxt=m==null?'':`<span style="color:${m<0?'#16a34a':'#dc2626'};font-weight:700">시세대비 ${m>0?'+':''}${m}%</span>`;
     const spc=Object.entries(t['특공유형']||{}).map(([k,v])=>`${k} ${v}`).join(' · ');
     return `<tr><td class="l">${t['주택형']} <span style="color:var(--dim)">(${t['평']}평)</span></td>
       <td><b>${eok(t['분양가'])}</b></td><td style="color:var(--dim)">${t['분양평단가']?t['분양평단가']+'만/평':'–'}</td>
-      <td>${mtxt}</td><td class="l" style="font-size:11px;color:var(--dim)">${spc||'일반 '+t['일반세대']}</td></tr>`;}).join('');
+      <td>${mtxt}</td><td class="l" style="font-size:11px;color:var(--dim)">${spc||'일반 '+t['일반세대']}</td>
+      <td>${t['분양가']?loanBtn(t['분양가'],t['주택형']):''}</td></tr>`;}).join('');
   const mref=d['지역평단가']?`주변시세 ${d['지역평단가']}만/평 기준 · 메리트 음수=저렴`:'주변시세 미상';
   el.innerHTML=`<div style="font-size:11px;margin-bottom:4px">${mref}</div>
     <table style="width:100%"><thead><tr style="font-size:11px;color:var(--dim)">
-    <th class="l">주택형</th><th>분양가</th><th>평단가</th><th>시세대비</th><th class="l">특별공급</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <th class="l">주택형</th><th>분양가</th><th>평단가</th><th>시세대비</th><th class="l">특별공급</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 let uvChart, _uvList=[], _uvSort={k:'저평가도', asc:false};
@@ -837,7 +891,7 @@ function renderUvRows(){
     tr.innerHTML = `<td class="l">${r.region} ${r['시그널']?badge(r['시그널']):''}
         <span class="pill" style="cursor:pointer" onclick="event.stopPropagation();toggleCG('${r.region}',this)">단지급지 ▾</span></td>
       <td>${r['입지점수']}</td><td>${won(r.price)}/평</td><td>${won(r['적정가'])}/평</td>
-      <td style="color:${uv>=0?'#4ade80':'#f87171'};font-weight:700">${uv>0?'+':''}${uv}%</td>
+      <td style="color:${uv>=0?'#16a34a':'#dc2626'};font-weight:700">${uv>0?'+':''}${uv}%</td>
       <td>${r['transit_min']??'–'}분</td><td>${r['school']}</td><td>${r['공원']}</td>`;
     tb.appendChild(tr);
   });
@@ -860,7 +914,7 @@ async function toggleCG(region, el){
           <span style="color:var(--dim)">${won(c['평단가'])}/평</span></div>`).join('')
       + `</div><div style="color:var(--dim);font-size:11px;padding:2px 4px">${region} 실거래 ${cs.length}개 단지 · 1급지=지역 내 최상위 평단가</div>`
     : `<div style="color:var(--dim);padding:8px">최근 실거래 단지 데이터가 없습니다(시군구 단위만 지원).</div>`;
-  det.innerHTML = `<td colspan="8" style="background:#0f1115">${cell}</td>`;
+  det.innerHTML = `<td colspan="8" style="background:#ffffff">${cell}</td>`;
   tr.after(det);
 }
 function showUvHaesol(region){
@@ -868,29 +922,29 @@ function showUvHaesol(region){
   const uv = r['저평가도'];
   const txt = (r['해설']||'').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
   document.getElementById('uvHaesol').innerHTML =
-    `<b>${region}</b> <span style="color:${uv>=0?'#4ade80':'#f87171'}">저평가도 ${uv>0?'+':''}${uv}%</span> · ${txt}`;
+    `<b>${region}</b> <span style="color:${uv>=0?'#16a34a':'#dc2626'}">저평가도 ${uv>0?'+':''}${uv}%</span> · ${txt}`;
 }
 function drawUvScatter(rows){
-  if(!uvChart) uvChart = echarts.init(document.getElementById('uvchart'), 'dark');
+  if(!uvChart) uvChart = echarts.init(document.getElementById('uvchart'));
   // 라벨은 눈에 띄는 지역만(저평가 상위·고평가 상위) — 가운데 군집 겹침 방지
   const sorted = [...rows].sort((a,b)=>b['저평가도']-a['저평가도']);
   const notable = new Set([...sorted.slice(0,8), ...sorted.slice(-6)].map(r=>r.region));
   const pts = rows.map(r=>({value:[r['입지점수'], r.price], name:r.region, uv:r['저평가도'],
-    label:{show:notable.has(r.region), formatter:r.region, position:'right', fontSize:9, color:'#aab2c5'}}));
+    label:{show:notable.has(r.region), formatter:r.region, position:'right', fontSize:9, color:'#475569'}}));
   const line = rows.map(r=>[r['입지점수'], r['적정가']]).sort((a,b)=>a[0]-b[0]);
   uvChart.setOption({
     tooltip:{formatter:p=> p.seriesType==='scatter'
       ? `<b>${p.data.name}</b><br/>입지점수 ${p.data.value[0]} · 평단 ${won(p.data.value[1])}/평<br/>저평가도 ${p.data.uv>0?'+':''}${p.data.uv}%` : '적정가(입지 기준 회귀선)'},
     grid:{left:64, right:30, top:30, bottom:44},
     graphic:[{type:'text', right:30, top:6, style:{
-      text:'저평가(초록) · 고평가(빨강) · ┈ 적정가', fill:'#8b93a7', fontSize:11}}],
+      text:'저평가(초록) · 고평가(빨강) · ┈ 적정가', fill:'#64748b', fontSize:11}}],
     xAxis:{name:'입지점수 →', nameLocation:'middle', nameGap:26, type:'value', min:0, max:100, splitLine:{lineStyle:{opacity:.08}}},
     yAxis:{name:'평단가(만원/평)', type:'value', splitLine:{lineStyle:{opacity:.08}}},
     series:[
-      {type:'line', data:line, showSymbol:false, lineStyle:{color:'#8b93a7', type:'dashed'}, z:1, silent:true},
+      {type:'line', data:line, showSymbol:false, lineStyle:{color:'#64748b', type:'dashed'}, z:1, silent:true},
       {type:'scatter', data:pts, symbolSize:12, z:2,
-       itemStyle:{color:p=> p.data.uv>=0 ? '#4ade80' : '#f87171', opacity:.85,
-                  borderColor:'#0f1115', borderWidth:1}},
+       itemStyle:{color:p=> p.data.uv>=0 ? '#16a34a' : '#dc2626', opacity:.85,
+                  borderColor:'#ffffff', borderWidth:1}},
     ]
   }, true);
   uvChart.off('click');
@@ -1038,14 +1092,14 @@ function reasonGraphic(region, sig){
   const W = 366;
   const H = 32 + lines.length * 18 + 12;
   return [{ type:'group', left:56, top:30, z:100, silent:true, children:[
-    {type:'rect', shape:{width:W, height:H, r:8}, style:{fill:'rgba(15,17,21,0.88)', stroke:'#2b3340', lineWidth:1}},
+    {type:'rect', shape:{width:W, height:H, r:8}, style:{fill:'rgba(15,17,21,0.88)', stroke:'#e2e8f0', lineWidth:1}},
     {type:'text', left:12, top:9, style:{text:head, fill:SIGCOLOR[sig.signal]||'#fff', font:'bold 14px sans-serif'}},
-    {type:'text', left:12, top:34, style:{text:lines.join('\n'), fill:'#dbe2ee', fontSize:12, lineHeight:18}},
+    {type:'text', left:12, top:34, style:{text:lines.join('\n'), fill:'#334155', fontSize:12, lineHeight:18}},
   ]}];
 }
 function drawChart(region, m, sig){
-  const colors = {jeonse_supply:"#38bdf8", buyer_superiority:"#a78bfa", buyer_demand:"#f472b6",
-                  sale_change:"#fbbf24", jeonse_change:"#34d399", price_index:"#f1f5f9"};
+  const colors = {jeonse_supply:"#0284c7", buyer_superiority:"#7c3aed", buyer_demand:"#db2777",
+                  sale_change:"#d97706", jeonse_change:"#059669", price_index:"#f1f5f9"};
   const series = [];
   const mk = (k, axis, extra={}) => { if(!m[k]) return;
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
@@ -1055,9 +1109,9 @@ function drawChart(region, m, sig){
       [{yAxis:z.from, itemStyle:{color:z.color, opacity:0.16}}, {yAxis:z.to}])) } : undefined;
   mk("jeonse_supply", 0, bandArea ? { markArea: bandArea } : {});
   mk("buyer_superiority", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#a78bfa'}}]}});
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#7c3aed'}}]}});
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#4ade80'}}]}});
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#16a34a'}}]}});
   mk("sale_change", 1); mk("jeonse_change", 1);
   mk("price_index", 0, { lineStyle:{width:2.4, color:'#f1f5f9'}, z:3 });  // 누적 매매가격지수(실제 가격)
 
@@ -1068,7 +1122,7 @@ function drawChart(region, m, sig){
       lineStyle:{width:1.2, type:'dashed', color:'#94a3b8'}, itemStyle:{color:'#94a3b8'},
       data: mc.dates.map((dt,i)=>[dt, mc.구매력?.[i]]) });
     series.push({ name:'대출금리%', type:'line', yAxisIndex:2, showSymbol:false, z:0,
-      lineStyle:{width:1.4, color:'#fb7185'}, itemStyle:{color:'#fb7185'},
+      lineStyle:{width:1.4, color:'#e11d48'}, itemStyle:{color:'#e11d48'},
       data: mc.dates.map((dt,i)=>[dt, mc.대출금리?.[i]]) });
   }
   // 거래량(월별 거래건수) 막대 — 시군구만
@@ -1085,7 +1139,7 @@ function drawChart(region, m, sig){
       markArea:{ data: _histCache[region].map(h=>[
         {xAxis:h.start, itemStyle:{color: bandColor(h.signal)},
          label:{show: h.during_pct!=null, position:'insideTop', fontSize:10,
-                color: h.signal==='SELL'?'#fecaca':'#dbeafe',
+                color: h.signal==='SELL'?'#b91c1c':'#1e40af',
                 formatter: (h.during_pct!=null?`기간 ${h.during_pct>0?'+':''}${h.during_pct}%`:'')
                           + (h.after12w_pct!=null?`\n이후 ${h.after12w_pct>0?'+':''}${h.after12w_pct}%`:'')}},
         {xAxis:h.end}]) }});
@@ -1101,8 +1155,8 @@ function drawChart(region, m, sig){
     grid:{left:46, right:150, top:52, bottom:64}, xAxis:{type:'time'},
     yAxis:[{name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}}, nameGap:12},
            {name:'증감%', position:'right', splitLine:{show:false}, nameGap:12},
-           {name:'금리%', position:'right', offset:50, min:0, splitLine:{show:false}, axisLabel:{color:'#fb7185'}, nameTextStyle:{color:'#fb7185'}, nameGap:12},
-           {name:'거래량', position:'right', offset:100, min:0, splitLine:{show:false}, axisLabel:{color:'#38bdf8'}, nameTextStyle:{color:'#38bdf8'}, nameGap:12}],
+           {name:'금리%', position:'right', offset:50, min:0, splitLine:{show:false}, axisLabel:{color:'#e11d48'}, nameTextStyle:{color:'#e11d48'}, nameGap:12},
+           {name:'거래량', position:'right', offset:100, min:0, splitLine:{show:false}, axisLabel:{color:'#0284c7'}, nameTextStyle:{color:'#0284c7'}, nameGap:12}],
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
     series }, true);
 }
@@ -1120,7 +1174,7 @@ async function loadData(){
     const rg = await (await fetch('/api/regime')).json();
     const box = document.getElementById('regimeBox');
     if(rg && rg.phase){
-      const C = {green:'#22c55e', yellow:'#eab308', orange:'#f97316', red:'#ef4444'}[rg.color]||'#94a3b8';
+      const C = {green:'#22c55e', yellow:'#ca8a04', orange:'#ea580c', red:'#ef4444'}[rg.color]||'#94a3b8';
       box.style.display='block'; box.title = rg.desc || '';
       box.innerHTML = `<span style="color:${C}">●</span> <b>수도권 유동성</b>: `
         + `<span style="color:${C};font-weight:700">${rg.phase}</span>`
@@ -1152,9 +1206,9 @@ function renderHistPanel(){
   const p = document.getElementById('histPanel');
   const iv = _showHist ? (_histCache[selected]||[]) : [];
   if(!iv.length){ p.classList.remove('open'); p.innerHTML=''; return; }
-  const col = s => s==='STRONG_BUY'?'#16a34a':s==='SELL'?'#f87171':'#22c55e';
+  const col = s => s==='STRONG_BUY'?'#16a34a':s==='SELL'?'#dc2626':'#22c55e';
   const rows = [...iv].reverse().map(h=>{
-    const dur = h['during_pct']!=null ? `<span style="color:${h['during_pct']>=0?'#4ade80':'#f87171'}">기간 ${h['during_pct']>0?'+':''}${h['during_pct']}%</span>`:'';
+    const dur = h['during_pct']!=null ? `<span style="color:${h['during_pct']>=0?'#16a34a':'#dc2626'}">기간 ${h['during_pct']>0?'+':''}${h['during_pct']}%</span>`:'';
     const aft = h['after12w_pct']!=null ? ` <span style="color:var(--dim)">→ 이후12주 ${h['after12w_pct']>0?'+':''}${h['after12w_pct']}%</span>`:'';
     return `<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--line);font-size:12px">
       <span style="color:${col(h.signal)};font-weight:700;min-width:78px">${h.signal}</span>
@@ -1216,9 +1270,9 @@ function recalcLoan(){
     monthly = loan/n + loan*rm;          // 첫달 납입
     interest = loan*rm*(n+1)/2;          // 총이자
   }
-  const card=(t,val,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#e6e8ee'}">${val}</div></div>`;
+  const card=(t,val,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#1e293b'}">${val}</div></div>`;
   document.getElementById('ln_out').innerHTML =
-    card('자본금', won(equity), '#fbbf24') + card(`대출금 (LTV ${v('ln_ltv')}%)`, won(loan), '#4ade80') +
+    card('자본금', won(equity), '#d97706') + card(`대출금 (LTV ${v('ln_ltv')}%)`, won(loan), '#16a34a') +
     card(document.getElementById('ln_method').value==='원금균등'?'월납입(첫달)':'월납입금', won(Math.round(monthly))) +
     card(`이자총액 (${v('ln_years')}년)`, won(Math.round(interest)));
 }
@@ -1247,7 +1301,7 @@ function renderAuction(rows){
   mapSplit('auctionList','auctionMap',rows,{
     summary:r=>{ const dl=daysTo(r['입찰기일']);
       return {nm:`${r['단지명']||'–'} ${r['목표달성']?'':'<span class="pill">목표미달</span>'}`,
-        right:`<b style="color:${r['시세차익률']>=0?'#4ade80':'#f87171'}">${r['시세차익률']}%</b>`,
+        right:`<b style="color:${r['시세차익률']>=0?'#16a34a':'#dc2626'}">${r['시세차익률']}%</b>`,
         sub:`${r['region']||''} ${r['단지급지']?'· '+r['단지급지']+'급지':''} · 권장 ${won(r['권장입찰가'])} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
     detail:r=>`<div class="kv">
       <span>${r['지역시그널']?badge(r['지역시그널']):''}</span>${r['단지급지']?'<span>'+gradeBadge(r['단지급지'],r['급지상위'])+'</span>':''}
@@ -1256,13 +1310,14 @@ function renderAuction(rows){
       <span>용적 ${r['용적률']?r['용적률']+'%':'–'}</span></div>
       <div class="kv" style="margin-top:5px"><span>감정 ${won(r['감정가'])}</span><span>최저 ${won(r['최저매각가'])}</span>
       <span>실거래 ${won(r['최근실거래가'])}</span><span>전세 ${won(r['최근전세가'])}</span>
-      <span style="color:#4ade80">권장입찰 <b>${won(r['권장입찰가'])}</b></span><span>임대 ${r['임대수익률']==null?'–':r['임대수익률']+'%'}</span>
+      <span style="color:#16a34a">권장입찰 <b>${won(r['권장입찰가'])}</b></span><span>임대 ${r['임대수익률']==null?'–':r['임대수익률']+'%'}</span>
       <span>입찰기일 ${r['입찰기일']||'–'}</span></div>
       <div style="margin-top:7px;display:flex;gap:6px">
-        <span class="btn" style="padding:3px 10px;background:var(--accent);color:#000" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">대출계산기</span>
+        <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>
+        ${loanBtn(r['권장입찰가'],r['단지명'])}
         <span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span></div>`,
     geoq:r=>{ const dong=(r['메모']||'').match(/[가-힣]+동/); return `${r['region']||''} ${dong?dong[0]+' ':''}${r['단지명']||''}`; },
-    color:r=>r['시세차익률']>=10?'#4ade80':r['시세차익률']>=0?'#fbbf24':'#f87171',
+    color:r=>r['시세차익률']>=10?'#16a34a':r['시세차익률']>=0?'#d97706':'#dc2626',
     label:r=>`<b>${r['단지명']}</b><br>${r['region']||''} · 권장 ${won(r['권장입찰가'])} · 차익 ${r['시세차익률']}%`,
   });
   renderStrategy(rows);
@@ -1287,11 +1342,11 @@ async function openCalc(id, name){
   const d = await (await fetch(`/api/auction/calc/${id}?${aparams()}`)).json();
   const rec = d.recommend;
   document.getElementById('calcTitle').textContent = `${name} — 입찰가 산정 (권장 입찰가 ${won(rec['입찰가'])})`;
-  const bd = (t,v,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#e6e8ee'}">${v}</div></div>`;
+  const bd = (t,v,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#1e293b'}">${v}</div></div>`;
   document.getElementById('calcBreak').innerHTML =
-    bd('권장 입찰가', won(rec['입찰가']), '#4ade80') + bd('경매 총매입', won(rec['경매총매입'])) +
-    bd('일반매매 총매입', won(rec['매매총매입'])) + bd('시세차익', won(rec['시세차익']), '#4ade80') +
-    bd('시세차익률', rec['시세차익률']+'%', '#4ade80') + bd('실투자금', won(rec['실투자금'])) +
+    bd('권장 입찰가', won(rec['입찰가']), '#16a34a') + bd('경매 총매입', won(rec['경매총매입'])) +
+    bd('일반매매 총매입', won(rec['매매총매입'])) + bd('시세차익', won(rec['시세차익']), '#16a34a') +
+    bd('시세차익률', rec['시세차익률']+'%', '#16a34a') + bd('실투자금', won(rec['실투자금'])) +
     (rec['임대수익률']!=null?bd('임대수익률', rec['임대수익률']+'%'):'') +
     (rec['매도수익률']!=null?bd('단기매도수익률', rec['매도수익률']+'%'):'');
   const cols = [['낙찰가율','낙찰가율','%'],['입찰가','입찰가'],['경매총매입','경매총매입'],
