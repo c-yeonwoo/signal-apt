@@ -9,13 +9,13 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root { --bg:#f8fafc; --panel:#ffffff; --line:#e2e8f0; --txt:#1e293b; --dim:#64748b; --accent:#2563eb; }
+  :root { --bg:#f8fafc; --panel:#ffffff; --line:#e2e8f0; --txt:#1e293b; --dim:#64748b; --accent:#0ea5e9; }
   * { box-sizing:border-box; }
   /* 통일 컨트롤: 셀렉트·인풋·필터바 */
   select, input[type=number], input[type=text], .ctrl {
     font-size:14px; padding:7px 11px; border:1px solid var(--line); border-radius:8px;
     background:#fff; color:var(--txt); outline:none; }
-  select:focus, input:focus, .ctrl:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(13,148,136,.12); }
+  select:focus, input:focus, .ctrl:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(14,165,233,.12); }
   .filterbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap;
     background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; margin-bottom:14px; }
   .filterbar label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:7px; white-space:nowrap; }
@@ -28,7 +28,7 @@
   .tabs { display:flex; gap:4px; }
   .tab { padding:6px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel);
          color:var(--dim); cursor:pointer; font-size:13px; font-weight:600; }
-  .tab.on { color:#fff; background:#2563eb; border-color:#2563eb; }
+  .tab.on { color:#fff; background:#0ea5e9; border-color:#0ea5e9; }
   .date { color:var(--dim); font-size:12px; white-space:nowrap; }
   #refresh { padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
              background:#eef2f7; color:#1d4ed8; cursor:pointer; font-size:13px; white-space:nowrap; }
@@ -94,7 +94,7 @@
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:12px; height:calc(100vh - 178px); min-height:420px; }
   .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
-  .ms-map { flex:1; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(37,99,235,0.06); }
+  .ms-map { flex:1; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(14,165,233,0.06); }
   .ms-row { padding:10px 13px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
   .ms-row:hover { background:#eef2f7; }
   .ms-row.sel { background:#eff6ff; box-shadow:inset 3px 0 0 var(--accent); }
@@ -105,8 +105,8 @@
   .ms-detail .kv { display:flex; flex-wrap:wrap; gap:5px 14px; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#ffffff; color:#1e293b; box-shadow:0 4px 18px rgba(0,0,0,.5); }
   .leaflet-popup-content { font-size:12px; line-height:1.4; }
-  .mpin { width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.25), 0 0 10px rgba(37,99,235,.5); }
-  .mpin.sel { width:22px; height:22px; box-shadow:0 0 0 4px rgba(37,99,235,.35), 0 0 16px rgba(37,99,235,.9); z-index:1000; }
+  .mpin { width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.25), 0 0 10px rgba(14,165,233,.5); }
+  .mpin.sel { width:22px; height:22px; box-shadow:0 0 0 4px rgba(14,165,233,.35), 0 0 16px rgba(14,165,233,.9); z-index:1000; }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#475569; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
@@ -142,7 +142,7 @@
   <h1 style="display:flex;align-items:center;gap:9px">
     <svg width="30" height="30" viewBox="0 0 72 72" aria-label="로고">
       <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#1e3a8a"/><stop offset=".55" stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/>
+        <stop offset="0" stop-color="#1e3a8a"/><stop offset=".55" stop-color="#0ea5e9"/><stop offset="1" stop-color="#0ea5e9"/>
       </linearGradient></defs>
       <rect width="72" height="72" rx="18" fill="url(#lg)"/>
       <rect x="16" y="42" width="11" height="18" rx="2" fill="#fff" fill-opacity=".92"/>
@@ -484,7 +484,7 @@ function gradeBadge(g, top){
 // 시군구 급지(평단가 분위 A~D, A=상급) — 청약 지역 맥락
 function regionGradeBadge(g, pyeong){
   if(!g) return '–';
-  const col = {A:'#ca8a04',B:'#16a34a',C:'#94a3b8',D:'#2563eb'}[g] || '#94a3b8';
+  const col = {A:'#ca8a04',B:'#16a34a',C:'#94a3b8',D:'#0ea5e9'}[g] || '#94a3b8';
   const p = pyeong ? ` <span style="color:var(--dim);font-size:10px">${pyeong}만/평</span>` : '';
   return `<span title="시군구 평단가 분위" style="color:${col};font-weight:700">${g}급지</span>${p}`;
 }
@@ -551,7 +551,7 @@ async function loadRedevStages(){
   const d=await (await fetch('/api/redevelopment/stages'+(region?'?region='+encodeURIComponent(region):''))).json();
   const late=['관리처분인가','이주','철거신고','착공신고','일반분양승인','준공인가','이전고시','조합해산'];
   dist.innerHTML=`<span style="color:var(--dim);font-size:12px;align-self:center">${d.region} ${d['사업수']}개 사업 →</span>`+
-    (d['단계분포']||[]).map(s=>{const c=late.includes(s['단계'])?'#16a34a':'#2563eb';
+    (d['단계분포']||[]).map(s=>{const c=late.includes(s['단계'])?'#16a34a':'#0ea5e9';
       return `<span style="background:${c}22;color:${c};border:1px solid ${c}55;border-radius:10px;padding:2px 9px;font-size:11px;font-weight:600">${s['단계']} ${s['사업수']}</span>`;}).join('');
   dur.innerHTML=(d['평균소요']||[]).slice(0,7).map(t=>
     `<span style="background:#eef2f7;border:1px solid var(--line);border-radius:8px;padding:3px 9px;font-size:11px">${t['전이']} <b style="color:var(--accent)">${t['평균개월']}개월</b></span>`).join('')
@@ -579,7 +579,7 @@ async function loadRedevZones(){
   const params=new URLSearchParams(); if(type)params.set('type',type); if(q)params.set('q',q);
   const d=await (await fetch('/api/redevelopment/zones?'+params)).json();
   st.innerHTML=`총 ${d.total}건 · `+Object.entries(d.by_type||{}).map(([k,v])=>`${k} ${v}`).join(' / ');
-  const tcol={'재건축':'#16a34a','재개발':'#2563eb','도시환경':'#7c3aed','주거환경':'#ea580c'};
+  const tcol={'재건축':'#16a34a','재개발':'#0ea5e9','도시환경':'#7c3aed','주거환경':'#ea580c'};
   d.zones.forEach(z=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td class="l">${z['구역명']||'–'}</td>
@@ -673,7 +673,7 @@ function plotPins(mapId, items, coords, opt){
   const st=initMap(mapId);
   Object.values(st.markers).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
   items.forEach((it,i)=>{ const c=coords[i]; if(!c) return;
-    const color=(opt.color&&opt.color(it))||'#2563eb';
+    const color=(opt.color&&opt.color(it))||'#0ea5e9';
     const icon=L.divIcon({className:'',html:`<div class="mpin" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
     const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(opt.label(it));
     st.markers[i]=mk; });
@@ -705,7 +705,7 @@ function calcLoan(){
   document.getElementById('loanOut').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div style="background:#f1f5f9;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">대출금</div><b style="font-size:16px">${eok(loan)}</b></div>
-      <div style="background:#eff6ff;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">자기자본(실투자)</div><b style="font-size:16px;color:#2563eb">${eok(own)}</b></div>
+      <div style="background:#eff6ff;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">자기자본(실투자)</div><b style="font-size:16px;color:#0ea5e9">${eok(own)}</b></div>
       <div style="background:#f1f5f9;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">월 상환액</div><b style="font-size:16px">${won(pay)}</b></div>
       <div style="background:#f1f5f9;border-radius:8px;padding:10px"><div style="color:var(--dim);font-size:11px">총 이자(${document.getElementById('ln_yrs').value}년)</div><b style="font-size:16px;color:#dc2626">${eok(totalInt)}</b></div>
     </div>`;
@@ -821,7 +821,7 @@ function subAddr(addr, region){
 // 청약 진행상태 배지 (라이프사이클 색상 + D-day)
 function psStatusBadge(st, dday){
   if(!st) return '–';
-  const col = {'접수중':'#16a34a','접수예정':'#2563eb','발표대기':'#ea580c','계약중':'#7c3aed','완료':'#64748b','공고':'#94a3b8'}[st]||'#94a3b8';
+  const col = {'접수중':'#16a34a','접수예정':'#0ea5e9','발표대기':'#ea580c','계약중':'#7c3aed','완료':'#64748b','공고':'#94a3b8'}[st]||'#94a3b8';
   const dd = (dday!=null && dday>=0 && st!=='완료') ? ` D-${dday}` : '';
   return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${st}${dd}</span>`;
 }
@@ -842,7 +842,7 @@ function renderPresale(){
         <span>입주 ${r['입주예정']||'–'}</span><span>총 ${r['총세대']?Number(r['총세대']).toLocaleString():'–'}세대</span></div>
         <div id="${id}" style="margin-top:7px;color:var(--dim)">평형별 분양가 불러오는 중…</div>`; },
     geoq:r=>r['주소']||(r['지역']+' '+r['단지명']),
-    color:r=>r['상태']==='접수중'?'#16a34a':r['상태']==='접수예정'?'#2563eb':'#94a3b8',
+    color:r=>r['상태']==='접수중'?'#16a34a':r['상태']==='접수예정'?'#0ea5e9':'#94a3b8',
     label:r=>`<b>${r['단지명']}</b><br>${r['지역']||''} · ${psStatusBadge(r['상태'],r['Dday'])}`,
   });
 }
