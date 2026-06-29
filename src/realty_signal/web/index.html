@@ -61,6 +61,23 @@
   .caret.open { transform:rotate(90deg); }
   .row.lv1 { padding-left:22px; } .row.lv2 { padding-left:38px; }
   .zsw { font-size:11px; padding:2px 8px; border-radius:10px; cursor:help; color:#0f1115; font-weight:600; }
+  /* 시그널 차트 — 사이드바 토글 / 상단바 / 해설패널 / 구간 팝오버 */
+  .side { transition:width .15s ease; }
+  .side.collapsed { width:0; min-width:0; border:none; overflow:hidden; }
+  .chartbar { display:flex; align-items:center; gap:8px; padding:7px 12px;
+              border-bottom:1px solid var(--line); flex-wrap:wrap; position:relative; }
+  #sideToggle { background:var(--panel); border:1px solid var(--line); color:var(--dim);
+                border-radius:6px; cursor:pointer; padding:3px 9px; font-size:12px; white-space:nowrap; }
+  #sideToggle:hover { color:#fff; }
+  .haesol-panel { padding:11px 14px; border-bottom:1px solid var(--line); background:#0f1115;
+                  font-size:13px; line-height:1.65; display:none; }
+  .haesol-panel.open { display:block; }
+  .zinfo-pop { position:absolute; z-index:50; top:42px; right:12px; background:#12151c;
+               border:1px solid var(--line); border-radius:8px; padding:11px 13px; font-size:12px;
+               max-width:320px; display:none; box-shadow:0 6px 20px rgba(0,0,0,.5); }
+  .zinfo-pop.open { display:block; }
+  .zrow { display:flex; align-items:center; gap:8px; margin:4px 0; }
+  .zsw-sm { width:15px; height:15px; border-radius:3px; flex:0 0 auto; }
   /* 경매 */
   #view-auction, #view-undervalued, #view-presale, #view-conclusion, #view-quicksale { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
   .sec { margin-bottom:18px; }
@@ -142,13 +159,16 @@
       <div id="list"></div>
     </div>
     <div class="main">
-      <div id="chart"></div>
-      <div class="footer">
+      <div class="chartbar">
+        <button id="sideToggle" onclick="toggleSide()" title="목록 접기/펼치기">◀ 목록</button>
         <span id="sigbadge"></span>
-        <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap">지난 시그널(매수/매도) 보기</button>
-        <span id="reasons"></span>
-        <div class="zlegend" id="zlegend"></div>
+        <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap">지난 시그널</button>
+        <button class="chip" id="haesolBtn" onclick="toggleHaesol()" style="white-space:nowrap">해설 ▾</button>
+        <button class="chip" id="zoneBtn" onclick="toggleZoneInfo(event)" style="white-space:nowrap">전세수급 색구간 ⓘ</button>
+        <div class="zinfo-pop" id="zinfoPop"></div>
       </div>
+      <div class="haesol-panel" id="haesolPanel"></div>
+      <div id="chart"></div>
     </div>
   </div>
 </div>
@@ -771,22 +791,46 @@ function renderList(){
   });
 }
 function renderZoneLegend(){
-  const z = document.getElementById('zlegend');
-  z.innerHTML = '<span style="color:var(--dim);font-size:11px">전세수급 구간:</span>';
-  (meta.zones.jeonse_supply||[]).forEach(zn => {
-    const s = document.createElement('span');
-    s.className = 'zsw'; s.style.background = zn.color; s.textContent = zn.label;
-    s.title = `${zn.label} (${zn.from}~${zn.to}): ${zn.desc}`;
-    z.appendChild(s);
-  });
+  // 전세수급 색구간 설명을 팝오버에 채움 (차트 배경색의 의미)
+  const z = document.getElementById('zinfoPop');
+  if(!z) return;
+  const rows = (meta.zones.jeonse_supply||[]).map(zn =>
+    `<div class="zrow"><span class="zsw-sm" style="background:${zn.color}"></span>
+       <span><b>${zn.label}</b> <span style="color:var(--dim)">(전세수급 ${zn.from}~${zn.to})</span><br>
+       <span style="color:var(--dim)">${zn.desc}</span></span></div>`).join('');
+  z.innerHTML = `<div style="font-weight:700;margin-bottom:6px">차트 배경색 = 전세수급지수 구간</div>
+    <div style="color:var(--dim);margin-bottom:8px">전세가 마를수록(높을수록) 매매 전환 압력이 커집니다.</div>${rows}`;
+}
+function toggleSide(){
+  const s = document.querySelector('#view-signal .side');
+  const collapsed = s.classList.toggle('collapsed');
+  document.getElementById('sideToggle').textContent = collapsed ? '▶ 목록' : '◀ 목록';
+  setTimeout(()=>chart && chart.resize(), 180);
+}
+function toggleHaesol(){
+  const p = document.getElementById('haesolPanel');
+  const open = p.classList.toggle('open');
+  document.getElementById('haesolBtn').classList.toggle('on', open);
+  document.getElementById('haesolBtn').textContent = open ? '해설 ▴' : '해설 ▾';
+  setTimeout(()=>chart && chart.resize(), 60);
+}
+function toggleZoneInfo(e){
+  e && e.stopPropagation();
+  const pop = document.getElementById('zinfoPop');
+  const open = pop.classList.toggle('open');
+  document.getElementById('zoneBtn').classList.toggle('on', open);
+  if(open){ const close=()=>{ pop.classList.remove('open'); document.getElementById('zoneBtn').classList.remove('on'); document.removeEventListener('click',close); };
+    setTimeout(()=>document.addEventListener('click',close),0); }
 }
 async function selectRegion(region){
   selected = region; renderList();
   const r = allSignals.find(x => x.region===region);
   document.getElementById('sigbadge').innerHTML = `<b>${region}</b> ${badge(r.signal)}`;
-  // footer: 지표 근거 칩
-  document.getElementById('reasons').innerHTML =
-    (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join('');
+  // 해설 패널 내용 채우기(버튼으로 펼침)
+  const reasons = (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join(' ');
+  document.getElementById('haesolPanel').innerHTML =
+    `<div style="margin-bottom:8px">${(r['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`
+    + `<div style="display:flex;gap:6px;flex-wrap:wrap">${reasons}</div>`;
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
   _lastM = d.metrics; _lastSig = r; _lastVol = d.volume || null;
   if(_showHist && !_histCache[region]){
@@ -826,8 +870,7 @@ function drawChart(region, m, sig){
   const zones = meta.zones.jeonse_supply || [];
   const bandArea = m.jeonse_supply ? { silent:true, data: zones.map(z=>(
       [{yAxis:z.from, itemStyle:{color:z.color, opacity:0.16}}, {yAxis:z.to}])) } : undefined;
-  mk("jeonse_supply", 0, bandArea ? { markArea: bandArea,
-      markPoint:{ symbolSize:42, data:[{type:'max',label:{fontSize:10}}] } } : {});
+  mk("jeonse_supply", 0, bandArea ? { markArea: bandArea } : {});
   mk("buyer_superiority", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#a78bfa'}}]}});
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
@@ -866,15 +909,19 @@ function drawChart(region, m, sig){
   }
 
   const last = meta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
-  const z0 = start.toISOString().slice(0,10);
-  chart.setOption({ tooltip:{trigger:'axis'}, legend:{top:6, right:96, textStyle:{fontSize:11}},
-    grid:{left:46, right:140, top:40, bottom:64}, xAxis:{type:'time'},
-    yAxis:[{name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}}},
-           {name:'증감%', position:'right', splitLine:{show:false}},
-           {name:'금리%', position:'right', offset:48, min:0, splitLine:{show:false}, axisLabel:{color:'#fb7185'}, nameTextStyle:{color:'#fb7185'}},
-           {name:'거래량', position:'right', offset:96, min:0, splitLine:{show:false}, axisLabel:{color:'#38bdf8'}, nameTextStyle:{color:'#38bdf8'}}],
+  // 지난 시그널 ON 이면 과거 구간이 보이도록 전체 기간으로, 아니면 최근 3년
+  const allDates = (m.jeonse_supply || m.price_index || m.sale_change || {}).dates || [];
+  const z0 = (_showHist && allDates.length) ? allDates[0] : start.toISOString().slice(0,10);
+  chart.setOption({ tooltip:{trigger:'axis'},
+    // 범례는 좌측 상단(우측 세로축 이름과 겹치지 않게)
+    legend:{type:'scroll', top:6, left:46, right:150, textStyle:{fontSize:11}},
+    grid:{left:46, right:150, top:52, bottom:64}, xAxis:{type:'time'},
+    yAxis:[{name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}}, nameGap:12},
+           {name:'증감%', position:'right', splitLine:{show:false}, nameGap:12},
+           {name:'금리%', position:'right', offset:50, min:0, splitLine:{show:false}, axisLabel:{color:'#fb7185'}, nameTextStyle:{color:'#fb7185'}, nameGap:12},
+           {name:'거래량', position:'right', offset:100, min:0, splitLine:{show:false}, axisLabel:{color:'#38bdf8'}, nameTextStyle:{color:'#38bdf8'}, nameGap:12}],
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
-    graphic: sig ? reasonGraphic(region, sig) : [], series }, true);
+    series }, true);
 }
 async function doRefresh(){
   const btn = document.getElementById('refresh'); btn.disabled = true; const old = btn.textContent; btn.textContent = '갱신 중…';
