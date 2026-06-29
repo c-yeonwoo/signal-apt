@@ -68,6 +68,7 @@ class Listing:
     대리입찰비: float = 0.0
     최근실거래가: float | None = None   # 국토부 동일단지 최근 매매(만원)
     최근전세가: float | None = None     # 국토부 동일단지 최근 전세(만원)
+    건축년도: int | None = None         # 국토부 실거래 매칭 단지 건축년도
     메모: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 
@@ -188,8 +189,8 @@ def _recent_yms(n: int = 6) -> list[str]:
     return out
 
 
-def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str) -> float | None:
-    """국토부 매매 실거래에서 동일단지(동+이름+면적) 최근 거래금액(만원)."""
+def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str) -> tuple[float, int] | tuple[None, None]:
+    """국토부 매매 실거래에서 동일단지(동+이름+면적) 최근 (거래금액 만원, 건축년도)."""
     base = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
     best = None
     cn = _norm(core)
@@ -213,12 +214,13 @@ def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str) 
                 if area and abs(ar - area) / area > 0.15:
                     continue
                 amt = float(it.findtext("dealAmount").replace(",", "").strip())
+                by = int(it.findtext("buildYear")) if (it.findtext("buildYear") or "").isdigit() else None
                 d = (int(it.findtext("dealYear")), int(it.findtext("dealMonth")), int(it.findtext("dealDay")))
             except (ValueError, AttributeError, TypeError):
                 continue
             if best is None or d > best[0]:
-                best = (d, amt)
-    return best[1] if best else None
+                best = (d, amt, by)
+    return (best[1], best[2]) if best else (None, None)
 
 
 def recent_jeonse_price(lawd5: str, dong: str, core: str, area: float, key: str) -> float | None:
@@ -265,9 +267,11 @@ def update_market(codes: dict, key: str) -> int:
         dong_m = re.search(r"([가-힣]+동)", lst.메모 or "")
         dong = dong_m.group(1) if dong_m else ""
         # 괄호 안 별칭(예: '(별내포스코더샵)')도 매칭에 쓰이도록 전체 단지명 사용
-        price = recent_trade_price(code[:5], dong, lst.단지명, lst.전용면적, key)
+        price, build_year = recent_trade_price(code[:5], dong, lst.단지명, lst.전용면적, key)
         if price:
             lst.최근실거래가 = price
+            if build_year:
+                lst.건축년도 = build_year
             n += 1
         jeonse = recent_jeonse_price(code[:5], dong, lst.단지명, lst.전용면적, key)  # 전월세 API 활성 시
         if jeonse:

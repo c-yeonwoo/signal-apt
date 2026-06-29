@@ -164,6 +164,10 @@
       <label>대출비율 % <input id="pLoan" type="number" value="70" step="5" oninput="loadAuction()"></label>
       <label>대출금리 % <input id="pRate" type="number" value="5" step="0.1" oninput="loadAuction()"></label>
       <label>보유개월 <input id="pHold" type="number" value="6" step="1" oninput="loadAuction()"></label>
+      <label>평형 <select id="fSize" onchange="loadAuction()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+        <option value="">전체</option><option value="s">소형(≤60㎡)</option><option value="m">중형(60~85)</option><option value="l">대형(>85)</option></select></label>
+      <label>연식 <select id="fAge" onchange="loadAuction()" style="background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px">
+        <option value="">전체</option><option value="new">신축(≤10년)</option><option value="mid">준신축(10~20)</option><option value="old">구축(>20)</option></select></label>
       <button class="btn primary" onclick="openAdd()">+ 매물 추가</button>
       <button class="btn" onclick="document.getElementById('csv').click()">CSV 임포트</button>
       <button class="btn" id="mktBtn" onclick="refreshMarket()">최근 실거래가 갱신</button>
@@ -193,7 +197,7 @@
     <p style="color:var(--dim);font-size:12px;margin:-4px 0 8px">행을 클릭하면 낙찰가율별 민감도 표·비용분해가 열립니다.</p>
     <table>
       <thead><tr>
-        <th class="l">단지명</th><th class="l">지역</th><th>감정가</th><th>최저매각가</th>
+        <th class="l">단지명</th><th class="l">지역</th><th>평형</th><th>연식</th><th>감정가</th><th>최저매각가</th>
         <th>최근실거래</th><th>전세</th><th>권장입찰가</th><th>시세차익률</th><th>임대수익률</th>
         <th class="l">입찰기일</th><th>우선순위</th><th></th>
       </tr></thead>
@@ -722,6 +726,10 @@ function prefillRegion(r){ switchTab('auction'); openAdd(); document.getElementB
 function daysTo(d){ if(!d) return null; return Math.ceil((new Date(d) - new Date())/86400000); }
 
 function renderAuction(rows){
+  const sz = document.getElementById('fSize').value, ag = document.getElementById('fAge').value;
+  if(sz) rows = rows.filter(r=>{const a=r['전용면적']||0; return sz==='s'?a<=60:sz==='m'?(a>60&&a<=85):a>85;});
+  if(ag) rows = rows.filter(r=>{ if(!r['건축년도']) return false; const y=2026-r['건축년도'];
+    return ag==='new'?y<=10:ag==='mid'?(y>10&&y<=20):y>20;});
   const tb = document.getElementById('auctionRows'); tb.innerHTML='';
   document.getElementById('emptyMsg').textContent = rows.length ? '' :
     '관심 매물이 없습니다. BUY+ 지역의 경매 매물을 "+ 매물 추가" 또는 CSV로 등록하세요.';
@@ -736,6 +744,8 @@ function renderAuction(rows){
     const lease = r['임대수익률']==null?'–':r['임대수익률']+'%';
     tr2.innerHTML = `<td class="l">${r['단지명']||'–'} ${r['목표달성']?'':'<span class="pill">목표미달</span>'}</td>
       <td class="l">${r['region']||''} ${r['지역시그널']?badge(r['지역시그널']):''}</td>
+      <td>${r['전용면적']?Math.round(r['전용면적'])+'㎡('+(r['전용면적']/3.3058).toFixed(0)+'평)':'–'}</td>
+      <td>${r['건축년도']?(2026-r['건축년도'])+'년':'–'}</td>
       <td>${won(r['감정가'])}</td><td>${won(r['최저매각가'])}</td>
       <td>${won(r['최근실거래가'])}</td><td>${won(r['최근전세가'])}</td>
       <td style="color:#4ade80;font-weight:600">${won(r['권장입찰가'])}</td>
