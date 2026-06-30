@@ -566,11 +566,18 @@ REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
 
 @lru_cache(maxsize=1)
 def _redev_zones():
-    """서울 정비구역(재건축/재개발) — upisRebuild. 캐시."""
+    """서울 정비구역(재건축/재개발) — upisRebuild. DB 영구 캐시(90일) → 인메모리."""
+    from realty_signal import db
+    cached = db.kv_get("redev_zones", max_age=90 * 86400)
+    if cached is not None:
+        return cached
     from realty_signal.ingest import redevelopment as rd
     config.load_env()
     key = config.seoul_key()
-    return rd.fetch_zones(key) if key else []
+    zones = rd.fetch_zones(key) if key else []
+    if zones:
+        db.kv_set("redev_zones", zones)
+    return zones
 
 
 @app.get("/api/redevelopment/zones")
@@ -588,19 +595,58 @@ def redev_zones(type: str | None = None, q: str | None = None):
 
 @lru_cache(maxsize=64)
 def _redev_candidates(region: str):
+    """지역 재건축 잠재력 단지 — DB 영구 캐시(30일) → 인메모리. 미스만 라이브 계산."""
+    from realty_signal import db
+    cached = db.kv_get(f"redev_cand:{region}", max_age=30 * 86400)
+    if cached is not None:
+        return cached
     from realty_signal.ingest import redevelopment as rd
     code = _kb().codes.get(region, "")
     if not (code and code.isdigit() and code[2:5] != "000"):
         return []
     config.load_env()
-    return rd.rebuild_candidates(code[:5], config.public_data_key())
+    cands = rd.rebuild_candidates(code[:5], config.public_data_key())
+    db.kv_set(f"redev_cand:{region}", cands)
+    return cands
 
 
 @app.get("/api/redevelopment/candidates/{region}")
 def redev_candidates(region: str):
     """지역 내 재건축 잠재력 단지 랭킹 (구축, 연식·용적률·세대수·시세 기반)."""
     sig = _signal_map()
-    return {"region": region, "시그널": sig.get(region, ""), "candidates": _redev_candidates(region)}
+    cands = _redev_candidates(region)
+    return {"region": region, "시그널": sig.get(region, ""),
+            "cached": db_has_redev_cache(region), "candidates": cands}
+
+
+def db_has_redev_cache(region: str) -> bool:
+    from realty_signal import db
+    return db.kv_get(f"redev_cand:{region}", max_age=30 * 86400) is not None
+
+
+@app.post("/api/redevelopment/warm")
+def redev_warm(data: dict = Body(default={})):
+    """비개인화 재건축 데이터 사전 계산 — 지정 지역(없으면 BUY+ 지역)을 DB에 적재.
+
+    한 번 호출해두면 이후 재건축 탭은 DB 캐시에서 즉시 응답. (수십초~수분 소요)
+    """
+    from realty_signal import db
+    regions = data.get("regions")
+    if not regions:  # 기본: 매수 시그널(BUY+) 지역만
+        sig = _signal_map()
+        regions = [r for r, s in sig.items() if s in ("STRONG_BUY", "BUY")]
+    _redev_zones()
+    done, skipped = [], []
+    for r in regions:
+        if db.kv_get(f"redev_cand:{r}", max_age=30 * 86400) is not None:
+            skipped.append(r)
+            continue
+        try:
+            _redev_candidates(r)
+            done.append(r)
+        except Exception as e:
+            log.warning("warm %s 실패: %s", r, e)
+    return {"warmed": done, "already_cached": skipped, "total": len(regions)}
 
 
 @lru_cache(maxsize=1)
@@ -659,6 +705,21 @@ def _region_centroid(region: str, code: str) -> tuple[float, float] | None:
     c = geocode(region, code)
     db.region_set(region, list(c) if c else None)
     return c
+
+
+@app.get("/api/region-centroids")
+def region_centroids(regions: str):
+    """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).
+
+    핀 폴백용: 단지 지오코딩 실패 단지를 지역 중심에 표시해 항상 클릭/포커스 가능.
+    """
+    codes = _kb().codes
+    out = {}
+    for region in [r for r in regions.split(",") if r][:60]:
+        c = _region_centroid(region, codes.get(region, ""))
+        if c:
+            out[region] = [c[0], c[1]]
+    return {"centroids": out}
 
 
 def _radar_scan(regions: list[str]) -> list[dict]:

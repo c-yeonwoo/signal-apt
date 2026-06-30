@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid INTEGER, ts INTE
 CREATE TABLE IF NOT EXISTS profile(uid INTEGER PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS favorites(uid INTEGER, kind TEXT, key TEXT, label TEXT, ts INTEGER,
     PRIMARY KEY(uid, kind, key));
+CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT, ts INTEGER);
 """
 
 _migrated = [False]
@@ -264,3 +265,31 @@ def fav_remove(uid: int, kind: str, key: str) -> None:
     c.execute("DELETE FROM favorites WHERE uid=? AND kind=? AND key=?", (uid, kind, key))
     c.commit()
     c.close()
+
+
+# ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
+def kv_get(k: str, max_age: int | None = None):
+    """캐시 값(JSON 역직렬화). 없거나 max_age(초) 초과 시 None."""
+    c = conn()
+    row = c.execute("SELECT v, ts FROM kv WHERE k=?", (k,)).fetchone()
+    c.close()
+    if not row:
+        return None
+    if max_age is not None and (time.time() - row[1]) > max_age:
+        return None
+    return json.loads(row[0])
+
+
+def kv_set(k: str, v) -> None:
+    c = conn()
+    c.execute("INSERT OR REPLACE INTO kv(k,v,ts) VALUES(?,?,?)",
+              (k, json.dumps(v, ensure_ascii=False), int(time.time())))
+    c.commit()
+    c.close()
+
+
+def kv_keys(prefix: str) -> list[str]:
+    c = conn()
+    rows = c.execute("SELECT k FROM kv WHERE k LIKE ?", (prefix + "%",)).fetchall()
+    c.close()
+    return [r[0] for r in rows]

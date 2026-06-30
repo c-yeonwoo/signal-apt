@@ -107,6 +107,7 @@
   .leaflet-popup-content { font-size:12px; line-height:1.4; }
   .mpin { width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.25), 0 0 10px rgba(37,99,235,.5); }
   .mpin.sel { width:22px; height:22px; box-shadow:0 0 0 4px rgba(37,99,235,.35), 0 0 16px rgba(37,99,235,.9); z-index:1000; }
+  .mpin.fb { opacity:.55; border-style:dashed; }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#475569; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
@@ -606,6 +607,7 @@ async function loadRedevCands(){
       <span>세대 ${c['세대수']?c['세대수'].toLocaleString():'–'}</span><span>평단 ${c['평단가']}만</span></div>
       <div style="margin-top:5px;font-size:11px;color:var(--dim)">점수구성 — 연식 ${c['_age']} · 용적 ${c['_far']} · 규모 ${c['_size']} · 입지 ${c['_loc']}</div>${loanBtn(c['평단가']*25,c['단지명']+' (25평 추정)')}`,
     geoq:c=>`${region} ${c['단지명']}`,
+    regionOf:()=>region,
     color:c=>gcol(c),
     label:c=>`<b>${c['단지명']}</b><br>재건축 잠재력 ${c['잠재력']} · ${c['연식년']}년`,
   });
@@ -695,6 +697,7 @@ function renderQuicksale(){
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
       <span>연식 ${m['연식']||'–'}</span></div>${loanBtn(m['호가'],m['단지명'])}`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
+    regionOf:m=>m['지역'],
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
     label:m=>`<b>${m['단지명']}</b><br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:#ea580c">(${m['급매갭']}%)</span>`,
   });
@@ -715,15 +718,29 @@ async function mapSplit(listId, mapId, items, opt){
       focusPin(mapId,i); };
     listEl.appendChild(row); listEl.appendChild(det);
   });
-  const coords={}, need=[];
+  const coords={}, need=[], fb=new Set(); opt._fb=fb;
   items.forEach((it,i)=>{ const c=opt.coord&&opt.coord(it); if(c&&c[0]) coords[i]=c;
     else if(opt.geoq){ const q=opt.geoq(it); if(q) need.push({i,q}); } });
-  plotPins(mapId, items, coords, opt);
+  // 1) 지역중심 폴백 먼저 — 모든 단지에 즉시 핀(클릭/포커스 보장). 지오코딩(느림) 기다리지 않음.
+  if(opt.regionOf && need.length){
+    const miss=[...new Set(need.map(n=>opt.regionOf(items[n.i])).filter(Boolean))];
+    if(miss.length){
+      try{ const cr=await (await fetch('/api/region-centroids?regions='+encodeURIComponent(miss.join(',')))).json();
+        const ctr=cr.centroids||{};
+        need.forEach(n=>{ const c=ctr[opt.regionOf(items[n.i])]; if(!c) return;
+          const i=n.i, ang=i*2.39996, rad=0.0013*(1+(i%6));   // 황금각 나선 지터(~±400m, 겹침 방지)
+          coords[i]=[c[0]+rad*Math.cos(ang), c[1]+rad*Math.sin(ang)]; fb.add(i); });
+      }catch(e){}
+    }
+  }
+  plotPins(mapId, items, coords, opt);   // 즉시 표시 (실좌표 + 폴백핀)
+  // 2) 단지 정밀 지오코딩 — 백그라운드. 성공한 단지만 폴백→실좌표로 업그레이드.
   if(need.length){
     const qs=[...new Set(need.map(n=>n.q))];
     try{ const r=await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:qs,max_miss:25})})).json();
-      need.forEach(n=>{ if(r.coords[n.q]) coords[n.i]=r.coords[n.q]; });
-      plotPins(mapId, items, coords, opt);
+      let changed=false;
+      need.forEach(n=>{ if(r.coords[n.q]){ coords[n.i]=r.coords[n.q]; fb.delete(n.i); changed=true; } });
+      if(changed) plotPins(mapId, items, coords, opt);
     }catch(e){}
   }
 }
@@ -739,10 +756,13 @@ function plotPins(mapId, items, coords, opt){
   const st=initMap(mapId);
   st.items=items; st.opt=opt; st.coords=coords;   // 클릭 시 on-demand 지오코딩용
   Object.values(st.markers).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
+  const fb=opt._fb||new Set();
   items.forEach((it,i)=>{ const c=coords[i]; if(!c) return;
     const color=(opt.color&&opt.color(it))||'#2563eb';
-    const icon=L.divIcon({className:'',html:`<div class="mpin" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
-    const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(opt.label(it));
+    const isfb=fb.has(i);
+    const icon=L.divIcon({className:'',html:`<div class="mpin${isfb?' fb':''}" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
+    const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사 (지역 중심)</span>`:'');
+    const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(lbl);
     st.markers[i]=mk; });
   const ms=Object.values(st.markers);
   if(ms.length){ const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
@@ -986,6 +1006,7 @@ function renderPresale(){
         <span>입주 ${r['입주예정']||'–'}</span><span>총 ${r['총세대']?Number(r['총세대']).toLocaleString():'–'}세대</span></div>
         <div id="${id}" style="margin-top:7px;color:var(--dim)">평형별 분양가 불러오는 중…</div>`; },
     geoq:r=>(r['주소']||'').split(' ').slice(0,2).join(' ')||r['지역'],   // 청약 주소(블록/지구)는 지오코딩 난해 → 주소 앞2토큰(정식 시도+시군구)
+    regionOf:r=>r['지역'],
     color:r=>r['상태']==='접수중'?'#16a34a':r['상태']==='접수예정'?'#2563eb':'#94a3b8',
     label:r=>`<b>${r['단지명']}</b><br>${r['지역']||''} · ${psStatusBadge(r['상태'],r['Dday'])}`,
   });
@@ -1474,6 +1495,7 @@ function renderAuction(rows){
         ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}
         <span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span></div>`,
     geoq:r=>{ const dong=(r['메모']||'').match(/[가-힣]+동/); return `${r['region']||''} ${dong?dong[0]+' ':''}${r['단지명']||''}`; },
+    regionOf:r=>r['region'],
     color:r=>r['시세차익률']>=10?'#16a34a':r['시세차익률']>=0?'#d97706':'#dc2626',
     label:r=>`<b>${r['단지명']}</b><br>${r['region']||''} · 권장 ${won(r['권장입찰가'])} · 차익 ${r['시세차익률']}%`,
   });
