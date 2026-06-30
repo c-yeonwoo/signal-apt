@@ -292,7 +292,8 @@
 <!-- 청약 탭 -->
 <div id="view-presale" style="display:none">
   <div class="sec">
-    <h3>청약·분양 단지 <span class="pill">청약홈</span></h3>
+    <h3>청약·분양 단지 <span class="pill">청약홈</span>
+      <button class="chip" onclick="openGajeom()" style="margin-left:8px;background:var(--accent);color:#fff;border-color:var(--accent)">🎯 내 청약 가점 <b id="gajeomBadge">–</b></button></h3>
     <p style="color:var(--dim);font-size:12px;margin:-2px 0 8px">
       최근~예정 청약. 접수중·임박(D-day) → BUY+ 순. 단지 클릭 시 평형별 분양가·특별공급·시세대비 메리트.
       <label style="margin-left:10px"><input type="checkbox" id="psBuyOnly" onchange="renderPresale()"> BUY+ 지역만</label>
@@ -474,6 +475,21 @@
     <button class="btn" onclick="document.getElementById('addDlg').close()">취소</button>
     <button class="btn primary" onclick="submitAdd()">추가</button>
   </div>
+</dialog>
+
+<dialog id="gajeomDlg" style="width:460px;max-width:94vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h3 style="margin:0">🎯 청약 가점 계산기 <span style="font-size:12px;color:var(--dim)">(가점제 84점)</span></h3>
+    <span class="btn" style="padding:2px 10px" onclick="document.getElementById('gajeomDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">프로필 값으로 자동 계산됩니다. 조정 시 즉시 반영.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+    <label>무주택 기간(년)<br><input id="gj_nohouse" type="number" min="0" class="ctrl" style="width:100%" oninput="calcGajeom()"></label>
+    <label>부양가족 수<br><input id="gj_family" type="number" min="0" class="ctrl" style="width:100%" oninput="calcGajeom()"></label>
+    <label>청약통장 가입(개월)<br><input id="gj_account" type="number" min="0" class="ctrl" style="width:100%" oninput="calcGajeom()"></label>
+  </div>
+  <div id="gajeomOut" style="margin-top:16px"></div>
+  <p style="color:var(--dim);font-size:11px;margin-top:10px">무주택기간 최대 32 · 부양가족 35 · 통장 17. 만30세 미만 미혼 등 예외는 미반영(개략).</p>
 </dialog>
 
 <dialog id="boardDlg" style="width:520px;max-width:94vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
@@ -1510,6 +1526,42 @@ function applyProfileDefaults(){
   const pmap={s:'17.4',m:'25.7',l:'35.4'};
   const py=document.getElementById('ccPyeong'); if(py && pmap[_profile['관심평수']]) py.value=pmap[_profile['관심평수']];
   const fs=document.getElementById('fSize'); if(fs && _profile['관심평수']) fs.value=_profile['관심평수'];
+  updateGajeomBadge();
+}
+// ===== 청약 가점 계산기 (가점제 84점) =====
+function gajeomScore(nohouseYr, family, accountMo){
+  const 무주택 = nohouseYr>=15 ? 32 : Math.min(32, Math.max(2, 2*(Math.floor(nohouseYr)+1)));   // 0~1년 2점, +2/년, 15년+ 32
+  const 부양 = Math.min(35, 5 + (family||0)*5);                                                   // 0명 5, +5/명, 6명+ 35
+  let 통장; const m=accountMo||0;
+  if(m<6) 통장=1; else if(m<12) 통장=2; else 통장=Math.min(17, 2+Math.floor(m/12));               // 6개월 1, 1년 2, +1/년, 15년+ 17
+  return {무주택, 부양, 통장, total: 무주택+부양+통장};
+}
+function updateGajeomBadge(){
+  const b=document.getElementById('gajeomBadge'); if(!b) return;
+  const g=gajeomScore(_profile['무주택기간']||0, _profile['부양가족']||0, _profile['청약통장개월']||0);
+  b.textContent = g.total+'점';
+}
+function openGajeom(){
+  document.getElementById('gj_nohouse').value=_profile['무주택기간']||0;
+  document.getElementById('gj_family').value=_profile['부양가족']||0;
+  document.getElementById('gj_account').value=_profile['청약통장개월']||0;
+  calcGajeom(); document.getElementById('gajeomDlg').showModal();
+}
+function calcGajeom(){
+  const ny=+document.getElementById('gj_nohouse').value||0, fa=+document.getElementById('gj_family').value||0, ac=+document.getElementById('gj_account').value||0;
+  const g=gajeomScore(ny,fa,ac);
+  // 프로필에도 반영(다음에 자동)
+  _profile['무주택기간']=ny; _profile['부양가족']=fa; _profile['청약통장개월']=ac;
+  fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
+  updateGajeomBadge();
+  const bar=(v,max,c)=>`<div style="background:#eef2f7;border-radius:6px;height:10px;overflow:hidden;margin-top:3px"><div style="width:${v/max*100}%;height:100%;background:${c}"></div></div>`;
+  const tier = g.total>=64?'수도권 인기 단지 당첨권(60점+)':g.total>=50?'중상위 — 비인기·중소형 노려볼만':'가점 낮음 — 추첨제/특별공급 병행 권장';
+  document.getElementById('gajeomOut').innerHTML=`
+    <div style="text-align:center;margin-bottom:12px"><span style="font-size:34px;font-weight:800;color:var(--accent)">${g.total}</span><span style="color:var(--dim)"> / 84점</span></div>
+    <div style="font-size:13px"><div style="display:flex;justify-content:space-between">무주택 기간 <b>${g.무주택}/32</b></div>${bar(g.무주택,32,'#2563eb')}</div>
+    <div style="font-size:13px;margin-top:8px"><div style="display:flex;justify-content:space-between">부양가족 <b>${g.부양}/35</b></div>${bar(g.부양,35,'#16a34a')}</div>
+    <div style="font-size:13px;margin-top:8px"><div style="display:flex;justify-content:space-between">청약통장 <b>${g.통장}/17</b></div>${bar(g.통장,17,'#d97706')}</div>
+    <div style="margin-top:12px;padding:8px 10px;background:#eff6ff;border-radius:8px;font-size:12.5px">📊 ${tier}</div>`;
 }
 let _favs = new Set();
 async function loadFavs(){
