@@ -48,7 +48,32 @@ def _do_refresh() -> dict:
     _regime.cache_clear()
     _presale.cache_clear()
     _backtest.cache_clear()
-    return {"ok": True, "last_date": str(kb.last_date.date()), "regions": len(kb.regions)}
+    changed = _snapshot_signals(str(kb.last_date.date()))
+    return {"ok": True, "last_date": str(kb.last_date.date()), "regions": len(kb.regions),
+            "signal_changes": len(changed)}
+
+
+def _snapshot_signals(asof: str) -> list[dict]:
+    """현재 시그널을 직전 스냅샷과 비교 → 변동을 로그에 적재하고 스냅샷 갱신.
+
+    변동 로그(signal_changes)는 전역(비개인화). /api/alerts 에서 사용자 즐겨찾기로 필터.
+    """
+    try:
+        cur = _signal_map()
+    except Exception:
+        return []
+    prev = db.kv_get("signal_snapshot") or {}
+    changes = []
+    if prev:  # 최초 1회는 스냅샷만 저장(가짜 변동 방지)
+        for region, sig in cur.items():
+            old = prev.get(region)
+            if old and old != sig:
+                changes.append({"region": region, "from": old, "to": sig, "date": asof})
+    if changes:
+        log_ = db.kv_get("signal_changes") or []
+        db.kv_set("signal_changes", (changes + log_)[:300])  # 최신순, 최대 300건
+    db.kv_set("signal_snapshot", cur)
+    return changes
 
 
 async def _auto_refresh_loop():
@@ -82,6 +107,11 @@ async def lifespan(app: FastAPI):
             store.fetch()
         except Exception as e:  # 수집 실패해도 서버는 기동(이후 갱신 버튼으로 재시도)
             log.error("초기 수집 실패: %s", e)
+    try:  # 시그널 스냅샷 초기화(최초 1회) — 이후 변동 감지 기준점
+        if not db.kv_get("signal_snapshot"):
+            _snapshot_signals(str(_kb().last_date.date()))
+    except Exception as e:
+        log.error("시그널 스냅샷 초기화 실패: %s", e)
     task = asyncio.create_task(_auto_refresh_loop())  # 백그라운드 자동 갱신
     yield
     task.cancel()
@@ -175,6 +205,32 @@ def favorites_add(request: Request, data: dict = Body(...)):
 @app.delete("/api/favorites")
 def favorites_del(request: Request, kind: str, key: str):
     db.fav_remove(_uid(request), kind, key)
+    return {"ok": True}
+
+
+# ---------- 알림 (즐겨찾기 지역 시그널 변동) ----------
+@app.get("/api/alerts")
+def alerts(request: Request):
+    """내 즐겨찾기 지역의 시그널 변동 + 현재 상태 다이제스트. unread=마지막 확인 이후 변동 수."""
+    uid = _uid(request)
+    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"}
+    log_ = db.kv_get("signal_changes") or []
+    mine = [c for c in log_ if c["region"] in favs][:50]
+    seen = db.kv_get(f"alerts_seen:{uid}") or ""
+    unread = sum(1 for c in mine if c["date"] > seen)
+    cur = _signal_map()
+    digest = [{"region": r, "signal": cur.get(r, "")} for r in sorted(favs)]
+    return {"changes": mine, "unread": unread, "digest": digest}
+
+
+@app.post("/api/alerts/seen")
+def alerts_seen(request: Request):
+    """알림 확인 처리 — 현재 데이터 기준일을 '마지막 확인'으로 기록."""
+    try:
+        last = str(_kb().last_date.date())
+    except Exception:
+        last = ""
+    db.kv_set(f"alerts_seen:{_uid(request)}", last)
     return {"ok": True}
 
 

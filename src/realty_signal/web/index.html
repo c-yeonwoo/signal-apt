@@ -137,6 +137,27 @@
   .grid2 label { font-size:12px; color:var(--dim); display:flex; flex-direction:column; gap:3px; }
   .grid2 input { background:#ffffff; border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:5px 7px; }
   .dlg-foot { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+
+  /* ===== 모바일 반응형 (≤760px) ===== */
+  @media (max-width:760px){
+    header { padding:11px 14px; gap:9px; min-height:0; }
+    header h1 { font-size:16px; }
+    .tabs { gap:5px; overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch;
+            width:100%; order:3; padding-bottom:2px; }
+    .tab { padding:8px 14px; white-space:nowrap; }
+    .right { width:100%; order:2; flex-wrap:wrap; }
+    /* 시그널: 사이드바 위 + 차트 아래로 스택 */
+    .wrap { flex-direction:column; height:auto; }
+    .side { width:100%; max-height:42vh; border-right:none; border-bottom:1px solid var(--line); }
+    .side.collapsed { max-height:0; border:none; }
+    .main { min-height:64vh; }
+    /* 좌우 분할 → 목록 위 + 지도 아래로 스택 */
+    .mapsplit { flex-direction:column; height:auto; min-height:0; }
+    .ms-list { width:100%; min-width:0; max-height:48vh; }
+    .ms-map { min-height:380px; }
+    /* 2열 폼 → 1열 */
+    .grid2 { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body class="tab-signal">
@@ -166,6 +187,7 @@
   </div>
   <div class="right">
     <button class="chip" onclick="openBoard()" style="font-size:12px">★ 내 보드</button>
+    <button class="chip" id="alertBtn" onclick="openAlerts()" style="font-size:13px;position:relative" title="즐겨찾기 지역 시그널 변동 알림">🔔<span id="alertBadge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
     <span class="date" id="date" title="자동 갱신(주간 cron)"></span>
     <button class="chip" id="myPageBtn" onclick="openMyPage()" style="font-size:13px;display:flex;align-items:center;gap:6px">👤 <span id="myPageLabel">마이페이지</span></button>
   </div>
@@ -564,13 +586,26 @@
   </div>
 </dialog>
 
+<dialog id="alertsDlg" style="width:480px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h3 style="margin:0;font-size:19px">🔔 알림 — 즐겨찾기 시그널 변동</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('alertsDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">즐겨찾기(★)한 지역의 매수/매도 시그널이 바뀌면 여기에 쌓입니다.</p>
+  <div id="alertsBody" style="max-height:60vh;overflow:auto"></div>
+</dialog>
+
 <script>
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
 const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};
 let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
 let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'));
-window.addEventListener('resize', () => chart.resize());
+window.addEventListener('resize', () => {
+  chart.resize();
+  if(typeof uvChart!=='undefined' && uvChart) uvChart.resize();
+  Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(e){} });
+});
 const badge = s => `<span class="badge ${s}">${s}</span>`;
 const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
 // 단지단위 급지(지역 내 평단가 순위) 1=최상급~5=하급
@@ -1671,6 +1706,43 @@ function saveMyPage(){
   toast('프로필을 저장했습니다.');
   if(typeof loadData==='function') loadData();
 }
+// ===== 알림 (즐겨찾기 시그널 변동) =====
+let _alerts={};
+async function loadAlerts(){
+  try{ _alerts = await (await fetch('/api/alerts')).json(); }catch(e){ return; }
+  const b=document.getElementById('alertBadge'); if(!b) return;
+  if(_alerts.unread>0){ b.textContent=_alerts.unread>9?'9+':_alerts.unread; b.style.display='block'; }
+  else b.style.display='none';
+}
+function renderAlerts(d){
+  const lbl={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도'};
+  const col=s=>SIGCOLOR[s]||'#94a3b8';
+  let html='';
+  if(d.changes && d.changes.length){
+    html += `<div style="font-weight:700;font-size:13px;margin-bottom:8px">최근 변동 <span style="color:var(--dim);font-weight:400">${d.changes.length}건</span></div>`
+      + d.changes.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
+        <b style="min-width:62px">${c.region}</b>
+        <span style="color:${col(c.from)};font-size:12px">${lbl[c.from]||c.from}</span><span style="color:var(--dim)">→</span>
+        <span style="color:${col(c.to)};font-weight:700">${lbl[c.to]||c.to}</span>
+        <span style="margin-left:auto;color:var(--dim);font-size:11px">${c.date}</span></div>`).join('');
+  } else {
+    html += `<div style="color:var(--dim);font-size:13px;padding:4px 0 10px">아직 변동 알림이 없습니다.<br><span style="font-size:12px">시그널은 KB 주간 데이터 갱신 시마다 직전과 비교됩니다.</span></div>`;
+  }
+  if(d.digest && d.digest.length){
+    html += `<div style="font-weight:700;font-size:13px;margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--line)">내 즐겨찾기 현재 시그널</div>`
+      + d.digest.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer" onclick="document.getElementById('alertsDlg').close();switchTab('signal');selectRegion('${g.region}')"><b style="min-width:62px">${g.region}</b>${g.signal?badge(g.signal):'<span style="color:var(--dim)">–</span>'}</div>`).join('');
+  } else {
+    html += `<div style="color:var(--dim);font-size:12px;margin-top:14px">시그널 탭에서 지역을 ★ 즐겨찾기하면 변동을 추적합니다.</div>`;
+  }
+  document.getElementById('alertsBody').innerHTML=html;
+}
+async function openAlerts(){
+  await loadAlerts();
+  renderAlerts(_alerts);
+  document.getElementById('alertsDlg').showModal();
+  try{ await fetch('/api/alerts/seen',{method:'POST'}); }catch(e){}
+  const b=document.getElementById('alertBadge'); if(b) b.style.display='none';
+}
 function applyProfileDefaults(){
   // 프로필 → 결론 자본·평수, 경매 평형 기본값 선반영
   const cap=document.getElementById('ccCapital'); if(cap && _profile['가용자본']) cap.value=_profile['가용자본'];
@@ -1726,6 +1798,7 @@ async function toggleFav(kind, key, label){
   else { _favs.add(id);
     await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,label})}); }
   if(typeof renderList==='function') renderList();
+  if(kind==='region') loadAlerts();   // 즐겨찾기 변경 → 알림 다이제스트 갱신
 }
 async function openBoard(){
   const d=await (await fetch('/api/favorites')).json();
@@ -1744,6 +1817,7 @@ async function startApp(needOnboard){
   document.getElementById('search').oninput = renderList;
   applyProfileHeader();
   applyProfileDefaults();
+  loadAlerts();
   if(needOnboard || !_profile || !Object.keys(_profile).length){
     document.getElementById('onbDlg').showModal();   // 온보딩 후 loadData
   } else {
