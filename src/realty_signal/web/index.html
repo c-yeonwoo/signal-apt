@@ -1075,9 +1075,11 @@ function renderFilters(){
 const collapsed = new Set();   // 접힌 그룹/시 키
 const GROUP_ORDER = ['서울','경기','인천','지방·광역'];
 
+const _SIGC = {STRONG_BUY:'#16a34a', BUY:'#22c55e', WATCH:'#d97706', NEUTRAL:'#cbd5e1', SELL_RISK:'#dc2626'};
 function rowEl(r, lv){
   const row = document.createElement('div');
   row.className = `row${lv?' lv'+lv:''}` + (selected===r.region?' sel':'');
+  row.style.borderLeft = `3px solid ${_SIGC[r.signal]||'#cbd5e1'}`;   // 시그널 색 강조
   const sp = r['공급압력']==null?'':` · 입주 ${r['공급압력']}x`;
   // 경기 일반구는 '구명'만 짧게 표기
   const disp = lv===2 ? r.region.split(' ').slice(1).join(' ')||r.region : r.region;
@@ -1098,47 +1100,22 @@ function header(cls, key, label, count, lv){
 }
 function gyeonggiParent(name){ const i=name.indexOf(' '); return i<0?name:name.slice(0,i); }
 
+const _SIGRANK = {STRONG_BUY:0, BUY:1, WATCH:2, NEUTRAL:3, SELL_RISK:4};
+function miniHead(t){ const h=document.createElement('div'); h.className='ghead'; h.style.cursor='default'; h.innerHTML=t; return h; }
 function renderList(){
   const q = document.getElementById('search').value.trim();
   const grp = document.getElementById('groupFilter').value;
   const list = document.getElementById('list'); list.innerHTML = '';
-  const rows = allSignals.filter(r => active.has(r.signal))
+  let rows = allSignals.filter(r => active.has(r.signal))
     .filter(r => !grp || r.group===grp).filter(r => !q || r.region.includes(q));
-
-  GROUP_ORDER.forEach(g => {
-    const gr = rows.filter(r => r.group===g);
-    if (!gr.length) return;
-    list.appendChild(header('ghead', 'g:'+g, g, gr.length));
-    if (collapsed.has('g:'+g)) return;
-
-    if (g === '경기') {
-      // 시 → 일반구 2단계. 일반구는 '시 구' 형태(공백 포함).
-      const parents = {};
-      gr.forEach(r => { const p = gyeonggiParent(r.region);
-        (parents[p] = parents[p] || {self:null, kids:[]});
-        if (r.region === p) parents[p].self = r; else parents[p].kids.push(r); });
-      Object.keys(parents).sort().forEach(p => {
-        const node = parents[p];
-        if (node.kids.length) {                       // 일반구를 가진 시
-          const sh = header('shead', 's:'+p, p, node.kids.length + (node.self?1:0));
-          list.appendChild(sh);
-          if (!collapsed.has('s:'+p)) {
-            if (node.self) list.appendChild(rowEl(node.self, 1));
-            node.kids.sort((a,b)=>a.region.localeCompare(b.region))
-              .forEach(k => list.appendChild(rowEl(k, 2)));
-          }
-        } else if (node.self) {                        // 구 없는 시/군
-          list.appendChild(rowEl(node.self, 1));
-        }
-      });
-    } else {
-      // 서울/인천/지방: 집계·광역 먼저, 그 외 가나다순
-      const agg = gr.filter(r => !/[가-힣]+(구|시|군)$/.test(r.region) || r.region.includes('개구') || r.region===g);
-      const leaf = gr.filter(r => !agg.includes(r));
-      [...agg, ...leaf.sort((a,b)=>a.region.localeCompare(b.region))]
-        .forEach(r => list.appendChild(rowEl(r, 1)));
-    }
-  });
+  // 시그널 강한 순 → 전세수급 높은 순 → 가나다
+  rows.sort((a,b)=> (_SIGRANK[a.signal]??9)-(_SIGRANK[b.signal]??9)
+    || (b['전세수급']||0)-(a['전세수급']||0) || a.region.localeCompare(b.region));
+  const favs = rows.filter(r => _favs.has('region:'+r.region));
+  const rest = rows.filter(r => !_favs.has('region:'+r.region));
+  if(favs.length){ list.appendChild(miniHead('★ 관심 지역')); favs.forEach(r=>list.appendChild(rowEl(r,0))); }
+  list.appendChild(miniHead(`전체 <span class="cnt">${rest.length} · 시그널 강한 순</span>`));
+  rest.forEach(r => list.appendChild(rowEl(r, 0)));
 }
 function renderZoneLegend(){
   // 전세수급 색구간 설명을 팝오버에 채움 (차트 배경색의 의미)
