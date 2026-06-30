@@ -22,12 +22,13 @@
   .filterbar .status { color:var(--dim); font-size:12.5px; margin-left:auto; }
   body { margin:0; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
          background:var(--bg); color:var(--txt); }
-  header { padding:9px 18px; border-bottom:1px solid var(--line); display:flex;
-           align-items:center; gap:12px; flex-wrap:wrap; }
-  header h1 { font-size:16px; margin:0; white-space:nowrap; }
-  .tabs { display:flex; gap:4px; }
-  .tab { padding:6px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel);
-         color:var(--dim); cursor:pointer; font-size:13px; font-weight:600; }
+  header { padding:15px 24px; border-bottom:1px solid var(--line); display:flex;
+           align-items:center; gap:14px; flex-wrap:wrap; min-height:64px; box-sizing:border-box;
+           background:var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  header h1 { font-size:18px; margin:0; white-space:nowrap; }
+  .tabs { display:flex; gap:5px; }
+  .tab { padding:9px 17px; border:1px solid var(--line); border-radius:9px; background:var(--panel);
+         color:var(--dim); cursor:pointer; font-size:14px; font-weight:600; }
   .tab.on { color:#fff; background:#2563eb; border-color:#2563eb; }
   .date { color:var(--dim); font-size:12px; white-space:nowrap; }
   #refresh { padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
@@ -166,7 +167,7 @@
   <div class="right">
     <button class="chip" onclick="openBoard()" style="font-size:12px">★ 내 보드</button>
     <span class="date" id="date" title="자동 갱신(주간 cron)"></span>
-    <span class="date" id="acct" style="display:flex;gap:8px;align-items:center"></span>
+    <button class="chip" id="myPageBtn" onclick="openMyPage()" style="font-size:13px;display:flex;align-items:center;gap:6px">👤 <span id="myPageLabel">마이페이지</span></button>
   </div>
 </header>
 
@@ -530,6 +531,37 @@
   </div>
   <button class="btn" onclick="saveOnboarding()" style="width:100%;margin-top:18px;background:var(--accent);color:#fff;font-weight:700;padding:11px;font-size:15px">저장하고 시작</button>
   <div style="text-align:center;margin-top:8px"><span onclick="skipOnboarding()" style="cursor:pointer;color:var(--dim);font-size:12px">나중에 하기</span></div>
+</dialog>
+
+<dialog id="myPageDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+    <div>
+      <h3 style="margin:0 0 3px;font-size:20px">👤 마이페이지</h3>
+      <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
+    </div>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('myPageDlg').close()">✕</span>
+  </div>
+
+  <div id="mp_summary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+  <div style="font-weight:700;font-size:14px;margin-bottom:10px;padding-top:6px;border-top:1px solid var(--line)">프로필 수정</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+    <label>주택 보유<br><select id="mp_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
+    <label>무주택 기간(년)<br><input id="mp_nohouse" type="number" min="0" class="ctrl" style="width:100%"></label>
+    <label>가용 자본(만원)<br><input id="mp_capital" type="number" placeholder="예: 50000" class="ctrl" style="width:100%"></label>
+    <label>총자산(만원, 선택)<br><input id="mp_asset" type="number" class="ctrl" style="width:100%"></label>
+    <label>관심 평수<br><select id="mp_size" class="ctrl" style="width:100%"><option value="">전체</option><option value="s">소형 (~60㎡)</option><option value="m">중형 (60~85㎡)</option><option value="l">대형 (85㎡~)</option></select></label>
+    <label>거주지(시군구)<br><input id="mp_region" placeholder="예: 노원구" class="ctrl" style="width:100%"></label>
+    <label>부양가족 수<br><input id="mp_family" type="number" min="0" class="ctrl" style="width:100%"></label>
+    <label>청약통장 가입(개월)<br><input id="mp_account" type="number" min="0" class="ctrl" style="width:100%"></label>
+  </div>
+  <div id="mp_gajeom" style="margin-top:14px;font-size:12px;color:var(--dim)"></div>
+
+  <button class="btn" onclick="saveMyPage()" style="width:100%;margin-top:16px;background:var(--accent);color:#fff;font-weight:700;padding:11px;font-size:15px">프로필 저장</button>
+  <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px">
+    <span onclick="document.getElementById('myPageDlg').close();openBoard()" style="cursor:pointer;color:var(--accent)">★ 내 보드 보기</span>
+    <span onclick="logout()" style="cursor:pointer;color:#dc2626">로그아웃</span>
+  </div>
 </dialog>
 
 <script>
@@ -1595,9 +1627,49 @@ function saveOnboarding(){
 }
 function skipOnboarding(){ document.getElementById('onbDlg').close(); loadData(); }
 function applyProfileHeader(){
-  const el=document.getElementById('acct');
-  if(el) el.innerHTML = `${_userEmail} <span onclick="logout()" style="cursor:pointer;color:var(--accent)">로그아웃</span>`
-    + (_profile['거주지']?` · 거주 ${_profile['거주지']}`:'');
+  const lab=document.getElementById('myPageLabel');
+  if(lab){ const nm=(_userEmail||'').split('@')[0]||'마이페이지';
+    lab.textContent = nm + (_profile['거주지']?` · ${_profile['거주지']}`:''); }
+}
+// ===== 마이페이지 (프로필 조회·수정) =====
+function openMyPage(){
+  document.getElementById('mp_email').textContent = _userEmail || '';
+  const p=_profile||{};
+  document.getElementById('mp_own').value = p['주택수']!=null ? String(p['주택수']) : '0';
+  document.getElementById('mp_nohouse').value = p['무주택기간']??'';
+  document.getElementById('mp_capital').value = p['가용자본']??'';
+  document.getElementById('mp_asset').value = p['총자산']??'';
+  document.getElementById('mp_size').value = p['관심평수']||'';
+  document.getElementById('mp_region').value = p['거주지']||'';
+  document.getElementById('mp_family').value = p['부양가족']??'';
+  document.getElementById('mp_account').value = p['청약통장개월']??'';
+  renderMyPageSummary();
+  document.getElementById('myPageDlg').showModal();
+}
+function renderMyPageSummary(){
+  const p=_profile||{};
+  const own = p['주택수']===0?'무주택':(p['주택수']===1?'1주택':(p['주택수']>=2?'다주택':'미설정'));
+  const sz = {s:'소형',m:'중형',l:'대형'}[p['관심평수']]||'전체';
+  const g = gajeomScore(p['무주택기간']||0, p['부양가족']||0, p['청약통장개월']||0);
+  const chip=(label,val)=>`<div style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:90px">
+    <div style="font-size:11px;color:var(--dim)">${label}</div><div style="font-weight:700;font-size:14px">${val}</div></div>`;
+  document.getElementById('mp_summary').innerHTML =
+    chip('주택', own) + chip('거주지', p['거주지']||'–') +
+    chip('가용자본', p['가용자본']?_eok(p['가용자본']):'–') + chip('관심평수', sz) +
+    chip('청약가점', `${g.total}점`);
+  document.getElementById('mp_gajeom').innerHTML =
+    `청약가점 <b style="color:var(--txt)">${g.total}/84</b> — 무주택 ${g.무주택}/32 · 부양가족 ${g.부양}/35 · 통장 ${g.통장}/17`;
+}
+function saveMyPage(){
+  const v=id=>document.getElementById(id).value;
+  _profile = {주택수:+v('mp_own'), 무주택기간:+v('mp_nohouse')||0, 가용자본:+v('mp_capital')||0,
+    총자산:+v('mp_asset')||0, 관심평수:v('mp_size'), 거주지:v('mp_region').trim(),
+    부양가족:+v('mp_family')||0, 청약통장개월:+v('mp_account')||0};
+  fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
+  renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults();
+  document.getElementById('myPageDlg').close();
+  toast('프로필을 저장했습니다.');
+  if(typeof loadData==='function') loadData();
 }
 function applyProfileDefaults(){
   // 프로필 → 결론 자본·평수, 경매 평형 기본값 선반영
