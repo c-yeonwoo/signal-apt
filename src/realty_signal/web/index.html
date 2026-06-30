@@ -665,6 +665,14 @@
   <div id="scoreBody"></div>
 </dialog>
 
+<dialog id="complexDlg" style="width:600px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <h3 id="cxTitle" style="margin:0;font-size:19px">단지 상세</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('complexDlg').close()">✕</span>
+  </div>
+  <div id="cxBody" style="max-height:70vh;overflow:auto"></div>
+</dialog>
+
 <script>
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
 const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};
@@ -744,7 +752,7 @@ async function loadRedevCands(){
     detail:c=>`<div class="kv"><span>잠재력 <b style="color:${gcol(c)}">${c['잠재력']}</b></span>
       <span>연식 ${c['연식년']}년</span><span>용적률 ${c['용적률']?c['용적률']+'%':'–'}</span>
       <span>세대 ${c['세대수']?c['세대수'].toLocaleString():'–'}</span><span>평단 ${c['평단가']}만</span></div>
-      <div style="margin-top:5px;font-size:11px;color:var(--dim)">점수구성 — 연식 ${c['_age']} · 용적 ${c['_far']} · 규모 ${c['_size']} · 입지 ${c['_loc']}</div>${loanBtn(c['평단가']*25,c['단지명']+' (25평 추정)')}`,
+      <div style="margin-top:5px;font-size:11px;color:var(--dim)">점수구성 — 연식 ${c['_age']} · 용적 ${c['_far']} · 규모 ${c['_size']} · 입지 ${c['_loc']}</div>${loanBtn(c['평단가']*25,c['단지명']+' (25평 추정)')}${cxBtn(c['단지명'],region)}`,
     geoq:c=>`${region} ${c['단지명']}`,
     regionOf:()=>region,
     color:c=>gcol(c),
@@ -834,7 +842,7 @@ function renderQuicksale(){
       sub:`${m['지역']||''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span></div>${loanBtn(m['호가'],m['단지명'])}`,
+      <span>연식 ${m['연식']||'–'}</span></div>${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     regionOf:m=>m['지역'],
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
@@ -1571,6 +1579,47 @@ function openScoreboard(){
     <div style="font-size:11px;color:var(--dim);margin-top:12px">기준일 ${bt['기준일']||''} · <b>적중률</b>=신호 방향이 이후 12주에 실현된 비율 · <b>기간중</b>=신호 구간 내 누적 변화 · <b>이후12주</b>=구간 종료 후 12주 변화</div>`;
   document.getElementById('scoreDlg').showModal();
 }
+// ===== 단지 deep-dive =====
+function cxBtn(name, region){
+  if(!name||!region) return '';
+  const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
+  return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">📈 단지 상세</span>`;
+}
+function _spark(vals){
+  if(!vals||vals.length<2) return '';
+  const w=560,h=66,pad=5, mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
+  const pts=vals.map((v,i)=>`${(pad+i*(w-2*pad)/(vals.length-1)).toFixed(1)},${(h-pad-(v-mn)/rng*(h-2*pad)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:66px;background:var(--bg);border:1px solid var(--line);border-radius:8px">
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+}
+async function openComplex(name, region){
+  const body=document.getElementById('cxBody');
+  document.getElementById('cxTitle').textContent=name;
+  body.innerHTML='<div style="color:var(--dim);padding:8px 0">국토부 실거래 불러오는 중… (최초 1회 수십초, 이후 캐시)</div>';
+  document.getElementById('complexDlg').showModal();
+  let d; try{ d=await (await fetch(`/api/complex/${encodeURIComponent(region)}/${encodeURIComponent(name)}`)).json(); }
+  catch(e){ body.innerHTML='<div style="color:#dc2626">불러오기 실패</div>'; return; }
+  if(d['지원안함']){ body.innerHTML='<div style="color:var(--dim)">이 지역은 실거래 단지 조회를 지원하지 않습니다. (수도권 시군구 위주)</div>'; return; }
+  if(d['거래없음']||!(d['평형별']||[]).length){ body.innerHTML='<div style="color:var(--dim)">최근 2년 실거래가 없는 단지입니다. (신축 분양·소규모 단지일 수 있음)</div>'; return; }
+  const tr=d['매매추이']||[];
+  const rows=d['평형별'].map(p=>`<tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:8px 6px"><b>${p['평형']}평</b> <span style="color:var(--dim);font-size:11px">${p['전용㎡']}㎡</span></td>
+    <td style="padding:8px 6px;text-align:right">${p['최근매매']?_eok(p['최근매매']):'–'}</td>
+    <td style="padding:8px 6px;text-align:right;color:var(--dim)">${p['평단가']}만</td>
+    <td style="padding:8px 6px;text-align:right">${p['최근전세']?_eok(p['최근전세']):'–'}</td>
+    <td style="padding:8px 6px;text-align:right;font-weight:700;color:${p['전세가율']>=70?'#16a34a':'var(--txt)'}">${p['전세가율']!=null?p['전세가율']+'%':'–'}</td>
+    <td style="padding:8px 6px;text-align:right">${p['갭']!=null?_eok(p['갭']):'–'}</td></tr>`).join('');
+  body.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
+      <div><div style="font-size:12px;color:var(--dim)">최근 평단가</div>
+        <div style="font-size:24px;font-weight:800;line-height:1.1">${(d['최근평단가']||0).toLocaleString()}<span style="font-size:13px">만/평</span></div></div>
+      <div style="text-align:right;font-size:12px;color:var(--dim)">${d['기간']||''} · ${d['총거래']}건<br>2년 추세 <b style="color:${d['추세pct']>=0?'#16a34a':'#dc2626'}">${d['추세pct']>0?'+':''}${d['추세pct']??'–'}%</b></div></div>
+    <div style="margin-bottom:16px">${_spark(tr.map(x=>x['평단가']))}</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:6px">평형별 시세 · 전세가율 · 갭</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">평형</th><th style="text-align:right;padding:6px">최근매매</th><th style="text-align:right;padding:6px">평단가</th><th style="text-align:right;padding:6px">최근전세</th><th style="text-align:right;padding:6px">전세가율</th><th style="text-align:right;padding:6px">갭</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 기준 · 전세가율=최근 전세보증금÷최근 매매가 · 갭=매매−전세 (실투자금 가늠)${d['cached']?' · 캐시':''}</div>`;
+}
 async function openHistModal(){
   const iv = _histCache[selected]||[];
   const col = s => s==='STRONG_BUY'?'#16a34a':s==='SELL'?'#dc2626':'#22c55e';
@@ -1685,7 +1734,7 @@ function renderAuction(rows){
       <span>입찰기일 ${r['입찰기일']||'–'}</span></div>
       <div style="margin-top:7px;display:flex;gap:6px">
         <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>
-        ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}
+        ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}${cxBtn(r['단지명'],r['region'])}
         <span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span></div>`,
     geoq:r=>{ const dong=(r['메모']||'').match(/[가-힣]+동/); return `${r['region']||''} ${dong?dong[0]+' ':''}${r['단지명']||''}`; },
     regionOf:r=>r['region'],
