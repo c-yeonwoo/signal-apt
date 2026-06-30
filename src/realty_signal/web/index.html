@@ -812,9 +812,47 @@ function renderAiReport(d, eok){
   if(quick) lines.push(`🏷️ 추천 지역에서 시세 이하 <b>급매 ${quick}건</b>이 포착됐습니다.`);
   lines.push(`<span style="color:var(--dim)">다음 행동: 위 추천 카드에서 단지·급매·청약을 눌러 ★ 즐겨찾기 → 내 보드에서 추적하세요.</span>`);
 
-  el.innerHTML = `<div style="font-weight:700;margin-bottom:8px;font-size:15px">✨ ${_userEmail||'회원'}님을 위한 매수 전략 리포트</div>`
-    + lines.map(l=>`<div style="margin:5px 0">• ${l}</div>`).join('');
+  _reportSummary = {
+    매수가능_억: +(d.budget/10000).toFixed(1), 거주지:p['거주지']||null, 주택수:p['주택수'],
+    가용자본_만:p['가용자본']||null, 관심평수:p['관심평수']||null,
+    청약가점: gajeomScore(p['무주택기간']||0,p['부양가족']||0,p['청약통장개월']||0).total,
+    추천지역: inb.slice(0,5).map(c=>({지역:c.region,시그널:c['시그널'],저평가도:c['저평가도'],
+      평단가:c['평단가'],예상매수가_억:+((c['예상매수가']||0)/10000).toFixed(1),
+      급매:c['급매건수']||0,청약:c['청약건수']||0})),
+    거주지당해청약:danghae, 추천지역급매건수:quick };
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:700;font-size:15px">✨ ${_userEmail||'회원'}님을 위한 매수 전략 리포트</div>
+      <button class="btn" onclick="genAiReport()" style="background:var(--accent);color:#fff;font-size:12px;padding:5px 11px;white-space:nowrap">🤖 AI 심층 분석</button>
+    </div><div id="aiReportBody">`
+    + lines.map(l=>`<div style="margin:5px 0">• ${l}</div>`).join('') + `</div>`;
   el.style.display='block';
+}
+let _reportSummary = null;
+function toast(msg){
+  let t=document.getElementById('_toast');
+  if(!t){ t=document.createElement('div'); t.id='_toast';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;background:#1e293b;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.2);max-width:90vw';
+    document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';},3200);
+}
+function mdLite(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/^##\s*(.+)$/gm,'<div style="font-weight:700;margin:12px 0 4px;font-size:14px">$1</div>')
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/^\s*[-•]\s*(.+)$/gm,'<div style="margin:3px 0">• $1</div>')
+    .replace(/\n{2,}/g,'<br>').replace(/\n/g,'<br>');
+}
+async function genAiReport(){
+  if(!_reportSummary) return;
+  const body=document.getElementById('aiReportBody');
+  const old=body.innerHTML; body.innerHTML='<div style="color:var(--dim)">🤖 Claude가 분석 중… (최대 10초)</div>';
+  try{
+    const r=await (await fetch('/api/report/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({summary:_reportSummary})})).json();
+    if(r.available && r.report) body.innerHTML=mdLite(r.report);
+    else { body.innerHTML=old; toast('AI 심층 분석은 ANTHROPIC_API_KEY 설정 시 사용 가능 (지금은 규칙기반 리포트)'); }
+  }catch(e){ body.innerHTML=old; toast('AI 리포트 생성 실패'); }
 }
 let _ccBudget=0, _ccPyeong=25.7;
 async function loadConclusion(){

@@ -100,6 +100,17 @@ def profile_put(request: Request, data: dict = Body(...)):
     return {"ok": True}
 
 
+@app.post("/api/report/ai")
+def report_ai(request: Request, data: dict = Body(...)):
+    """프로필 + 결론 요약 → Claude 심층 리포트. 키 없으면 available:false (프론트 폴백)."""
+    from realty_signal import ai_report
+    if not ai_report.available():
+        return {"available": False}
+    profile = db.profile_get(_uid(request))
+    report = ai_report.generate(profile, data.get("summary") or {})
+    return {"available": True, "report": report} if report else {"available": False}
+
+
 @app.get("/api/favorites")
 def favorites_get(request: Request):
     return {"favorites": db.fav_list(_uid(request))}
