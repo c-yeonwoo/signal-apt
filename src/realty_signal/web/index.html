@@ -164,6 +164,7 @@
   </div>
   <div class="right">
     <span class="date" id="date" title="자동 갱신(주간 cron)"></span>
+    <span class="date" id="acct" style="display:flex;gap:8px;align-items:center"></span>
   </div>
 </header>
 
@@ -462,6 +463,37 @@
     <button class="btn" onclick="document.getElementById('addDlg').close()">취소</button>
     <button class="btn primary" onclick="submitAdd()">추가</button>
   </div>
+</dialog>
+
+<div id="authGate" style="position:fixed;inset:0;z-index:9999;background:#f8fafc;display:none;align-items:center;justify-content:center">
+  <div style="width:370px;max-width:92vw;background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px;box-shadow:0 12px 44px rgba(0,0,0,.10)">
+    <h2 style="margin:0 0 2px;font-size:22px">📊 아파트 시그널맵</h2>
+    <p style="color:var(--dim);font-size:13px;margin:0 0 20px">데이터로 내집마련하기</p>
+    <input id="authEmail" type="email" placeholder="이메일" style="width:100%;margin-bottom:10px">
+    <input id="authPw" type="password" placeholder="비밀번호 (6자 이상)" style="width:100%;margin-bottom:16px" onkeydown="if(event.key==='Enter')authSubmit()">
+    <button class="btn" id="authBtn" onclick="authSubmit()" style="width:100%;background:var(--accent);color:#fff;font-weight:700;padding:11px;font-size:15px">로그인</button>
+    <div id="authErr" style="color:#dc2626;font-size:12.5px;margin-top:10px;min-height:16px"></div>
+    <div style="text-align:center;margin-top:6px;font-size:13px;color:var(--dim)">
+      <span id="authToggle" onclick="toggleAuthMode()" style="cursor:pointer;color:var(--accent);font-weight:600">계정이 없으신가요? 회원가입</span>
+    </div>
+  </div>
+</div>
+
+<dialog id="onbDlg" style="width:480px;max-width:94vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
+  <h3 style="margin:0 0 2px">1분 프로필 설정</h3>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 16px">입력하면 청약·결론·필터가 <b>내 조건</b>으로 맞춰집니다. (나중에 변경 가능)</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+    <label>주택 보유<br><select id="ob_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
+    <label>무주택 기간(년)<br><input id="ob_nohouse" type="number" value="0" class="ctrl" style="width:100%"></label>
+    <label>가용 자본(만원)<br><input id="ob_capital" type="number" placeholder="예: 50000" class="ctrl" style="width:100%"></label>
+    <label>총자산(만원, 선택)<br><input id="ob_asset" type="number" class="ctrl" style="width:100%"></label>
+    <label>관심 평수<br><select id="ob_size" class="ctrl" style="width:100%"><option value="">전체</option><option value="s">소형 (~60㎡)</option><option value="m">중형 (60~85㎡)</option><option value="l">대형 (85㎡~)</option></select></label>
+    <label>거주지(시군구)<br><input id="ob_region" placeholder="예: 노원구" class="ctrl" style="width:100%"></label>
+    <label>부양가족 수<br><input id="ob_family" type="number" value="0" class="ctrl" style="width:100%"></label>
+    <label>청약통장 가입(개월)<br><input id="ob_account" type="number" value="0" class="ctrl" style="width:100%"></label>
+  </div>
+  <button class="btn" onclick="saveOnboarding()" style="width:100%;margin-top:18px;background:var(--accent);color:#fff;font-weight:700;padding:11px;font-size:15px">저장하고 시작</button>
+  <div style="text-align:center;margin-top:8px"><span onclick="skipOnboarding()" style="cursor:pointer;color:var(--dim);font-size:12px">나중에 하기</span></div>
 </dialog>
 
 <script>
@@ -1409,10 +1441,60 @@ async function openCalc(id, name){
   document.getElementById('calcDlg').showModal();
 }
 
-(async function init(){
+// ===== 인증 게이트 =====
+let _authMode='login', _profile={}, _userEmail='';
+function showAuthGate(){ document.getElementById('authGate').style.display='flex'; }
+function toggleAuthMode(){
+  _authMode = _authMode==='login'?'signup':'login';
+  document.getElementById('authBtn').textContent = _authMode==='login'?'로그인':'회원가입';
+  document.getElementById('authToggle').textContent = _authMode==='login'?'계정이 없으신가요? 회원가입':'이미 계정이 있으신가요? 로그인';
+  document.getElementById('authErr').textContent='';
+}
+async function authSubmit(){
+  const email=document.getElementById('authEmail').value, pw=document.getElementById('authPw').value;
+  const r = await fetch('/api/auth/'+_authMode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,pw})});
+  const d = await r.json();
+  if(!d.ok){ document.getElementById('authErr').textContent=d.error||'실패'; return; }
+  const signup = _authMode==='signup';
+  const me = await (await fetch('/api/auth/me')).json();   // 로그인 후 프로필 재조회
+  _userEmail = me.email||''; _profile = me.profile||{};
+  document.getElementById('authGate').style.display='none';
+  await startApp(signup);   // 가입이면 온보딩
+}
+async function logout(){ await fetch('/api/auth/logout',{method:'POST'}); location.reload(); }
+function saveOnboarding(){
+  const v=id=>document.getElementById(id).value;
+  _profile={주택수:+v('ob_own'), 무주택기간:+v('ob_nohouse'), 가용자본:+v('ob_capital')||0,
+    총자산:+v('ob_asset')||0, 관심평수:v('ob_size'), 거주지:v('ob_region').trim(),
+    부양가족:+v('ob_family')||0, 청약통장개월:+v('ob_account')||0};
+  fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
+  document.getElementById('onbDlg').close();
+  applyProfileHeader(); loadData();
+}
+function skipOnboarding(){ document.getElementById('onbDlg').close(); loadData(); }
+function applyProfileHeader(){
+  const el=document.getElementById('acct');
+  if(el) el.innerHTML = `${_userEmail} <span onclick="logout()" style="cursor:pointer;color:var(--accent)">로그아웃</span>`
+    + (_profile['거주지']?` · 거주 ${_profile['거주지']}`:'');
+}
+async function startApp(needOnboard){
   renderFilters();
   document.getElementById('search').oninput = renderList;
-  await loadData();
+  applyProfileHeader();
+  if(needOnboard || !_profile || !Object.keys(_profile).length){
+    document.getElementById('onbDlg').showModal();   // 온보딩 후 loadData
+  } else {
+    await loadData();
+  }
+}
+(async function init(){
+  try{
+    const r = await fetch('/api/auth/me');
+    if(!r.ok){ showAuthGate(); return; }
+    const me = await r.json();
+    _userEmail = me.email; _profile = me.profile||{};
+    await startApp(false);
+  }catch(e){ showAuthGate(); }
 })();
 </script>
 </body>
