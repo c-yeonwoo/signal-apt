@@ -820,6 +820,29 @@ def _region_centroid(region: str, code: str) -> tuple[float, float] | None:
     return c
 
 
+@app.get("/api/complex/{region}/{name}")
+def complex_detail(region: str, name: str):
+    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭. DB 캐시(30일)."""
+    from realty_signal import db
+    code = _kb().codes.get(region, "")
+    if not (code and code.isdigit() and len(code) >= 5):
+        return {"단지명": name, "지원안함": True, "평형별": [], "매매추이": []}
+    lawd5 = code[:5]
+    ckey = f"complex:{lawd5}:{name}"
+    cached = db.kv_get(ckey, max_age=30 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    from realty_signal.ingest import complex as cx
+    config.load_env()
+    pk = config.public_data_key()
+    if not pk:
+        return {"단지명": name, "지원안함": True, "평형별": [], "매매추이": []}
+    data = cx.fetch_complex(lawd5, name, pk)
+    data["region"] = region
+    db.kv_set(ckey, data)
+    return data
+
+
 @app.get("/api/region-centroids")
 def region_centroids(regions: str):
     """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).
