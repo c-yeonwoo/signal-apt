@@ -348,6 +348,7 @@
       <label style="margin-left:10px"><input type="checkbox" id="psBuyOnly" onchange="renderPresale()"> BUY+ 지역만</label>
       <label style="margin-left:8px"><input type="checkbox" id="psOpen" onchange="renderPresale()" checked> 접수중·예정만</label>
     </p>
+    <div id="psTeukgong" style="margin:-2px 0 10px;font-size:13px"></div>
     <div class="mapsplit">
       <div class="ms-list" id="psList"></div>
       <div class="ms-map" id="psMap"></div>
@@ -1137,6 +1138,7 @@ function psStatusBadge(st, dday){
   return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${st}${dd}</span>`;
 }
 function renderPresale(){
+  renderTeukgong();
   const buyOnly = document.getElementById('psBuyOnly').checked;
   const openOnly = document.getElementById('psOpen').checked;
   const rows = _presaleList
@@ -1856,8 +1858,12 @@ function renderMyPageSummary(){
     chip('가용자본', p['가용자본']?_eok(p['가용자본']):'–') +
     chip('연소득', p['연소득']?_eok(p['연소득']):'–') + chip('관심평수', sz) +
     chip('청약가점', `${g.total}점`);
+  const elig=teukgong(p).filter(t=>t.ok);
+  const tg = elig.length
+    ? `<div style="margin-top:7px">특별공급 자격: ${elig.map(t=>`<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="${t.why}">${t.key}</span>`).join(' ')} <span style="color:var(--dim);font-size:11px">· 소득·자산 요건 별도</span></div>`
+    : `<div style="margin-top:7px;color:var(--dim)">특별공급 자격: 해당 없음 (일반공급·가점제 대상)</div>`;
   document.getElementById('mp_gajeom').innerHTML =
-    `청약가점 <b style="color:var(--txt)">${g.total}/84</b> — 무주택 ${g.무주택}/32 · 부양가족 ${g.부양}/35 · 통장 ${g.통장}/17`;
+    `청약가점 <b style="color:var(--txt)">${g.total}/84</b> — 무주택 ${g.무주택}/32 · 부양가족 ${g.부양}/35 · 통장 ${g.통장}/17` + tg;
 }
 function saveMyPage(){
   const v=id=>document.getElementById(id).value;
@@ -1931,6 +1937,28 @@ function updateGajeomBadge(){
   const b=document.getElementById('gajeomBadge'); if(!b) return;
   const g=gajeomScore(_profile['무주택기간']||0, _profile['부양가족']||0, _profile['청약통장개월']||0);
   b.textContent = g.total+'점';
+}
+// ===== 청약 특별공급 자격 자동판정 (프로필 기반) =====
+function teukgong(p){
+  p=p||{}; const home0=(p['주택수']??0)===0;   // 무주택(세대 근사)
+  const r=[];
+  r.push({key:'신혼부부', ok: p['혼인상태']==='newly' && home0,
+    why: p['혼인상태']!=='newly' ? '혼인 7년 이내 아님' : (home0?'혼인 7년 이내·무주택 충족':'주택 보유 → 제외')});
+  r.push({key:'다자녀', ok: (p['자녀수']||0)>=2 && home0,
+    why: (p['자녀수']||0)<2 ? '미성년 자녀 2명 미만' : (home0?`자녀 ${p['자녀수']}명·무주택 충족`:'주택 보유 → 제외')});
+  const fh=p['생애최초']===1, hh=p['세대주']===1;
+  r.push({key:'생애최초', ok: fh && home0 && hh,
+    why: !fh ? '생애최초 아님(또는 미설정)' : !home0 ? '주택 보유 → 제외' : !hh ? '무주택 세대주 아님' : '생애최초·무주택·세대주 충족'});
+  return r;
+}
+function renderTeukgong(){
+  const el=document.getElementById('psTeukgong'); if(!el) return;
+  if(!Object.keys(_profile||{}).length){ el.innerHTML='<span style="color:var(--dim);font-size:12px">마이페이지에서 혼인·자녀·생애최초·세대주를 입력하면 특별공급 자격을 자동 판정합니다.</span>'; return; }
+  const all=teukgong(_profile), elig=all.filter(t=>t.ok);
+  el.innerHTML = elig.length
+    ? `<b>내 특별공급 자격:</b> ${elig.map(t=>`<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="${t.why}">${t.key} 가능</span>`).join(' ')}`
+      + ` <span style="color:var(--dim);font-size:11px">· 소득·자산 요건은 단지 모집공고 확인</span>`
+    : `<span style="color:var(--dim);font-size:12px" title="${all.map(t=>t.key+': '+t.why).join(' / ')}">해당 특별공급 자격 없음 — 일반공급(가점제) 대상. (조건 변경 시 마이페이지 수정)</span>`;
 }
 function openGajeom(){
   document.getElementById('gj_nohouse').value=_profile['무주택기간']||0;
