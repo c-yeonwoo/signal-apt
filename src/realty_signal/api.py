@@ -396,15 +396,23 @@ def _presale():
 
 
 @app.get("/api/presale")
-def presale_list():
-    """청약 단지(청약홈) — 지역 시그널 결합. 임박(접수예정/접수중·D-day) → BUY+ 우선."""
+def presale_list(request: Request):
+    """청약 단지(청약홈) — 지역 시그널 결합 + 거주지 당해 판정. 당해→임박→BUY+ 정렬."""
     sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "": 5}
     st_rank = {"접수중": 0, "접수예정": 1, "발표대기": 2, "계약중": 3, "공고": 4, "완료": 5}
+    home = (db.profile_get(_uid(request)).get("거주지") or "").strip()  # 거주 시군구
+
+    items = []
+    for d in _presale():
+        d = dict(d)
+        # 당해(해당지역 우선공급): 거주 시군구가 단지 지역/주소에 일치
+        d["당해"] = bool(home and (home == d.get("지역") or home in (d.get("주소") or "")))
+        items.append(d)
 
     def key(d):
-        return (st_rank.get(d["상태"], 6), d["Dday"] if d["Dday"] is not None else 999,
-                sig_rank.get(d["시그널"], 5))
-    return sorted(_presale(), key=key)
+        return (0 if d["당해"] else 1, st_rank.get(d["상태"], 6),
+                d["Dday"] if d["Dday"] is not None else 999, sig_rank.get(d["시그널"], 5))
+    return sorted(items, key=key)
 
 
 @app.get("/api/presale/{manage_no}/types")
