@@ -1161,10 +1161,16 @@ function rowEl(r, lv){
   const faved = _favs.has('region:'+r.region);
   row.innerHTML = `<span class="nm">${disp}</span>${badge(r.signal)}
     <span class="fav" title="즐겨찾기" style="cursor:pointer;color:${faved?'#f59e0b':'var(--line)'};margin-left:auto">${faved?'★':'☆'}</span>
-    <span class="mn">전세 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}${sp}</span>`;
+    <span class="mn">전세 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}${sp}${gwonLabel(r['수급출처'])}</span>`;
   row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); toggleFav('region', r.region, r.region); };
   row.onclick = () => selectRegion(r.region);
   return row;
+}
+// 전세수급·매수우위가 KB 권역(강북14/강남11/시도) 단위 상속값일 때 표기
+function gwonLabel(src){
+  if(!src) return '';
+  const s = src.replace('14개구','권').replace('11개구','권');
+  return ` <span style="color:#94a3b8;font-size:11px" title="KB는 전세수급·매수우위를 ${src} 단위로만 발표합니다. 이 두 지표는 ${s} 공통값이며, 구별 차별화는 매매모멘텀·입주물량·저평가·급지에서 나옵니다.">·${s}공통</span>`;
 }
 function header(cls, key, label, count, lv){
   const h = document.createElement('div'); h.className = cls;
@@ -1229,7 +1235,7 @@ async function selectRegion(region){
   const r = allSignals.find(x => x.region===region);
   document.getElementById('sigbadge').innerHTML = `${region} ${badge(r.signal)}`;
   const ss=document.getElementById('sigsub');
-  if(ss) ss.textContent = `전세수급 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}` + (r['공급압력']!=null?` · 입주 ${r['공급압력']}x`:'');
+  if(ss) ss.innerHTML = `전세수급 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}` + (r['공급압력']!=null?` · 입주 ${r['공급압력']}x`:'') + gwonLabel(r['수급출처']);
   // 해설 패널 내용 채우기(버튼으로 펼침)
   const reasons = (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join(' ');
   document.getElementById('haesolPanel').innerHTML =
@@ -1378,7 +1384,20 @@ function renderHistPanel(){
     <span style="color:var(--dim);font-size:11px">차트의 색 구간 = 초록(매수)·빨강(매도). 버튼을 누르면 구간별 근거가 표로 뜹니다</span></div>`;
   p.classList.add('open');
 }
-function openHistModal(){
+let _btCache=null;
+async function backtestBanner(){
+  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){ return ''; } }
+  const bt=_btCache; if(!bt||!bt.by_signal||!bt.by_signal.length) return '';
+  const lab={STRONG_BUY:'강력매수',BUY:'매수',SELL:'매도'}, col={STRONG_BUY:'#16a34a',BUY:'#22c55e',SELL:'#dc2626'};
+  const cards=bt.by_signal.map(s=>`<div style="flex:1;background:${col[s.signal]}14;border:1px solid ${col[s.signal]}55;border-radius:10px;padding:9px 12px">
+    <div style="font-size:12px;color:${col[s.signal]};font-weight:700">${lab[s.signal]||s.signal}</div>
+    <div style="font-size:23px;font-weight:800;line-height:1.1">${s['적중률']??'–'}<span style="font-size:13px;font-weight:600">%</span></div>
+    <div style="font-size:11px;color:var(--dim)">${s['구간수'].toLocaleString()}구간 · 기간중 ${s['기간중평균']>0?'+':''}${s['기간중평균']}%</div></div>`).join('');
+  return `<div style="margin-bottom:13px">
+    <div style="font-size:12px;color:var(--dim);margin-bottom:6px" title="${bt['설명']||''}">📊 <b style="color:var(--txt)">전체 지역 시그널 적중률</b> — 과거 모든 구간 기준 (매수=이후 12주 상승 / 매도=하락이면 적중)</div>
+    <div style="display:flex;gap:8px">${cards}</div></div>`;
+}
+async function openHistModal(){
   const iv = _histCache[selected]||[];
   const col = s => s==='STRONG_BUY'?'#16a34a':s==='SELL'?'#dc2626':'#22c55e';
   const rows = [...iv].reverse().map(h=>{
@@ -1392,7 +1411,7 @@ function openHistModal(){
       <td style="padding:7px 6px;text-align:right">${aft}</td></tr>`;
   }).join('');
   document.getElementById('histTitle').textContent = `${selected} — 지난 시그널 구간 (근거)`;
-  document.getElementById('histBody').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+  document.getElementById('histBody').innerHTML = (await backtestBanner()) + `<div style="font-size:12px;color:var(--dim);margin-bottom:4px">${selected} 구간별 내역</div><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="color:var(--dim);font-size:12px;text-align:left"><th style="padding:6px">시그널</th><th style="padding:6px">기간</th><th style="padding:6px">근거</th><th style="padding:6px;text-align:right">구간수익</th><th style="padding:6px;text-align:right">이후12주</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
   document.getElementById('histDlg').showModal();

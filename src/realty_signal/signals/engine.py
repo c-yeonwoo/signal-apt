@@ -306,6 +306,51 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
     return intervals
 
 
+def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
+    """전 지역 과거 시그널 구간을 모아 타입별 적중률·평균 수익률 집계.
+
+    적중 정의 — 매수(STRONG_BUY/BUY): 시그널 이후 12주 가격 상승. 매도(SELL): 이후 12주 하락.
+    오직 보유 데이터(KB 누적 가격지수)만으로 '이 신호가 과거에 맞았나'를 수치화.
+    """
+    c = config or SignalConfig()
+    agg: dict = {}
+    for region in kb.latest().index:
+        try:
+            ivs = signal_history(kb, region, c)
+        except Exception:
+            continue
+        for iv in ivs:
+            t = iv.get("signal")
+            if t not in ("STRONG_BUY", "BUY", "SELL"):
+                continue
+            a = agg.setdefault(t, {"n": 0, "during": [], "after": [], "hit": 0, "neval": 0})
+            a["n"] += 1
+            if iv.get("during_pct") is not None:
+                a["during"].append(iv["during_pct"])
+            if iv.get("after12w_pct") is not None:
+                a["after"].append(iv["after12w_pct"])
+                a["neval"] += 1
+                up = iv["after12w_pct"] > 0
+                if (t in ("STRONG_BUY", "BUY") and up) or (t == "SELL" and not up):
+                    a["hit"] += 1
+
+    def _avg(xs):
+        return round(sum(xs) / len(xs), 1) if xs else None
+
+    by = []
+    for t in ("STRONG_BUY", "BUY", "SELL"):
+        a = agg.get(t)
+        if not a:
+            continue
+        by.append({
+            "signal": t, "구간수": a["n"], "평가수": a["neval"],
+            "적중률": round(a["hit"] / a["neval"] * 100) if a["neval"] else None,
+            "기간중평균": _avg(a["during"]), "이후12주평균": _avg(a["after"]),
+        })
+    return {"기준일": str(kb.last_date.date()), "by_signal": by,
+            "설명": "과거 각 지역 시그널 구간의 실제 가격 변화. 매수=이후 12주 상승, 매도=이후 12주 하락이면 적중."}
+
+
 def price_index_from(sale: "pd.Series") -> "pd.Series":
     """주간 매매증감률(%) → 누적 매매가격지수(시작=100)."""
     s = sale.sort_index().dropna()
@@ -449,6 +494,7 @@ def evaluate(
                 "공급압력": round(sp, 2) if pd.notna(sp) else None,
                 "거래량비": vr,
                 "급지": 급지,
+                "수급출처": inherited_from,   # 전세수급·매수우위가 상속된 상위 권역(있으면 구별 공통값)
                 "근거": " · ".join(reasons),
             }
         )

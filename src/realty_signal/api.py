@@ -25,8 +25,56 @@ def _uid(request: Request):
     return u["id"] if u else None
 
 
+_REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
+
+
+def _data_age_days() -> float | None:
+    """현재 캐시 데이터의 경과일(없으면 None)."""
+    try:
+        last = _kb().last_date
+        import datetime as _dt
+        return (_dt.datetime.now() - last.to_pydatetime()).total_seconds() / 86400
+    except Exception:
+        return None
+
+
+def _do_refresh() -> dict:
+    """KB 재수집 + 파생 캐시 무효화. /api/refresh·스케줄러 공용."""
+    import time
+    kb = store.fetch()
+    db.kv_set("last_kb_fetch", time.time())   # 마지막 수집 시각(스케줄러 기준)
+    _kb.cache_clear()
+    _signals_df.cache_clear()
+    _regime.cache_clear()
+    _presale.cache_clear()
+    _backtest.cache_clear()
+    return {"ok": True, "last_date": str(kb.last_date.date()), "regions": len(kb.regions)}
+
+
+async def _auto_refresh_loop():
+    """데이터 신선도 자동 유지 — 마지막 수집 후 7일 경과 시 재수집(매일 점검).
+
+    KB 주간 데이터는 측정일이 발표보다 ~1주 지연 → '데이터 날짜'가 아닌 '마지막 수집 시각'
+    기준으로 주 1회만 받아, 매 기동 재수집을 방지하면서 새 주차 발표를 빠르게 반영.
+    """
+    import asyncio
+    import time
+    while True:
+        try:
+            last = db.kv_get("last_kb_fetch")
+            age_days = (time.time() - last) / 86400 if last else 999
+            if age_days >= _REFRESH_EVERY_DAYS:
+                log.warning("마지막 수집 %.1f일 경과 — 자동 갱신 시작", age_days)
+                await asyncio.to_thread(_do_refresh)
+                log.warning("자동 갱신 완료")
+        except Exception as e:  # 갱신 실패해도 루프 유지(다음 점검에 재시도)
+            log.error("자동 갱신 실패: %s", e)
+        await asyncio.sleep(86400)  # 하루마다 점검
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     # 캐시가 없으면(신규 배포 등) KB 데이터허브에서 최초 1회 수집.
     if not store.CACHE_FILE.exists():
         log.warning("캐시 없음 — KB 데이터허브에서 최초 수집 중…")
@@ -34,7 +82,9 @@ async def lifespan(app: FastAPI):
             store.fetch()
         except Exception as e:  # 수집 실패해도 서버는 기동(이후 갱신 버튼으로 재시도)
             log.error("초기 수집 실패: %s", e)
+    task = asyncio.create_task(_auto_refresh_loop())  # 백그라운드 자동 갱신
     yield
+    task.cancel()
 
 
 app = FastAPI(title="realty-signal-map", lifespan=lifespan)
@@ -165,12 +215,19 @@ def index():
 @app.post("/api/refresh")
 def refresh():
     """KB 데이터허브에서 최신 지표를 재수집하고 캐시/시그널을 갱신."""
-    kb = store.fetch()
-    _kb.cache_clear()
-    _signals_df.cache_clear()
-    _regime.cache_clear()
-    _presale.cache_clear()
-    return {"ok": True, "last_date": str(kb.last_date.date()), "regions": len(kb.regions)}
+    return _do_refresh()
+
+
+@lru_cache(maxsize=1)
+def _backtest():
+    from realty_signal.signals.engine import backtest_summary
+    return backtest_summary(_kb(), SignalConfig())
+
+
+@app.get("/api/backtest")
+def backtest():
+    """시그널 적중률 — 전 지역 과거 구간의 실제 가격 결과로 산출(보유 데이터만)."""
+    return {**_backtest(), "data_age_days": round(_data_age_days() or 0, 1)}
 
 
 @app.get("/api/meta")
