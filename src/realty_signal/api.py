@@ -843,6 +843,35 @@ def complex_detail(region: str, name: str):
     return data
 
 
+@app.get("/api/agents/{region}/{name}")
+def agents_nearby(region: str, name: str):
+    """단지 근처 공인중개사 — 카카오 로컬. 단지 좌표(지오코딩→지역중심 폴백) 반경 검색. 캐시 7일."""
+    from realty_signal import db
+    key = config.kakao_key()
+    if not key:
+        config.load_env()
+        key = config.kakao_key()
+    if not key:
+        return {"available": False, "agents": []}
+    ckey = f"agents:{region}:{name}"
+    cached = db.kv_get(ckey, max_age=7 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    # 단지 좌표: 지오코딩 캐시 → 실패 시 지역 중심
+    from realty_signal.ingest import agents as ag, geocode
+    q = f"{region} {name}"
+    coords = geocode.geocode_batch([q], max_miss=1).get("coords", {}).get(q)
+    if not coords:
+        c = _region_centroid(region, _kb().codes.get(region, ""))
+        coords = list(c) if c else None
+    if not coords:
+        return {"available": True, "agents": [], "no_coord": True}
+    lst = ag.search_agents(coords[0], coords[1], key)
+    out = {"available": True, "agents": lst, "coord": coords}
+    db.kv_set(ckey, out)
+    return out
+
+
 @app.get("/api/region-centroids")
 def region_centroids(regions: str):
     """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).

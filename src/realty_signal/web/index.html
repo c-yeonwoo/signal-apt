@@ -1620,7 +1620,24 @@ async function openComplex(name, region){
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">평형</th><th style="text-align:right;padding:6px">최근매매</th><th style="text-align:right;padding:6px">평단가</th><th style="text-align:right;padding:6px">최근전세</th><th style="text-align:right;padding:6px">전세가율</th><th style="text-align:right;padding:6px">갭</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 기준 · 전세가율=최근 전세보증금÷최근 매매가 · 갭=매매−전세 (실투자금 가늠)${d['cached']?' · 캐시':''}</div>`;
+    <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 기준 · 전세가율=최근 전세보증금÷최근 매매가 · 갭=매매−전세 (실투자금 가늠)${d['cached']?' · 캐시':''}</div>
+    <div id="cxAgents" style="margin-top:6px"></div>`;
+  loadComplexAgents(name, region);
+}
+async function loadComplexAgents(name, region){
+  const el=document.getElementById('cxAgents'); if(!el) return;
+  el.innerHTML='<div style="color:var(--dim);font-size:12px;padding-top:12px;border-top:1px solid var(--line)">🏢 근처 공인중개사 불러오는 중…</div>';
+  let d; try{ d=await (await fetch(`/api/agents/${encodeURIComponent(region)}/${encodeURIComponent(name)}`)).json(); }
+  catch(e){ el.innerHTML=''; return; }
+  if(!d.available){ el.innerHTML=''; return; }   // 키 미설정 → 섹션 숨김
+  if(!(d.agents||[]).length){ el.innerHTML='<div style="font-size:12px;color:var(--dim);padding-top:12px;border-top:1px solid var(--line)">근처 등록 중개사를 찾지 못했습니다.</div>'; return; }
+  el.innerHTML=`<div style="font-size:13px;font-weight:700;margin:6px 0 8px;padding-top:12px;border-top:1px solid var(--line)">🏢 근처 공인중개사 <span style="color:var(--dim);font-weight:400;font-size:11px">· 카카오맵</span></div>`
+    + d.agents.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">
+        <div style="flex:1;min-width:0">
+          <a href="${a.url}" target="_blank" rel="noopener" style="font-weight:600;color:var(--txt);text-decoration:none">${a['상호']}</a>
+          <div style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a['주소']||''}${a['거리m']!=null?` · ${a['거리m']}m`:''}</div></div>
+        ${a['전화']?`<a href="tel:${a['전화']}" style="font-size:12px;color:var(--accent);white-space:nowrap">📞 ${a['전화']}</a>`:''}
+      </div>`).join('');
 }
 async function openHistModal(){
   const iv = _histCache[selected]||[];

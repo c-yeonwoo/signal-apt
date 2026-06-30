@@ -28,3 +28,7 @@ def odsay_key() -> str | None:
 
 def seoul_key() -> str | None:
     return os.environ.get("SEOUL_OPENAPI_KEY")
+
+
+def kakao_key() -> str | None:
+    return os.environ.get("KAKAO_REST_API_KEY")
