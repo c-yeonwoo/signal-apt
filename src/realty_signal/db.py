@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS redev_progress(biz TEXT, sgg5 TEXT, stage TEXT, cd IN
 CREATE INDEX IF NOT EXISTS ix_redev_sgg ON redev_progress(sgg5);
 CREATE TABLE IF NOT EXISTS building(k TEXT PRIMARY KEY, vlrat REAL, bcrat REAL,
     useapr TEXT, hhld INTEGER, floors INTEGER, ts INTEGER);
+CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE, pwhash TEXT, created INTEGER);
+CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid INTEGER, ts INTEGER);
+CREATE TABLE IF NOT EXISTS profile(uid INTEGER PRIMARY KEY, data TEXT);
+CREATE TABLE IF NOT EXISTS favorites(uid INTEGER, kind TEXT, key TEXT, label TEXT, ts INTEGER,
+    PRIMARY KEY(uid, kind, key));
 """
 
 _migrated = [False]
@@ -172,5 +178,89 @@ def building_set(key: str, b: dict | None) -> None:
     c.execute("INSERT OR REPLACE INTO building(k,vlrat,bcrat,useapr,hhld,floors,ts) VALUES(?,?,?,?,?,?,?)",
               (key, b.get("용적률"), b.get("건폐율"), b.get("사용승인일"), b.get("세대수"),
                b.get("최고층"), int(time.time())))
+    c.commit()
+    c.close()
+
+
+# ---------- users / sessions ----------
+def user_create(email: str, pwhash: str) -> int | None:
+    c = conn()
+    try:
+        cur = c.execute("INSERT INTO users(email,pwhash,created) VALUES(?,?,?)",
+                        (email.lower().strip(), pwhash, int(time.time())))
+        c.commit()
+        return cur.lastrowid
+    except sqlite3.IntegrityError:
+        return None  # 이미 가입된 이메일
+    finally:
+        c.close()
+
+
+def user_by_email(email: str):
+    c = conn()
+    row = c.execute("SELECT id,email,pwhash FROM users WHERE email=?", (email.lower().strip(),)).fetchone()
+    c.close()
+    return {"id": row[0], "email": row[1], "pwhash": row[2]} if row else None
+
+
+def session_create(token: str, uid: int) -> None:
+    c = conn()
+    c.execute("INSERT OR REPLACE INTO sessions(token,uid,ts) VALUES(?,?,?)", (token, uid, int(time.time())))
+    c.commit()
+    c.close()
+
+
+def session_user(token: str):
+    if not token:
+        return None
+    c = conn()
+    row = c.execute("SELECT u.id,u.email FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token=?",
+                    (token,)).fetchone()
+    c.close()
+    return {"id": row[0], "email": row[1]} if row else None
+
+
+def session_delete(token: str) -> None:
+    c = conn()
+    c.execute("DELETE FROM sessions WHERE token=?", (token,))
+    c.commit()
+    c.close()
+
+
+# ---------- profile (uid → JSON) ----------
+def profile_get(uid: int) -> dict:
+    c = conn()
+    row = c.execute("SELECT data FROM profile WHERE uid=?", (uid,)).fetchone()
+    c.close()
+    return json.loads(row[0]) if row and row[0] else {}
+
+
+def profile_set(uid: int, data: dict) -> None:
+    c = conn()
+    c.execute("INSERT OR REPLACE INTO profile(uid,data) VALUES(?,?)",
+              (uid, json.dumps(data, ensure_ascii=False)))
+    c.commit()
+    c.close()
+
+
+# ---------- favorites ----------
+def fav_list(uid: int) -> list[dict]:
+    c = conn()
+    rows = c.execute("SELECT kind,key,label FROM favorites WHERE uid=? ORDER BY ts DESC", (uid,)).fetchall()
+    c.close()
+    return [{"kind": k, "key": key, "label": lb} for k, key, lb in rows]
+
+
+def fav_add(uid: int, kind: str, key: str, label: str) -> None:
+    c = conn()
+    c.execute("INSERT OR REPLACE INTO favorites(uid,kind,key,label,ts) VALUES(?,?,?,?,?)",
+              (uid, kind, key, label, int(time.time())))
+    c.commit()
+    c.close()
+
+
+def fav_remove(uid: int, kind: str, key: str) -> None:
+    c = conn()
+    c.execute("DELETE FROM favorites WHERE uid=? AND kind=? AND key=?", (uid, kind, key))
     c.commit()
     c.close()

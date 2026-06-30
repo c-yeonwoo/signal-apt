@@ -8,13 +8,21 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import Body, FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse
 
-from realty_signal import auction, config, store
+from realty_signal import auction, auth, config, db, store
 from realty_signal.signals.engine import SignalConfig, evaluate
 
 log = logging.getLogger("realty_signal")
+
+# 인증 게이트: /api/* 는 세션 필수(아래 경로 prefix 만 예외). 그 외(/, 정적)는 허용.
+_OPEN_PREFIXES = ("/api/auth/",)
+
+
+def _uid(request: Request):
+    u = auth.current_user(request.cookies.get(auth.COOKIE))
+    return u["id"] if u else None
 
 
 @asynccontextmanager
@@ -30,6 +38,84 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="realty-signal-map", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def _auth_gate(request: Request, call_next):
+    """인증된 유저만 데이터 API 접근. /api/auth/* 와 비-API(/, 정적)는 허용."""
+    p = request.url.path
+    if p.startswith("/api/") and not p.startswith(_OPEN_PREFIXES):
+        if not _uid(request):
+            return JSONResponse({"error": "인증이 필요합니다.", "auth": False}, status_code=401)
+    return await call_next(request)
+
+
+# ---------- 인증 ----------
+@app.post("/api/auth/signup")
+def auth_signup(data: dict = Body(...)):
+    token, err = auth.signup(data.get("email", ""), data.get("pw", ""))
+    if err:
+        return JSONResponse({"ok": False, "error": err}, status_code=400)
+    r = JSONResponse({"ok": True})
+    r.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    return r
+
+
+@app.post("/api/auth/login")
+def auth_login(data: dict = Body(...)):
+    token, err = auth.login(data.get("email", ""), data.get("pw", ""))
+    if err:
+        return JSONResponse({"ok": False, "error": err}, status_code=401)
+    r = JSONResponse({"ok": True})
+    r.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    return r
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    auth.logout(request.cookies.get(auth.COOKIE))
+    r = JSONResponse({"ok": True})
+    r.delete_cookie(auth.COOKIE)
+    return r
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    u = auth.current_user(request.cookies.get(auth.COOKIE))
+    if not u:
+        return JSONResponse({"auth": False}, status_code=401)
+    return {"auth": True, "email": u["email"], "profile": db.profile_get(u["id"]),
+            "onboarded": bool(db.profile_get(u["id"]))}
+
+
+# ---------- 프로필 / 즐겨찾기 ----------
+@app.get("/api/profile")
+def profile_get(request: Request):
+    return db.profile_get(_uid(request))
+
+
+@app.put("/api/profile")
+def profile_put(request: Request, data: dict = Body(...)):
+    db.profile_set(_uid(request), data)
+    return {"ok": True}
+
+
+@app.get("/api/favorites")
+def favorites_get(request: Request):
+    return {"favorites": db.fav_list(_uid(request))}
+
+
+@app.post("/api/favorites")
+def favorites_add(request: Request, data: dict = Body(...)):
+    db.fav_add(_uid(request), data.get("kind", "region"), data.get("key", ""), data.get("label", ""))
+    return {"ok": True}
+
+
+@app.delete("/api/favorites")
+def favorites_del(request: Request, kind: str, key: str):
+    db.fav_remove(_uid(request), kind, key)
+    return {"ok": True}
+
 
 WEB_DIR = Path(__file__).parent / "web"
 _METRIC_LABEL = {
