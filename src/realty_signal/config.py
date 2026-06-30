@@ -32,3 +32,11 @@ def seoul_key() -> str | None:
 
 def kakao_key() -> str | None:
     return os.environ.get("KAKAO_REST_API_KEY")
+
+
+def youtube_key() -> str | None:
+    return os.environ.get("YOUTUBE_API_KEY")
+
+
+def naver_search() -> tuple[str | None, str | None]:
+    return os.environ.get("NAVER_CLIENT_ID"), os.environ.get("NAVER_CLIENT_SECRET")

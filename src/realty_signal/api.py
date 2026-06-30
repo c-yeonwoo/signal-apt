@@ -843,6 +843,26 @@ def complex_detail(region: str, name: str):
     return data
 
 
+@app.get("/api/imjang/{region}/{name}")
+def imjang_report(region: str, name: str):
+    """단지 임장 리포트 — 유튜브·블로그 수집 → (키 있으면) Claude 종합. 링크 폴백. 캐시 30일."""
+    from realty_signal import db
+    from realty_signal.ingest import imjang
+    config.load_env()
+    yt = config.youtube_key()
+    nv_id, nv_sec = config.naver_search()
+    anth = bool(__import__("os").environ.get("ANTHROPIC_API_KEY"))
+    # 큐레이션/리포트 tier만 캐시(순수 링크는 캐시 의미 없음)
+    ckey = f"imjang:{region}:{name}"
+    cached = db.kv_get(ckey, max_age=30 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    data = imjang.build_report(name, yt_key=yt, nv_id=nv_id, nv_sec=nv_sec, anthropic_on=anth)
+    if data.get("tier") != "links":
+        db.kv_set(ckey, data)
+    return data
+
+
 @app.get("/api/agents/{region}/{name}")
 def agents_nearby(region: str, name: str):
     """단지 근처 공인중개사 — 카카오 로컬. 단지 좌표(지오코딩→지역중심 폴백) 반경 검색. 캐시 7일."""
