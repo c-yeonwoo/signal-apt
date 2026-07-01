@@ -355,24 +355,19 @@
 <!-- 저평가 탭 -->
 <div id="view-undervalued" style="display:none">
   <div class="sec">
-    <h3>저평가 지역 추천 — 입지(교통·학군·환경) 대비 가격</h3>
+    <h3>저평가 지역 추천 — 지역 급지 대비 입지·가격</h3>
     <p style="color:var(--dim);font-size:13px;margin:-2px 0 0">
-      업무지구(강남·광화문·여의도) 대중교통 소요시간 + 학원밀도 + 주거환경(공원·하천·마트)으로 <b>입지점수</b>를 만들고,
-      입지 대비 실제 평단가가 낮을수록 <b>저평가</b>. 산점도 회귀선(적정가) 아래 점이 저평가 지역입니다.
-      <i>※ 시군구 단위라 단지별 신축/구축 차이는 반영 안 됨 — 숏리스트용.</i></p>
+      지역을 <b>평단가 분위로 급지(상~하급지)</b>로 나누고, 각 급지 안에서 <b>입지(교통·학군·환경) 대비 저평가</b>된 곳을 추천합니다.
+      입지점수 = 업무지구(강남·광화문·여의도) 대중교통 + 학원밀도 + 주거환경. <b>같은 급지인데 입지 대비 싸면 저평가</b>.
+      <i>※ 시군구 단위 숏리스트 — 단지별 신축/구축 차이는 반영 안 됨.</i></p>
   </div>
   <div id="uvchart" style="height:340px"></div>
   <div id="uvHaesol" style="margin:6px 2px 0;padding:10px 14px;background:var(--panel);
        border:1px solid var(--line);border-radius:10px;font-size:14px;color:#334155;min-height:20px"></div>
   <div class="sec" style="margin-top:14px">
-    <table>
-      <thead><tr id="uvHead">
-        <th class="l" data-k="region">지역</th><th data-k="입지점수">입지점수</th>
-        <th data-k="price">평단가</th><th data-k="적정가">적정가</th><th data-k="저평가도">저평가도</th>
-        <th data-k="transit_min" title="강남·광화문·여의도 3개 업무지구 중 대중교통 최단 시간(ODsay). 가장 가까운 곳 기준">업무지구 ⓘ</th><th data-k="school" title="반경 1.5km 학원 수(소상공인 상가정보)">학원수</th><th data-k="공원">공원</th>
-      </tr></thead>
-      <tbody id="uvRows"></tbody>
-    </table>
+    <label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;margin-bottom:8px">
+      <input type="checkbox" id="uvBuyOnly" onchange="renderUvGroups()"> 매수신호(BUY+) 지역만</label>
+    <div id="uvGroups"></div>
     <p id="uvEmpty" style="color:var(--dim)"></p>
   </div>
 </div>
@@ -1505,75 +1500,73 @@ async function loadPsTypes(no, elId){
     <th class="l">주택형</th><th>분양가</th><th>평단가</th><th>시세대비</th><th class="l">특별공급</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-let uvChart, _uvList=[], _uvSort={k:'저평가도', asc:false};
+let uvChart, _uvList=[];
 async function loadUndervalued(){
   const d = await (await fetch('/api/undervalued')).json();
   const empty = document.getElementById('uvEmpty');
   if(!d.ready || !d.listings.length){
-    document.getElementById('uvRows').innerHTML='';
+    document.getElementById('uvGroups').innerHTML='';
     empty.textContent = '저평가 데이터가 아직 없습니다. 터미널에서 `signal localities` 를 실행하세요(수 분 소요).';
     if(uvChart) uvChart.clear(); return;
   }
   empty.textContent='';
+  // 지역 급지(A~D)를 시그널 데이터에서 조인(평단가 분위 기반, /api/signals)
+  const gm={}; (allSignals||[]).forEach(s=> gm[s.region]=s['급지']);
+  d.listings.forEach(r=> { if(!r['급지']) r['급지']=gm[r.region]; });
   _uvList = d.listings;
   window._uv = {};
   d.listings.forEach(r=> window._uv[r.region]=r);
-  document.querySelectorAll('#uvHead th').forEach(th=>{
-    th.style.cursor='pointer';
-    th.onclick = () => uvSort(th.dataset.k);
+  // 급지별 근거 통계 — 평단가 범위 + 대표(중앙) 입지점수
+  _uvGradeStats={};
+  ['A','B','C','D'].forEach(g=>{
+    const arr=d.listings.filter(r=>r['급지']===g); if(!arr.length) return;
+    const ps=arr.map(r=>r.price).filter(Boolean).sort((a,b)=>a-b);
+    const is=arr.map(r=>r['입지점수']).filter(x=>x!=null).sort((a,b)=>a-b);
+    _uvGradeStats[g]={n:arr.length, pMin:ps[0], pMax:ps[ps.length-1], ipjiMid: is.length?Math.round(is[Math.floor(is.length/2)]):null};
   });
-  renderUvRows();
+  renderUvGroups();
   drawUvScatter(d.listings);
   showUvHaesol([..._uvList].sort((a,b)=>b['저평가도']-a['저평가도'])[0].region);
 }
-function uvSort(k){
-  _uvSort = {k, asc: _uvSort.k===k ? !_uvSort.asc : (k==='region')};
-  renderUvRows();
-}
-function renderUvRows(){
-  const {k, asc} = _uvSort;
-  const arr = [..._uvList].sort((a,b)=>{
-    const x=a[k], y=b[k];
-    const c = typeof x==='string' ? x.localeCompare(y) : (x??-1e9)-(y??-1e9);
-    return asc ? c : -c;
-  });
-  document.querySelectorAll('#uvHead th').forEach(th=>{
-    const base=th.textContent.replace(/[ ▲▼]+$/,'');
-    th.textContent = th.dataset.k===k ? base+(asc?' ▲':' ▼') : base;
-  });
-  const tb = document.getElementById('uvRows'); tb.innerHTML='';
-  arr.forEach(r=>{
-    const uv=r['저평가도'], tr=document.createElement('tr');
-    tr.style.cursor='pointer';
-    tr.onclick = () => showUvHaesol(r.region);
-    tr.innerHTML = `<td class="l">${r.region} ${r['시그널']?badge(r['시그널']):''}
-        <span class="pill" style="cursor:pointer" onclick="event.stopPropagation();toggleCG('${r.region}',this)">단지급지 ▾</span></td>
-      <td>${r['입지점수']}</td><td>${won(r.price)}/평</td><td>${won(r['적정가'])}/평</td>
-      <td style="color:${uv>=0?'#16a34a':'#dc2626'};font-weight:700">${uv>0?'+':''}${uv}%</td>
-      <td title="강남·광화문·여의도 중 최단">${r['transit_min']??'–'}분${r['최단업무지구']?' ('+r['최단업무지구']+')':''}</td><td>${r['school']}</td><td>${r['공원']}</td>`;
-    tb.appendChild(tr);
-  });
-}
-// 저평가 행 → 지역 내 단지별 급지 랭킹 펼치기
-async function toggleCG(region, el){
-  const tr = el.closest('tr');
-  if(tr.nextSibling && tr.nextSibling.classList?.contains('cg-detail')){
-    tr.nextSibling.remove(); el.textContent='단지급지 ▾'; return;
+let _uvGradeStats={};
+// 지역 급지별 그룹 → 각 급지 안에서 '입지 대비 저평가' 순 추천
+function renderUvGroups(){
+  const host=document.getElementById('uvGroups'); if(!host) return;
+  const buyOnly=document.getElementById('uvBuyOnly')?.checked;
+  const G=(typeof _REGION_GRADE!=='undefined')?_REGION_GRADE:{};
+  const order=['A','B','C','D'];
+  const groups={}; [...order,'기타'].forEach(g=>groups[g]=[]);
+  (_uvList||[]).forEach(r=>{ if(buyOnly && !['STRONG_BUY','BUY'].includes(r['시그널'])) return;
+    groups[order.includes(r['급지'])?r['급지']:'기타'].push(r); });
+  let html='';
+  for(const g of [...order,'기타']){
+    const arr=(groups[g]||[]).sort((a,b)=>b['저평가도']-a['저평가도']);
+    if(!arr.length) continue;
+    const gd=G[g]||{label:g==='기타'?'급지 미산정':g,col:'#94a3b8'};
+    const st=_uvGradeStats[g];
+    const meta = (g==='기타'||!st) ? '평단가 분위 미산정 지역'
+      : `평단가 ${won(st.pMin)}~${won(st.pMax)}/평 · 대표 입지 ${st.ipjiMid??'–'}점 · ${st.n}개 지역`;
+    const hi=new Set(arr.filter(r=>r['저평가도']>0).slice(0,3).map(r=>r.region));   // 급지 대비 저평가 상위 강조
+    html += `<div style="margin-bottom:14px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:9px;padding:9px 13px;background:${gd.col}12;border-bottom:1px solid var(--line)">
+        <span style="font-size:14px;font-weight:800;color:${gd.col}">${gd.label}</span>
+        <span style="font-size:11px;color:var(--dim)">${meta}</span></div>
+      <div>${arr.map(r=>uvRow(r, hi.has(r.region), gd.col)).join('')}</div></div>`;
   }
-  el.textContent='로딩…';
-  const d = await (await fetch('/api/complex-grades/'+encodeURIComponent(region))).json();
-  el.textContent='단지급지 ▲';
-  const det = document.createElement('tr'); det.className='cg-detail';
-  const cs = d.complexes||[];
-  const cell = cs.length
-    ? `<div style="max-height:260px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 14px;padding:8px 4px">`
-      + cs.map(c=>`<div style="display:flex;justify-content:space-between;font-size:12px">
-          <span>${gradeBadge(c['급지'])} ${c['단지']}</span>
-          <span style="color:var(--dim)">${won(c['평단가'])}/평</span></div>`).join('')
-      + `</div><div style="color:var(--dim);font-size:11px;padding:2px 4px">${region} 실거래 ${cs.length}개 단지 · 1급지=지역 내 최상위 평단가</div>`
-    : `<div style="color:var(--dim);padding:8px">최근 실거래 단지 데이터가 없습니다(시군구 단위만 지원).</div>`;
-  det.innerHTML = `<td colspan="8" style="background:#ffffff">${cell}</td>`;
-  tr.after(det);
+  host.innerHTML = html || '<p style="color:var(--dim)">해당 조건의 지역이 없습니다.</p>';
+}
+function uvRow(r, hi, col){
+  const uv=r['저평가도'], ipji=r['입지점수']||0;
+  const bar=`<span style="display:inline-block;width:44px;height:6px;border-radius:3px;background:var(--line);vertical-align:middle;position:relative">
+    <span style="position:absolute;left:0;top:0;height:6px;width:${Math.max(3,Math.min(100,ipji))}%;background:${col};border-radius:3px"></span></span>`;
+  return `<div onclick="showUvHaesol('${r.region}')" title="클릭 → 해설·산점도 위치" style="display:flex;align-items:center;gap:10px;padding:8px 13px;border-bottom:1px solid var(--line);cursor:pointer;${hi?'background:rgba(22,163,74,.06);border-left:3px solid var(--sig-buy)':''}">
+    <div style="min-width:130px;font-size:13px;font-weight:600">${r.region} ${r['시그널']?badge(r['시그널']):''}</div>
+    <div style="min-width:108px;font-size:12px;color:var(--dim)" title="입지점수 0~100 · 교통·학군·환경">입지 <b style="color:var(--txt)">${ipji}</b> ${bar}</div>
+    <div style="min-width:104px;font-size:12px">평단 <b>${won(r.price)}/평</b></div>
+    <div style="min-width:100px;font-size:12px;color:var(--dim)">적정 ${won(r['적정가'])}/평</div>
+    <div style="min-width:60px;font-size:13px;font-weight:800;color:${uv>=0?'#16a34a':'#dc2626'}">${uv>0?'+':''}${uv}%</div>
+    ${hi?'<span style="font-size:10px;color:var(--sig-buy);font-weight:700;white-space:nowrap">급지 대비 저평가 ★</span>':''}
+  </div>`;
 }
 function showUvHaesol(region){
   const r = window._uv?.[region]; if(!r) return;
