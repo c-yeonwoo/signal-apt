@@ -228,6 +228,7 @@
     <button class="tab" data-tab="conclusion" onclick="switchTab('conclusion')">✨ AI 리포트</button>
   </div>
   <div class="right">
+    <button class="chip" onclick="openComplexFind()" style="font-size:12px" title="단지명으로 상세 검색">🔍 단지찾기</button>
     <button class="chip" onclick="switchTab('glossary')" style="font-size:12px" title="부동산 용어·개념 학습">📖 용어</button>
     <button class="chip" onclick="openBoard()" style="font-size:12px">★ 내 보드</button>
     <button class="chip" id="alertBtn" onclick="openAlerts()" style="font-size:13px;position:relative" title="즐겨찾기 지역 시그널 변동 알림">🔔<span id="alertBadge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
@@ -726,6 +727,15 @@
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('complexDlg').close()">✕</span>
   </div>
   <div id="cxBody" style="max-height:70vh;overflow:auto"></div>
+</dialog>
+
+<dialog id="cxFindDlg" style="width:480px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <h3 style="margin:0;font-size:18px">🔍 단지 찾기</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('cxFindDlg').close()">✕</span>
+  </div>
+  <input id="cxFindInput" placeholder="단지명 입력 (예: 은마, 상계주공, 헬리오시티)" style="width:100%;margin-bottom:12px" oninput="cxFindDebounced()" onkeydown="if(event.key==='Enter')cxFind()">
+  <div id="cxFindResults" style="max-height:52vh;overflow:auto"></div>
 </dialog>
 
 <dialog id="sourceDlg" style="width:620px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
@@ -1851,6 +1861,25 @@ function _spark(vals){
   const pts=vals.map((v,i)=>`${(pad+i*(w-2*pad)/(vals.length-1)).toFixed(1)},${(h-pad-(v-mn)/rng*(h-2*pad)).toFixed(1)}`).join(' ');
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:66px;background:var(--bg);border:1px solid var(--line);border-radius:8px">
     <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+}
+// ===== 단지 통합 검색 =====
+let _cxFindT;
+function openComplexFind(){
+  document.getElementById('cxFindResults').innerHTML='<div style="color:var(--dim);font-size:12px">단지명을 입력하세요.</div>';
+  document.getElementById('cxFindDlg').showModal();
+  setTimeout(()=>document.getElementById('cxFindInput').focus(),50);
+}
+function cxFindDebounced(){ clearTimeout(_cxFindT); _cxFindT=setTimeout(cxFind,350); }
+async function cxFind(){
+  const q=document.getElementById('cxFindInput').value.trim();
+  const el=document.getElementById('cxFindResults');
+  if(q.length<2){ el.innerHTML='<div style="color:var(--dim);font-size:12px">2글자 이상 입력하세요.</div>'; return; }
+  el.innerHTML='<div style="color:var(--dim);font-size:12px">검색 중…</div>';
+  let d; try{ d=await (await fetch('/api/complex-search?q='+encodeURIComponent(q))).json(); }catch(e){ el.innerHTML='<div style="color:#dc2626">검색 실패</div>'; return; }
+  if(!(d.results||[]).length){ el.innerHTML='<div style="color:var(--dim);font-size:12px">결과가 없습니다. (실거래 있는 아파트만)</div>'; return; }
+  el.innerHTML=d.results.map(r=>`<div onclick="document.getElementById('cxFindDlg').close();openComplex('${(r.name||'').replace(/['"\\]/g,'')}','${(r.region||'').replace(/['"\\]/g,'')}')" style="cursor:pointer;padding:10px 8px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+      <div><b style="font-size:14px">${r.name}</b><div style="font-size:11px;color:var(--dim)">${r.address}</div></div>
+      <span class="pill" style="font-size:11px">${r.region} ›</span></div>`).join('');
 }
 async function openComplex(name, region){
   const body=document.getElementById('cxBody');
