@@ -48,12 +48,17 @@ def youtube_search(query: str, key: str, n: int = 4) -> list[dict]:
 
 
 def transcript(video_id: str) -> str:
+    """유튜브 자막 추출 — 무료·키 불필요(youtube-transcript-api). 신·구 API 모두 대응."""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        segs = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])
+        api = YouTubeTranscriptApi()
+        if hasattr(api, "fetch"):                       # 신버전(>=1.0): 인스턴스 fetch
+            tr = api.fetch(video_id, languages=["ko", "en"])
+            return " ".join(s.text for s in tr)[:6000]
+        segs = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])  # 구버전
         return " ".join(s["text"] for s in segs)[:6000]
     except Exception:
-        return ""
+        return ""   # 자막 없음·비공개·IP차단 → 빈 문자열(폴백)
 
 
 def naver_blog(query: str, cid: str, csec: str, n: int = 4) -> list[dict]:
