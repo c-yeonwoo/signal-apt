@@ -78,9 +78,6 @@
   .astep { font-size:13px; color:var(--txt); background:var(--panel); border:1px solid var(--line);
            border-radius:var(--r-md); padding:9px 12px; }
   .astep b:first-child { display:inline-block; width:18px; }
-  .mpseg { padding:8px 14px; border:none; background:none; color:var(--dim); cursor:pointer;
-           font-size:14px; font-weight:600; border-bottom:2px solid transparent; margin-bottom:-1px; }
-  .mpseg.on { color:var(--accent); border-bottom-color:var(--accent); }
   .acct-item { display:block; padding:8px 12px; font-size:13px; color:var(--txt); cursor:pointer;
                border-radius:8px; white-space:nowrap; }
   .acct-item:hover { background:var(--accent-weak); }
@@ -148,7 +145,7 @@
   .zrow { display:flex; align-items:center; gap:8px; margin:4px 0; }
   .zsw-sm { width:15px; height:15px; border-radius:3px; flex:0 0 auto; }
   /* 경매 */
-  #view-auction, #view-undervalued, #view-presale, #view-quicksale, #view-redev { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
+  #view-auction, #view-undervalued, #view-presale, #view-quicksale, #view-redev, #view-mymap, #view-report { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:12px; height:calc(100vh - 178px); min-height:420px; }
   .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
@@ -263,7 +260,6 @@
         <a class="acct-item" onclick="acctGo('profile')">👤 프로필 수정</a>
         <a class="acct-item" onclick="acctGo('map')">🗺️ 내 시그널 맵</a>
         <a class="acct-item" onclick="acctGo('report')">✨ AI 리포트</a>
-        <a class="acct-item" onclick="closeAcctMenu();openBoard()">★ 내 보드</a>
         <a class="acct-item" onclick="closeAcctMenu();logout()" style="color:#dc2626">로그아웃</a>
       </div>
     </div>
@@ -660,14 +656,6 @@
   <p style="color:var(--dim);font-size:11px;margin-top:10px">무주택기간 최대 32 · 부양가족 35 · 통장 17. 만30세 미만 미혼 등 예외는 미반영(개략).</p>
 </dialog>
 
-<dialog id="boardDlg" style="width:520px;max-width:94vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <h3 style="margin:0">★ 내 보드 — 관심 지역</h3>
-    <span class="btn" style="padding:2px 10px" onclick="document.getElementById('boardDlg').close()">✕</span>
-  </div>
-  <div id="boardBody" style="max-height:60vh;overflow:auto"></div>
-</dialog>
-
 <div id="authGate">
   <div class="auth-card">
     <div class="auth-brand">
@@ -722,59 +710,12 @@
  <div style="max-width:980px;margin:0 auto;padding:22px 18px 48px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
     <div>
-      <h3 style="margin:0 0 3px;font-size:22px">👤 마이페이지</h3>
+      <h3 style="margin:0 0 3px;font-size:22px">👤 프로필 수정</h3>
       <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
     </div>
     <span onclick="logout()" style="cursor:pointer;color:#dc2626;font-size:13px">로그아웃</span>
   </div>
 
-  <!-- 마이페이지 섹션 서브내브 -->
-  <div style="display:flex;gap:8px;border-bottom:1px solid var(--line);margin-bottom:20px">
-    <button class="mpseg on" data-seg="profile" onclick="mpSection('profile')">프로필</button>
-    <button class="mpseg" data-seg="map" onclick="mpSection('map')">🗺️ 내 시그널맵</button>
-    <button class="mpseg" data-seg="report" onclick="mpSection('report')">✨ AI 리포트</button>
-  </div>
-
-  <!-- 내 시그널맵 -->
-  <section id="mp-map" style="display:none">
-    <p style="color:var(--dim);font-size:13px;margin:0 0 12px">🏠 현재 거주지 · 📍 관심지역 · 🏢 관심단지를 한 지도에서. <b>핀 두 개를 클릭</b>하면 직선거리와 대중교통 소요시간을 계산합니다.</p>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <div id="myMap" style="flex:1;min-width:340px;height:520px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
-      <aside style="width:290px;flex:0 0 auto">
-        <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px">핀 두 개를 클릭해 거리를 재보세요.</div>
-        <div id="myMapInfo" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;min-height:60px"></div>
-        <div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.8">
-          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#2563eb;display:inline-block"></span> 현재 거주지</span><br>
-          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#16a34a;display:inline-block"></span> 관심지역</span><br>
-          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#ea580c;display:inline-block"></span> 관심단지</span></div>
-        <div id="myMapEmpty" style="font-size:12px;color:var(--dim);margin-top:10px"></div>
-      </aside>
-    </div>
-  </section>
-
-  <!-- AI 리포트(상단탭에서 이전) -->
-  <section id="mp-report" style="display:none">
-    <h3 style="margin:0 0 4px;font-size:19px">✨ AI 개인화 리포트</h3>
-    <p style="color:var(--dim);font-size:13px;margin:0 0 14px">내 프로필과 <b>관심 지역·단지(80%)</b> + <b>미처 발견 못한 신규 후보(20%)</b>를 섞어 나에게 맞는 매수 전략을 리포트로 만듭니다.</p>
-    <div id="aiReport" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:16px;line-height:1.7;font-size:14px;display:none"></div>
-    <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-      <label>가용자본(자기자본)<br><input id="ccCapital" type="number" value="30000" style="width:120px"> <span style="color:var(--dim)">만원</span></label>
-      <label>대출비율(LTV)<br><input id="ccLtv" type="number" value="70" min="0" max="90" style="width:70px"> %</label>
-      <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
-      <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
-      <label>기준 평형<br><select id="ccPyeong" class="ctrl">
-        <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
-      </select></label>
-      <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
-      <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
-    </div>
-    <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
-    <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
-    <p id="ccEmpty" style="color:var(--dim)"></p>
-  </section>
-
-  <!-- 프로필 -->
-  <section id="mp-profile">
   <div id="mp_summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px;max-width:560px"></div>
 
   <div class="mp-sec">기본 정보</div>
@@ -806,7 +747,49 @@
   <div id="mp_gajeom" style="margin-top:16px;font-size:12px;color:var(--dim)"></div>
 
   <button class="btn" onclick="saveMyPage()" style="width:100%;margin-top:24px;max-width:560px;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">프로필 저장</button>
-  </section>
+ </div>
+</div>
+
+<!-- 내 시그널 맵 (별도 페이지) -->
+<div id="view-mymap" style="display:none">
+ <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
+  <h3 style="margin:0 0 4px;font-size:22px">🗺️ 내 시그널 맵</h3>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">🏠 현재 거주지 · 📍 관심지역 · 🏢 관심단지를 한 지도에서. <b>핀 두 개를 클릭</b>하면 직선거리와 대중교통 소요시간을 계산합니다.</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <div id="myMap" style="flex:1;min-width:340px;height:560px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
+    <aside style="width:290px;flex:0 0 auto">
+      <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px">핀 두 개를 클릭해 거리를 재보세요.</div>
+      <div id="myMapInfo" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;min-height:60px"></div>
+      <div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.8">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#2563eb;display:inline-block"></span> 현재 거주지</span><br>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#16a34a;display:inline-block"></span> 관심지역</span><br>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#ea580c;display:inline-block"></span> 관심단지</span></div>
+      <div id="myMapEmpty" style="font-size:12px;color:var(--dim);margin-top:10px"></div>
+    </aside>
+  </div>
+ </div>
+</div>
+
+<!-- AI 리포트 (별도 페이지) -->
+<div id="view-report" style="display:none">
+ <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
+  <h3 style="margin:0 0 4px;font-size:22px">✨ AI 개인화 리포트</h3>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">내 프로필과 <b>관심 지역·단지(80%)</b> + <b>미처 발견 못한 신규 후보(20%)</b>를 섞어 나에게 맞는 매수 전략을 리포트로 만듭니다.</p>
+  <div id="aiReport" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:16px;line-height:1.7;font-size:14px;display:none"></div>
+  <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <label>가용자본(자기자본)<br><input id="ccCapital" type="number" value="30000" style="width:120px"> <span style="color:var(--dim)">만원</span></label>
+    <label>대출비율(LTV)<br><input id="ccLtv" type="number" value="70" min="0" max="90" style="width:70px"> %</label>
+    <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
+    <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
+    <label>기준 평형<br><select id="ccPyeong" class="ctrl">
+      <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
+    </select></label>
+    <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
+    <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
+  </div>
+  <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
+  <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
+  <p id="ccEmpty" style="color:var(--dim)"></p>
  </div>
 </div>
 
@@ -932,7 +915,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
-  ['signal','auction','undervalued','presale','quicksale','redev','mypage','news','glossary','about'].forEach(v=>
+  ['signal','auction','undervalued','presale','quicksale','redev','mypage','mymap','report','news','glossary','about'].forEach(v=>
     document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
   if(listing){
     document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
@@ -942,6 +925,8 @@ function switchTab(t){
   if(t==='signal'){ chart.resize(); renderScoreboard(); renderAha(); }
   if(t==='undervalued') loadUndervalued();
   if(t==='mypage') fillMyPage();
+  if(t==='mymap') drawMyMap();
+  if(t==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
   if(t==='news') loadNews();
   if(t==='glossary') renderGlossary();
 }
@@ -1395,7 +1380,7 @@ function renderAiReport(d, eok){
   if(homeCard) lines.push(`거주지 <b>${p['거주지']}</b>는 현재 ${badge(homeCard['시그널']||'')} — ${homeCard['예산내']?'예산 내 매수 검토 가능':'예산 초과(자본·대출 점검 필요)'}.`);
   if(danghae) lines.push(`🏠 거주지 우선 <b>당해 청약</b>을 포함해 추천 지역 청약 <b>${danghae}건</b>이 진행/예정입니다.`);
   if(quick) lines.push(`🏷️ 추천 지역에서 시세 이하 <b>급매 ${quick}건</b>이 포착됐습니다.`);
-  lines.push(`<span style="color:var(--dim)">다음 행동: 위 추천 카드에서 단지·급매·청약을 눌러 ★ 즐겨찾기 → 내 보드에서 추적하세요.</span>`);
+  lines.push(`<span style="color:var(--dim)">다음 행동: 위 추천 카드에서 단지·급매·청약을 눌러 ★ 즐겨찾기 → 내 시그널 맵에서 확인하세요.</span>`);
 
   _reportSummary = {
     매수가능_억: +(d.budget/10000).toFixed(1), 거주지:p['거주지']||null, 주택수:p['주택수'],
@@ -2522,7 +2507,7 @@ function applyProfileHeader(){
 function toggleAcctMenu(e){ if(e) e.stopPropagation();
   const m=document.getElementById('acctMenu'); m.style.display = m.style.display==='block'?'none':'block'; }
 function closeAcctMenu(){ const m=document.getElementById('acctMenu'); if(m) m.style.display='none'; }
-function acctGo(seg){ closeAcctMenu(); switchTab('mypage'); mpSection(seg); }
+function acctGo(seg){ closeAcctMenu(); switchTab({profile:'mypage', map:'mymap', report:'report'}[seg] || 'mypage'); }
 document.addEventListener('click',e=>{ const m=document.getElementById('acctMenu'), b=document.getElementById('acctBtn');
   if(m && m.style.display==='block' && !m.contains(e.target) && b && !b.contains(e.target)) m.style.display='none'; });
 // ===== 마이페이지 (프로필 조회·수정) =====
@@ -2545,13 +2530,6 @@ function fillMyPage(){
   document.getElementById('mp_householder').value = p['세대주']!=null ? String(p['세대주']) : '';
   document.getElementById('mp_firsthome').value = p['생애최초']!=null ? String(p['생애최초']) : '';
   renderMyPageSummary();
-}
-// ===== 마이페이지 섹션 전환 =====
-function mpSection(name){
-  document.querySelectorAll('.mpseg').forEach(b=>b.classList.toggle('on', b.dataset.seg===name));
-  ['profile','map','report'].forEach(s=>{ const el=document.getElementById('mp-'+s); if(el) el.style.display = s===name?'':'none'; });
-  if(name==='map') drawMyMap();
-  if(name==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
 }
 // ===== 내 시그널맵 — 거주지·관심지역·관심단지 핀 + 거리/대중교통 =====
 let myMap=null, _myLayer=null, _myMarkers=[], _myPts=[], _mySel=[];
@@ -2776,17 +2754,6 @@ async function toggleFav(kind, key, label){
     await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,label})}); }
   if(typeof renderList==='function') renderList();
   if(kind==='region') loadAlerts();   // 즐겨찾기 변경 → 알림 다이제스트 갱신
-}
-async function openBoard(){
-  const d=await (await fetch('/api/favorites')).json();
-  const favs=(d.favorites||[]).filter(f=>f.kind==='region');
-  const sm={}; (allSignals||[]).forEach(s=>sm[s.region]=s);
-  document.getElementById('boardBody').innerHTML = favs.length ? favs.map(f=>{const s=sm[f.key]||{};
-    return `<div onclick="document.getElementById('boardDlg').close();switchTab('signal');selectRegion('${f.key}')" style="cursor:pointer;display:flex;justify-content:space-between;padding:9px 4px;border-bottom:1px solid var(--line)">
-      <span style="color:#f59e0b">★ <b style="color:var(--txt)">${f.label}</b> ${s.signal?badge(s.signal):''}</span>
-      <span style="color:var(--dim);font-size:12px">전세 ${s['전세수급']??'–'} · 매수우위 ${s['매수우위지수']??'–'}${gwonLabel(s['수급출처'])}</span></div>`;}).join('')
-    : '<p style="color:var(--dim)">아직 즐겨찾기한 지역이 없습니다. 시그널 목록에서 ☆를 눌러 추가하세요.</p>';
-  document.getElementById('boardDlg').showModal();
 }
 async function startApp(needOnboard){
   await loadFavs();
