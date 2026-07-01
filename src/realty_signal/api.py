@@ -860,8 +860,10 @@ def news_summary(topic: str | None = None, days: int = 30):
     if cached is not None:
         return {**cached, "cached": True}
     from realty_signal.ingest import news as nw
-    summary = nw.summarize(topic, items)
-    out = {"available": True, "enough": True, "summary": summary, "n": len(items), "days": days}
+    detail = bool(topic and topic != "전체")   # 특정 테마 → 심층 요약
+    summary = nw.summarize(topic, items, detail=detail)
+    out = {"available": True, "enough": True, "summary": summary, "n": len(items),
+           "days": days, "detail": detail}
     if summary:
         db.kv_set(ckey, out)
     return out
