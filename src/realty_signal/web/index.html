@@ -205,6 +205,7 @@
   <div class="tabs">
     <button class="tab on" data-tab="signal" onclick="switchTab('signal')">시그널</button>
     <button class="tab" data-tab="cycle" onclick="switchTab('cycle')">사이클</button>
+    <button class="tab" data-tab="news" onclick="switchTab('news')">뉴스</button>
     <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
     <button class="tab" data-tab="auction" onclick="switchTab('auction')">경매</button>
     <button class="tab" data-tab="quicksale" onclick="switchTab('quicksale')">급매</button>
@@ -432,6 +433,15 @@
     </div>
     <table><thead><tr><th class="l">구역명</th><th>구분</th><th class="l">위치</th><th>면적(㎡)</th></tr></thead>
       <tbody id="rdZoneRows"></tbody></table>
+  </div>
+</div>
+
+<div id="view-news" style="display:none">
+  <div style="max-width:860px;margin:0 auto;padding:20px 16px 40px">
+    <h2 style="margin:0 0 4px">📰 부동산 뉴스</h2>
+    <p style="color:var(--dim);font-size:13px;margin:0 0 14px">정책·금리·청약·재건축·시장 뉴스를 최신순으로. (네이버 뉴스 · 매시간 갱신 · 원문 링크)</p>
+    <div id="newsTopics" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div id="newsList"></div>
   </div>
 </div>
 
@@ -734,7 +744,7 @@ function switchTab(t){
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
-  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle'].forEach(v=>
+  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle','news'].forEach(v=>
     document.getElementById('view-'+v).style.display = v===t?'':'none');
   if(t==='signal'){ chart.resize(); renderScoreboard(); }
   if(t==='auction') loadAuction();
@@ -745,6 +755,26 @@ function switchTab(t){
   if(t==='redev') loadRedev();
   if(t==='mypage') fillMyPage();
   if(t==='cycle') loadCycle();
+  if(t==='news') loadNews();
+}
+// ===== 부동산 뉴스 KB =====
+let _newsTopic='전체';
+async function loadNews(){
+  const list=document.getElementById('newsList');
+  list.innerHTML='<div style="color:var(--dim)">뉴스 불러오는 중…</div>';
+  let d; try{ d=await (await fetch('/api/news'+(_newsTopic!=='전체'?'?topic='+encodeURIComponent(_newsTopic):''))).json(); }
+  catch(e){ list.innerHTML='<div style="color:#dc2626">불러오기 실패</div>'; return; }
+  const tc={정책:'#2563eb',금리:'#dc2626',청약:'#16a34a',재건축:'#d97706',시장:'#7c3aed'};
+  document.getElementById('newsTopics').innerHTML=(d.topics||[]).map(tp=>{
+    const on=tp===_newsTopic;
+    return `<span onclick="_newsTopic='${tp}';loadNews()" class="pill" style="cursor:pointer;${on?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${tp}</span>`;}).join('');
+  if(!(d.items||[]).length){ list.innerHTML='<div style="color:var(--dim)">뉴스가 없습니다. (NAVER 키 설정 시 수집)</div>'; return; }
+  list.innerHTML=d.items.map(n=>`<a href="${n.link}" target="_blank" rel="noopener" style="display:block;padding:12px 2px;border-bottom:1px solid var(--line);text-decoration:none;color:var(--txt)">
+      <div style="display:flex;gap:8px;align-items:baseline">
+        <span class="pill" style="font-size:10px;color:${tc[n.topic]||'#64748b'};border-color:${(tc[n.topic]||'#64748b')}55">${n.topic}</span>
+        <b style="font-size:14px;flex:1">${n.title}</b></div>
+      <div style="font-size:12px;color:var(--dim);margin-top:4px;line-height:1.5">${(n.descr||'').slice(0,110)}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:3px">${n.source} · ${(n.pubdate||'').slice(0,16)}</div></a>`).join('');
 }
 // ===== 부동산 경기 사이클 국면 =====
 const _CYCLE=[

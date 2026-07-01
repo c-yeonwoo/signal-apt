@@ -826,6 +826,25 @@ def _region_centroid(region: str, code: str) -> tuple[float, float] | None:
     return c
 
 
+@app.get("/api/news")
+def news(topic: str | None = None):
+    """부동산 뉴스 KB — 최신순. 1시간 초과 시 네이버 뉴스에서 갱신·누적."""
+    from realty_signal import db
+    from realty_signal.ingest import news as nw
+    import time as _t
+    last = db.kv_get("news_fetched") or 0
+    if _t.time() - last > 3600:
+        config.load_env()
+        cid, csec = config.naver_search()
+        if cid and csec:
+            added = db.news_upsert(nw.fetch_news(cid, csec))
+            db.kv_set("news_fetched", _t.time())
+            log.info("뉴스 갱신 — 신규 %d건", added)
+    items = db.news_list(topic)
+    return {"topics": ["전체", *nw._TOPICS.keys()], "items": items,
+            "available": bool(items) or bool(config.naver_search()[0])}
+
+
 @app.get("/api/cycle")
 def cycle(region: str = "서울"):
     """부동산 경기 사이클 국면(벌집순환 4국면) + 근거. 광역(기본 서울) 주간 시리즈 기반."""

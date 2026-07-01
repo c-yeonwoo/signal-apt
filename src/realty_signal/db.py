@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS profile(uid INTEGER PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS favorites(uid INTEGER, kind TEXT, key TEXT, label TEXT, ts INTEGER,
     PRIMARY KEY(uid, kind, key));
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT, ts INTEGER);
+CREATE TABLE IF NOT EXISTS news(link TEXT PRIMARY KEY, title TEXT, descr TEXT,
+    source TEXT, topic TEXT, pubdate TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS ix_news_ts ON news(ts);
 """
 
 _migrated = [False]
@@ -293,3 +296,40 @@ def kv_keys(prefix: str) -> list[str]:
     rows = c.execute("SELECT k FROM kv WHERE k LIKE ?", (prefix + "%",)).fetchall()
     c.close()
     return [r[0] for r in rows]
+
+
+# ---------- news (부동산 뉴스 KB — 누적) ----------
+def news_upsert(items: list[dict]) -> int:
+    """뉴스 항목 누적(link PK 중복 무시). 새로 추가된 건수 반환."""
+    if not items:
+        return 0
+    c = conn()
+    before = c.execute("SELECT COUNT(*) FROM news").fetchone()[0]
+    c.executemany("INSERT OR IGNORE INTO news(link,title,descr,source,topic,pubdate,ts) "
+                  "VALUES(?,?,?,?,?,?,?)",
+                  [(i["link"], i.get("title"), i.get("descr"), i.get("source"),
+                    i.get("topic"), i.get("pubdate"), int(time.time())) for i in items])
+    c.commit()
+    added = c.execute("SELECT COUNT(*) FROM news").fetchone()[0] - before
+    c.close()
+    return added
+
+
+def news_list(topic: str | None = None, limit: int = 60) -> list[dict]:
+    c = conn()
+    if topic and topic != "전체":
+        cur = c.execute("SELECT link,title,descr,source,topic,pubdate FROM news WHERE topic=? "
+                        "ORDER BY pubdate DESC, ts DESC LIMIT ?", (topic, limit))
+    else:
+        cur = c.execute("SELECT link,title,descr,source,topic,pubdate FROM news "
+                        "ORDER BY pubdate DESC, ts DESC LIMIT ?", (limit,))
+    rows = [{"link": l, "title": t, "descr": d, "source": s, "topic": tp, "pubdate": pd}
+            for l, t, d, s, tp, pd in cur]
+    c.close()
+    return rows
+
+
+def news_recent_for_ai(limit: int = 15) -> list[dict]:
+    """AI 리포트용 최근 뉴스 요약(제목+토픽) — 정책·시장 맥락 주입용."""
+    return [{"title": n["title"], "topic": n["topic"], "date": n["pubdate"]}
+            for n in news_list(None, limit)]
