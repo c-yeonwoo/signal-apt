@@ -877,6 +877,41 @@ def cycle(region: str = "서울"):
     return cyc.current_phase(_kb(), region) or {"phase": None}
 
 
+@app.get("/api/complex-search")
+def complex_search(q: str):
+    """단지명 통합검색 — 카카오 로컬로 위치 해석 → {단지명, region} 후보. deep-dive 진입용."""
+    import json as _json
+    import urllib.parse
+    import urllib.request
+    key = config.kakao_key()
+    if not key:
+        config.load_env()
+        key = config.kakao_key()
+    if not key or not q.strip():
+        return {"results": []}
+    codes = _kb().codes
+    url = "https://dapi.kakao.com/v2/local/search/keyword.json?" + urllib.parse.urlencode(
+        {"query": q if "아파트" in q else q + " 아파트", "size": 12})
+    try:
+        data = _json.loads(urllib.request.urlopen(  # noqa: S310
+            urllib.request.Request(url, headers={"Authorization": f"KakaoAK {key}"}), timeout=8).read())
+    except Exception as e:
+        log.warning("단지검색 실패: %s", e)
+        return {"results": []}
+    seen, out = set(), []
+    for d in data.get("documents", []):
+        addr = d.get("road_address_name") or d.get("address_name") or ""
+        region = next((k for k in codes if k in addr), None)   # 주소에 포함된 시군구 코드키 매칭
+        nm = d.get("place_name", "")
+        if not region or (nm, region) in seen:
+            continue
+        seen.add((nm, region))
+        out.append({"name": nm, "region": region, "address": addr})
+        if len(out) >= 6:
+            break
+    return {"results": out}
+
+
 @app.get("/api/complex/{region}/{name}")
 def complex_detail(region: str, name: str):
     """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭. DB 캐시(30일)."""
