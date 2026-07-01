@@ -777,6 +777,7 @@
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
 const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};
 let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
+let activeGrade = new Set(["A","B","C","D"]);   // 지역 급지 필터(상~하급지). 급지 없는 지방은 항상 통과
 let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'));
 window.addEventListener('resize', () => {
@@ -793,12 +794,14 @@ function gradeBadge(g, top){
   const t = top!=null ? ` <span style="color:var(--dim);font-size:10px">상위${top}%</span>` : '';
   return `<span title="지역 내 평단가 순위" style="color:${col};font-weight:700">${g}급지</span>${t}`;
 }
-// 시군구 급지(평단가 분위 A~D, A=상급) — 청약 지역 맥락
+// 시군구 급지(평단가 분위 A~D) → 직관 라벨(상/중상/중하/하급지)
+const _REGION_GRADE = {A:{label:'상급지',col:'#ca8a04'}, B:{label:'중상급지',col:'#16a34a'},
+                       C:{label:'중하급지',col:'#0891b2'}, D:{label:'하급지',col:'#94a3b8'}};
 function regionGradeBadge(g, pyeong){
   if(!g) return '–';
-  const col = {A:'#ca8a04',B:'#16a34a',C:'#94a3b8',D:'var(--accent)'}[g] || '#94a3b8';
+  const gd = _REGION_GRADE[g] || {label:g+'급지', col:'#94a3b8'};
   const p = pyeong ? ` <span style="color:var(--dim);font-size:10px">${pyeong}만/평</span>` : '';
-  return `<span title="시군구 평단가 분위" style="color:${col};font-weight:700">${g}급지</span>${p}`;
+  return `<span title="시군구 평단가 분위(A~D)" style="color:${gd.col};font-weight:700">${gd.label}</span>${p}`;
 }
 
 const _LISTING=['auction','quicksale','presale','redev'];   // 매물 하위탭
@@ -1594,6 +1597,18 @@ function renderFilters(){
     el.onclick = () => { active.has(s)?active.delete(s):active.add(s); renderFilters(); renderList(); };
     f.appendChild(el);
   });
+  // 지역 급지 필터 (상~하급지)
+  const g = document.createElement('div');
+  g.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;align-items:center';
+  g.innerHTML = '<span style="font-size:10px;color:var(--dim)">급지</span>';
+  [['A','상급지'],['B','중상'],['C','중하'],['D','하급지']].forEach(([code,lbl]) => {
+    const el = document.createElement('span');
+    el.className = 'chip' + (activeGrade.has(code)?' on':''); el.textContent = lbl;
+    el.style.fontSize = '11px';
+    el.onclick = () => { activeGrade.has(code)?activeGrade.delete(code):activeGrade.add(code); renderFilters(); renderList(); };
+    g.appendChild(el);
+  });
+  f.appendChild(g);
 }
 const collapsed = new Set();   // 접힌 그룹/시 키
 const GROUP_ORDER = ['서울','경기','인천','지방·광역'];
@@ -1606,6 +1621,8 @@ function rowEl(r, lv){
   // 구별 차별 지표(매매모멘텀·입주)를 앞세우고, 권역 공통 수급은 뒤에 흐리게 + 칩 표기
   const sp = r['공급압력']==null?'':`입주 ${r['공급압력']}x`;
   const mom = r['매매모멘텀'] && r['매매모멘텀']!=='보합' ? `매매 ${r['매매모멘텀']}` : '';
+  const gd = _REGION_GRADE[r['급지']];
+  const gtag = gd ? `<span style="color:${gd.col};font-weight:700">${gd.label}</span>` : '';
   const diff = [mom, sp].filter(Boolean).join(' · ');
   const shared = `전세 ${r['전세수급']??'–'}·매수우위 ${r['매수우위지수']??'–'}`;
   // 경기 일반구는 '구명'만 짧게 표기
@@ -1613,7 +1630,7 @@ function rowEl(r, lv){
   const faved = _favs.has('region:'+r.region);
   row.innerHTML = `<span class="nm">${disp}</span>${badge(r.signal)}
     <span class="fav" title="즐겨찾기" style="cursor:pointer;color:${faved?'#f59e0b':'var(--line)'};margin-left:auto">${faved?'★':'☆'}</span>
-    <span class="mn">${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
+    <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
   row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); toggleFav('region', r.region, r.region); };
   row.onclick = () => selectRegion(r.region);
   return row;
@@ -1640,6 +1657,7 @@ function renderList(){
   const grp = document.getElementById('groupFilter').value;
   const list = document.getElementById('list'); list.innerHTML = '';
   let rows = allSignals.filter(r => active.has(r.signal))
+    .filter(r => !r['급지'] || activeGrade.has(r['급지']))   // 급지 없는 지방은 항상 통과
     .filter(r => !grp || r.group===grp).filter(r => !q || r.region.includes(q));
   // 시그널 강한 순 → 전세수급 높은 순 → 가나다
   rows.sort((a,b)=> (_SIGRANK[a.signal]??9)-(_SIGRANK[b.signal]??9)
