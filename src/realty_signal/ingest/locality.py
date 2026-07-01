@@ -90,6 +90,22 @@ def transit_min(lat: float, lng: float) -> tuple[int, str] | tuple[None, None]:
     return (best, best_hub)
 
 
+def transit_between(sx: float, sy: float, ex: float, ey: float) -> dict | None:
+    """두 지점(경도 x, 위도 y) 간 대중교통 최단경로 요약. 키 없거나 실패 시 None."""
+    key = config.odsay_key()
+    if not key:
+        return None
+    url = ("https://api.odsay.com/v1/api/searchPubTransPathT?apiKey="
+           + urllib.parse.quote(key, safe="")
+           + f"&SX={sx}&SY={sy}&EX={ex}&EY={ey}")
+    try:
+        info = json.loads(_fetch(url))["result"]["path"][0]["info"]
+        return {"min": round(info["totalTime"]), "transfer": info.get("busTransitCount", 0) + info.get("subwayTransitCount", 0),
+                "pay": info.get("payment")}
+    except Exception:
+        return None
+
+
 # ---------- 학군: 소상공인 상가정보, 반경 내 교육(P1) 점포수 ----------
 def school_count(lat: float, lng: float, radius: int = 1500) -> int | None:
     key = config.public_data_key()

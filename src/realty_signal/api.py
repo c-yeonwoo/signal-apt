@@ -818,6 +818,22 @@ def geocode_ep(data: dict = Body(...)):
     return geocode.geocode_batch(queries, max_miss=max_miss)
 
 
+@app.get("/api/transit")
+def transit_ep(sx: float, sy: float, ex: float, ey: float):
+    """두 좌표 간 대중교통 최단경로(분·환승·요금). 좌표 라운딩 키로 kv 캐시(30일)."""
+    from realty_signal import db
+    from realty_signal.ingest import locality
+    ck = f"transit:{sx:.3f},{sy:.3f}->{ex:.3f},{ey:.3f}"
+    cached = db.kv_get(ck, max_age=30 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    r = locality.transit_between(sx, sy, ex, ey)
+    out = {"available": r is not None, "route": r}
+    if r:
+        db.kv_set(ck, out)
+    return out
+
+
 @app.get("/api/redevelopment/value-calc")
 def redev_value_calc(current_price: float, pyeong: float, presale_pyeong_price: float,
                      contribution: float, hold_months: int = 60):

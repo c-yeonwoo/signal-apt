@@ -78,6 +78,9 @@
   .astep { font-size:13px; color:var(--txt); background:var(--panel); border:1px solid var(--line);
            border-radius:var(--r-md); padding:9px 12px; }
   .astep b:first-child { display:inline-block; width:18px; }
+  .mpseg { padding:8px 14px; border:none; background:none; color:var(--dim); cursor:pointer;
+           font-size:14px; font-weight:600; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .mpseg.on { color:var(--accent); border-bottom-color:var(--accent); }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
   #reasons { display:flex; gap:6px; flex-wrap:wrap; flex:1 1 360px; min-width:240px; }
@@ -724,16 +727,47 @@
 </dialog>
 
 <div id="view-mypage" style="display:none">
- <div style="max-width:560px;margin:0 auto;padding:26px 18px 48px">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+ <div style="max-width:980px;margin:0 auto;padding:22px 18px 48px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
     <div>
       <h3 style="margin:0 0 3px;font-size:22px">👤 마이페이지</h3>
       <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
     </div>
-    <span class="btn" style="padding:5px 13px" onclick="switchTab('signal')">← 홈</span>
+    <span onclick="logout()" style="cursor:pointer;color:#dc2626;font-size:13px">로그아웃</span>
   </div>
 
-  <div id="mp_summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px"></div>
+  <!-- 마이페이지 섹션 서브내브 -->
+  <div style="display:flex;gap:8px;border-bottom:1px solid var(--line);margin-bottom:20px">
+    <button class="mpseg on" data-seg="profile" onclick="mpSection('profile')">프로필</button>
+    <button class="mpseg" data-seg="map" onclick="mpSection('map')">🗺️ 내 시그널맵</button>
+    <button class="mpseg" data-seg="report" onclick="mpSection('report')">✨ AI 리포트</button>
+  </div>
+
+  <!-- 내 시그널맵 -->
+  <section id="mp-map" style="display:none">
+    <p style="color:var(--dim);font-size:13px;margin:0 0 12px">🏠 현재 거주지 · 📍 관심지역 · 🏢 관심단지를 한 지도에서. <b>핀 두 개를 클릭</b>하면 직선거리와 대중교통 소요시간을 계산합니다.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div id="myMap" style="flex:1;min-width:340px;height:520px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
+      <aside style="width:290px;flex:0 0 auto">
+        <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px">핀 두 개를 클릭해 거리를 재보세요.</div>
+        <div id="myMapInfo" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;min-height:60px"></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.8">
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#2563eb;display:inline-block"></span> 현재 거주지</span><br>
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#16a34a;display:inline-block"></span> 관심지역</span><br>
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#ea580c;display:inline-block"></span> 관심단지</span></div>
+        <div id="myMapEmpty" style="font-size:12px;color:var(--dim);margin-top:10px"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- AI 리포트(자리 — 다음 단계에서 이전) -->
+  <section id="mp-report" style="display:none">
+    <p style="color:var(--dim);font-size:13px">AI 리포트는 곧 이 자리로 이동합니다. 지금은 상단 <b>✨ AI 리포트</b> 탭에서 이용하세요.</p>
+  </section>
+
+  <!-- 프로필 -->
+  <section id="mp-profile">
+  <div id="mp_summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px;max-width:560px"></div>
 
   <div class="mp-sec">기본 정보</div>
   <div class="grid2">
@@ -763,11 +797,8 @@
   </div>
   <div id="mp_gajeom" style="margin-top:16px;font-size:12px;color:var(--dim)"></div>
 
-  <button class="btn" onclick="saveMyPage()" style="width:100%;margin-top:24px;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">프로필 저장</button>
-  <div style="display:flex;justify-content:space-between;margin-top:18px;font-size:13px">
-    <span onclick="openBoard()" style="cursor:pointer;color:var(--accent)">★ 내 보드 보기</span>
-    <span onclick="logout()" style="cursor:pointer;color:#dc2626">로그아웃</span>
-  </div>
+  <button class="btn" onclick="saveMyPage()" style="width:100%;margin-top:24px;max-width:560px;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">프로필 저장</button>
+  </section>
  </div>
 </div>
 
@@ -793,6 +824,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <h3 id="cxTitle" style="margin:0;font-size:19px">단지 상세</h3>
     <div style="display:flex;gap:8px">
+      <span class="btn" id="cxFavBtn" style="padding:3px 11px" onclick="toggleCxFav()">★ 관심단지</span>
       <span class="btn" style="padding:3px 11px;background:var(--accent);color:#fff" onclick="addToCompare(_cxCur.name,_cxCur.region)">＋ 비교담기</span>
       <span class="btn" style="padding:2px 11px" onclick="document.getElementById('complexDlg').close()">✕</span>
     </div>
@@ -2166,8 +2198,21 @@ async function openCompare(){
       ${cols.length>1?`<span onclick="cmpSave([]);document.getElementById('cmpDlg').close()" style="cursor:pointer;font-size:12px;color:#dc2626">전체 비우기</span>`:''}</div>
     <div style="font-size:11px;color:var(--dim);margin-top:8px">주력 평형=최다 거래 평형. 단지마다 평형이 다를 수 있어 참고용.</div>`;
 }
+function cxFavKey(region,name){ return region+'|'+name; }
+function updateCxFavBtn(){
+  const b=document.getElementById('cxFavBtn'); if(!b) return;
+  const on=(_favs||new Set()).has('complex:'+cxFavKey(_cxCur.region,_cxCur.name));
+  b.textContent = on?'★ 관심단지 ✓':'☆ 관심단지';
+  b.style.background = on?'var(--accent)':''; b.style.color = on?'#fff':'';
+}
+async function toggleCxFav(){
+  if(!_cxCur.name||!_cxCur.region) return;
+  await toggleFav('complex', cxFavKey(_cxCur.region,_cxCur.name), _cxCur.name);
+  updateCxFavBtn();
+}
 async function openComplex(name, region){
   _cxCur={name,region};
+  updateCxFavBtn();
   const body=document.getElementById('cxBody');
   document.getElementById('cxTitle').textContent=name;
   body.innerHTML='<div style="color:var(--dim);padding:8px 0">국토부 실거래 불러오는 중… (최초 1회 수십초, 이후 캐시)</div>';
@@ -2485,6 +2530,85 @@ function fillMyPage(){
   document.getElementById('mp_householder').value = p['세대주']!=null ? String(p['세대주']) : '';
   document.getElementById('mp_firsthome').value = p['생애최초']!=null ? String(p['생애최초']) : '';
   renderMyPageSummary();
+}
+// ===== 마이페이지 섹션 전환 =====
+function mpSection(name){
+  document.querySelectorAll('.mpseg').forEach(b=>b.classList.toggle('on', b.dataset.seg===name));
+  ['profile','map','report'].forEach(s=>{ const el=document.getElementById('mp-'+s); if(el) el.style.display = s===name?'':'none'; });
+  if(name==='map') drawMyMap();
+}
+// ===== 내 시그널맵 — 거주지·관심지역·관심단지 핀 + 거리/대중교통 =====
+let myMap=null, _myLayer=null, _myMarkers=[], _myPts=[], _mySel=[];
+function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
+  const dLat=d(b[0]-a[0]), dLng=d(b[1]-a[1]);
+  const s=Math.sin(dLat/2)**2 + Math.cos(d(a[0]))*Math.cos(d(b[0]))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s)); }
+async function drawMyMap(){
+  const el=document.getElementById('myMap'); if(!el || typeof L==='undefined') return;
+  if(!myMap){
+    myMap=L.map(el,{attributionControl:false, scrollWheelZoom:false}).setView([37.55,127.0],10);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:17}).addTo(myMap);
+  }
+  setTimeout(()=>myMap.invalidateSize(),90);
+  const sm={}; (allSignals||[]).forEach(s=>sm[s.region]=s);
+  const p=_profile||{};
+  const regionFavs=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
+  const complexFavs=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8)); // "region|name"
+  const regionsNeeded=[...new Set([p['거주지'], ...regionFavs].filter(Boolean))];
+  let cen={};
+  if(regionsNeeded.length){ try{ cen=(await (await fetch('/api/region-centroids?regions='+encodeURIComponent(regionsNeeded.join(',')))).json()).centroids||{}; }catch(e){} }
+  const pts=[];
+  if(p['거주지'] && cen[p['거주지']]) pts.push({kind:'home',name:p['거주지'],region:p['거주지'],lat:cen[p['거주지']][0],lng:cen[p['거주지']][1],color:'#2563eb'});
+  regionFavs.forEach(r=>{ if(cen[r] && r!==p['거주지']){ const s=sm[r]||{}; pts.push({kind:'region',name:r,region:r,lat:cen[r][0],lng:cen[r][1],color:'#16a34a',sig:s.signal,grade:s['급지']}); } });
+  if(complexFavs.length){
+    const q=complexFavs.map(k=>{const i=k.indexOf('|');return k.slice(0,i)+' '+k.slice(i+1);});
+    let co={}; try{ co=(await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:q,max_miss:10})})).json()).coords||{}; }catch(e){}
+    complexFavs.forEach((k,idx)=>{ const i=k.indexOf('|'), reg=k.slice(0,i), nm=k.slice(i+1); const c=co[q[idx]]; if(c) pts.push({kind:'complex',name:nm,region:reg,lat:c[0],lng:c[1],color:'#ea580c'}); });
+  }
+  _myPts=pts; _mySel=[];
+  if(_myLayer) _myLayer.remove();
+  _myLayer=L.layerGroup().addTo(myMap); _myMarkers=[];
+  pts.forEach((pt,i)=>{
+    const m=L.circleMarker([pt.lat,pt.lng],{radius:8,color:'#fff',weight:2,fillColor:pt.color,fillOpacity:.95})
+      .bindTooltip(`${pt.kind==='home'?'🏠':pt.kind==='region'?'📍':'🏢'} ${pt.name}`,{direction:'top'})
+      .addTo(_myLayer);
+    m.on('click',()=>myPinClick(i));
+    _myMarkers.push(m);
+  });
+  document.getElementById('myMapEmpty').textContent = pts.length ? ''
+    : '표시할 핀이 없습니다. 프로필에 거주지를 입력하거나, 시그널/단지에서 ★로 관심지역·관심단지를 추가하세요.';
+  document.getElementById('myMapDist').textContent = '핀 두 개를 클릭해 거리를 재보세요.';
+  document.getElementById('myMapInfo').innerHTML = '';
+  if(pts.length){ const g=L.featureGroup(_myMarkers); myMap.fitBounds(g.getBounds().pad(0.25)); }
+}
+function myPinClick(i){
+  const pt=_myPts[i]; if(!pt) return;
+  // 선택 토글(최대 2)
+  const at=_mySel.indexOf(i);
+  if(at>=0) _mySel.splice(at,1); else { _mySel.push(i); if(_mySel.length>2) _mySel.shift(); }
+  _myMarkers.forEach((m,j)=>m.setStyle({radius:_mySel.includes(j)?12:8, weight:_mySel.includes(j)?3:2}));
+  // 단일 정보 패널
+  const uv=(window._uv||{})[pt.region];
+  const badgeH = pt.sig?badge(pt.sig):'';
+  const gd=(typeof _REGION_GRADE!=='undefined'&&pt.grade)?_REGION_GRADE[pt.grade]:null;
+  let info=`<b style="font-size:14px">${pt.kind==='home'?'🏠':pt.kind==='region'?'📍':'🏢'} ${pt.name}</b> ${badgeH}`;
+  if(gd) info+=` <span style="color:${gd.col};font-weight:700;font-size:12px">${gd.label}</span>`;
+  if(uv) info+=`<div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.7">평단 ${won(uv.price)}/평 · 입지 ${uv['입지점수']??'–'}<br>업무지구 ${uv['transit_min']??'–'}분${uv['최단업무지구']?'('+uv['최단업무지구']+')':''} · 학원 ${uv['school']??'–'} · 공원 ${uv['공원']??'–'}</div>`;
+  if(pt.kind==='complex') info+=`<div style="margin-top:8px"><span class="btn" style="padding:4px 11px;font-size:12px" onclick="addToCompare('${pt.name.replace(/'/g,'')}','${pt.region}')">＋ 비교담기</span></div>`;
+  else info+=`<div style="margin-top:8px"><span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널 보기 →</span></div>`;
+  document.getElementById('myMapInfo').innerHTML = info;
+  if(_mySel.length===2) myMeasure();
+}
+async function myMeasure(){
+  const a=_myPts[_mySel[0]], b=_myPts[_mySel[1]];
+  const km=_haversineKm([a.lat,a.lng],[b.lat,b.lng]);
+  const box=document.getElementById('myMapDist');
+  box.innerHTML=`<b>${a.name}</b> ↔ <b>${b.name}</b><br>직선거리 <b style="color:var(--accent)">${km.toFixed(1)}km</b> · 대중교통 <span id="myTransit">계산 중…</span>`;
+  try{
+    const r=await (await fetch(`/api/transit?sx=${a.lng}&sy=${a.lat}&ex=${b.lng}&ey=${b.lat}`)).json();
+    const t=document.getElementById('myTransit');
+    if(t) t.innerHTML = r.available&&r.route ? `<b style="color:var(--accent)">${r.route.min}분</b> (환승 ${r.route.transfer}회)` : '<span style="color:var(--dim)">정보 없음</span>';
+  }catch(e){ const t=document.getElementById('myTransit'); if(t) t.textContent='정보 없음'; }
 }
 function openMyPage(){ switchTab('mypage'); }   // 하위호환 — 별도 페이지로 이동
 function renderMyPageSummary(){
