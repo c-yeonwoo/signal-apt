@@ -18,8 +18,9 @@ _SYSTEM = (
     "관심평수·청약가점)과 데이터 분석 결과(매수 시그널 지역, 저평가도, 예상 매수가, 급매·청약·"
     "재건축 현황)를 바탕으로, 그 사람에게 맞는 매수 전략을 제시합니다.\n"
     "- 한국어로, 신뢰감 있고 구체적으로. 데이터에 근거해 단정적으로 말하되 과장 금지.\n"
-    "- 구조: ①한줄 요약 ②추천 지역 2~3곳과 이유 ③거주지·청약 관점 ④리스크/유의점 ⑤다음 행동.\n"
-    "- 마크다운 헤더(##)와 굵게(**)를 적절히 사용. 600자 내외로 핵심만.\n"
+    "- 구조: ①한줄 요약 ②추천 지역 2~3곳과 이유 ③거주지·청약 관점 ④최근 정책·시장 뉴스 반영 ⑤리스크/유의점 ⑥다음 행동.\n"
+    "- '최근 뉴스'가 주어지면 그 정책·규제·금리 흐름을 전략에 반드시 반영(예: 규제지역 지정, 대출 규제, 금리 방향).\n"
+    "- 마크다운 헤더(##)와 굵게(**)를 적절히 사용. 700자 내외로 핵심만.\n"
     "- 투자 권유가 아닌 데이터 해석임을 마지막에 한 줄로 고지."
 )
 
@@ -28,8 +29,8 @@ def available() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
-def generate(profile: dict, summary: dict) -> str | None:
-    """프로필 + 결론 요약 → Claude 심층 리포트(markdown). 불가 시 None."""
+def generate(profile: dict, summary: dict, news: list | None = None) -> str | None:
+    """프로필 + 결론 요약 (+최근 뉴스 맥락) → Claude 심층 리포트(markdown). 불가 시 None."""
     if not available():
         return None
     try:
@@ -38,6 +39,8 @@ def generate(profile: dict, summary: dict) -> str | None:
         log.warning("anthropic SDK 미설치 — AI 리포트 폴백")
         return None
     payload = {"프로필": profile, "분석결과": summary}
+    if news:
+        payload["최근뉴스"] = news
     user = ("아래 JSON은 한 사용자의 프로필과 부동산 데이터 분석 결과입니다. "
             "이 사람을 위한 개인화 매수 전략 리포트를 작성하세요.\n\n"
             + json.dumps(payload, ensure_ascii=False, indent=2))

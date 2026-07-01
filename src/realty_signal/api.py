@@ -193,8 +193,9 @@ def report_ai(request: Request, data: dict = Body(...)):
     if not ai_report.available():
         return {"available": False}
     profile = db.profile_get(_uid(request))
-    report = ai_report.generate(profile, data.get("summary") or {})
-    return {"available": True, "report": report} if report else {"available": False}
+    news = db.news_recent_for_ai(12)   # 최근 정책·시장 뉴스 맥락 주입
+    report = ai_report.generate(profile, data.get("summary") or {}, news=news)
+    return {"available": True, "report": report, "news_used": len(news)} if report else {"available": False}
 
 
 @app.get("/api/favorites")
