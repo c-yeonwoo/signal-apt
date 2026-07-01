@@ -221,10 +221,7 @@
     <button class="tab" data-tab="cycle" onclick="switchTab('cycle')">사이클</button>
     <button class="tab" data-tab="news" onclick="switchTab('news')">뉴스</button>
     <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
-    <button class="tab" data-tab="auction" onclick="switchTab('auction')">경매</button>
-    <button class="tab" data-tab="quicksale" onclick="switchTab('quicksale')">급매</button>
-    <button class="tab" data-tab="presale" onclick="switchTab('presale')">청약</button>
-    <button class="tab" data-tab="redev" onclick="switchTab('redev')">재건축</button>
+    <button class="tab" data-tab="listings" onclick="switchTab('listings')">매물</button>
     <button class="tab" data-tab="conclusion" onclick="switchTab('conclusion')">✨ AI 리포트</button>
   </div>
   <div class="right">
@@ -237,6 +234,14 @@
     <button class="chip" id="myPageBtn" onclick="switchTab('mypage')" style="font-size:13px;display:flex;align-items:center;gap:6px">👤 <span id="myPageLabel">마이페이지</span></button>
   </div>
 </header>
+
+<div id="listingSubnav" style="padding:8px 16px;border-bottom:1px solid var(--line);gap:8px;align-items:center;display:none">
+  <span style="font-size:12px;color:var(--dim);margin-right:4px">매물 ·</span>
+  <button class="subtab chip" data-sub="auction" onclick="switchTab('auction')">경매</button>
+  <button class="subtab chip" data-sub="quicksale" onclick="switchTab('quicksale')">급매</button>
+  <button class="subtab chip" data-sub="presale" onclick="switchTab('presale')">청약</button>
+  <button class="subtab chip" data-sub="redev" onclick="switchTab('redev')">재건축</button>
+</div>
 
 <!-- 시그널 탭 -->
 <div id="view-signal">
@@ -789,19 +794,25 @@ function regionGradeBadge(g, pyeong){
   return `<span title="시군구 평단가 분위" style="color:${col};font-weight:700">${g}급지</span>${p}`;
 }
 
+const _LISTING=['auction','quicksale','presale','redev'];   // 매물 하위탭
+let _listingSub='auction';
+const _LISTLOAD={auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
 function switchTab(t){
+  if(_LISTING.includes(t)){ _listingSub=t; t='listings'; }   // 4탭 → 매물 그룹으로 라우팅
+  const listing = t==='listings';
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
+  const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
   ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle','news','glossary'].forEach(v=>
-    document.getElementById('view-'+v).style.display = v===t?'':'none');
+    document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
+  if(listing){
+    document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
+    (_LISTLOAD[_listingSub]||(()=>{}))();
+  }
   if(t==='signal'){ chart.resize(); renderScoreboard(); renderAha(); }
-  if(t==='auction') loadAuction();
   if(t==='undervalued') loadUndervalued();
-  if(t==='presale') loadPresale();
   if(t==='conclusion') loadConclusion();
-  if(t==='quicksale') loadQuicksale();
-  if(t==='redev') loadRedev();
   if(t==='mypage') fillMyPage();
   if(t==='cycle') loadCycle();
   if(t==='news') loadNews();
