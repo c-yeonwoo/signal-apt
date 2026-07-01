@@ -755,9 +755,10 @@
   <p style="color:var(--dim);font-size:13px;margin:0 0 12px">🏠 거주지 · 📍 관심지역 · 🏢 관심단지 + <b>단지 검색·비교·급지색</b>을 지도 위에서. <b>핀 두 개 클릭</b> → 거리·대중교통(선으로 표시).</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="position:relative;flex:1;min-width:220px;max-width:360px">
-      <input id="mmSearch" placeholder="🔍 단지 검색 (예: 은마, 헬리오시티)" oninput="mmSearchDeb()" onkeydown="if(event.key==='Enter')mmDoSearch()" style="width:100%">
+      <input id="mmSearch" placeholder="🔍 단지 검색 → 📍지도 표시 / ＋비교 추가" oninput="mmSearchDeb()" onkeydown="if(event.key==='Enter')mmDoSearch()" style="width:100%">
       <div id="mmSearchRes" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:300px;overflow:auto;z-index:800"></div>
     </div>
+    <button class="chip" onclick="openFavList()" title="관심지역·관심단지 목록">⭐ 관심목록</button>
     <button class="chip" id="mmGradeBtn" onclick="toggleMyGrade()" title="지역 급지색 오버레이">🎨 급지색</button>
     <button class="chip" id="mmCmpBtn" onclick="document.getElementById('mmCompare').scrollIntoView({behavior:'smooth'})" title="비교표로 이동">🆚 비교 0</button>
     <button class="chip" onclick="mmClearSearch()" title="검색 핀·측정선 지우기">↺ 초기화</button>
@@ -777,15 +778,11 @@
 
   <!-- 단지 비교표 (지도 아래 인라인) -->
   <section id="mmCompare" style="margin-top:22px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       <h3 style="margin:0;font-size:18px">🆚 단지 비교</h3>
-      <div style="position:relative;flex:1;min-width:200px;max-width:320px">
-        <input id="mmcSearch" placeholder="🔍 단지 검색해 열 추가 (예: 은마)" oninput="mmcSearchDeb()" onkeydown="if(event.key==='Enter')mmcDoSearch()" style="width:100%">
-        <div id="mmcRes" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:280px;overflow:auto;z-index:800"></div>
-      </div>
       <button class="btn" id="mmcRunBtn" onclick="runCompare()" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 16px">비교하기</button>
     </div>
-    <p style="color:var(--dim);font-size:12px;margin:0 0 8px">단지를 검색해 열로 추가하면 <b>'–'로 대기</b>합니다. <b>비교하기</b>를 누르면 그때 실거래를 불러와 채웁니다(단지별 캐시).</p>
+    <p style="color:var(--dim);font-size:12px;margin:0 0 8px">위 <b>단지 검색</b>의 <b>＋비교</b> 또는 관심단지 핀에서 열을 추가하면 <b>'–'로 대기</b>합니다. <b>비교하기</b>를 누르면 그때 실거래를 불러와 채웁니다(단지별 캐시).</p>
     <div id="mmCompareTable" style="overflow:auto"></div>
   </section>
  </div>
@@ -860,6 +857,14 @@
   </div>
   <p style="color:var(--dim);font-size:12px;margin:0 0 12px">국토부 실거래 기준 · 각 단지 주력 평형(최다 거래) 비교. 최대 4개.</p>
   <div id="cmpBody" style="overflow:auto"></div>
+</dialog>
+
+<dialog id="favListDlg" style="width:460px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <h3 style="margin:0;font-size:19px">⭐ 내 관심목록</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('favListDlg').close()">✕</span>
+  </div>
+  <div id="favListBody" style="max-height:64vh;overflow:auto"></div>
 </dialog>
 
 <dialog id="sourceDlg" style="width:620px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
@@ -2136,8 +2141,14 @@ async function openScoreboard(){
 function cxBtn(name, region){
   if(!name||!region) return '';
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
-  return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">📈 단지 상세</span>`;
+  const on=(_favs||new Set()).has('complex:'+r+'|'+n);
+  return ` <span class="btn favcx" data-n="${n}" data-r="${r}" style="padding:3px 10px${on?';background:var(--accent);color:#fff':''}" onclick="event.stopPropagation();favCxToggle(this)">${on?'★':'☆'} 관심단지</span>`
+    + ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">📈 단지 상세</span>`;
 }
+function favCxToggle(el){ const n=el.dataset.n, r=el.dataset.r;
+  toggleFav('complex', r+'|'+n, n).then(()=>{ const on=_favs.has('complex:'+r+'|'+n);
+    el.textContent=(on?'★':'☆')+' 관심단지'; el.style.background=on?'var(--accent)':''; el.style.color=on?'#fff':'';
+    toast(on?`관심단지 추가: ${n}`:'관심단지 해제'); }); }
 function _spark(vals){
   if(!vals||vals.length<2) return '';
   const w=560,h=66,pad=5, mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
@@ -2268,9 +2279,37 @@ async function mmcDoSearch(){
     return `<div class="acct-item" style="display:flex;justify-content:space-between;gap:8px" onclick="cmpAddCol('${n}','${rg}')"><span><b>${r.name}</b> <span style="font-size:11px;color:var(--dim)">${rg}</span></span><span style="font-size:11px;color:var(--accent)">＋ 열 추가</span></div>`;}).join('');
 }
 function cmpAddCol(name,region){
-  document.getElementById('mmcRes').style.display='none'; document.getElementById('mmcSearch').value='';
+  ['mmSearchRes','mmcRes'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+  ['mmSearch','mmcSearch'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   addToCompare(name,region); renderCompareTable();
+  const sec=document.getElementById('mmCompare'); if(sec) sec.scrollIntoView({behavior:'smooth'});
 }
+// ===== 관심목록 모달 (관심지역/관심단지 분리) =====
+function openFavList(){ renderFavList(); document.getElementById('favListDlg').showModal(); }
+function renderFavList(){
+  const body=document.getElementById('favListBody'); if(!body) return;
+  const regions=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
+  const complexes=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8));
+  const sm={}; (allSignals||[]).forEach(s=>sm[s.region]=s);
+  const rSec=`<div style="font-size:13px;font-weight:700;margin:2px 0 6px">📍 관심지역 <span style="color:var(--dim);font-weight:400">${regions.length}</span></div>`
+    + (regions.length? regions.map(r=>{const s=sm[r]||{};
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)">
+          <span style="cursor:pointer" onclick="document.getElementById('favListDlg').close();switchTab('signal');selectRegion('${r}')"><b>${r}</b> ${s.signal?badge(s.signal):''}</span>
+          <span onclick="favRemove('region','${r}','${r}')" style="cursor:pointer;color:#dc2626;font-size:12px">✕ 제거</span></div>`;}).join('')
+      : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 시그널 목록에서 ☆로 추가하세요.</div>');
+  const cSec=`<div style="font-size:13px;font-weight:700;margin:18px 0 6px">🏢 관심단지 <span style="color:var(--dim);font-weight:400">${complexes.length}</span></div>`
+    + (complexes.length? complexes.map(k=>{const i=k.indexOf('|'), reg=k.slice(0,i), nm=k.slice(i+1), nq=nm.replace(/['"\\]/g,''), kq=k.replace(/['"\\]/g,'');
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${nm}</b> <span style="font-size:11px;color:var(--dim)">${reg}</span></span>
+          <span style="display:flex;gap:9px;white-space:nowrap">
+            <span onclick="addToCompare('${nq}','${reg}')" style="cursor:pointer;color:var(--accent);font-size:12px">＋비교</span>
+            <span onclick="document.getElementById('favListDlg').close();openComplex('${nq}','${reg}')" style="cursor:pointer;font-size:12px">상세</span>
+            <span onclick="favRemove('complex','${kq}','${nq}')" style="cursor:pointer;color:#dc2626;font-size:12px">✕</span></span></div>`;}).join('')
+      : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 매물·단지 상세의 ☆ 관심단지로 추가하세요.</div>');
+  body.innerHTML=rSec+cSec;
+}
+async function favRemove(kind,key,label){ await toggleFav(kind,key,label); renderFavList();
+  const mv=document.getElementById('view-mymap'); if(mv && mv.style.display!=='none') drawMyMap(); }
 function cxFavKey(region,name){ return region+'|'+name; }
 function updateCxFavBtn(){
   const b=document.getElementById('cxFavBtn'); if(!b) return;
@@ -2705,9 +2744,12 @@ async function mmDoSearch(){
   const rs=d.results||[];
   if(!rs.length){ box.innerHTML='<div style="padding:9px;color:var(--dim);font-size:12px">결과 없음 (실거래 있는 아파트만)</div>'; return; }
   box.innerHTML=rs.map(r=>{const n=(r.name||'').replace(/['"\\]/g,''), rg=_sggFromAddr(r.address,r.region).replace(/['"\\]/g,'');
-    return `<div class="acct-item" style="display:flex;justify-content:space-between;gap:8px;align-items:center" onclick="mmPick('${n}','${rg}')">
-      <span style="min-width:0"><b>${r.name}</b> <span style="font-size:11px;color:var(--dim)">${rg}</span></span>
-      <span style="font-size:11px;color:var(--accent)">지도에 표시 ›</span></div>`;}).join('');
+    return `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${r.name}</b> <span style="font-size:11px;color:var(--dim)">${rg}</span></span>
+      <span style="display:flex;gap:5px;white-space:nowrap">
+        <span class="btn" style="padding:3px 9px;font-size:12px" onclick="mmPick('${n}','${rg}')">📍 지도</span>
+        <span class="btn" style="padding:3px 9px;font-size:12px;background:var(--accent);color:#fff" onclick="cmpAddCol('${n}','${rg}')">＋ 비교</span>
+      </span></div>`;}).join('');
 }
 async function mmPick(name,region){
   document.getElementById('mmSearchRes').style.display='none';
