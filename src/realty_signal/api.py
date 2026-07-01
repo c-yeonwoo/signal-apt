@@ -820,6 +820,13 @@ def _region_centroid(region: str, code: str) -> tuple[float, float] | None:
     return c
 
 
+@app.get("/api/cycle")
+def cycle(region: str = "서울"):
+    """부동산 경기 사이클 국면(벌집순환 4국면) + 근거. 광역(기본 서울) 주간 시리즈 기반."""
+    from realty_signal.signals import cycle as cyc
+    return cyc.current_phase(_kb(), region) or {"phase": None}
+
+
 @app.get("/api/complex/{region}/{name}")
 def complex_detail(region: str, name: str):
     """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭. DB 캐시(30일)."""

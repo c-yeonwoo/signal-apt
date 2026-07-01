@@ -207,6 +207,7 @@
     <button class="tab" data-tab="quicksale" onclick="switchTab('quicksale')">급매</button>
     <button class="tab" data-tab="presale" onclick="switchTab('presale')">청약</button>
     <button class="tab" data-tab="redev" onclick="switchTab('redev')">재건축</button>
+    <button class="tab" data-tab="cycle" onclick="switchTab('cycle')">사이클</button>
     <button class="tab" data-tab="conclusion" onclick="switchTab('conclusion')">✨ AI 리포트</button>
   </div>
   <div class="right">
@@ -429,6 +430,19 @@
     </div>
     <table><thead><tr><th class="l">구역명</th><th>구분</th><th class="l">위치</th><th>면적(㎡)</th></tr></thead>
       <tbody id="rdZoneRows"></tbody></table>
+  </div>
+</div>
+
+<div id="view-cycle" style="display:none">
+  <div style="max-width:960px;margin:0 auto;padding:20px 16px 40px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <h2 style="margin:0">🌀 부동산 경기 사이클</h2>
+      <label style="font-size:13px;color:var(--dim)">권역 <select id="cycleRegion" class="ctrl" onchange="loadCycle()" style="padding:6px 9px"><option value="서울">서울</option><option value="경기">경기</option><option value="인천">인천</option></select></label>
+    </div>
+    <p style="color:var(--dim);font-size:13px;margin:0 0 16px">벌집순환모형 4국면 — <b>가격 방향 × 매수심리 방향</b>으로 현재 위치를 추정합니다. (심리·거래량이 가격을 선행)</p>
+    <div id="cycleNow"></div>
+    <div id="cyclePhases" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px"></div>
+    <p style="color:var(--dim);font-size:11px;margin-top:14px">※ KB 광역 주간 시리즈 기반 추정. 지역·단지별 국면은 다를 수 있으며 참고용입니다.</p>
   </div>
 </div>
 
@@ -716,7 +730,7 @@ function switchTab(t){
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
-  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage'].forEach(v=>
+  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle'].forEach(v=>
     document.getElementById('view-'+v).style.display = v===t?'':'none');
   if(t==='signal'){ chart.resize(); renderScoreboard(); }
   if(t==='auction') loadAuction();
@@ -726,6 +740,34 @@ function switchTab(t){
   if(t==='quicksale') loadQuicksale();
   if(t==='redev') loadRedev();
   if(t==='mypage') fillMyPage();
+  if(t==='cycle') loadCycle();
+}
+// ===== 부동산 경기 사이클 국면 =====
+const _CYCLE=[
+  {k:'회복기', ic:'🌱', col:'#0ea5e9', tag:'매수 기회', 현상:['거래량이 먼저 살아남','급매 물량 소진 시작','전세가율 상승·전세난','바닥 다지기 심리']},
+  {k:'상승기', ic:'🔥', col:'#16a34a', tag:'상승 추세', 현상:['호가 상승·신고가 출현','매물 잠김(집주인 관망)','추격매수·낙관 과열','상급지→하급지 확산']},
+  {k:'후퇴기', ic:'⚠️', col:'#d97706', tag:'매도 신호', 현상:['거래량 급감(먼저 마름)','호가 정체·관망세','상급지부터 조정','급지역전(끝물) 경계']},
+  {k:'침체기', ic:'❄️', col:'#dc2626', tag:'하락·바닥', 현상:['급매·경매 물건 증가','매수 관망·공포 심리','전세 선호(매매 기피)','다음 회복 준비 구간']},
+];
+async function loadCycle(){
+  const region=document.getElementById('cycleRegion').value;
+  const now=document.getElementById('cycleNow'), grid=document.getElementById('cyclePhases');
+  now.innerHTML='<div style="color:var(--dim)">국면 분석 중…</div>'; grid.innerHTML='';
+  let d; try{ d=await (await fetch('/api/cycle?region='+encodeURIComponent(region))).json(); }catch(e){ now.innerHTML='<div style="color:#dc2626">불러오기 실패</div>'; return; }
+  if(!d.phase){ now.innerHTML='<div style="color:var(--dim)">데이터가 부족합니다.</div>'; return; }
+  const cur=_CYCLE.find(c=>c.k===d.phase)||_CYCLE[0];
+  now.innerHTML=`<div style="background:${cur.col}12;border:1.5px solid ${cur.col}66;border-radius:14px;padding:18px 20px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="font-size:34px">${cur.ic}</div>
+      <div><div style="font-size:12px;color:var(--dim)">${region} · 현재 국면 (${d.asof} 기준)</div>
+        <div style="font-size:26px;font-weight:800;color:${cur.col}">${cur.k} <span style="font-size:13px;color:var(--dim);font-weight:600">· ${cur.tag}</span></div></div></div>
+    <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${(d.reasons||[]).map(r=>`<span class="rchip">${r}</span>`).join('')}</div></div>`;
+  grid.innerHTML=_CYCLE.map(c=>{const on=c.k===d.phase;
+    return `<div style="border:${on?'2px solid '+c.col:'1px solid var(--line)'};border-radius:12px;padding:12px;background:${on?c.col+'0e':'var(--panel)'};position:relative">
+      ${on?`<span style="position:absolute;top:-9px;left:12px;background:${c.col};color:#fff;font-size:10px;font-weight:700;padding:1px 8px;border-radius:8px">현재</span>`:''}
+      <div style="font-weight:800;color:${c.col};font-size:15px">${c.ic} ${c.k}</div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:7px">${c.tag}</div>
+      ${c.현상.map(x=>`<div style="font-size:11.5px;margin:3px 0;color:${on?'var(--txt)':'var(--dim)'}">· ${x}</div>`).join('')}</div>`;}).join('');
 }
 function redevTab(name){
   ['screener','stages','calc','zones'].forEach(n=>
