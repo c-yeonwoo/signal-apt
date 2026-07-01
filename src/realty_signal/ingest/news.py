@@ -56,9 +56,17 @@ _SUM_SYS = (
     "- 뉴스에 근거해서만. 없으면 억지로 만들지 말 것. 전체 400~600자. 마지막에 '※ 뉴스 헤드라인 기반 요약' 한 줄."
 )
 
+_SUM_SYS_DETAIL = (
+    "당신은 부동산 뉴스 애널리스트입니다. 특정 테마의 최근 뉴스 묶음을 받아, 그 테마를 깊이 있게 정리합니다.\n"
+    "- 마크다운 세 섹션: ## 핵심 이슈 (4~6개 불릿, 수치·지역·단지 등 구체적으로) / "
+    "## 제도·정책 변경점 (있는 경우 2~4개 불릿) / ## 매수자 관점 시사점 (2~3개 불릿).\n"
+    "- 각 불릿 한 줄. 광고·홍보성 제외. 확정 아닌 건 '~전망/논의'. 뉴스 근거 내에서만.\n"
+    "- 전체 600~900자. 마지막에 '※ 뉴스 헤드라인 기반 분석' 한 줄."
+)
 
-def summarize(topic: str | None, items: list[dict]) -> str | None:
-    """최근 뉴스 묶음 → Claude 요약(주요 이슈 + 변경점). 키/항목 부족 시 None."""
+
+def summarize(topic: str | None, items: list[dict], detail: bool = False) -> str | None:
+    """최근 뉴스 묶음 → Claude 요약. detail=True(특정 테마)면 심층 3섹션. 키/항목 부족 시 None."""
     try:
         import anthropic
     except ImportError:
@@ -70,7 +78,8 @@ def summarize(topic: str | None, items: list[dict]) -> str | None:
     try:
         client = anthropic.Anthropic()
         resp = client.messages.create(
-            model=MODEL, max_tokens=1200, system=_SUM_SYS,
+            model=MODEL, max_tokens=1600 if detail else 1200,
+            system=_SUM_SYS_DETAIL if detail else _SUM_SYS,
             messages=[{"role": "user", "content": f"{scope} 최근 뉴스 {len(items)}건입니다. 요약하세요.\n\n{corpus[:12000]}"}])
         return "".join(b.text for b in resp.content if b.type == "text").strip() or None
     except Exception as e:

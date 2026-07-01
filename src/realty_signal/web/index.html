@@ -1260,11 +1260,14 @@ function toast(msg){
   clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';},3200);
 }
 function mdLite(s){
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/^##\s*(.+)$/gm,'<div style="font-weight:700;margin:12px 0 4px;font-size:14px">$1</div>')
-    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
-    .replace(/^\s*[-•]\s*(.+)$/gm,'<div style="margin:3px 0">• $1</div>')
-    .replace(/\n{2,}/g,'<br>').replace(/\n/g,'<br>');
+  // 줄 단위 처리 — 빈 줄은 건너뛰어 불필요한 세로 여백 제거(타이트)
+  return (s||'').split(/\n/).map(ln=>{
+    ln=ln.trim(); if(!ln) return '';
+    ln=ln.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+    if(/^##\s*/.test(ln)) return `<div style="font-weight:700;margin:11px 0 4px;font-size:14px">${ln.replace(/^##\s*/,'')}</div>`;
+    if(/^[-•]\s*/.test(ln)) return `<div style="margin:2px 0">• ${ln.replace(/^[-•]\s*/,'')}</div>`;
+    return `<div style="margin:3px 0">${ln}</div>`;
+  }).join('');
 }
 async function genAiReport(){
   if(!_reportSummary) return;
