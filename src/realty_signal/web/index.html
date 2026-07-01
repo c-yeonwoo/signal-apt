@@ -1890,9 +1890,14 @@ async function cxFind(){
   el.innerHTML='<div style="color:var(--dim);font-size:12px">검색 중…</div>';
   let d; try{ d=await (await fetch('/api/complex-search?q='+encodeURIComponent(q))).json(); }catch(e){ el.innerHTML='<div style="color:#dc2626">검색 실패</div>'; return; }
   if(!(d.results||[]).length){ el.innerHTML='<div style="color:var(--dim);font-size:12px">결과가 없습니다. (실거래 있는 아파트만)</div>'; return; }
-  el.innerHTML=d.results.map(r=>`<div onclick="document.getElementById('cxFindDlg').close();openComplex('${(r.name||'').replace(/['"\\]/g,'')}','${(r.region||'').replace(/['"\\]/g,'')}')" style="cursor:pointer;padding:10px 8px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
-      <div><b style="font-size:14px">${r.name}</b><div style="font-size:11px;color:var(--dim)">${r.address}</div></div>
-      <span class="pill" style="font-size:11px">${r.region} ›</span></div>`).join('');
+  el.innerHTML=d.results.map(r=>{const n=(r.name||'').replace(/['"\\]/g,''), rg=(r.region||'').replace(/['"\\]/g,'');
+    return `<div style="padding:9px 8px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div onclick="document.getElementById('cxFindDlg').close();openComplex('${n}','${rg}')" style="cursor:pointer;flex:1;min-width:0">
+        <b style="font-size:14px">${r.name}</b><div style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.address}</div></div>
+      <span class="pill" style="font-size:11px;color:var(--dim)">${r.region}</span>
+      <span class="btn" style="padding:4px 10px;background:var(--accent);color:#fff;white-space:nowrap" onclick="event.stopPropagation();addToCompare('${n}','${rg}')">＋비교</span>
+      <span class="btn" style="padding:4px 10px;white-space:nowrap" onclick="document.getElementById('cxFindDlg').close();openComplex('${n}','${rg}')">상세 ›</span>
+    </div>`;}).join('');
 }
 // ===== 단지 비교 =====
 let _cxCur={name:'',region:''};
@@ -1909,7 +1914,8 @@ function rmCompare(name,region){ cmpSave(cmpList().filter(x=>!(x.name===name&&x.
 async function openCompare(){
   const a=cmpList(); const body=document.getElementById('cmpBody');
   document.getElementById('cmpDlg').showModal();
-  if(!a.length){ body.innerHTML='<div style="color:var(--dim)">단지 상세에서 ＋비교담기로 추가하세요.</div>'; return; }
+  if(!a.length){ body.innerHTML=`<div style="color:var(--dim);padding:8px 0 14px">비교할 단지가 없습니다. 단지를 검색해 담아보세요.</div>
+    <span class="btn" style="padding:7px 14px;background:var(--accent);color:#fff" onclick="document.getElementById('cmpDlg').close();openComplexFind()">🔍 단지 검색해서 담기</span>`; return; }
   body.innerHTML='<div style="color:var(--dim)">불러오는 중…</div>';
   const data=await Promise.all(a.map(x=>fetch(`/api/complex/${encodeURIComponent(x.region)}/${encodeURIComponent(x.name)}`).then(r=>r.json()).catch(()=>null)));
   const cols=a.map((x,i)=>({x,d:data[i]}));
@@ -1930,7 +1936,10 @@ async function openCompare(){
       ${row('갭(실투자금)', (d,m)=>m&&m['갭']!=null?_eok(m['갭']):null)}
       ${row('총 거래', d=>d&&d['총거래']?d['총거래']+'건':null)}
     </tbody></table>
-    <div style="font-size:11px;color:var(--dim);margin-top:10px">주력 평형=최다 거래 평형. 단지마다 평형이 다를 수 있어 참고용.</div>`;
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+      <span class="btn" style="padding:6px 13px;background:var(--accent);color:#fff" onclick="document.getElementById('cmpDlg').close();openComplexFind()">＋ 단지 추가</span>
+      ${cols.length>1?`<span onclick="cmpSave([]);document.getElementById('cmpDlg').close()" style="cursor:pointer;font-size:12px;color:#dc2626">전체 비우기</span>`:''}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:8px">주력 평형=최다 거래 평형. 단지마다 평형이 다를 수 있어 참고용.</div>`;
 }
 async function openComplex(name, region){
   _cxCur={name,region};
