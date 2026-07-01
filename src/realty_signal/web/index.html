@@ -1684,11 +1684,15 @@ function toggleHaesol(){
 }
 function toggleZoneInfo(e){
   e && e.stopPropagation();
+  _showZones = !_showZones;   // 전세수급 배경 구간 on/off (기본 off)
+  document.getElementById('zoneBtn').classList.toggle('on', _showZones);
   const pop = document.getElementById('zinfoPop');
-  const open = pop.classList.toggle('open');
-  document.getElementById('zoneBtn').classList.toggle('on', open);
-  if(open){ const close=()=>{ pop.classList.remove('open'); document.getElementById('zoneBtn').classList.remove('on'); document.removeEventListener('click',close); };
-    setTimeout(()=>document.addEventListener('click',close),0); }
+  if(_showZones){   // 켤 때 색 범례 잠깐 표시(밴드는 유지)
+    pop.classList.add('open');
+    const close=()=>{ pop.classList.remove('open'); document.removeEventListener('click',close); };
+    setTimeout(()=>document.addEventListener('click',close),0);
+  } else pop.classList.remove('open');
+  if(_lastM) drawChart(selected, _lastM, _lastSig);
 }
 async function selectRegion(region){
   selected = region; renderList();
@@ -1739,7 +1743,7 @@ function drawChart(region, m, sig){
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
       lineStyle:{width:1.5}, itemStyle:{color:colors[k]}, data:m[k].dates.map((dt,i)=>[dt, m[k].values[i]]), ...extra }); };
   const zones = meta.zones.jeonse_supply || [];
-  const bandArea = m.jeonse_supply ? { silent:true, data: zones.map(z=>(
+  const bandArea = (_showZones && m.jeonse_supply) ? { silent:true, data: zones.map(z=>(
       [{yAxis:z.from, itemStyle:{color:z.color, opacity:0.16}}, {yAxis:z.to}])) } : undefined;
   mk("jeonse_supply", 0, bandArea ? { markArea: bandArea } : {});
   mk("buyer_superiority", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
@@ -1833,7 +1837,8 @@ async function loadData(){
   selectRegion(keep ? selected : (allSignals.find(r=>active.has(r.signal))||allSignals[0]).region);
 }
 let _showHist=false, _histCache={}, _lastM=null, _lastSig=null, _lastVol=null;
-// 경기 국면 오버레이 (지역별 시기별 국면 밴드)
+// 오버레이 상태 — 전세수급 배경 구간(기본 off) + 경기 국면 밴드
+let _showZones=false;
 let _showCycle=false, _cycleCache={};
 async function toggleCycleOverlay(){
   _showCycle=!_showCycle;
