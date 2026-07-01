@@ -70,6 +70,14 @@
   .SELL_RISK{background:#ef444433;color:#dc2626;}
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
   #chart { flex:1; min-height:0; }
+  .acard { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; cursor:pointer;
+           background:var(--panel); display:flex; flex-direction:column; gap:5px; transition:box-shadow .15s,border-color .15s; }
+  .acard:hover { box-shadow:var(--shadow); border-color:var(--accent); }
+  .acard b { font-size:14px; }
+  .acard span { font-size:12px; color:var(--dim); line-height:1.5; }
+  .astep { font-size:13px; color:var(--txt); background:var(--panel); border:1px solid var(--line);
+           border-radius:var(--r-md); padding:9px 12px; }
+  .astep b:first-child { display:inline-block; width:18px; }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
   #reasons { display:flex; gap:6px; flex-wrap:wrap; flex:1 1 360px; min-width:240px; }
@@ -237,7 +245,7 @@
     <!-- 도구: 탐색·비교·학습 -->
     <button class="chip" onclick="openComplexFind()" style="font-size:12px" title="단지명으로 상세 검색">단지찾기</button>
     <button class="chip" id="cmpChip" onclick="openCompare()" style="font-size:12px;display:none;background:var(--accent);color:#fff;border-color:var(--accent)" title="담은 단지 비교">비교 0</button>
-    <button class="chip" onclick="switchTab('glossary')" style="font-size:12px" title="부동산 용어·개념 학습">용어</button>
+    <button class="chip" onclick="switchTab('about')" style="font-size:12px" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">❓ 가이드</button>
     <span aria-hidden="true" style="width:1px;height:18px;background:var(--line);margin:0 4px;flex:0 0 auto"></span>
     <!-- 개인: 보드·알림·계정 -->
     <button class="chip" onclick="openBoard()" style="font-size:12px" title="즐겨찾기 지역 보드">★ 내 보드</button>
@@ -477,6 +485,47 @@
     <p style="color:var(--dim);font-size:13px;margin:0 0 14px">매매·투자에 꼭 필요한 용어를 카테고리별로. 이 앱에서 쓰는 지표엔 <span class="pill" style="font-size:10px;border-color:var(--accent);color:var(--accent)">앱 지표</span> 표시.</p>
     <input id="glossSearch" placeholder="🔍 용어 검색 (예: DSR, 전세가율, 비례율)" oninput="renderGlossary()" style="width:100%;max-width:420px;margin-bottom:16px">
     <div id="glossBody"></div>
+  </div>
+</div>
+
+<!-- 서비스 소개·도움말 허브 -->
+<div id="view-about" style="display:none">
+  <div style="max-width:960px;margin:0 auto;padding:26px 18px 56px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      <svg width="38" height="38" viewBox="0 0 72 72" aria-hidden="true">
+        <rect width="72" height="72" rx="18" fill="url(#lg)"/>
+        <rect x="16" y="42" width="11" height="18" rx="2" fill="#fff" fill-opacity=".92"/>
+        <rect x="30" y="30" width="11" height="30" rx="2" fill="#fff" fill-opacity=".92"/>
+        <rect x="44" y="20" width="11" height="40" rx="2" fill="#fff" fill-opacity=".92"/>
+        <polyline points="11,46 30,36 46,26 60,14" fill="none" stroke="#22c55e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="60" cy="14" r="6" fill="#22c55e"/></svg>
+      <h2 style="margin:0;font-size:24px">시그널 APT란?</h2>
+    </div>
+    <p style="color:var(--txt);font-size:15px;line-height:1.6;margin:6px 0 4px"><b>데이터로 찾는 아파트 매매 타이밍.</b> 전문가 상담 없이도, 시장 지표와 흐름을 스스로 보고 매수 의사결정을 내릴 수 있게 돕는 서비스입니다.</p>
+    <p style="color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 20px">KB 주간지수·국토부 실거래·청약홈·경매·정비사업 등 공개 데이터를 우리 방식으로 가공해 <b>매수/매도 시그널</b>을 냅니다. 감이 아니라 <b>과거 구간으로 검증된 적중률</b>로 말합니다.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+      <div class="acard" onclick="openScoreboard()" style="border:2px solid var(--ring)">
+        <div style="font-size:20px">📊</div><b>시그널 성적표</b>
+        <span>과거 구간으로 검증한 매수·매도 <b style="color:var(--sig-buy)">적중률</b>. "정말 맞나요?"의 답.</span></div>
+      <div class="acard" onclick="openCycleGuide()">
+        <div style="font-size:20px">🌀</div><b>경기 국면 가이드</b>
+        <span>회복·상승·후퇴·침체 4국면과 자산격차. 사이클 읽는 법.</span></div>
+      <div class="acard" onclick="switchTab('glossary')">
+        <div style="font-size:20px">📖</div><b>용어사전</b>
+        <span>전세가율·DSR·비례율 등 매매·투자에 꼭 필요한 개념.</span></div>
+      <div class="acard" onclick="openSources()">
+        <div style="font-size:20px">ⓘ</div><b>데이터 출처·갱신주기</b>
+        <span>어떤 공개 데이터를 어떻게·얼마나 자주 쓰는지.</span></div>
+    </div>
+
+    <h3 style="font-size:16px;margin:26px 0 8px">이렇게 쓰세요</h3>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="astep"><b style="color:var(--accent)">1</b> <b>시그널</b> 탭 — 시장 국면과 지역별 매수/매도 시그널을 봅니다.</div>
+      <div class="astep"><b style="color:var(--accent)">2</b> <b>저평가</b> 탭 — 지역 급지 대비 입지가 좋고 싼 곳을 발굴합니다.</div>
+      <div class="astep"><b style="color:var(--accent)">3</b> <b>매물</b>(경매·급매·청약·재건축) · <b>✨AI 리포트</b> — 내 예산으로 실행합니다.</div>
+    </div>
+    <p style="color:var(--dim);font-size:11px;margin-top:20px">※ 모든 지표는 참고용입니다. 투자 판단과 실거래 확인은 이용자 책임입니다.</p>
   </div>
 </div>
 
@@ -844,7 +893,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
-  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','news','glossary'].forEach(v=>
+  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','news','glossary','about'].forEach(v=>
     document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
   if(listing){
     document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
@@ -2628,10 +2677,8 @@ async function startApp(needOnboard){
 </script>
 <footer style="border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim);background:var(--panel)">
   <b style="color:var(--txt)">Signal APT</b>
+  <span onclick="switchTab('about')" style="cursor:pointer;color:var(--accent)">🎨 시그널 APT란?</span>
   <span onclick="openScoreboard()" style="cursor:pointer;color:var(--accent)">📊 시그널 성적표</span>
-  <span onclick="openSources()" style="cursor:pointer;color:var(--accent)">ⓘ 데이터 출처·갱신주기</span>
-  <span onclick="openCycleGuide()" style="cursor:pointer;color:var(--accent)">🌀 경기 국면 가이드</span>
-  <span onclick="switchTab('glossary')" style="cursor:pointer;color:var(--accent)">📖 용어사전</span>
   <span style="margin-left:auto">지표는 참고용 · 투자 판단·실거래 확인은 이용자 책임</span>
 </footer>
 </body>
