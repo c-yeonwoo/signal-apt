@@ -824,6 +824,13 @@ def geocode_ep(data: dict = Body(...)):
     return geocode.geocode_batch(queries, max_miss=max_miss)
 
 
+@app.get("/api/mapconfig")
+def mapconfig():
+    """지도 타일 설정 — VWorld 키 있으면 한글 타일 URL, 없으면 null(프론트 CartoDB 폴백)."""
+    k = config.vworld_key()
+    return {"vworld": k or None}
+
+
 @app.get("/api/transit")
 def transit_ep(sx: float, sy: float, ex: float, ey: float):
     """두 좌표 간 대중교통 최단경로(분·환승·요금). 좌표 라운딩 키로 kv 캐시(30일)."""
