@@ -57,14 +57,15 @@ def current_phase(kb, region: str = "서울") -> dict | None:
 def cycle_history(kb, region: str = "서울") -> list[dict]:
     """지역 시기별 경기 국면 타임라인 — 매매 모멘텀(방향)×가속도(2x2)로 회복/상승/후퇴/침체 밴드.
 
-    가격만으로 산출(지역별 고유) → 지역마다 곡선이 다름. 잡음 방지 위해 12주 평활 + 짧은 밴드 병합.
+    가격만으로 산출(지역별 고유) → 지역마다 곡선이 다름. 잡음 방지 위해 26주 평활 + 짧은 밴드 반복 병합.
     """
     import pandas as pd
     sale = kb.series(region, "sale_change").dropna()
     if len(sale) < 24:
         return []
-    mom = sale.rolling(12, min_periods=6).mean()
-    prev = mom.shift(12)
+    # 매크로 사이클용 평활 — 26주(반년) 모멘텀 방향×가속으로 판정해 상승↔후퇴 잔파동 억제
+    mom = sale.rolling(26, min_periods=12).mean()
+    prev = mom.shift(26)
     seq = []
     for d in sale.index:
         m, p = mom.get(d), prev.get(d)
@@ -83,13 +84,18 @@ def cycle_history(kb, region: str = "서울") -> list[dict]:
             bands[-1]["end"] = str(d.date()); bands[-1]["_n"] += 1
         else:
             bands.append({"start": str(d.date()), "end": str(d.date()), "phase": ph, "_n": 1})
-    # 짧은 밴드(<8주) 직전 밴드로 흡수 → 깜빡임 제거
-    merged = []
+    # 짧은 밴드(<20주 ≈ 5개월) 를 반복적으로 직전 밴드에 흡수 → 매크로 국면만 남김
+    changed = True
+    while changed and len(bands) > 1:
+        changed = False
+        merged = []
+        for b in bands:
+            # 같은 국면 인접 → 합치고, 짧은(<20주) 밴드 → 직전에 흡수(직전 국면 유지)
+            if merged and (merged[-1]["phase"] == b["phase"] or b["_n"] < 20):
+                merged[-1]["end"] = b["end"]; merged[-1]["_n"] += b["_n"]; changed = True
+            else:
+                merged.append(b)
+        bands = merged
     for b in bands:
-        if merged and b["_n"] < 8:
-            merged[-1]["end"] = b["end"]
-        else:
-            merged.append(b)
-    for b in merged:
         b.pop("_n", None)
-    return merged
+    return bands

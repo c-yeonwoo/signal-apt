@@ -292,6 +292,10 @@
       </div>
       <div id="haesolPanel" style="padding:9px 14px;border-bottom:1px solid var(--line);font-size:13px;line-height:1.55"></div>
       <div class="haesol-panel" id="histPanel"></div>
+      <div id="cycleMini" style="display:none;border-bottom:1px solid var(--line)">
+        <div style="font-size:10px;color:var(--dim);padding:5px 10px 0">🌀 경기 사이클 파형 — 침체 저점 → 회복 → 상승 고점 → 후퇴 (곡선 위치 = 국면, 색 = 국면 구간)</div>
+        <div id="cycleMiniChart" style="height:70px"></div>
+      </div>
       <div id="chart"></div>
     </div>
   </div>
@@ -784,6 +788,7 @@ let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'));
 window.addEventListener('resize', () => {
   chart.resize();
+  if(cycleMini) cycleMini.resize();
   if(typeof uvChart!=='undefined' && uvChart) uvChart.resize();
   Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(e){} });
 });
@@ -1832,6 +1837,32 @@ function drawChart(region, m, sig){
             axisLabel:{color:SEC.color}, nameTextStyle:{color:SEC.color}, nameGap:12}],
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
     series }, true);
+  drawCycleMini(region, z0, last);
+}
+// 경기 국면 사인곡선 미니차트 — 침체(저점)→회복→상승(고점)→후퇴 파형으로 국면을 시각화(색 밴드 유지)
+let cycleMini=null;
+function drawCycleMini(region, z0, last){
+  const el=document.getElementById('cycleMini');
+  const bands=(_cycleCache[region]||[]).slice().sort((a,b)=> a.start<b.start?-1:1);
+  if(!_showCycle || bands.length<2){ el.style.display='none'; if(cycleMini) cycleMini.clear(); return; }
+  el.style.display='block';
+  if(!cycleMini) cycleMini=echarts.init(document.getElementById('cycleMiniChart'));
+  cycleMini.resize();
+  const H={침체기:-1, 회복기:0, 상승기:1, 후퇴기:0};   // 사인 파형 높이(저점→중간→고점→중간)
+  const pc={회복기:'rgba(2,132,199,0.18)', 상승기:'rgba(22,163,74,0.18)', 후퇴기:'rgba(217,119,6,0.18)', 침체기:'rgba(220,38,38,0.16)'};
+  const mid=b=>{ const s=new Date(b.start).getTime(), e=new Date(b.end).getTime(); return new Date((s+e)/2).toISOString().slice(0,10); };
+  const pts=[[z0, H[bands[0].phase]??0], ...bands.map(b=>[mid(b), H[b.phase]??0]), [last, H[bands[bands.length-1].phase]??0]];
+  cycleMini.setOption({ animation:false, grid:{left:48, right:62, top:12, bottom:6},
+    xAxis:{type:'time', min:z0, max:last, show:false},
+    yAxis:{type:'value', min:-1.5, max:1.5, show:false},
+    tooltip:{show:false},
+    series:[{ type:'line', smooth:0.6, showSymbol:false, silent:true, data:pts,
+      lineStyle:{width:2, color:'#475569'}, areaStyle:{opacity:.07, color:'#475569'},
+      markLine:{ silent:true, symbol:'none', data:[{yAxis:0}], label:{show:false}, lineStyle:{type:'dashed', opacity:.22, color:'var(--dim)'} },
+      markArea:{ silent:true, data: bands.map(b=>[
+        {xAxis:b.start, itemStyle:{color:pc[b.phase]||'rgba(148,163,184,.12)'},
+         label:{show:true, position:'insideTop', fontSize:9, color:'var(--dim)', formatter:b.phase.replace('기','')}},
+        {xAxis:b.end}]) } }] }, true);
 }
 function redrawChart(){ if(_lastM && selected) drawChart(selected, _lastM, _lastSig); }
 async function doRefresh(){
