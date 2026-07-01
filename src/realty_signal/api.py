@@ -94,6 +94,12 @@ async def _auto_refresh_loop():
                 log.warning("자동 갱신 완료")
         except Exception as e:  # 갱신 실패해도 루프 유지(다음 점검에 재시도)
             log.error("자동 갱신 실패: %s", e)
+        try:  # 회원·리포트 보존 — S3 백업(env 설정 시). 매일 1회.
+            from realty_signal import backup
+            if backup.enabled():
+                await asyncio.to_thread(backup.run_backup)
+        except Exception as e:
+            log.error("백업 실패: %s", e)
         await asyncio.sleep(86400)  # 하루마다 점검
 
 

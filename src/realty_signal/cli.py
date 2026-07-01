@@ -136,6 +136,17 @@ def serve(
 
 
 @app.command()
+def backup():
+    """app.db 를 S3 호환 스토리지로 백업 (env 설정 시). 수동/cron 실행용."""
+    from realty_signal import backup as bk
+    if not bk.enabled():
+        console.print("[yellow]백업 env 미설정[/yellow] (BACKUP_S3_BUCKET/KEY_ID/SECRET)")
+        raise typer.Exit(1)
+    key = bk.run_backup()
+    console.print(f"[green]백업 완료:[/green] {key}" if key else "[red]백업 실패[/red]")
+
+
+@app.command()
 def report(
     path: Path = typer.Argument(..., exists=True, help="KB 주간 시계열 .xlsx 경로"),
     region: str = typer.Option(None, help="특정 지역의 최근 추이만 보기"),

@@ -60,5 +60,22 @@ railway run bash -c 'mkdir -p /app/data/cache'
 
 ---
 
+## 자동 백업 (SQLite → S3 호환 스토리지)
+
+볼륨은 단일 실패점이라, 회원·리포트 보존을 위해 **매일 `app.db` 스냅샷을 오브젝트 스토리지로 백업**합니다. env 설정 시 앱 내장 루프가 자동 실행(하루 1회), 미설정 시 비활성.
+
+**추천 스토리지: Cloudflare R2** (무료 10GB, S3 호환) 또는 AWS S3 / Supabase Storage.
+
+```
+BACKUP_S3_BUCKET=signalapt-backup
+BACKUP_S3_KEY_ID=...
+BACKUP_S3_SECRET=...
+BACKUP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com   # R2/Supabase 등. AWS S3면 생략
+BACKUP_S3_REGION=auto
+```
+- 온라인 백업(`.backup`)이라 **운영 중에도 안전**. gzip 압축(현재 ≈0.5MB), 최근 14개 유지·자동 정리.
+- 수동 실행: `signal backup` (cron에 걸어도 됨).
+- **복구**: 스토리지에서 최신 `signalapt/app-*.db.gz` 내려받아 `gunzip` → 볼륨의 `data/cache/app.db` 로 교체 후 재시작.
+
 ## Fly.io 로 옮기려면 (참고)
 동일 `Dockerfile` 재사용. `fly launch --no-deploy` → `fly volumes create data --size 3` → `fly.toml`에 `[mounts] source="data" destination="/app/data"` + `[env] HOST="0.0.0.0"` → `fly secrets set KEY=..` → `fly deploy`. (scale-to-zero로 유휴 비용 절감 가능)
