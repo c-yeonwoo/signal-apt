@@ -442,8 +442,10 @@
       <label style="font-size:13px;color:var(--dim)">권역 <select id="cycleRegion" class="ctrl" onchange="loadCycle()" style="padding:6px 9px"><option value="서울">서울</option><option value="경기">경기</option><option value="인천">인천</option></select></label>
     </div>
     <p style="color:var(--dim);font-size:13px;margin:0 0 16px">벌집순환모형 4국면 — <b>가격 방향 × 매수심리 방향</b>으로 현재 위치를 추정합니다. (심리·거래량이 가격을 선행)</p>
+    <div id="cycleGraph" style="margin-bottom:18px"></div>
     <div id="cycleNow"></div>
     <div id="cyclePhases" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px"></div>
+    <div id="cycleInsight" style="margin-top:20px"></div>
     <p style="color:var(--dim);font-size:11px;margin-top:14px">※ KB 광역 주간 시리즈 기반 추정. 지역·단지별 국면은 다를 수 있으며 참고용입니다.</p>
   </div>
 </div>
@@ -770,6 +772,42 @@ async function loadCycle(){
       <div style="font-weight:800;color:${c.col};font-size:15px">${c.ic} ${c.k}</div>
       <div style="font-size:11px;color:var(--dim);margin-bottom:7px">${c.tag}</div>
       ${c.현상.map(x=>`<div style="font-size:11.5px;margin:3px 0;color:${on?'var(--txt)':'var(--dim)'}">· ${x}</div>`).join('')}</div>`;}).join('');
+  document.getElementById('cycleGraph').innerHTML = cycleGraph(d.phase, d.asof, cur.col);
+  document.getElementById('cycleInsight').innerHTML = cycleInsight(d.phase);
+}
+// 순환주기 사인곡선 + 현재 위치 펄스
+function cycleGraph(phase, asof, col){
+  const W=920,H=300,padX=60,padT=40,padB=54, midY=(padT+(H-padB))/2, amp=(H-padT-padB)/2*0.8;
+  const tpos={회복기:0.15, 상승기:0.35, 후퇴기:0.62, 침체기:0.85};
+  const xOf=t=>padX+t*(W-2*padX), yOf=t=>midY+amp*Math.cos(2*Math.PI*t);
+  let path=''; for(let i=0;i<=120;i++){const t=i/120; path+=(i?'L':'M')+xOf(t).toFixed(1)+' '+yOf(t).toFixed(1)+' ';}
+  const ct=tpos[phase]??0.35, cx=xOf(ct), cy=yOf(ct);
+  const lbl=(t,txt,c,on)=>`<text x="${xOf(t)}" y="${yOf(t)+(t>0.25&&t<0.75?-16:26)}" text-anchor="middle" font-size="${on?16:13}" font-weight="${on?800:600}" fill="${on?c:'var(--dim)'}">${txt}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px">
+    <line x1="${padX}" y1="${padT+4}" x2="${W-padX}" y2="${padT+4}" stroke="var(--line)" stroke-dasharray="4 4"/>
+    <text x="${padX-8}" y="${padT+8}" text-anchor="end" font-size="11" fill="var(--dim)">고점</text>
+    <line x1="${padX}" y1="${H-padB-4}" x2="${W-padX}" y2="${H-padB-4}" stroke="var(--line)" stroke-dasharray="4 4"/>
+    <text x="${padX-8}" y="${H-padB}" text-anchor="end" font-size="11" fill="var(--dim)">저점</text>
+    <path d="${path}" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round"/>
+    ${_CYCLE.map(c=>lbl(tpos[c.k], c.ic+' '+c.k, c.col, c.k===phase)).join('')}
+    <line x1="${cx}" y1="${padT}" x2="${cx}" y2="${H-padB}" stroke="${col}" stroke-width="1.5" stroke-dasharray="3 3" opacity=".5"/>
+    <circle cx="${cx}" cy="${cy}" r="9" fill="${col}" opacity=".25"><animate attributeName="r" values="9;20;9" dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity" values=".35;0;.35" dur="1.8s" repeatCount="indefinite"/></circle>
+    <circle cx="${cx}" cy="${cy}" r="7" fill="${col}" stroke="#fff" stroke-width="2.5"/>
+    <text x="${cx}" y="${padT-12}" text-anchor="middle" font-size="13" font-weight="800" fill="${col}">현재 · ${asof}</text>
+  </svg>`;
+}
+function cycleInsight(phase){
+  const now = {회복기:'지금은 <b>무주택 실수요자의 진입 적기</b> — 격차가 벌어지기 전 올라타는 구간입니다.',
+    상승기:'지금은 <b>자산 격차가 가장 빠르게 벌어지는 국면</b> — 유주택·상급지일수록 유리, 무주택은 진입장벽이 높아집니다.',
+    후퇴기:'지금은 상승 피로가 쌓인 국면 — 상급지부터 조정될 수 있고, 무리한 추격매수는 격차 상단에서 물릴 위험이 있습니다.',
+    침체기:'지금은 <b>현금 보유자의 저가 매수 기회</b> — 이 시기의 매수가 다음 상승기 격차를 가릅니다.'}[phase]||'';
+  return `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.7">
+    <div style="font-weight:800;font-size:14px;margin-bottom:6px">💡 사이클과 자산 격차</div>
+    <p style="margin:0 0 8px">일반적으로 <b>상승기에 유주택·무주택 간 자산 격차가 가장 크게 벌어진다</b>고 봅니다. 집값이 오르면 유주택자의 순자산은 불어나는 반면(자산 인플레이션), 무주택자의 전세·현금 가치는 상대적으로 뒤처져 이른바 '벼락거지' 현상이 나타납니다. 상급지가 하급지보다 더 크게 오르며 자산가 내부의 격차도 확대됩니다.</p>
+    <p style="margin:0 0 8px">반대로 <b>하락·침체기</b>에는 고가·상급지 조정폭이 커 격차가 일시적으로 좁혀지지만, 현금 보유자가 급매·경매로 저가 매수하며 <b>다음 상승기 격차의 씨앗</b>이 됩니다. 결국 격차를 줄이는 열쇠는 <b>회복기 초입에 진입하는 타이밍</b>입니다.</p>
+    <div style="background:#fff;border-left:3px solid var(--accent);padding:8px 12px;border-radius:0 8px 8px 0;margin-top:4px">${now}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:8px">※ 우리 가계자산의 대부분이 부동산이라 집값 국면이 자산 불평등을 크게 좌우한다는 일반적 견해입니다(가계금융복지조사 등). 참고용 해석입니다.</div>
+  </div>`;
 }
 function redevTab(name){
   ['screener','stages','calc','zones'].forEach(n=>
