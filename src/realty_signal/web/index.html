@@ -145,7 +145,7 @@
   .zrow { display:flex; align-items:center; gap:8px; margin:4px 0; }
   .zsw-sm { width:15px; height:15px; border-radius:3px; flex:0 0 auto; }
   /* 경매 */
-  #view-auction, #view-undervalued, #view-presale, #view-conclusion, #view-quicksale, #view-redev { padding:16px 20px; height:calc(100vh - 52px); overflow:auto; }
+  #view-auction, #view-undervalued, #view-presale, #view-quicksale, #view-redev { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:12px; height:calc(100vh - 178px); min-height:420px; }
   .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
@@ -242,7 +242,6 @@
     <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
     <button class="tab" data-tab="listings" onclick="switchTab('listings')">매물</button>
     <button class="tab" data-tab="news" onclick="switchTab('news')">뉴스</button>
-    <button class="tab" data-tab="conclusion" onclick="switchTab('conclusion')">✨ AI 리포트</button>
   </div>
   <div class="right">
     <!-- 도구: 탐색·비교·학습 -->
@@ -557,26 +556,6 @@
   <p style="color:var(--dim);font-size:11px;margin-top:14px">※ KB 광역 주간 시리즈 기반 추정. 지역·단지별 국면은 다를 수 있으며 참고용입니다.</p>
 </dialog>
 
-<div id="view-conclusion" style="display:none">
-  <h2 style="margin:0 0 4px">✨ AI 개인화 리포트</h2>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">내 프로필(주택수·예산·거주지·평수)과 시그널·저평가·급매·청약·재건축을 종합해 <b>나에게 맞는 매수 전략</b>을 리포트로 만듭니다.</p>
-  <div id="aiReport" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:16px;line-height:1.7;font-size:14px;display:none"></div>
-  <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-    <label>가용자본(자기자본)<br><input id="ccCapital" type="number" value="30000" style="width:120px"> <span style="color:var(--dim)">만원</span></label>
-    <label>대출비율(LTV)<br><input id="ccLtv" type="number" value="70" min="0" max="90" style="width:70px"> %</label>
-    <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
-    <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
-    <label>기준 평형<br><select id="ccPyeong" class="ctrl">
-      <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
-    </select></label>
-    <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
-    <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
-  </div>
-  <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
-  <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
-  <p id="ccEmpty" style="color:var(--dim)"></p>
-</div>
-
 <dialog id="calcDlg" style="width:760px">
   <h3 id="calcTitle"></h3>
   <div id="calcBreak" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px"></div>
@@ -760,9 +739,25 @@
     </div>
   </section>
 
-  <!-- AI 리포트(자리 — 다음 단계에서 이전) -->
+  <!-- AI 리포트(상단탭에서 이전) -->
   <section id="mp-report" style="display:none">
-    <p style="color:var(--dim);font-size:13px">AI 리포트는 곧 이 자리로 이동합니다. 지금은 상단 <b>✨ AI 리포트</b> 탭에서 이용하세요.</p>
+    <h3 style="margin:0 0 4px;font-size:19px">✨ AI 개인화 리포트</h3>
+    <p style="color:var(--dim);font-size:13px;margin:0 0 14px">내 프로필과 <b>관심 지역·단지(80%)</b> + <b>미처 발견 못한 신규 후보(20%)</b>를 섞어 나에게 맞는 매수 전략을 리포트로 만듭니다.</p>
+    <div id="aiReport" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:16px;line-height:1.7;font-size:14px;display:none"></div>
+    <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <label>가용자본(자기자본)<br><input id="ccCapital" type="number" value="30000" style="width:120px"> <span style="color:var(--dim)">만원</span></label>
+      <label>대출비율(LTV)<br><input id="ccLtv" type="number" value="70" min="0" max="90" style="width:70px"> %</label>
+      <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
+      <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
+      <label>기준 평형<br><select id="ccPyeong" class="ctrl">
+        <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
+      </select></label>
+      <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
+      <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
+    </div>
+    <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
+    <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
+    <p id="ccEmpty" style="color:var(--dim)"></p>
   </section>
 
   <!-- 프로필 -->
@@ -924,7 +919,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
-  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','news','glossary','about'].forEach(v=>
+  ['signal','auction','undervalued','presale','quicksale','redev','mypage','news','glossary','about'].forEach(v=>
     document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
   if(listing){
     document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
@@ -933,7 +928,6 @@ function switchTab(t){
   }
   if(t==='signal'){ chart.resize(); renderScoreboard(); renderAha(); }
   if(t==='undervalued') loadUndervalued();
-  if(t==='conclusion') loadConclusion();
   if(t==='mypage') fillMyPage();
   if(t==='news') loadNews();
   if(t==='glossary') renderGlossary();
@@ -2536,6 +2530,7 @@ function mpSection(name){
   document.querySelectorAll('.mpseg').forEach(b=>b.classList.toggle('on', b.dataset.seg===name));
   ['profile','map','report'].forEach(s=>{ const el=document.getElementById('mp-'+s); if(el) el.style.display = s===name?'':'none'; });
   if(name==='map') drawMyMap();
+  if(name==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
 }
 // ===== 내 시그널맵 — 거주지·관심지역·관심단지 핀 + 거리/대중교통 =====
 let myMap=null, _myLayer=null, _myMarkers=[], _myPts=[], _mySel=[];

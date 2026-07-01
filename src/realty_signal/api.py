@@ -192,9 +192,15 @@ def report_ai(request: Request, data: dict = Body(...)):
     from realty_signal import ai_report
     if not ai_report.available():
         return {"available": False}
-    profile = db.profile_get(_uid(request))
+    uid = _uid(request)
+    profile = db.profile_get(uid)
     news = db.news_recent_for_ai(12)   # 최근 정책·시장 뉴스 맥락 주입
-    report = ai_report.generate(profile, data.get("summary") or {}, news=news)
+    fav = db.fav_list(uid)
+    favorites = {
+        "관심지역": [f["key"] for f in fav if f["kind"] == "region"],
+        "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav if f["kind"] == "complex"],
+    }
+    report = ai_report.generate(profile, data.get("summary") or {}, news=news, favorites=favorites)
     return {"available": True, "report": report, "news_used": len(news)} if report else {"available": False}
 
 
