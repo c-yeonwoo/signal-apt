@@ -45,6 +45,8 @@
   .filters { display:flex; gap:5px; flex-wrap:wrap; }
   .chip { padding:3px 9px; border:1px solid var(--line); border-radius:12px; cursor:pointer;
           background:var(--panel); color:var(--dim); font-size:11px; user-select:none; }
+  /* 차트바 칩(지난 시그널·해설·전세수급 구간·출처)은 크게 — 가시성 */
+  .chartbar .chip { font-size:13px; padding:7px 14px; border-radius:14px; font-weight:600; color:var(--txt); }
   .chip.on { color:#fff; border-color:var(--accent); background:var(--accent); }
   #list { flex:1; overflow:auto; }
   .row { padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex;
