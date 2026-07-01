@@ -45,7 +45,7 @@
              background:#eef2f7; color:var(--accent); cursor:pointer; font-size:13px; white-space:nowrap; }
   #refresh:disabled { opacity:.5; cursor:wait; }
   .right { margin-left:auto; display:flex; gap:12px; align-items:center; }
-  .wrap { display:flex; height:calc(100vh - 52px); }
+  .wrap { display:flex; height:calc(100vh - var(--hh, 70px)); }
   .side { width:264px; border-right:1px solid var(--line); display:flex; flex-direction:column; }
   /* 사이드바 필터 */
   .sfilters { padding:10px 12px; border-bottom:1px solid var(--line); background:#f1f5f9;
@@ -69,7 +69,7 @@
   .WATCH{background:#ca8a0433;color:#d97706;} .NEUTRAL{background:#33415533;color:#94a3b8;}
   .SELL_RISK{background:#ef444433;color:#dc2626;}
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
-  #chart { flex:1; }
+  #chart { flex:1; min-height:0; }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
   #reasons { display:flex; gap:6px; flex-wrap:wrap; flex:1 1 360px; min-width:240px; }
@@ -280,7 +280,7 @@
         <button id="sideToggle" onclick="toggleSide()" title="목록 접기/펼치기" style="font-size:15px">◀</button>
         <span id="sigbadge" style="font-size:18px;font-weight:700"></span>
         <span id="sigsub" style="color:var(--dim);font-size:12.5px"></span>
-        <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 매물(경매·급매·청약)만 좁혀 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 매물 ›</button>
+        <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 급매물(+경매·청약)만 좁혀 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 급매물 ›</button>
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;color:var(--dim)">오버레이</span>
           <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap">📅 지난 시그널</button>
@@ -780,7 +780,15 @@ let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
 let activeGrade = new Set(["A","B","C","D"]);   // 지역 급지 필터(상~하급지). 급지 없는 지방은 항상 통과
 let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'));
+// 헤더 실제 높이를 --hh 로 반영 → .wrap 높이가 헤더/뷰포트와 정확히 맞아 footer 침범 방지
+function fitHeaderHeight(){
+  const h=document.querySelector('header')?.offsetHeight;
+  if(h) document.documentElement.style.setProperty('--hh', h+'px');
+}
+fitHeaderHeight();
+window.addEventListener('load', ()=>{ fitHeaderHeight(); chart.resize(); if(cycleMini) cycleMini.resize(); });
 window.addEventListener('resize', () => {
+  fitHeaderHeight();
   chart.resize();
   if(cycleMini) cycleMini.resize();
   if(typeof uvChart!=='undefined' && uvChart) uvChart.resize();
@@ -1818,11 +1826,8 @@ function drawChart(region, m, sig){
   }
 
   const last = meta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
-  // 지난 시그널·경기국면 ON 이면 과거가 보이도록 전체 기간으로, 아니면 최근 3년
-  // 지역에 따라 전세수급이 비어있을 수 있음 → dates 가 실제로 채워진 첫 시리즈 사용(전체기간 산정)
-  const _dc=[m.sale_change, m.price_index, m.jeonse_supply].find(s=>s&&s.dates&&s.dates.length);
-  const allDates = (_dc&&_dc.dates) || [];
-  const z0 = ((_showHist||_showCycle) && allDates.length) ? allDates[0] : start.toISOString().slice(0,10);
+  // 차트 리드로우 시 기본 표시기간은 항상 최근 3년(오버레이는 전체기간 렌더되나 뷰는 3년, 줌아웃 시 확장)
+  const z0 = start.toISOString().slice(0,10);
   chart.setOption({ tooltip:{trigger:'axis'},
     legend:{type:'scroll', top:6, left:46, right:70, textStyle:{fontSize:11}},
     grid:{left:48, right:62, top:52, bottom:64}, xAxis:{type:'time'},
@@ -1833,6 +1838,8 @@ function drawChart(region, m, sig){
     series }, true);
   drawCycleMini(region, z0, last);
   bindCycleZoomSync();
+  // 미니차트 표시/숨김으로 차트 컨테이너 높이가 바뀜 → 레이아웃 반영 후 메인차트 리사이즈(오버플로/침범 방지)
+  requestAnimationFrame(()=>{ chart.resize(); if(cycleMini && _showCycle) cycleMini.resize(); });
 }
 // 메인 차트 줌/팬 → 미니 파형도 같은 x구간으로 맞춤(정렬 유지). 최초 1회만 바인딩.
 let _cycleZoomBound=false;
