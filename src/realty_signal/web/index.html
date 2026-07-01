@@ -251,6 +251,7 @@
           <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap">📅 지난 시그널</button>
           <button class="chip" id="haesolBtn" onclick="toggleHaesol()" style="white-space:nowrap">💬 해설</button>
           <button class="chip" id="zoneBtn" onclick="toggleZoneInfo(event)" style="white-space:nowrap">🎨 전세수급 구간</button>
+          <button class="chip" onclick="openSources()" title="지표 데이터 출처·갱신주기" style="white-space:nowrap">ⓘ 출처</button>
           <div class="zinfo-pop" id="zinfoPop"></div>
         </div>
       </div>
@@ -672,6 +673,15 @@
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('complexDlg').close()">✕</span>
   </div>
   <div id="cxBody" style="max-height:70vh;overflow:auto"></div>
+</dialog>
+
+<dialog id="sourceDlg" style="width:620px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h3 style="margin:0;font-size:19px">ⓘ 데이터 출처 · 갱신주기</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('sourceDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">차트·지표는 아래 공개 데이터를 우리 방식으로 가공·시각화한 것입니다. 출처마다 갱신 주기가 다릅니다.</p>
+  <div id="sourceBody" style="max-height:66vh;overflow:auto"></div>
 </dialog>
 
 <script>
@@ -1668,6 +1678,26 @@ async function loadComplexAgents(name, region){
           <div style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a['주소']||''}${a['거리m']!=null?` · ${a['거리m']}m`:''}</div></div>
         ${a['전화']?`<a href="tel:${a['전화']}" style="font-size:12px;color:var(--accent);white-space:nowrap">📞 ${a['전화']}</a>`:''}
       </div>`).join('');
+}
+function openSources(){
+  const rows=[
+    ['전세수급·매수우위·매수세·매매/전세 증감률','KB부동산 데이터허브','주간 (매주 금 발표)'],
+    ['매매가격지수 (누적 추세선)','KB 주간 증감률 누적 — 자체 파생','주간'],
+    ['거래량·실거래가','국토교통부 실거래가(RTMS)','수시 (계약 후 30일 내 신고)'],
+    ['주택구입부담지수 (구매력)','한국주택금융공사 K-HAI','분기'],
+    ['기준금리 / 대출금리','한국은행','기준금리 수시 · 대출금리 월'],
+    ['입주물량 (공급압력)','KB 데이터허브 공급 통계','월·연'],
+    ['저평가도·입지점수·급지','자체 산출 (헤도닉 회귀 + 국토부 실거래)','실거래 갱신 시'],
+    ['정비구역·재건축 단계','서울 열린데이터광장 (정비사업 현황·추진경과)','부정기 (지자체 고시)'],
+    ['단지 전세가율·갭','국토부 실거래 (매매+전세)','수시'],
+  ];
+  const asof=(document.getElementById('date')?.textContent||'').trim();
+  document.getElementById('sourceBody').innerHTML =
+    `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="color:var(--dim);font-size:11px;text-align:left"><th style="padding:7px 6px">지표</th><th style="padding:7px 6px">출처</th><th style="padding:7px 6px;white-space:nowrap">갱신주기</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 6px">${r[0]}</td><td style="padding:8px 6px;color:var(--dim)">${r[1]}</td><td style="padding:8px 6px;color:var(--dim);white-space:nowrap">${r[2]}</td></tr>`).join('')}</tbody></table>`
+    + `<div style="font-size:11px;color:var(--dim);margin-top:12px">현재 KB 데이터 ${asof} · 앱은 주간 자동 갱신됩니다. 지표는 참고용이며 실제 투자 판단·실거래 확인은 이용자 책임입니다.</div>`;
+  document.getElementById('sourceDlg').showModal();
 }
 async function openHistModal(){
   const iv = _histCache[selected]||[];
