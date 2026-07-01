@@ -81,6 +81,9 @@
   .mpseg { padding:8px 14px; border:none; background:none; color:var(--dim); cursor:pointer;
            font-size:14px; font-weight:600; border-bottom:2px solid transparent; margin-bottom:-1px; }
   .mpseg.on { color:var(--accent); border-bottom-color:var(--accent); }
+  .acct-item { display:block; padding:8px 12px; font-size:13px; color:var(--txt); cursor:pointer;
+               border-radius:8px; white-space:nowrap; }
+  .acct-item:hover { background:var(--accent-weak); }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
             align-items:center; gap:14px; flex-wrap:wrap; }
   #reasons { display:flex; gap:6px; flex-wrap:wrap; flex:1 1 360px; min-width:240px; }
@@ -242,6 +245,7 @@
     <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
     <button class="tab" data-tab="listings" onclick="switchTab('listings')">매물</button>
     <button class="tab" data-tab="news" onclick="switchTab('news')">뉴스</button>
+    <button class="tab" data-tab="report" onclick="acctGo('report')" title="내 관심 기반 개인화 매수전략 — 최종 결론">✨ AI 리포트</button>
   </div>
   <div class="right">
     <!-- 도구: 탐색·비교·학습 -->
@@ -249,11 +253,20 @@
     <button class="chip" id="cmpChip" onclick="openCompare()" style="font-size:12px;display:none;background:var(--accent);color:#fff;border-color:var(--accent)" title="담은 단지 비교">비교 0</button>
     <button class="chip" onclick="switchTab('about')" style="font-size:12px" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">❓ 가이드</button>
     <span aria-hidden="true" style="width:1px;height:18px;background:var(--line);margin:0 4px;flex:0 0 auto"></span>
-    <!-- 개인: 보드·알림·계정 -->
-    <button class="chip" onclick="openBoard()" style="font-size:12px" title="즐겨찾기 지역 보드">★ 내 보드</button>
+    <!-- 개인: 알림·계정 -->
     <button class="chip" id="alertBtn" onclick="openAlerts()" style="font-size:14px;line-height:1;position:relative" title="즐겨찾기 지역 시그널 변동 알림">🔔<span id="alertBadge" style="display:none;position:absolute;top:-5px;right:-5px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
     <span class="date" id="date" title="자동 갱신(주간 cron)"></span>
-    <button class="chip" id="myPageBtn" onclick="switchTab('mypage')" style="font-size:12px"><span id="myPageLabel">마이페이지</span></button>
+    <div style="position:relative">
+      <button class="chip" id="acctBtn" onclick="toggleAcctMenu(event)" style="font-size:12px">👤 <span id="myPageLabel">계정</span> ▾</button>
+      <div id="acctMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);min-width:190px;z-index:1200;padding:4px">
+        <div id="acctEmail" style="padding:7px 12px 8px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line);margin-bottom:4px"></div>
+        <a class="acct-item" onclick="acctGo('profile')">👤 프로필 수정</a>
+        <a class="acct-item" onclick="acctGo('map')">🗺️ 내 시그널 맵</a>
+        <a class="acct-item" onclick="acctGo('report')">✨ AI 리포트</a>
+        <a class="acct-item" onclick="closeAcctMenu();openBoard()">★ 내 보드</a>
+        <a class="acct-item" onclick="closeAcctMenu();logout()" style="color:#dc2626">로그아웃</a>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -2500,10 +2513,18 @@ function saveOnboarding(){
 }
 function skipOnboarding(){ document.getElementById('onbDlg').close(); loadData(); }
 function applyProfileHeader(){
+  const nm=(_userEmail||'').split('@')[0]||'계정';
   const lab=document.getElementById('myPageLabel');
-  if(lab){ const nm=(_userEmail||'').split('@')[0]||'마이페이지';
-    lab.textContent = nm + (_profile['거주지']?` · ${_profile['거주지']}`:''); }
+  if(lab) lab.textContent = nm + (_profile['거주지']?` · ${_profile['거주지']}`:'');
+  const em=document.getElementById('acctEmail'); if(em) em.textContent = _userEmail || '';
 }
+// ===== 계정 드롭다운 =====
+function toggleAcctMenu(e){ if(e) e.stopPropagation();
+  const m=document.getElementById('acctMenu'); m.style.display = m.style.display==='block'?'none':'block'; }
+function closeAcctMenu(){ const m=document.getElementById('acctMenu'); if(m) m.style.display='none'; }
+function acctGo(seg){ closeAcctMenu(); switchTab('mypage'); mpSection(seg); }
+document.addEventListener('click',e=>{ const m=document.getElementById('acctMenu'), b=document.getElementById('acctBtn');
+  if(m && m.style.display==='block' && !m.contains(e.target) && b && !b.contains(e.target)) m.style.display='none'; });
 // ===== 마이페이지 (프로필 조회·수정) =====
 function fillMyPage(){
   document.getElementById('mp_email').textContent = _userEmail || '';
