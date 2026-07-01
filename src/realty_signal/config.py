@@ -18,6 +18,11 @@ def load_env(path: str | Path = ".env") -> None:
         os.environ.setdefault(k.strip(), v.strip())
 
 
+def is_prod() -> bool:
+    """배포(Railway) 환경 여부. 로컬 dev 는 RAILWAY_ENVIRONMENT 가 없음."""
+    return bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("APP_ENV") == "prod")
+
+
 def public_data_key() -> str | None:
     return os.environ.get("PUBLIC_DATA_KEY")
 

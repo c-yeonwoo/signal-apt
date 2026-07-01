@@ -87,6 +87,34 @@ def summarize(topic: str | None, items: list[dict], detail: bool = False) -> str
         return None
 
 
+_CHANGE_KW = ("정책", "규제", "대출", "금리", "세제", "세금", "완화", "지정", "해제", "공급", "제도")
+
+
+def mock_summary(topic: str | None, items: list[dict], detail: bool = False) -> str:
+    """로컬 dev 용 목업 요약 — LLM 호출 없이 실제 헤드라인으로 그럴듯한 형태만 구성.
+
+    실제 AI 분석이 아니라 개발 중 UI 확인용. prod 에서는 summarize() 사용.
+    """
+    titles = [i.get("title", "").strip() for i in items if i.get("title")]
+    top = titles[:6 if detail else 5]
+    changes = [t for t in titles if any(k in t for k in _CHANGE_KW)][:4]
+    scope = f"'{topic}'" if (topic and topic != "전체") else "부동산 전반"
+    if detail:
+        parts = [f"## 핵심 이슈", *[f"- {t}" for t in top[:6]]]
+        if changes:
+            parts += ["", "## 제도·정책 변경점", *[f"- {t}" for t in changes]]
+        parts += ["", "## 매수자 관점 시사점",
+                  f"- {scope} 관련 헤드라인이 최근 {len(items)}건 수집됨 — 흐름 모니터링 권장.",
+                  "- 규제·금리 변화는 실거래에 시차를 두고 반영되는 경향."]
+        parts.append("\n※ 로컬 목업 요약 (실제 AI 분석은 배포 환경에서 생성)")
+        return "\n".join(parts)
+    parts = [f"## 최근 주요 이슈", *[f"- {t}" for t in top]]
+    if changes:
+        parts += ["", "## 꼭 알아야 할 변경점", *[f"- {t}" for t in changes]]
+    parts.append("\n※ 로컬 목업 요약 (실제 AI 분석은 배포 환경에서 생성)")
+    return "\n".join(parts)
+
+
 def fetch_news(cid: str, csec: str, per_topic: int = 12) -> list[dict]:
     """토픽별 최신 뉴스 수집 → 정규화·태깅. link 기준 dedupe."""
     seen: dict[str, dict] = {}

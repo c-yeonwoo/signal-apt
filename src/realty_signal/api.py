@@ -848,20 +848,25 @@ def news(topic: str | None = None):
 
 @app.get("/api/news/summary")
 def news_summary(topic: str | None = None, days: int = 30):
-    """테마별 최근 뉴스 AI 요약(주요 이슈+변경점). KB 충분(5건+)·ANTHROPIC 키 시. 캐시 6h."""
+    """테마별 뉴스 요약. 로컬 dev → 목업(LLM 미호출), prod → Claude + 캐시 TTL 1일."""
     import os as _os
     from realty_signal import db
-    if not _os.environ.get("ANTHROPIC_API_KEY"):
-        return {"available": False}
+    from realty_signal.ingest import news as nw
     items = db.news_since(topic, days, 40)
     if len(items) < 5:
         return {"available": True, "enough": False, "count": len(items)}
+    detail = bool(topic and topic != "전체")   # 특정 테마 → 심층 요약
+    # 로컬 개발: LLM 비용 없이 헤드라인 기반 목업 (매번 새로 생성해도 저렴)
+    if not config.is_prod():
+        return {"available": True, "enough": True, "detail": detail, "n": len(items),
+                "days": days, "mock": True, "summary": nw.mock_summary(topic, items, detail)}
+    # 배포: Claude 요약 + 하루 캐시 (매 요청마다 호출 금지)
+    if not _os.environ.get("ANTHROPIC_API_KEY"):
+        return {"available": False}
     ckey = f"newsum:{topic or '전체'}:{days}"
-    cached = db.kv_get(ckey, max_age=6 * 3600)
+    cached = db.kv_get(ckey, max_age=86400)   # TTL 1일
     if cached is not None:
         return {**cached, "cached": True}
-    from realty_signal.ingest import news as nw
-    detail = bool(topic and topic != "전체")   # 특정 테마 → 심층 요약
     summary = nw.summarize(topic, items, detail=detail)
     out = {"available": True, "enough": True, "summary": summary, "n": len(items),
            "days": days, "detail": detail}
