@@ -220,7 +220,7 @@
 </head>
 <body class="tab-signal">
 <header>
-  <h1 style="display:flex;align-items:center;gap:9px">
+  <h1 onclick="location.assign('/')" title="홈(시그널)으로" style="display:flex;align-items:center;gap:9px;cursor:pointer">
     <svg width="30" height="30" viewBox="0 0 72 72" aria-label="로고">
       <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#1e3a8a"/><stop offset=".55" stop-color="#2563eb"/><stop offset="1" stop-color="#2563eb"/>
@@ -268,7 +268,6 @@
 <div id="view-signal">
   <div class="wrap">
     <div class="side">
-      <div id="ahaBox" style="display:none;padding:12px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,rgba(37,99,235,.09),rgba(37,99,235,.02))"></div>
       <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help"></div>
       <div class="sfilters">
         <input id="search" placeholder="🔍 지역 검색…" />
