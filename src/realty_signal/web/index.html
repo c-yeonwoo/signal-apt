@@ -258,7 +258,6 @@
 
 <!-- 시그널 탭 -->
 <div id="view-signal">
-  <div id="heroScore" style="display:none"></div>
   <div class="wrap">
     <div class="side">
       <div id="ahaBox" style="display:none;padding:12px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,rgba(37,99,235,.09),rgba(37,99,235,.02))"></div>
@@ -1827,7 +1826,9 @@ function drawChart(region, m, sig){
 
   const last = meta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
   // 지난 시그널·경기국면 ON 이면 과거가 보이도록 전체 기간으로, 아니면 최근 3년
-  const allDates = (m.jeonse_supply || m.price_index || m.sale_change || {}).dates || [];
+  // 지역에 따라 전세수급이 비어있을 수 있음 → dates 가 실제로 채워진 첫 시리즈 사용(전체기간 산정)
+  const _dc=[m.sale_change, m.price_index, m.jeonse_supply].find(s=>s&&s.dates&&s.dates.length);
+  const allDates = (_dc&&_dc.dates) || [];
   const z0 = ((_showHist||_showCycle) && allDates.length) ? allDates[0] : start.toISOString().slice(0,10);
   chart.setOption({ tooltip:{trigger:'axis'},
     legend:{type:'scroll', top:6, left:46, right:70, textStyle:{fontSize:11}},
@@ -1838,6 +1839,17 @@ function drawChart(region, m, sig){
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
     series }, true);
   drawCycleMini(region, z0, last);
+  bindCycleZoomSync();
+}
+// 메인 차트 줌/팬 → 미니 파형도 같은 x구간으로 맞춤(정렬 유지). 최초 1회만 바인딩.
+let _cycleZoomBound=false;
+function bindCycleZoomSync(){
+  if(_cycleZoomBound) return; _cycleZoomBound=true;
+  chart.on('datazoom', ()=>{
+    if(!_showCycle || !cycleMini) return;
+    const dz=(chart.getOption().dataZoom||[])[0];
+    if(dz && dz.startValue!=null) cycleMini.setOption({xAxis:{min:dz.startValue, max:dz.endValue}});
+  });
 }
 // 경기 국면 사인곡선 미니차트 — 침체(저점)→회복→상승(고점)→후퇴 파형으로 국면을 시각화(색 밴드 유지)
 let cycleMini=null;
@@ -1968,35 +1980,12 @@ async function renderAha(){
   }catch(e){ el.style.display='none'; }
 }
 async function renderScoreboard(){
-  const el=document.getElementById('heroScore'); if(!el) return;
-  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){ return; } }
-  const bt=_btCache; if(!bt||!bt.by_signal||!bt.by_signal.length) return;
-  const lab={STRONG_BUY:'강력매수',BUY:'매수',SELL:'매도'}, col={STRONG_BUY:'#16a34a',BUY:'#22c55e',SELL:'#dc2626'};
-  const n=bt.by_signal.reduce((a,s)=>a+(s['평가수']||0),0);
-  // 대표 지표 = 강력매수 적중률(없으면 첫 항목)
-  const flag=bt.by_signal.find(s=>s.signal==='STRONG_BUY')||bt.by_signal[0];
-  const pill=s=>`<div style="text-align:center;min-width:74px">
-      <div style="font-size:11px;color:${col[s.signal]};font-weight:700">${lab[s.signal]||s.signal}</div>
-      <div style="font-size:27px;font-weight:800;line-height:1;color:${col[s.signal]}">${s['적중률']??'–'}<span style="font-size:13px;font-weight:700">%</span></div>
-      <div style="font-size:10px;color:var(--dim)">${(s['평가수']??0).toLocaleString()}건</div></div>`;
-  el.innerHTML=`<div style="padding:13px 18px;border-bottom:1px solid var(--line);
-      background:linear-gradient(135deg,var(--accent-weak),rgba(37,99,235,.02));
-      display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-      <div style="min-width:210px">
-        <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:7px">📊 시그널 성적표
-          <span style="font-size:10px;font-weight:700;color:var(--accent);background:var(--panel);border:1px solid var(--ring);border-radius:999px;padding:1px 8px">실증 검증</span></div>
-        <div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.45">감이 아니라, 과거 <b style="color:var(--txt)">${n.toLocaleString()}구간</b>을 KB 실거래 지수로<br>검증한 <b style="color:var(--txt)">실제 적중률</b>로 신호를 냅니다.</div>
-      </div>
-      <div style="display:flex;gap:8px;flex:1;justify-content:center;flex-wrap:wrap">${bt.by_signal.map(pill).join('')}</div>
-      <div style="text-align:right;min-width:120px">
-        <div style="font-size:11px;color:var(--dim)">대표 · 강력매수</div>
-        <div style="font-size:12px;color:var(--dim);margin-bottom:5px"><b style="color:${col[flag.signal]};font-size:15px">${flag['적중률']}%</b> 적중</div>
-        <span onclick="openScoreboard()" class="btn" style="padding:5px 12px;font-size:12px;font-weight:600;color:var(--accent);border-color:var(--ring)">성적표 상세 ▸</span>
-      </div></div>`;
-  el.style.display='block';
+  // 성적표는 footer '📊 시그널 성적표' 버튼 → openScoreboard() 다이얼로그로. 여기선 캐시만 미리 로드.
+  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){} }
 }
-function openScoreboard(){
-  const bt=_btCache; if(!bt) return;
+async function openScoreboard(){
+  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){ return; } }
+  const bt=_btCache; if(!bt||!bt.by_signal) return;
   const lab={STRONG_BUY:'강력매수',BUY:'매수',SELL:'매도'}, col={STRONG_BUY:'#16a34a',BUY:'#22c55e',SELL:'#dc2626'};
   const rows=bt.by_signal.map(s=>`<tr style="border-bottom:1px solid var(--line)">
     <td style="padding:10px 6px"><span style="color:${col[s.signal]};font-weight:700">${lab[s.signal]||s.signal}</span></td>
@@ -2599,6 +2588,7 @@ async function startApp(needOnboard){
 </script>
 <footer style="border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim);background:var(--panel)">
   <b style="color:var(--txt)">Signal APT</b>
+  <span onclick="openScoreboard()" style="cursor:pointer;color:var(--accent)">📊 시그널 성적표</span>
   <span onclick="openSources()" style="cursor:pointer;color:var(--accent)">ⓘ 데이터 출처·갱신주기</span>
   <span onclick="openCycleGuide()" style="cursor:pointer;color:var(--accent)">🌀 경기 국면 가이드</span>
   <span onclick="switchTab('glossary')" style="cursor:pointer;color:var(--accent)">📖 용어사전</span>
