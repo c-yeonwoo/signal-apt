@@ -214,6 +214,7 @@
     <button class="tab" data-tab="conclusion" onclick="switchTab('conclusion')">✨ AI 리포트</button>
   </div>
   <div class="right">
+    <button class="chip" onclick="switchTab('glossary')" style="font-size:12px" title="부동산 용어·개념 학습">📖 용어</button>
     <button class="chip" onclick="openBoard()" style="font-size:12px">★ 내 보드</button>
     <button class="chip" id="alertBtn" onclick="openAlerts()" style="font-size:13px;position:relative" title="즐겨찾기 지역 시그널 변동 알림">🔔<span id="alertBadge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
     <span class="date" id="date" title="자동 갱신(주간 cron)"></span>
@@ -433,6 +434,15 @@
     </div>
     <table><thead><tr><th class="l">구역명</th><th>구분</th><th class="l">위치</th><th>면적(㎡)</th></tr></thead>
       <tbody id="rdZoneRows"></tbody></table>
+  </div>
+</div>
+
+<div id="view-glossary" style="display:none">
+  <div style="max-width:900px;margin:0 auto;padding:20px 16px 48px">
+    <h2 style="margin:0 0 4px">📖 부동산 용어·개념 사전</h2>
+    <p style="color:var(--dim);font-size:13px;margin:0 0 14px">매매·투자에 꼭 필요한 용어를 카테고리별로. 이 앱에서 쓰는 지표엔 <span class="pill" style="font-size:10px;border-color:var(--accent);color:var(--accent)">앱 지표</span> 표시.</p>
+    <input id="glossSearch" placeholder="🔍 용어 검색 (예: DSR, 전세가율, 비례율)" oninput="renderGlossary()" style="width:100%;max-width:420px;margin-bottom:16px">
+    <div id="glossBody"></div>
   </div>
 </div>
 
@@ -744,7 +754,7 @@ function switchTab(t){
   document.body.className = 'tab-'+t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
-  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle','news'].forEach(v=>
+  ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle','news','glossary'].forEach(v=>
     document.getElementById('view-'+v).style.display = v===t?'':'none');
   if(t==='signal'){ chart.resize(); renderScoreboard(); }
   if(t==='auction') loadAuction();
@@ -756,6 +766,97 @@ function switchTab(t){
   if(t==='mypage') fillMyPage();
   if(t==='cycle') loadCycle();
   if(t==='news') loadNews();
+  if(t==='glossary') renderGlossary();
+}
+// ===== 부동산 용어 사전 ([용어, 정의, 앱지표?]) =====
+const _GLOSSARY=[
+["면적·타입",[
+  ["전용면적","현관 안쪽 우리 집만의 실제 사용 면적(방·거실·주방). 청약·세금 기준 면적."],
+  ["공급면적","전용면적 + 주거공용면적(계단·복도). '분양면적'이라고도 함."],
+  ["84타입 / 59타입","전용 84㎡(약 34평)·59㎡(약 25평). 84㎡ 이하가 국민주택규모."],
+  ["전용률","공급면적 대비 전용면적 비율. 높을수록 실사용 면적이 큼(판상형↑)."],
+  ["서비스면적","발코니 등 면적 산정에서 빠지는 덤 공간(확장 대상)."],
+  ["판상형 / 타워형","일자 배치(채광·환기 좋음) vs 탑상형(조망·디자인). "],
+]],
+["가격·시세",[
+  ["실거래가","실제 계약·신고된 거래가격(국토부). 가장 객관적 시세."],
+  ["호가","집주인이 부르는 매도 희망가. 실거래가와 차이날 수 있음."],
+  ["평단가","3.3㎡(1평)당 가격. 단지·지역 비교의 기준."],
+  ["전세가율","매매가 대비 전세가 비율. 높을수록 갭(투자금)이 작고 하방이 단단."],
+  ["갭 / 갭투자","매매가−전세가. 전세 낀 매수로 실투자금(갭)만으로 사는 방식."],
+  ["급매","시세보다 낮게 급히 내놓은 매물."],
+]],
+["대출·금리·자금",[
+  ["LTV","담보인정비율 — 집값 대비 빌릴 수 있는 최대 비율.","앱"],
+  ["DSR","총부채원리금상환비율 — 연소득 대비 전 대출 원리금 비율(보통 40% 한도).","앱"],
+  ["DTI","총부채상환비율 — 소득 대비 주담대 원리금+기타대출 이자 비율."],
+  ["기준금리","한국은행이 정하는 정책금리. 대출·시장금리의 출발점."],
+  ["고정 / 변동금리","만기까지 고정 vs 시장따라 변동. 금리 상승기엔 고정이 유리."],
+  ["레버리지","대출(남의 돈)을 지렛대로 자기자본 수익률을 키우는 것. 하락 시 손실도 확대."],
+  ["원리금균등 / 원금균등","매달 상환액 동일 vs 원금 동일(이자 점감, 초기 부담↑)."],
+  ["디딤돌·보금자리론","무주택 실수요자용 정책 저금리 대출."],
+]],
+["청약·공급",[
+  ["청약통장","청약 자격·가점의 기본. 가입기간·납입횟수가 점수화.","앱"],
+  ["가점제 / 추첨제","무주택기간+부양가족+통장기간(84점) 순 vs 무작위 추첨.","앱"],
+  ["특별공급","신혼부부·다자녀·생애최초·노부모 등 별도 물량(경쟁 완화).","앱"],
+  ["분양가상한제","분양가를 택지비+건축비 이내로 규제 → 시세보다 저렴."],
+  ["전매제한","분양권을 일정 기간 되팔 수 없게 하는 규제."],
+  ["당해 / 기타지역","해당 지역 거주자 우선 물량 vs 그 외. 거주요건 중요.","앱"],
+  ["무순위(줍줍)","미계약·부적격 물량을 무순위로 재공급."],
+  ["공공분양 / 공공임대","공공이 시세 이하로 분양 vs 임대(장기 거주·저렴)."],
+]],
+["경매·공매",[
+  ["경매","채무 미상환 시 법원이 부동산을 강제 매각(입찰).","앱"],
+  ["공매","세금 체납 등으로 자산관리공사(캠코)가 처분. 온비드 입찰."],
+  ["감정가 / 최저매각가","감정평가액 vs 유찰로 낮아진 이번 회차 최저 입찰가.","앱"],
+  ["낙찰가율","감정가 대비 낙찰가 비율. 시장 열기의 지표."],
+  ["유찰","입찰자 없어 다음 회차로(보통 20~30%↓)."],
+  ["권리분석 / 말소기준권리","낙찰로 사라지는/인수되는 권리 판별. 경매의 핵심 리스크 점검."],
+  ["명도","낙찰 후 점유자를 내보내는 절차."],
+]],
+["정비사업(재건축·재개발)",[
+  ["재건축 / 재개발","낡은 아파트를 새로 vs 노후 주거지 전체를 정비.","앱"],
+  ["조합설립·사업시행·관리처분인가","정비사업 3대 관문. 관리처분에서 분담금 확정→불확실성 급감.","앱"],
+  ["비례율","조합 개발이익률. 100%↑면 사업성 좋음(분담금↓)."],
+  ["분담금","조합원이 새 집을 받기 위해 추가로 내는 돈.","앱"],
+  ["프리미엄(P)","입주권·분양권에 붙는 웃돈."],
+  ["용적률 / 건폐율","대지 대비 총 바닥면적 / 건물 바닥면적 비율. 낮을수록 재건축 여유.","앱"],
+  ["대지지분","내 소유의 땅 몫. 클수록 재건축 가치↑."],
+  ["입주권 / 분양권","정비사업 조합원 권리 vs 청약 당첨 권리."],
+]],
+["세금·비용",[
+  ["취득세","집 살 때 내는 세금(가격·주택수별 1~12%).","앱"],
+  ["재산세 / 종부세","보유세 — 매년 / 고가·다주택 추가 과세."],
+  ["양도세","팔 때 시세차익에 대한 세금(보유·거주기간별 감면)."],
+  ["중개보수(복비)","중개사 수수료(거래가·요율 상한)."],
+]],
+["지표·시장 (이 앱)",[
+  ["매수우위지수","매수·매도 심리(100 기준). 높으면 매수자가 많음.","앱"],
+  ["전세수급지수","전세 수요/공급(100 기준). 높으면 전세난→매매 전이 압력.","앱"],
+  ["주택구입부담지수","중위소득 가구의 중간가 주택 구입 부담. 높을수록 비쌈.","앱"],
+  ["저평가도","입지(헤도닉) 적정가 대비 실제가가 싼 정도(+면 저평가).","앱"],
+  ["급지","지역/단지 등급(입지·시세 순위). A~D·1~5.","앱"],
+  ["벌집순환모형","회복→상승→후퇴→침체 4국면 부동산 경기 사이클.","앱"],
+  ["입주물량","향후 입주 예정 물량. 많으면 공급과잉(가격 압력).","앱"],
+]],
+];
+function renderGlossary(){
+  const q=(document.getElementById('glossSearch').value||'').trim().toLowerCase();
+  const body=document.getElementById('glossBody');
+  let html='', hits=0;
+  for(const [cat, terms] of _GLOSSARY){
+    const ft=terms.filter(([t,d])=> !q || t.toLowerCase().includes(q) || d.toLowerCase().includes(q));
+    if(!ft.length) continue;
+    hits+=ft.length;
+    html+=`<div style="font-weight:800;font-size:14px;margin:18px 0 8px;color:var(--accent)">${cat}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px">`
+      + ft.map(([t,d,app])=>`<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)">
+          <div style="font-weight:700;font-size:13px;margin-bottom:3px">${t} ${app?'<span class="pill" style="font-size:9px;border-color:var(--accent);color:var(--accent)">앱 지표</span>':''}</div>
+          <div style="font-size:12px;color:var(--dim);line-height:1.55">${d}</div></div>`).join('')
+      + `</div>`;
+  }
+  body.innerHTML = hits ? html : '<div style="color:var(--dim);padding:20px 0">검색 결과가 없습니다.</div>';
 }
 // ===== 부동산 뉴스 KB =====
 let _newsTopic='전체';
