@@ -242,6 +242,7 @@
 <div id="view-signal">
   <div class="wrap">
     <div class="side">
+      <div id="ahaBox" style="display:none;padding:12px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,rgba(14,165,233,.09),rgba(14,165,233,.02))"></div>
       <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help"></div>
       <div id="scoreboard" style="display:none;padding:11px 12px;border-bottom:1px solid var(--line)"></div>
       <div class="sfilters">
@@ -794,7 +795,7 @@ function switchTab(t){
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   ['signal','auction','undervalued','presale','conclusion','quicksale','redev','mypage','cycle','news','glossary'].forEach(v=>
     document.getElementById('view-'+v).style.display = v===t?'':'none');
-  if(t==='signal'){ chart.resize(); renderScoreboard(); }
+  if(t==='signal'){ chart.resize(); renderScoreboard(); renderAha(); }
   if(t==='auction') loadAuction();
   if(t==='undervalued') loadUndervalued();
   if(t==='presale') loadPresale();
@@ -1831,6 +1832,28 @@ async function backtestBanner(){
     <div style="font-size:12px;color:var(--dim);margin-bottom:6px" title="${bt['설명']||''}">📊 <b style="color:var(--txt)">전체 지역 시그널 적중률</b> — 과거 모든 구간 기준 (매수=이후 12주 상승 / 매도=하락이면 적중)</div>
     <div style="display:flex;gap:8px">${cards}</div></div>`;
 }
+// ===== 온보딩 아하 모먼트 — "내 예산이면 지금 여기" =====
+async function renderAha(){
+  const el=document.getElementById('ahaBox'); if(!el) return;
+  const cap=_profile&&_profile['가용자본'];
+  if(!cap){
+    el.innerHTML=`<div style="font-size:12px;color:var(--dim);line-height:1.5">💡 <b style="color:var(--txt)">맞춤 추천</b>을 받으려면<br>마이페이지에 <b>가용 자본</b>을 입력하세요.</div>
+      <span class="btn" style="margin-top:8px;padding:5px 11px;background:var(--accent);color:#fff;font-size:12px" onclick="switchTab('mypage')">프로필 입력 →</span>`;
+    el.style.display='block'; return;
+  }
+  try{
+    const inc=_profile['연소득']?`&income=${_profile['연소득']}`:'';
+    const d=await (await fetch(`/api/conclusion?capital=${cap}&ltv=0.7&pyeong=25.7${inc}`)).json();
+    const top=(d.cards||[]).filter(c=>c['예산내']).slice(0,3);
+    const who=_profile['거주지']?_profile['거주지']+'님':'회원님';
+    el.innerHTML=`<div style="font-size:12px;color:var(--dim);margin-bottom:6px">💡 예산 <b style="color:var(--txt)">${_eok(d.budget)}</b>이면 지금 <b style="color:var(--accent)">매수 추천</b></div>`
+      + (top.length? `<div style="display:flex;flex-direction:column;gap:5px">`+top.map(c=>`<div onclick="selectRegion('${c.region}')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px">
+          <b style="font-size:13px">${c.region}</b><span>${badge(c['시그널'])}${c['저평가도']>0?` <span style="font-size:10px;color:#16a34a">저평가+${c['저평가도']}%</span>`:''}</span></div>`).join('')+`</div>`
+        : `<div style="font-size:12px;color:var(--dim)">예산 내 BUY+ 지역이 없습니다. 결론 탭에서 조건을 조정해 보세요.</div>`)
+      + `<span onclick="switchTab('conclusion')" style="cursor:pointer;color:var(--accent);font-size:11px;font-weight:600;display:inline-block;margin-top:7px">결론 전체 보기 →</span>`;
+    el.style.display='block';
+  }catch(e){ el.style.display='none'; }
+}
 async function renderScoreboard(){
   const el=document.getElementById('scoreboard'); if(!el) return;
   if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){ return; } }
@@ -2290,7 +2313,7 @@ function saveMyPage(){
     세대주:v('mp_householder')===''?null:+v('mp_householder'),
     생애최초:v('mp_firsthome')===''?null:+v('mp_firsthome')};
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
-  renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults();
+  renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults(); renderAha();
   toast('프로필을 저장했습니다.');
   if(typeof loadData==='function') loadData();
 }
@@ -2430,6 +2453,7 @@ async function startApp(needOnboard){
   applyProfileDefaults();
   loadAlerts();
   renderScoreboard();
+  renderAha();
   updateCmpChip();
   if(needOnboard || !_profile || !Object.keys(_profile).length){
     document.getElementById('onbDlg').showModal();   // 온보딩 후 loadData
