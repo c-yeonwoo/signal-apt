@@ -845,6 +845,28 @@ def news(topic: str | None = None):
             "available": bool(items) or bool(config.naver_search()[0])}
 
 
+@app.get("/api/news/summary")
+def news_summary(topic: str | None = None, days: int = 30):
+    """테마별 최근 뉴스 AI 요약(주요 이슈+변경점). KB 충분(5건+)·ANTHROPIC 키 시. 캐시 6h."""
+    import os as _os
+    from realty_signal import db
+    if not _os.environ.get("ANTHROPIC_API_KEY"):
+        return {"available": False}
+    items = db.news_since(topic, days, 40)
+    if len(items) < 5:
+        return {"available": True, "enough": False, "count": len(items)}
+    ckey = f"newsum:{topic or '전체'}:{days}"
+    cached = db.kv_get(ckey, max_age=6 * 3600)
+    if cached is not None:
+        return {**cached, "cached": True}
+    from realty_signal.ingest import news as nw
+    summary = nw.summarize(topic, items)
+    out = {"available": True, "enough": True, "summary": summary, "n": len(items), "days": days}
+    if summary:
+        db.kv_set(ckey, out)
+    return out
+
+
 @app.get("/api/cycle")
 def cycle(region: str = "서울"):
     """부동산 경기 사이클 국면(벌집순환 4국면) + 근거. 광역(기본 서울) 주간 시리즈 기반."""

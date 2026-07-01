@@ -66,6 +66,8 @@
   .rchip { font-size:12px; padding:3px 9px; border-radius:12px; background:#eef2f7; border:1px solid var(--line); }
   .gwon { display:inline-block; font-size:10px; color:#92710e; background:#fef3c7; border:1px solid #fde68a;
           border-radius:6px; padding:0 5px; margin-left:4px; vertical-align:middle; cursor:help; font-weight:600; }
+  /* 뉴스 필터칩 크게 */
+  #newsTopics .pill { font-size:13px; padding:7px 15px; border-radius:16px; font-weight:600; cursor:pointer; }
   /* 뉴스·용어 카드 그리드 */
   .newsgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
   .ncard { border:1px solid var(--line); border-radius:14px; padding:15px 16px; background:var(--panel);
@@ -462,7 +464,8 @@
   <div style="max-width:1120px;margin:0 auto;padding:20px 16px 40px">
     <h2 style="margin:0 0 4px">📰 부동산 뉴스</h2>
     <p style="color:var(--dim);font-size:13px;margin:0 0 14px">정책·금리·청약·재건축·시장 뉴스를 최신순으로. (네이버 뉴스 · 매시간 갱신 · 원문 링크)</p>
-    <div id="newsTopics" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div id="newsTopics" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div id="newsSummary" style="margin-bottom:16px"></div>
     <div id="newsList"></div>
   </div>
 </div>
@@ -871,7 +874,22 @@ function renderGlossary(){
   body.innerHTML = hits ? html : '<div style="color:var(--dim);padding:20px 0">검색 결과가 없습니다.</div>';
 }
 // ===== 부동산 뉴스 KB =====
-let _newsTopic='전체';
+let _newsTopic='전체', _newsDays=30;
+async function loadNewsSummary(topic){
+  const el=document.getElementById('newsSummary'); if(!el) return;
+  el.innerHTML='<div style="color:var(--dim);font-size:12px">💡 AI 요약 준비 중…</div>';
+  let d; try{ d=await (await fetch(`/api/news/summary?days=${_newsDays}`+(topic&&topic!=='전체'?'&topic='+encodeURIComponent(topic):''))).json(); }
+  catch(e){ el.innerHTML=''; return; }
+  if(!d.available){ el.innerHTML=''; return; }   // ANTHROPIC 키 없음 → 섹션 숨김
+  const tg=`<span style="margin-left:auto;font-size:11px;white-space:nowrap">`
+    + [7,30].map(dd=>`<span onclick="_newsDays=${dd};loadNewsSummary('${topic}')" style="cursor:pointer;margin-left:9px;color:${_newsDays===dd?'var(--accent)':'var(--dim)'};font-weight:${_newsDays===dd?700:400}">${dd===7?'최근 1주':'최근 1달'}</span>`).join('')+`</span>`;
+  if(!d.enough){ el.innerHTML=`<div style="background:var(--bg);border:1px dashed var(--line);border-radius:12px;padding:12px 15px;font-size:12px;color:var(--dim);display:flex;align-items:center">💡 이 테마 뉴스가 더 쌓이면 AI가 최근 이슈·변경점을 요약해 드립니다. (현재 ${d.count||0}건)${tg}</div>`; return; }
+  if(!d.summary){ el.innerHTML=''; return; }
+  el.innerHTML=`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:15px 17px">
+    <div style="display:flex;align-items:center;margin-bottom:8px"><b style="font-size:14px">💡 AI 요약 · ${topic&&topic!=='전체'?topic:'부동산 전반'}</b>${tg}</div>
+    <div style="font-size:13px;line-height:1.65">${mdLite(d.summary)}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:8px">최근 ${d.n}건 헤드라인 기반 · ${d.cached?'캐시':'방금 생성'}</div></div>`;
+}
 async function loadNews(){
   const list=document.getElementById('newsList');
   list.innerHTML='<div style="color:var(--dim)">뉴스 불러오는 중…</div>';
@@ -880,7 +898,8 @@ async function loadNews(){
   const tc={정책:'#2563eb',금리:'#dc2626',청약:'#16a34a',재건축:'#d97706',시장:'#7c3aed'};
   document.getElementById('newsTopics').innerHTML=(d.topics||[]).map(tp=>{
     const on=tp===_newsTopic;
-    return `<span onclick="_newsTopic='${tp}';loadNews()" class="pill" style="cursor:pointer;${on?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${tp}</span>`;}).join('');
+    return `<span onclick="_newsTopic='${tp}';loadNews()" class="pill" style="${on?'background:var(--accent);color:#fff;border-color:var(--accent)':''}">${tp}</span>`;}).join('');
+  loadNewsSummary(_newsTopic);
   if(!(d.items||[]).length){ list.innerHTML='<div style="color:var(--dim)">뉴스가 없습니다. (NAVER 키 설정 시 수집)</div>'; return; }
   list.className='newsgrid';
   list.innerHTML=d.items.map(n=>{const c=tc[n.topic]||'#64748b';

@@ -329,6 +329,22 @@ def news_list(topic: str | None = None, limit: int = 60) -> list[dict]:
     return rows
 
 
+def news_since(topic: str | None, days: int = 30, limit: int = 40) -> list[dict]:
+    """최근 days일 내 수집(ts 기준) 뉴스 — AI 요약용."""
+    since = int(time.time()) - days * 86400
+    c = conn()
+    if topic and topic != "전체":
+        cur = c.execute("SELECT title,descr,source,topic,pubdate FROM news WHERE topic=? AND ts>=? "
+                        "ORDER BY ts DESC LIMIT ?", (topic, since, limit))
+    else:
+        cur = c.execute("SELECT title,descr,source,topic,pubdate FROM news WHERE ts>=? "
+                        "ORDER BY ts DESC LIMIT ?", (since, limit))
+    rows = [{"title": t, "descr": d, "source": s, "topic": tp, "pubdate": pd}
+            for t, d, s, tp, pd in cur]
+    c.close()
+    return rows
+
+
 def news_recent_for_ai(limit: int = 15) -> list[dict]:
     """AI 리포트용 최근 뉴스 요약(제목+토픽) — 정책·시장 맥락 주입용."""
     return [{"title": n["title"], "topic": n["topic"], "date": n["pubdate"]}

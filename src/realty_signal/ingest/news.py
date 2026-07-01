@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 
 log = logging.getLogger("realty_signal")
+MODEL = "claude-opus-4-8"
 
 # 토픽 → 검색어
 _TOPICS = {
@@ -45,6 +46,36 @@ def _naver_news(query: str, cid: str, csec: str, n: int = 10) -> list[dict]:
         log.warning("naver news 실패(%s): %s", query, e)
         return []
     return data.get("items", [])
+
+
+_SUM_SYS = (
+    "당신은 부동산 뉴스 큐레이터입니다. 최근 뉴스 제목·요약 묶음을 받아, 부동산 매수·투자자가 "
+    "꼭 알아야 할 핵심을 정리합니다.\n"
+    "- 마크다운으로 딱 두 섹션: ## 최근 주요 이슈 (3~5개 불릿) / ## 꼭 알아야 할 변경점 (2~4개 불릿, 정책·금리·제도 변화 중심).\n"
+    "- 각 불릿 한 줄, 구체적으로. 개별 기사 광고·홍보성 내용은 제외. 확정 아닌 건 '~전망/논의'로.\n"
+    "- 뉴스에 근거해서만. 없으면 억지로 만들지 말 것. 전체 400~600자. 마지막에 '※ 뉴스 헤드라인 기반 요약' 한 줄."
+)
+
+
+def summarize(topic: str | None, items: list[dict]) -> str | None:
+    """최근 뉴스 묶음 → Claude 요약(주요 이슈 + 변경점). 키/항목 부족 시 None."""
+    try:
+        import anthropic
+    except ImportError:
+        return None
+    corpus = "\n".join(f"- [{i.get('topic')}] {i.get('title')} — {(i.get('descr') or '')[:80]}" for i in items)
+    if not corpus.strip():
+        return None
+    scope = f"'{topic}' 테마" if (topic and topic != "전체") else "부동산 전반"
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=MODEL, max_tokens=1200, system=_SUM_SYS,
+            messages=[{"role": "user", "content": f"{scope} 최근 뉴스 {len(items)}건입니다. 요약하세요.\n\n{corpus[:12000]}"}])
+        return "".join(b.text for b in resp.content if b.type == "text").strip() or None
+    except Exception as e:
+        log.warning("뉴스 요약 실패: %s", e)
+        return None
 
 
 def fetch_news(cid: str, csec: str, per_topic: int = 12) -> list[dict]:
