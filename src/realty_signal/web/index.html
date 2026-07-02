@@ -300,6 +300,7 @@
 <div id="listingSubnav" style="padding:10px 16px;border-bottom:1px solid var(--line);gap:12px;align-items:center;display:none">
   <span style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
   <div class="mtabs">
+    <button class="subtab" data-sub="all" onclick="switchTab('all')">전체<small>기회도순</small></button>
     <button class="subtab" data-sub="auction" onclick="switchTab('auction')">경매<small>시세 이하 낙찰</small></button>
     <button class="subtab" data-sub="quicksale" onclick="switchTab('quicksale')">급매<small>시세 이하 호가</small></button>
     <button class="subtab" data-sub="presale" onclick="switchTab('presale')">청약<small>신규 분양</small></button>
@@ -357,6 +358,26 @@
         <div id="macroMiniChart" style="height:76px"></div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 통합 매물(전체) 탭 -->
+<div id="view-all" style="display:none">
+  <div style="padding:16px 20px 0">
+    <h3 style="margin:0 0 4px">통합 매물 — 기회도순</h3>
+    <p style="color:var(--dim);font-size:12px;margin:0 0 10px">경매·급매·청약을 한 곳에서. <b>기회도</b>(유형 교차 정규화)로 정렬. 유형·급지·매수신호로 좁혀보세요.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+      <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+      <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
+    </div>
+  </div>
+  <div style="padding:0 20px 16px">
+    <div class="mapsplit">
+      <div class="ms-list" id="laList"></div>
+      <div class="ms-map" id="laMap"></div>
+    </div>
+    <p id="laEmpty" style="color:var(--dim)"></p>
   </div>
 </div>
 
@@ -989,8 +1010,8 @@ function renderMtFilter(hostId, rerender){
   el.querySelectorAll('[data-g]').forEach(c=>c.onclick=()=>{ const g=c.dataset.g;
     _mtGradeSet.has(g)?_mtGradeSet.delete(g):_mtGradeSet.add(g); rerender(); });
 }
-const _LISTING=['auction','quicksale','presale','redev'];   // 매물 하위탭
-let _listingSub='auction';
+const _LISTING=['all','auction','quicksale','presale','redev'];   // 매물 하위탭(전체 통합 + 유형별)
+let _listingSub='all';
 let _focusRegion=null;   // 관심지역 → 매물 좁히기(옵션, 강제 X)
 function focusListings(region){
   _focusRegion = region || null;
@@ -1006,7 +1027,7 @@ function renderListingFocus(){
   el.style.display = _focusRegion ? '' : 'none';
 }
 function inFocus(region){ return !_focusRegion || (region||'').includes(_focusRegion) || _focusRegion.includes(region||'§'); }
-const _LISTLOAD={auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
+const _LISTLOAD={all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
 function switchTab(t){
   if(_LISTING.includes(t)){ _listingSub=t; t='listings'; }   // 4탭 → 매물 그룹으로 라우팅
   const listing = t==='listings';
@@ -1014,7 +1035,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
-  ['signal','auction','undervalued','presale','quicksale','redev','mypage','mymap','report','news','glossary','about'].forEach(v=>
+  ['signal','all','auction','undervalued','presale','quicksale','redev','mypage','mymap','report','news','glossary','about'].forEach(v=>
     document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
   if(listing){
     document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
@@ -1033,7 +1054,7 @@ function switchTab(t){
   const hash = listing ? _listingSub : t;
   if(location.hash.slice(1) !== hash) history.replaceState(null, '', '#' + hash);
 }
-const _ROUTES=['signal','undervalued','listings','auction','quicksale','presale','redev','news','report','mymap','mypage','about','glossary'];
+const _ROUTES=['signal','undervalued','listings','all','auction','quicksale','presale','redev','news','report','mymap','mypage','about','glossary'];
 function routeFromHash(){
   const h=decodeURIComponent(location.hash.slice(1));
   if(_ROUTES.includes(h)){ switchTab(h); return true; }
@@ -1360,6 +1381,46 @@ function renderQuicksale(){
     regionOf:m=>m['지역'],
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
     label:m=>`<b>${m['단지명']}</b><br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:#ea580c">(${m['급매갭']}%)</span>`,
+  });
+}
+// ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
+const _LA_TYPES=['경매','급매','청약'];
+const _LA_COLOR={경매:'#8b5cf6', 급매:'#ea580c', 청약:'#0891b2'};
+let _laSel=null, _laData=[];
+function _laInitSel(){ if(_laSel) return; _laSel=new Set(['경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
+async function loadAllListings(){
+  _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
+  const types=[..._laSel].join(',')||'경매';
+  document.getElementById('laStatus').textContent='불러오는 중…';
+  try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent(types))).json();
+    _laData=d.listings||[]; document.getElementById('laStatus').textContent=`${_laData.length}건 · 기준 ${d.asof}`; }
+  catch(e){ _laData=[]; document.getElementById('laStatus').textContent='불러오기 실패'; }
+  renderAllListings();
+}
+function renderLaTypeChips(){
+  const el=document.getElementById('laTypeChips'); if(!el) return;
+  el.innerHTML='<span style="font-size:11px;color:var(--dim)">유형</span>'+_LA_TYPES.map(t=>
+    `<span class="chip${_laSel.has(t)?' on':''}" style="font-size:12px" data-t="${t}">${t}</span>`).join('');
+  el.querySelectorAll('[data-t]').forEach(c=>c.onclick=()=>{ const t=c.dataset.t;
+    _laSel.has(t)?_laSel.delete(t):_laSel.add(t); if(!_laSel.size)_laSel.add(t); loadAllListings(); });
+}
+function renderAllListings(){
+  const rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']));
+  document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호 완화 / 급매는 급매 탭에서 스캔)';
+  const typeBadge=t=>`<span class="pill" style="background:${_LA_COLOR[t]};color:#fff;border-color:${_LA_COLOR[t]};font-size:10px">${t}</span>`;
+  mapSplit('laList','laMap',rows,{
+    summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
+      right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
+      sub:`${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · 기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b>`}),
+    detail:x=>{ const acts = x['유형']==='청약'
+        ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
+        : cxBtn(x['단지명'], x['지역']);
+      return `<div class="kv"><span>유형 ${x['유형']}</span><span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div><div style="margin-top:7px">${acts}</div>`; },
+    coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
+    geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
+    regionOf:x=>x['지역'],
+    color:x=>_LA_COLOR[x['유형']]||'#94a3b8',
+    label:x=>`<b>${x['단지명']}</b> ${x['유형']}<br>${x['지역']||''} · ${x['지표라벨']} ${x['지표값']??''}${x['지표단위']||''}`,
   });
 }
 // ===== 재사용 좌우 분할 지도 컴포넌트 (Leaflet + CartoDB dark) =====
