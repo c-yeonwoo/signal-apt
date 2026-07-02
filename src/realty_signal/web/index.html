@@ -30,6 +30,7 @@
   .bigsearch { padding:12px 15px !important; border-radius:14px !important; font-size:14px; background:#fff;
     box-shadow:0 1px 2px rgba(2,32,71,.04); }
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
+  .page-head { font-size:22px; font-weight:800; margin:0 0 4px; }
   /* 지도 핀 (divIcon) */
   .mappin { width:18px; height:18px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
     border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,.28); box-sizing:border-box; }
@@ -364,7 +365,7 @@
 <!-- 통합 매물(전체) 탭 -->
 <div id="view-all" style="display:none">
   <div style="padding:16px 20px 0">
-    <h3 style="margin:0 0 4px">통합 매물 — 기회도순</h3>
+    <h2 class="page-head">통합 매물 — 기회도순</h2>
     <p style="color:var(--dim);font-size:12px;margin:0 0 10px">경매·급매·청약을 한 곳에서. <b>기회도</b>(유형 교차 정규화)로 정렬. 유형·급지·매수신호로 좁혀보세요.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
@@ -437,7 +438,7 @@
 <!-- 저평가 탭 -->
 <div id="view-undervalued" style="display:none">
   <div class="sec">
-    <h3>저평가 지역 추천 — 지역 급지 대비 입지·가격</h3>
+    <h2 class="page-head">저평가 지역 추천 — 지역 급지 대비 입지·가격</h2>
     <p style="color:var(--dim);font-size:13px;margin:-2px 0 0">
       지역을 <b>평단가 분위로 급지(상~하급지)</b>로 나누고, 각 급지 안에서 <b>입지(교통·학군·환경) 대비 저평가</b>된 곳을 추천합니다.
       입지점수 = 업무지구(강남·광화문·여의도) 대중교통 + 학원밀도 + 주거환경. <b>같은 급지인데 입지 대비 싸면 저평가</b>.
@@ -480,7 +481,7 @@
 </div>
 
 <div id="view-quicksale" style="display:none">
-  <h2 style="margin:0 0 4px">급매 레이더 <span style="font-size:12px;color:var(--dim);font-weight:400">개인용 · 로컬 확인</span></h2>
+  <h2 class="page-head">급매 레이더 <span style="font-size:12px;color:var(--dim);font-weight:400">개인용 · 로컬 확인</span></h2>
   <p style="color:var(--dim);font-size:13px;margin:0 0 6px">시세(중위호가) 대비 싸게 나온 매물을 지역별로 모읍니다. 급매갭 = (호가−중위시세)/중위시세, 음수가 클수록 저가.</p>
   <p style="color:#ea580c;font-size:11px;margin:0 0 12px">⚠ 출처는 네이버 부동산 매물(baroezip 공개 API 경유). 개인 참고용이며 재배포/상업이용 금지.</p>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
@@ -499,7 +500,7 @@
 </div>
 
 <div id="view-redev" style="display:none">
-  <h2 style="margin:0 0 8px">재건축 · 재개발</h2>
+  <h2 class="page-head">재건축 · 재개발</h2>
   <div class="tabs" style="margin-bottom:14px">
     <button class="tab on" data-rtab="screener" onclick="redevTab('screener')">잠재력 스크리너</button>
     <button class="tab" data-rtab="stages" onclick="redevTab('stages')">단계 현황</button>
@@ -556,7 +557,7 @@
 
 <div id="view-glossary" style="display:none">
   <div style="max-width:1160px;margin:0 auto;padding:20px 16px 48px">
-    <h2 style="margin:0 0 4px">부동산 용어·개념 사전</h2>
+    <h2 class="page-head">부동산 용어·개념 사전</h2>
     <p style="color:var(--dim);font-size:13px;margin:0 0 14px">매매·투자에 꼭 필요한 용어를 카테고리별로. 이 앱에서 쓰는 지표엔 <span class="pill" style="font-size:10px;border-color:var(--accent);color:var(--accent)">앱 지표</span> 표시.</p>
     <input id="glossSearch" placeholder="용어 검색 (예: DSR, 전세가율, 비례율)" oninput="renderGlossary()" style="width:100%;max-width:420px;margin-bottom:16px">
     <div id="glossBody"></div>
@@ -606,7 +607,7 @@
 
 <div id="view-news" style="display:none">
   <div style="max-width:1120px;margin:0 auto;padding:20px 16px 40px">
-    <h2 style="margin:0 0 4px">부동산 뉴스</h2>
+    <h2 class="page-head">부동산 뉴스</h2>
     <p style="color:var(--dim);font-size:13px;margin:0 0 14px">정책·금리·청약·재건축·시장 뉴스를 최신순으로. (네이버 뉴스 · 매시간 갱신 · 원문 링크)</p>
     <div id="newsTopics" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px"></div>
     <div id="newsSummary" style="margin-bottom:16px"></div>
@@ -774,7 +775,7 @@
 <div id="view-mypage" style="display:none">
  <div style="max-width:980px;margin:0 auto;padding:22px 18px 48px">
   <div style="margin-bottom:14px">
-    <h3 style="margin:0 0 3px;font-size:22px">프로필 수정</h3>
+    <h2 class="page-head" style="margin:0 0 3px">프로필 수정</h2>
     <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
   </div>
 
@@ -823,7 +824,7 @@
 <!-- 내 시그널 맵 (별도 페이지) -->
 <div id="view-mymap" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
-  <h3 style="margin:0 0 4px;font-size:22px">내 시그널 맵</h3>
+  <h2 class="page-head">내 시그널 맵</h2>
   <p style="color:var(--dim);font-size:13px;margin:0 0 12px">🏠 거주지 · 📍 관심지역 · 🏢 관심단지 + <b>단지 검색·비교·급지색</b>을 지도 위에서. <b>핀 두 개 클릭</b> → 거리·대중교통(선으로 표시).</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="position:relative;flex:1;min-width:220px;max-width:360px">
@@ -858,7 +859,7 @@
 <!-- AI 리포트 (별도 페이지) -->
 <div id="view-report" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
-  <h3 style="margin:0 0 4px;font-size:22px">AI 개인화 리포트</h3>
+  <h2 class="page-head">AI 개인화 리포트</h2>
   <p style="color:var(--dim);font-size:13px;margin:0 0 14px">내 프로필과 <b>관심 지역·단지(80%)</b> + <b>미처 발견 못한 신규 후보(20%)</b>를 섞어 나에게 맞는 매수 전략을 리포트로 만듭니다.</p>
   <div id="aiReport" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:16px;line-height:1.7;font-size:14px;display:none"></div>
   <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
