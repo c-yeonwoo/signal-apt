@@ -110,8 +110,51 @@ async def _auto_refresh_loop():
         await asyncio.sleep(86400)  # 하루마다 점검
 
 
+def _seed_if_missing():
+    """빈 볼륨(첫 배포) 자동 시딩 — 파일 없을 때·키 있을 때만, 각 단계 best-effort.
+
+    KB(시그널)만 부팅 자동수집되고 저평가·급매·재건축은 별도 생성이 필요해,
+    신규 배포/볼륨 리셋 시 통합 매물·급지가 비어 보이는 것을 방지한다.
+    """
+    pk = config.public_data_key()
+    if pk and not store.LOCALITY_FILE.exists():          # 저평가·급지
+        try:
+            log.warning("localities 없음 — 저평가·급지 빌드 중(수 분)…")
+            store.build_localities()
+        except Exception as e:  # noqa: BLE001
+            log.error("localities 시딩 실패: %s", e)
+    if pk and not QUICKSALE_FILE.exists():               # 급매 레이더
+        try:
+            log.warning("quicksale 없음 — 급매 레이더 스캔 중…")
+            df = _signals_df()
+            regions = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
+            listings = _radar_scan(regions)
+            QUICKSALE_FILE.write_text(json.dumps(
+                {"ready": True, "listings": listings, "regions": regions, "count": len(listings)},
+                ensure_ascii=False), encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            log.error("quicksale 시딩 실패: %s", e)
+    if config.seoul_key():                               # 재건축 워밍(BUY+ 지역)
+        try:
+            log.warning("재건축 워밍 중(BUY+ 지역)…")
+            _redev_zones()
+            for r in (r for r, s in _signal_map().items() if s in ("STRONG_BUY", "BUY")):
+                if db.kv_get(f"redev_cand:{r}", max_age=30 * 86400) is None:
+                    try:
+                        _redev_candidates(r)
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("redev warm %s 실패: %s", r, e)
+        except Exception as e:  # noqa: BLE001
+            log.error("재건축 시딩 실패: %s", e)
+    try:  # 시딩 전 빈 데이터로 캐시된 파생결과 무효화
+        _regime.cache_clear()
+        _signals_df.cache_clear()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def _startup_bg():
-    """초기 수집·스냅샷을 백그라운드로 — 헬스체크(/)가 데이터 수집을 기다리지 않도록.
+    """초기 수집·시딩·스냅샷을 백그라운드로 — 헬스체크(/)가 데이터를 기다리지 않도록.
 
     신규 배포 첫 부팅의 KB 수집은 수십 초 걸려, 동기 실행 시 lifespan이 막혀
     healthcheck 윈도우 내에 서버가 응답하지 못한다(배포 실패). '/'는 정적 SPA라
@@ -124,6 +167,10 @@ async def _startup_bg():
             await asyncio.to_thread(store.fetch)
         except Exception as e:  # 수집 실패해도 서버는 기동(이후 갱신으로 재시도)
             log.error("초기 수집 실패: %s", e)
+    try:
+        await asyncio.to_thread(_seed_if_missing)   # 저평가·급매·재건축 자동 시딩(무거움)
+    except Exception as e:  # noqa: BLE001
+        log.error("자동 시딩 실패: %s", e)
     try:  # 시그널 스냅샷 초기화(최초 1회) — 이후 변동 감지 기준점
         if not db.kv_get("signal_snapshot"):
             _snapshot_signals(str(_kb().last_date.date()))
