@@ -23,9 +23,22 @@
   * { box-sizing:border-box; }
   /* 통일 컨트롤: 셀렉트·인풋·필터바 */
   select, input[type=number], input[type=text], .ctrl {
-    font-size:14px; padding:7px 11px; border:1px solid var(--line); border-radius:8px;
+    font-size:14px; padding:9px 12px; border:1px solid var(--line); border-radius:10px;
     background:#fff; color:var(--txt); outline:none; }
   select:focus, input:focus, .ctrl:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  /* 넓고 둥근 검색창 */
+  .bigsearch { padding:12px 15px !important; border-radius:14px !important; font-size:14px; background:#fff;
+    box-shadow:0 1px 2px rgba(2,32,71,.04); }
+  .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
+  /* 지도 핀 (divIcon) */
+  .mappin { width:18px; height:18px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+    border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,.28); box-sizing:border-box; }
+  .mappin.sel { width:24px; height:24px; box-shadow:0 0 0 4px var(--ring),0 2px 6px rgba(0,0,0,.3); z-index:1000; }
+  /* 비교하기 플로팅 버튼 */
+  #cmpFab { position:fixed; right:24px; bottom:24px; z-index:1100; background:var(--accent); color:#fff;
+    border:none; border-radius:999px; padding:13px 22px; font-size:14px; font-weight:700; cursor:pointer;
+    box-shadow:0 6px 18px rgba(37,99,235,.4); display:none; }
+  #cmpFab:hover { filter:brightness(1.05); }
   .filterbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap;
     background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; margin-bottom:14px; }
   .filterbar label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:7px; white-space:nowrap; }
@@ -718,7 +731,7 @@
     <label>주택 보유<br><select id="mp_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
     <label>거주지<br>
       <div style="position:relative">
-        <input id="mp_region" placeholder="동·도로명·단지로 검색 (예: 대치동, 은마)" class="ctrl" style="width:100%" oninput="mpRegionSearch()" autocomplete="off">
+        <input id="mp_region" placeholder="동·도로명·단지로 검색 (예: 대치동, 은마)" class="ctrl bigsearch" style="width:100%" oninput="mpRegionSearch()" autocomplete="off">
         <div id="mpRegionRes" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:240px;overflow:auto;z-index:900"></div>
       </div></label>
     <label>관심 평수<br><select id="mp_size" class="ctrl" style="width:100%"><option value="">전체</option><option value="s">소형 (~60㎡)</option><option value="m">중형 (60~85㎡)</option><option value="l">대형 (85㎡~)</option></select></label>
@@ -760,13 +773,12 @@
   <p style="color:var(--dim);font-size:13px;margin:0 0 12px">🏠 거주지 · 📍 관심지역 · 🏢 관심단지 + <b>단지 검색·비교·급지색</b>을 지도 위에서. <b>핀 두 개 클릭</b> → 거리·대중교통(선으로 표시).</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="position:relative;flex:1;min-width:220px;max-width:360px">
-      <input id="mmSearch" placeholder="🔍 단지 검색 → 📍지도 표시 / ＋비교 추가" oninput="mmSearchDeb()" onkeydown="if(event.key==='Enter')mmDoSearch()" style="width:100%">
+      <input id="mmSearch" class="bigsearch" placeholder="단지 검색 — 지도 표시·비교 추가" oninput="mmSearchDeb()" onkeydown="if(event.key==='Enter')mmDoSearch()" style="width:100%">
       <div id="mmSearchRes" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:300px;overflow:auto;z-index:800"></div>
     </div>
-    <button class="chip" onclick="openFavList()" title="관심지역·관심단지 목록">⭐ 관심목록</button>
-    <button class="chip" id="mmGradeBtn" onclick="toggleMyGrade()" title="지역 급지색 오버레이">🎨 급지색</button>
-    <button class="chip" id="mmCmpBtn" onclick="document.getElementById('mmCompare').scrollIntoView({behavior:'smooth'})" title="비교표로 이동">🆚 비교 0</button>
-    <button class="chip" onclick="mmClearSearch()" title="검색 핀·측정선 지우기">↺ 초기화</button>
+    <button class="chip" onclick="openFavList()" title="관심지역·관심단지 목록">관심목록</button>
+    <button class="chip" id="mmGradeBtn" onclick="toggleMyGrade()" title="지역 급지색 오버레이">급지색</button>
+    <button class="chip" onclick="mmClearSearch()" title="검색 핀·측정선 지우기">초기화</button>
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
     <div id="myMap" style="flex:1;min-width:340px;height:560px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
@@ -783,11 +795,8 @@
 
   <!-- 단지 비교표 (지도 아래 인라인) -->
   <section id="mmCompare" style="margin-top:22px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <h3 style="margin:0;font-size:18px">🆚 단지 비교</h3>
-      <button class="btn" id="mmcRunBtn" onclick="runCompare()" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 16px">비교하기</button>
-    </div>
-    <p style="color:var(--dim);font-size:12px;margin:0 0 8px">위 <b>단지 검색</b>의 <b>＋비교</b> 또는 관심단지 핀에서 열을 추가하면 <b>'–'로 대기</b>합니다. <b>비교하기</b>를 누르면 그때 실거래를 불러와 채웁니다(단지별 캐시).</p>
+    <h3 style="margin:0 0 6px;font-size:18px">단지 비교</h3>
+    <p style="color:var(--dim);font-size:12px;margin:0 0 10px">위 <b>단지 검색</b>의 <b>＋비교</b> 또는 관심단지 핀에서 열을 추가하면 <b>'–'로 대기</b>합니다. 우측 <b>비교하기</b> 버튼을 누르면 그때 실거래를 불러와 채웁니다.</p>
     <div id="mmCompareTable" style="overflow:auto"></div>
   </section>
  </div>
@@ -956,6 +965,7 @@ function switchTab(t){
   if(t==='signal'){ chart.resize(); renderScoreboard(); renderAha(); }
   if(t==='undervalued') loadUndervalued();
   if(t==='mypage') fillMyPage();
+  if(typeof updateCmpFab==='function') updateCmpFab();
   if(t==='mymap') drawMyMap();
   if(t==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
   if(t==='news') loadNews();
@@ -2232,44 +2242,55 @@ async function openCompare(){
 // ===== 내 시그널맵 인라인 비교표 (동적 열 추가 + 지연 로드/캐시) =====
 let _cmpData={};   // region|name → 실거래 데이터(로드 완료). undefined = 대기중
 function _cmpKey(x){ return x.region+'|'+x.name; }
+function updateCmpFab(){
+  const fab=document.getElementById('cmpFab'); if(!fab) return;
+  const onMap=(document.getElementById('view-mymap')||{}).style && document.getElementById('view-mymap').style.display!=='none';
+  const n=cmpList().length, pend=cmpList().filter(x=>_cmpData[_cmpKey(x)]===undefined).length;
+  fab.style.display = (onMap && n) ? 'block' : 'none';
+  fab.disabled=false; fab.textContent = pend? `비교하기 ${pend}` : '비교 완료';
+}
 function renderCompareTable(){
   const host=document.getElementById('mmCompareTable'); if(!host) return;
-  updateCmpChip();
+  updateCmpChip(); updateCmpFab();
   const a=cmpList();
-  if(!a.length){ host.innerHTML='<div style="color:var(--dim);font-size:13px;padding:10px 0">비교할 단지가 없습니다. 위 검색으로 추가하거나, 지도의 관심단지 핀에서 ＋비교를 누르세요.</div>'; return; }
+  if(!a.length){ host.innerHTML='<div style="color:var(--dim);font-size:13px;padding:14px;border:1px dashed var(--line);border-radius:var(--r-md);text-align:center">비교할 단지가 없습니다. 위 <b>단지 검색</b>의 ＋비교, 또는 지도 관심단지 핀에서 담아보세요.</div>'; return; }
   const main=d=>{ const p=(d&&d['평형별']||[]); if(!p.length) return null; return p.slice().sort((u,v)=>(v['매매건수']||0)-(u['매매건수']||0))[0]; };
   const cols=a.map(x=>({x, d:_cmpData[_cmpKey(x)]}));   // d===undefined → 미로드
-  const cell=(c,fn)=> c.d===undefined ? '<span style="color:var(--dim)">–</span>' : (fn(c.d,main(c.d))??'–');
-  const row=(label,fn)=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:9px 8px;color:var(--dim);font-size:12px;white-space:nowrap">${label}</td>`
-    + cols.map(c=>`<td style="padding:9px 8px;text-align:right;font-weight:600">${cell(c,fn)}</td>`).join('')+`</tr>`;
-  host.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:${120+cols.length*128}px">
-    <thead><tr><td></td>${cols.map(c=>`<td style="padding:8px;text-align:right;vertical-align:top">
-        <div style="font-weight:800">${c.x.name.replace('아파트','')}</div>
-        <div style="font-size:11px;color:var(--dim)">${c.x.region}</div>
-        <span onclick="rmCmpCol('${c.x.name.replace(/['"\\]/g,'')}','${c.x.region.replace(/['"\\]/g,'')}')" style="cursor:pointer;font-size:11px;color:#dc2626">✕ 제거</span>
-        ${c.d===undefined?'<div style="font-size:10px;color:var(--accent);margin-top:2px">대기중</div>':''}</td>`).join('')}</tr></thead>
-    <tbody>
-      ${row('최근 평단가', d=>d&&d['최근평단가']?d['최근평단가'].toLocaleString()+'만':null)}
-      ${row('2년 추세', d=>d&&d['추세pct']!=null?`<span style="color:${d['추세pct']>=0?'#16a34a':'#dc2626'}">${d['추세pct']>0?'+':''}${d['추세pct']}%</span>`:null)}
-      ${row('주력 평형', (d,m)=>m?`${m['평형']}평`:null)}
-      ${row('최근 매매', (d,m)=>m&&m['최근매매']?_eok(m['최근매매']):null)}
-      ${row('전세가율', (d,m)=>m&&m['전세가율']!=null?`<b style="color:${m['전세가율']>=70?'#16a34a':'var(--txt)'}">${m['전세가율']}%</b>`:null)}
-      ${row('갭(실투자금)', (d,m)=>m&&m['갭']!=null?_eok(m['갭']):null)}
-      ${row('총 거래', d=>d&&d['총거래']?d['총거래']+'건':null)}
-    </tbody></table>
-    ${cols.length>1?`<div style="margin-top:8px"><span onclick="cmpSave([]);renderCompareTable()" style="cursor:pointer;font-size:12px;color:#dc2626">전체 비우기</span></div>`:''}`;
+  const cell=(c,fn)=> c.d===undefined ? '<span style="color:var(--sig-neutral)">–</span>' : (fn(c.d,main(c.d))??'–');
+  const rows=[['최근 평단가', d=>d&&d['최근평단가']?d['최근평단가'].toLocaleString()+'만':null],
+    ['2년 추세', d=>d&&d['추세pct']!=null?`<span style="color:${d['추세pct']>=0?'var(--sig-buy)':'var(--danger)'}">${d['추세pct']>0?'+':''}${d['추세pct']}%</span>`:null],
+    ['주력 평형', (d,m)=>m?`${m['평형']}평`:null],
+    ['최근 매매', (d,m)=>m&&m['최근매매']?_eok(m['최근매매']):null],
+    ['전세가율', (d,m)=>m&&m['전세가율']!=null?`<b style="color:${m['전세가율']>=70?'var(--sig-buy)':'var(--txt)'}">${m['전세가율']}%</b>`:null],
+    ['갭(실투자금)', (d,m)=>m&&m['갭']!=null?_eok(m['갭']):null],
+    ['총 거래', d=>d&&d['총거래']?d['총거래']+'건':null]];
+  const th=cols.map(c=>`<th style="padding:11px 12px;text-align:right;vertical-align:top;font-weight:800;min-width:120px">
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px">
+        <span>${c.x.name.replace('아파트','')}</span>
+        <span onclick="rmCmpCol('${c.x.name.replace(/['"\\]/g,'')}','${c.x.region.replace(/['"\\]/g,'')}')" title="제거" style="cursor:pointer;color:var(--dim);border:1px solid var(--line);border-radius:50%;width:18px;height:18px;line-height:16px;text-align:center;font-weight:400;font-size:12px">×</span></div>
+      <div style="font-size:11px;color:var(--dim);font-weight:400;margin-top:1px">${c.x.region}</div>
+      ${c.d===undefined?'<div style="display:inline-block;font-size:10px;color:var(--warn);background:var(--panel);border:1px solid var(--warn);border-radius:999px;padding:0 7px;margin-top:4px;font-weight:600">대기중</div>':''}</th>`).join('');
+  host.innerHTML=`<div style="border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow)">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:${130+cols.length*130}px">
+    <thead><tr style="background:var(--accent-weak)"><th style="padding:11px 12px;text-align:left"></th>${th}</tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr style="${i%2?'background:var(--bg)':''}">
+      <td style="padding:10px 12px;color:var(--dim);font-size:12px;white-space:nowrap;border-top:1px solid var(--line)">${r[0]}</td>`
+      + cols.map(c=>`<td style="padding:10px 12px;text-align:right;font-weight:600;border-top:1px solid var(--line)">${cell(c,r[1])}</td>`).join('')+`</tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <span style="font-size:11px;color:var(--dim)">주력 평형=최다 거래 평형. 단지마다 달라 참고용.</span>
+      ${cols.length?`<span onclick="cmpSave([]);renderCompareTable()" style="cursor:pointer;font-size:12px;color:var(--danger)">전체 비우기</span>`:''}</div>`;
 }
 async function runCompare(){
   const a=cmpList(), pend=a.filter(x=>_cmpData[_cmpKey(x)]===undefined);
   if(!a.length){ toast('비교할 단지를 먼저 추가하세요'); return; }
   if(!pend.length){ toast('이미 모두 불러왔습니다'); return; }
-  const btn=document.getElementById('mmcRunBtn'), old=btn.textContent; btn.disabled=true; btn.textContent='불러오는 중…';
+  const fab=document.getElementById('cmpFab'); if(fab){ fab.disabled=true; fab.textContent='불러오는 중…'; }
   await Promise.all(pend.map(async x=>{
     try{ _cmpData[_cmpKey(x)]=await (await fetch(`/api/complex/${encodeURIComponent(x.region)}/${encodeURIComponent(x.name)}`)).json(); }
     catch(e){ _cmpData[_cmpKey(x)]=null; }
     renderCompareTable();
   }));
-  btn.disabled=false; btn.textContent=old;
 }
 function rmCmpCol(name,region){ cmpSave(cmpList().filter(x=>!(x.name===name&&x.region===region))); renderCompareTable(); }
 function mmcSearchDeb(){ clearTimeout(_cxFindT2); _cxFindT2=setTimeout(mmcDoSearch,350); }
@@ -2684,6 +2705,9 @@ function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s)); }
 let _mapCfg=null, _myGradeLayer=null, _showMyGrade=false, _myLine=null, _mySearchList=[], _cxFindT2=null;
 const _MMICON={home:'🏠',region:'📍',complex:'🏢',search:'🔎'};
+function _pinIcon(color, sel){
+  return L.divIcon({className:'', html:`<div class="mappin${sel?' sel':''}" style="background:${color}"></div>`,
+    iconSize:sel?[24,24]:[18,18], iconAnchor:sel?[6,24]:[4,18]}); }
 // 검색결과 region 은 광역(예:'서울')이라 실거래 조회 불가 → 주소에서 시군구 추출
 function _sggFromAddr(addr, fallback){
   const t=(addr||'').trim().split(/\s+/);
@@ -2725,7 +2749,7 @@ async function drawMyMap(){
   if(_myLayer) _myLayer.remove();
   _myLayer=L.layerGroup().addTo(myMap); _myMarkers=[];
   pts.forEach((pt,i)=>{
-    const m=L.circleMarker([pt.lat,pt.lng],{radius:8,color:'#fff',weight:2,fillColor:pt.color,fillOpacity:.95})
+    const m=L.marker([pt.lat,pt.lng],{icon:_pinIcon(pt.color,false)})
       .bindTooltip(`${_MMICON[pt.kind]} ${pt.name}`,{direction:'top'})
       .addTo(_myLayer);
     m.on('click',()=>myPinClick(i));
@@ -2794,7 +2818,7 @@ function myPinClick(i){
   // 선택 토글(최대 2)
   const at=_mySel.indexOf(i);
   if(at>=0) _mySel.splice(at,1); else { _mySel.push(i); if(_mySel.length>2) _mySel.shift(); }
-  _myMarkers.forEach((m,j)=>m.setStyle({radius:_mySel.includes(j)?12:8, weight:_mySel.includes(j)?3:2}));
+  _myMarkers.forEach((m,j)=>m.setIcon(_pinIcon(_myPts[j].color, _mySel.includes(j))));
   // 단일 정보 패널
   const uv=(window._uv||{})[pt.region];
   const badgeH = pt.sig?badge(pt.sig):'';
@@ -3022,6 +3046,8 @@ async function startApp(needOnboard){
   }catch(e){ showAuthGate(); }
 })();
 </script>
+<button id="cmpFab" onclick="runCompare()">비교하기</button>
+
 <footer style="border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim);background:var(--panel)">
   <b style="color:var(--txt)">Signal APT</b>
   <span onclick="switchTab('about')" style="cursor:pointer;color:var(--accent)">🎨 시그널 APT란?</span>
