@@ -1345,10 +1345,17 @@ async function mapSplit(listId, mapId, items, opt){
     }catch(e){}
   }
 }
+// 공용 지도 타일 — VWorld 키 있으면 한글, 없으면 CartoDB voyager(전 지도 통일)
+let _mapCfg=null;
+function _mapTile(){
+  if(_mapCfg && _mapCfg.vworld)
+    return L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${_mapCfg.vworld}/Base/{z}/{y}/{x}.png`,{maxZoom:19});
+  return L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'© OpenStreetMap © CARTO'});
+}
 function initMap(mapId){
   let st=_ms[mapId];
   if(!st){ const map=L.map(mapId,{scrollWheelZoom:true,zoomControl:true});
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+    _mapTile().addTo(map);
     map.setView([37.55,126.99],11);
     st=_ms[mapId]={map,markers:{},sel:null}; }
   return st;
@@ -1672,7 +1679,7 @@ async function drawUvMap(){
   const el=document.getElementById('uvMap'); if(!el || typeof L==='undefined') return;
   if(!uvMap){
     uvMap=L.map(el,{attributionControl:false, scrollWheelZoom:false}).setView([37.45,127.0],9);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:16}).addTo(uvMap);
+    _mapTile().addTo(uvMap);
   }
   if(!_uvGeo){ try{ _uvGeo=await (await fetch('/sudo_gu.geojson')).json(); }catch(e){ return; } }
   const G=(typeof _REGION_GRADE!=='undefined')?_REGION_GRADE:{};
@@ -2726,7 +2733,7 @@ function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
   const dLat=d(b[0]-a[0]), dLng=d(b[1]-a[1]);
   const s=Math.sin(dLat/2)**2 + Math.cos(d(a[0]))*Math.cos(d(b[0]))*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s)); }
-let _mapCfg=null, _myGradeLayer=null, _showMyGrade=false, _myLine=null, _mySearchList=[], _cxFindT2=null;
+let _myGradeLayer=null, _showMyGrade=false, _myLine=null, _mySearchList=[], _cxFindT2=null;
 const _MMICON={home:'🏠',region:'📍',complex:'🏢',search:'🔎'};
 function _pinIcon(color, sel){
   return L.divIcon({className:'', html:`<div class="mappin${sel?' sel':''}" style="background:${color}"></div>`,
@@ -2738,17 +2745,11 @@ function _sggFromAddr(addr, fallback){
   if(t.length>=2 && /(구|군|시)$/.test(t[1])) return t[1];                          // 강남구 / 하남시
   return fallback||'';
 }
-async function _ensureTile(){
-  if(_mapCfg===null){ try{ _mapCfg=await (await fetch('/api/mapconfig')).json(); }catch(e){ _mapCfg={}; } }
-  if(_mapCfg && _mapCfg.vworld)
-    return L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${_mapCfg.vworld}/Base/{z}/{y}/{x}.png`,{maxZoom:19});
-  return L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19});
-}
 async function drawMyMap(){
   const el=document.getElementById('myMap'); if(!el || typeof L==='undefined') return;
   if(!myMap){
     myMap=L.map(el,{attributionControl:false, scrollWheelZoom:true}).setView([37.55,127.0],10);
-    (await _ensureTile()).addTo(myMap);
+    _mapTile().addTo(myMap);
   }
   setTimeout(()=>myMap.invalidateSize(),90);
   const sm={}; (allSignals||[]).forEach(s=>sm[s.region]=s);
@@ -3044,6 +3045,7 @@ async function toggleFav(kind, key, label){
   if(kind==='region') loadAlerts();   // 즐겨찾기 변경 → 알림 다이제스트 갱신
 }
 async function startApp(needOnboard){
+  try{ _mapCfg=await (await fetch('/api/mapconfig')).json(); }catch(e){ _mapCfg=_mapCfg||{}; }   // 지도 타일 설정 선로드
   await loadFavs();
   renderFilters();
   document.getElementById('search').oninput = renderList;
