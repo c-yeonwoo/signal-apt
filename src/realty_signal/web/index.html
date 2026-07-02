@@ -897,6 +897,11 @@
   <p style="color:var(--dim);font-size:11px;margin:-4px 0 12px">매수 예산 = (현재 시세 − 대출잔액 + 추가 현금) + 새 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 1주택 비과세 가정 · 참고용이며 실제 세금·대출은 확인 필요.</p>
   <div id="tuCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px"></div>
   <p id="tuEmpty" style="color:var(--dim)"></p>
+  <div id="tuListWrap" style="display:none;margin-top:26px">
+    <h3 style="font-size:16px;font-weight:800;margin:0 0 4px">이 예산이면 살 수 있는 실제 매물</h3>
+    <p style="color:var(--dim);font-size:12px;margin:0 0 12px">착지 후보 지역(상급지·동급지)에서 매수 예산 이하로 나온 경매·급매를 기회도순으로.</p>
+    <div id="tuListings" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+  </div>
  </div>
 </div>
 
@@ -1140,6 +1145,25 @@ function renderTradeup(d){
       ${x['해설']?`<div style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5">${x['해설']}</div>`:''}
     </div>`;
   }).join('');
+  // 단지-레벨: 예산 이하 실제 매물
+  const ls=d.listings||[], wrap=document.getElementById('tuListWrap');
+  wrap.style.display = ls.length? '' : 'none';
+  if(ls.length){
+    const tc=(typeof _LA_COLOR!=='undefined')?_LA_COLOR:{};
+    document.getElementById('tuListings').innerHTML=ls.map(x=>{
+      const col=tc[x['유형']]||'#64748b';
+      const gcol=((typeof _REGION_GRADE!=='undefined'&&_REGION_GRADE[x['지역급지']])||{}).col||'#94a3b8';
+      return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <b style="font-size:14px">${x['단지명']||'-'}</b>
+          <span style="font-size:10px;font-weight:700;color:#fff;background:${col};padding:2px 7px;border-radius:6px">${x['유형']}</span>
+        </div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${x['지역']} <span style="color:${gcol};font-weight:700">${x['지역급지']||''}</span>${x['급지상향']>0?' <span style="color:#15803d;font-weight:700">▲상급지</span>':''} ${_tuSigBadge(x['시그널'])}</div>
+        <div style="font-size:13px">총액 <b>${_won(x['총액'])}</b> <span style="color:#15803d;font-size:11px">· 예산 여유 ${_won(x['여유'])}</span></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:5px">기회도 <b style="color:var(--txt)">${x['기회도']}</b> · ${x['기회도근거']||''}</div>
+      </div>`;
+    }).join('');
+  }
 }
 // ===== 부동산 용어 사전 ([용어, 정의, 앱지표?]) =====
 const _GLOSSARY=[

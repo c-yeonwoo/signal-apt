@@ -755,13 +755,33 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
         })
     # 예산 내 & 상급지 우선 → 점수순
     cards.sort(key=lambda c: (c["예산내"], c["_score"]), reverse=True)
+
+    # 단지-레벨: 예산 이하 실제 매물(경매·급매) — 급지 하향 아닌 지역만, 급지상향·기회도 순
+    grade_of = {c["region"]: c["급지상향"] for c in cards}
+    floor = current_value * 0.6                           # 현 시세 60% 미만은 갈아타기 아님(오피스텔·소형 노이즈 제거)
+    listings = []
+    for L in _build_listings({"경매", "급매"}):
+        tot = L.get("총액")
+        if not tot or tot > budget or tot < floor:
+            continue
+        delta = grade_of.get(L["지역"])
+        if delta is None or delta < 0:                    # 하급지·현지역 제외
+            continue
+        listings.append({
+            "유형": L["유형"], "단지명": L["단지명"], "지역": L["지역"],
+            "지역급지": L["지역급지"], "급지상향": delta, "시그널": L["시그널"],
+            "총액": round(tot), "기회도": L["기회도"], "기회도근거": L["기회도근거"],
+            "여유": round(budget - tot), "ref": L.get("ref"),
+        })
+    listings.sort(key=lambda x: (x["급지상향"], x["기회도"] or 0), reverse=True)
+
     return {
         "current": {"region": current_region, "급지": cur_grade,
                     "시세": round(current_value), "대출잔액": round(loan_balance),
                     "순자산": round(net_equity)},
         "extra_cash": round(extra_cash), "capital": round(capital),
         "budget": budget, "detail": budget_detail, "pyeong": pyeong,
-        "cards": cards,
+        "cards": cards, "listings": listings[:40],
     }
 
 
@@ -1217,28 +1237,27 @@ def _opportunity(kind: str, m: dict, signal: str | None, grade: str | None):
     return max(0, min(100, base + sb + gb)), " · ".join(why)
 
 
-@app.get("/api/listings/all")
-def listings_all(request: Request, types: str = "경매,급매,청약"):
-    """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 기회도(시그널·급지 가중). 유형 교차 정렬."""
-    want = set(t for t in types.split(",") if t)
+def _build_listings(want: set[str]) -> list[dict]:
+    """통합 매물 정규화(공통 스키마 + 기회도 + 총액). 유형 필터(want)만 수집."""
     grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
     out = []
 
-    def add(kind, name, region, signal, mlabel, mval, munit, raw, lat, lng, ref):
+    def add(kind, name, region, signal, mlabel, mval, munit, raw, lat, lng, ref, total=None):
         score, why = _opportunity(kind, raw, signal, grade.get(region))
         out.append({"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
                     "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
-                    "기회도": score, "기회도근거": why, "lat": lat, "lng": lng, "ref": ref})
+                    "기회도": score, "기회도근거": why, "총액": total, "lat": lat, "lng": lng, "ref": ref})
 
     if "경매" in want:
         for r in auction.enrich(auction.load(), _signal_map(), {}):
             add("경매", r.get("단지명"), r.get("region"), r.get("지역시그널"),
-                "시세차익", r.get("시세차익률"), "%", r, r.get("lat"), r.get("lng"), {"id": r.get("id")})
+                "시세차익", r.get("시세차익률"), "%", r, r.get("lat"), r.get("lng"),
+                {"id": r.get("id")}, total=r.get("권장입찰가"))
     if "급매" in want and QUICKSALE_FILE.exists():
         for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "급매갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
-                {"평형": m.get("평형"), "호가": m.get("호가")})
+                {"평형": m.get("평형"), "호가": m.get("호가")}, total=m.get("호가"))
     if "청약" in want:
         for d in _presale():
             add("청약", d.get("단지명"), d.get("지역"), d.get("시그널"),
@@ -1253,7 +1272,13 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
                 add("재건축", c.get("단지명"), region, s,
                     "재건축잠재력", c.get("잠재력"), "점", c, None, None,
                     {"연식년": c.get("연식년"), "평단가": c.get("평단가")})
+    return out
 
+
+@app.get("/api/listings/all")
+def listings_all(request: Request, types: str = "경매,급매,청약"):
+    """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 기회도(시그널·급지 가중). 유형 교차 정렬."""
+    out = _build_listings(set(t for t in types.split(",") if t))
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
     return {"listings": out, "asof": str(_kb().last_date.date()),
             "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")}}
