@@ -697,6 +697,74 @@ def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
             "income": income, "detail": budget_detail, "cards": cards}
 
 
+_GRADE_ORDER = {"A": 4, "B": 3, "C": 2, "D": 1}
+
+
+@app.get("/api/tradeup")
+def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
+            extra_cash: float = 0, ltv: float = 0.7, income: float | None = None,
+            rate: float = 0.04, years: int = 30, pyeong: float = 25.7):
+    """갈아타기 전략 — 현 자산 매도 → 상급지/저평가 착지 후보.
+
+    current_value: 현재 집 시세(만원), loan_balance: 대출잔액(만원),
+    extra_cash: 추가 투입 현금(만원). 순자산(=시세−잔액)+추가현금 → 새 매수 예산 산출.
+    현재 거주 급지 대비 상향/동급/하향으로 후보를 분류해 반환(1주택 비과세 가정·참고용).
+    """
+    from collections import defaultdict
+
+    net_equity = max(0.0, current_value - loan_balance)   # 매도 시 손에 쥐는 순자산
+    capital = net_equity + max(0.0, extra_cash)           # 갈아타기 가용 자기자본
+    budget, budget_detail = _max_purchase(capital, ltv, income, rate, years)
+
+    sig = _signal_map()
+    df = store.load_localities()
+    locmap = {}
+    if not df.empty:
+        for r in json.loads(df.to_json(orient="records", force_ascii=False)):
+            locmap[r["region"]] = r
+    regions = _regime().get("regions", {})
+
+    cur_grade = (regions.get(current_region) or {}).get("급지")
+    cur_g = _GRADE_ORDER.get(cur_grade, 0)
+    rank = {"STRONG_BUY": 2, "BUY": 1, "WATCH": 0}
+
+    cards = []
+    for region, r in locmap.items():
+        if region == current_region:
+            continue
+        price = r.get("price")
+        est = round(price * pyeong) if price else None      # 84㎡ 예상 매수가(만원)
+        if not est:
+            continue
+        rg = regions.get(region, {})
+        g = _GRADE_ORDER.get(rg.get("급지"), 0)
+        delta = g - cur_g                                    # +상급지 / 0 동급 / −하급지
+        move = "상급지" if delta > 0 else ("동급지" if delta == 0 else "하급지")
+        s = sig.get(region, "")
+        uv = r.get("저평가도") or 0
+        affordable = est <= budget
+        # 갈아타기 매력 = 급지상향 우선 → 시그널 → 저평가 → 입지
+        score = delta * 10000 + rank.get(s, -1) * 1000 + uv * 10 + (r.get("입지점수") or 0)
+        cards.append({
+            "region": region, "이동": move, "급지상향": delta,
+            "지역급지": rg.get("급지"), "시그널": s, "평단가": price,
+            "예상매수가": est, "예산내": affordable,
+            "추가필요": None if affordable else round(est - budget),
+            "저평가도": uv, "입지점수": r.get("입지점수"), "해설": r.get("해설"),
+            "_score": round(score, 1),
+        })
+    # 예산 내 & 상급지 우선 → 점수순
+    cards.sort(key=lambda c: (c["예산내"], c["_score"]), reverse=True)
+    return {
+        "current": {"region": current_region, "급지": cur_grade,
+                    "시세": round(current_value), "대출잔액": round(loan_balance),
+                    "순자산": round(net_equity)},
+        "extra_cash": round(extra_cash), "capital": round(capital),
+        "budget": budget, "detail": budget_detail, "pyeong": pyeong,
+        "cards": cards,
+    }
+
+
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
 

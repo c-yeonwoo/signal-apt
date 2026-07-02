@@ -278,6 +278,7 @@
     <button class="tab on" data-tab="signal" onclick="switchTab('signal')">시그널</button>
     <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
     <button class="tab" data-tab="listings" onclick="switchTab('listings')">매물</button>
+    <button class="tab" data-tab="tradeup" onclick="switchTab('tradeup')" title="지금 집을 팔고 상급지로 갈아탈 수 있는지 — 예산·급지 기반 착지 후보">갈아타기</button>
     <button class="tab" data-tab="news" onclick="switchTab('news')">뉴스</button>
     <button class="tab" data-tab="report" onclick="acctGo('report')" title="내 관심 기반 개인화 매수전략 — 최종 결론">AI 리포트</button>
   </div>
@@ -879,6 +880,26 @@
  </div>
 </div>
 
+<div id="view-tradeup" style="display:none">
+ <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
+  <h2 class="page-head">갈아타기 전략</h2>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">지금 집을 팔면 <b>어디까지 갈아탈 수 있는지</b>를 계산합니다. 순자산(시세−대출)에 추가 현금을 더한 자기자본으로 새 대출(LTV·DSR)을 얹어 <b>매수 가능 예산</b>을 구하고, 현재 <b>급지 대비 상급지</b> 후보를 시그널·저평가 순으로 보여줍니다.</p>
+  <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+    <label>현재 거주지<br><input id="tuRegion" placeholder="예: 노원구" class="ctrl" style="width:130px"></label>
+    <label>현재 시세<br><input id="tuValue" type="number" placeholder="90000" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
+    <label>대출잔액<br><input id="tuLoan" type="number" value="0" style="width:100px"> <span style="color:var(--dim)">만원</span></label>
+    <label>추가 현금<br><input id="tuCash" type="number" value="0" style="width:100px"> <span style="color:var(--dim)">만원</span></label>
+    <label>LTV<br><input id="tuLtv" type="number" value="70" min="0" max="90" style="width:60px"> %</label>
+    <label>연소득<br><input id="tuIncome" type="number" placeholder="선택(DSR)" style="width:100px"> <span style="color:var(--dim)">만원</span></label>
+    <button class="btn" onclick="loadTradeup()" style="background:var(--accent);color:#fff;font-weight:700">계산</button>
+  </div>
+  <div id="tuSummary" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;line-height:1.7"></div>
+  <p style="color:var(--dim);font-size:11px;margin:-4px 0 12px">매수 예산 = (현재 시세 − 대출잔액 + 추가 현금) + 새 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 1주택 비과세 가정 · 참고용이며 실제 세금·대출은 확인 필요.</p>
+  <div id="tuCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px"></div>
+  <p id="tuEmpty" style="color:var(--dim)"></p>
+ </div>
+</div>
+
 <dialog id="alertsDlg" style="width:480px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
     <h3 style="margin:0;font-size:19px">알림 — 즐겨찾기 시그널 변동</h3>
@@ -1036,7 +1057,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
-  ['signal','all','auction','undervalued','presale','quicksale','redev','mypage','mymap','report','news','glossary','about'].forEach(v=>
+  ['signal','all','auction','undervalued','presale','quicksale','redev','mypage','mymap','report','tradeup','news','glossary','about'].forEach(v=>
     document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
   if(listing){
     document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
@@ -1049,17 +1070,76 @@ function switchTab(t){
   if(typeof updateCmpFab==='function') updateCmpFab();
   if(t==='mymap') drawMyMap();
   if(t==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
+  if(t==='tradeup') tuPrefill();
   if(t==='news') loadNews();
   if(t==='glossary') renderGlossary();
   // URL 해시 동기화 — 새로고침 시 현재 탭 유지
   const hash = listing ? _listingSub : t;
   if(location.hash.slice(1) !== hash) history.replaceState(null, '', '#' + hash);
 }
-const _ROUTES=['signal','undervalued','listings','all','auction','quicksale','presale','redev','news','report','mymap','mypage','about','glossary'];
+const _ROUTES=['signal','undervalued','listings','all','auction','quicksale','presale','redev','tradeup','news','report','mymap','mypage','about','glossary'];
 function routeFromHash(){
   const h=decodeURIComponent(location.hash.slice(1));
   if(_ROUTES.includes(h)){ switchTab(h); return true; }
   return false;
+}
+// ===== 갈아타기 전략 (현 자산 매도 → 상급지 착지) =====
+let _tuData=null;
+const _TU_SIG={STRONG_BUY:['적극매수','#15803d'],BUY:['매수','#16a34a'],WATCH:['관망','#ca8a04'],NEUTRAL:['중립','#64748b'],SELL_RISK:['매도주의','#dc2626']};
+function _tuSigBadge(s){ const m=_TU_SIG[s]; return m?`<span style="font-size:11px;font-weight:700;color:${m[1]}">${m[0]}</span>`:''; }
+function _won(m){ m=Math.round(m); return (m>=10000)?(m/10000).toFixed(m%10000?1:0)+'억':m+'만'; }
+function tuPrefill(){
+  const p=_profile||{};
+  const rg=document.getElementById('tuRegion'); if(rg && !rg.value && p['거주지']) rg.value=p['거주지'];
+  const inc=document.getElementById('tuIncome'); if(inc && !inc.value && p['연소득']) inc.value=p['연소득'];
+  const cash=document.getElementById('tuCash'); if(cash && (!cash.value||cash.value==='0') && p['가용자본']) cash.value=p['가용자본'];
+}
+async function loadTradeup(){
+  const region=document.getElementById('tuRegion').value.trim();
+  const value=+document.getElementById('tuValue').value;
+  if(!region||!value){ toast('현재 거주지와 시세를 입력해 주세요'); return; }
+  const loan=+document.getElementById('tuLoan').value||0;
+  const cash=+document.getElementById('tuCash').value||0;
+  const ltv=(+document.getElementById('tuLtv').value||70)/100;
+  const income=+document.getElementById('tuIncome').value||0;
+  document.getElementById('tuCards').innerHTML='<p style="color:var(--dim)">계산 중…</p>';
+  let q=`/api/tradeup?current_region=${encodeURIComponent(region)}&current_value=${value}&loan_balance=${loan}&extra_cash=${cash}&ltv=${ltv}`;
+  if(income) q+=`&income=${income}`;
+  try{ const d=await (await fetch(q)).json(); _tuData=d; renderTradeup(d); }
+  catch(e){ document.getElementById('tuCards').innerHTML='<p style="color:var(--dim)">불러오기 실패</p>'; }
+}
+function renderTradeup(d){
+  const c=d.current||{}, gcol=((typeof _REGION_GRADE!=='undefined'&&_REGION_GRADE[c['급지']])||{}).col||'#94a3b8';
+  const sm=document.getElementById('tuSummary'); sm.style.display='';
+  sm.innerHTML=
+    `현재 <b>${c.region}</b>(<span style="color:${gcol};font-weight:700">${c['급지']||'-'}급지</span>) 시세 <b>${_won(c['시세'])}</b>`
+    + (c['대출잔액']?` · 대출잔액 ${_won(c['대출잔액'])}`:'')
+    + ` → 순자산 <b>${_won(c['순자산'])}</b>`
+    + (d.extra_cash?` + 추가현금 ${_won(d.extra_cash)}`:'')
+    + ` = 자기자본 <b>${_won(d.capital)}</b><br>`
+    + `대출을 얹은 <b>매수 예산 ${_won(d.budget)}</b> 기준 — 아래는 예산으로 갈 수 있는 상급지 후보입니다.`;
+  const cards=d.cards||[];
+  const inBudget=cards.filter(x=>x['예산내']);
+  document.getElementById('tuEmpty').textContent = cards.length? '' : '후보가 없습니다. 거주지명(시군구)을 확인해 주세요.';
+  const show=(inBudget.length?inBudget:cards).slice(0,24);
+  document.getElementById('tuCards').innerHTML=show.map(x=>{
+    const col=((typeof _REGION_GRADE!=='undefined'&&_REGION_GRADE[x['지역급지']])||{}).col||'#94a3b8';
+    const moveCol = x['급지상향']>0?'#15803d':(x['급지상향']===0?'#64748b':'#b45309');
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px 15px;cursor:pointer;background:var(--panel)" onclick="switchTab('signal');selectRegion('${x.region}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="font-size:15px">${x.region}</b>
+        <span style="font-size:11px;font-weight:700;color:${moveCol}">${x['이동']}${x['급지상향']>0?' ▲':''}</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:8px">
+        <span style="color:${col};font-weight:700">${x['지역급지']||'-'}급지</span>
+        ${_tuSigBadge(x['시그널'])}
+        ${x['저평가도']?`<span style="color:var(--dim)">저평가 ${x['저평가도']}</span>`:''}
+      </div>
+      <div style="font-size:13px">예상 매수가 <b>${_won(x['예상매수가'])}</b>
+        ${x['예산내']?'<span style="color:#15803d;font-size:11px">· 예산 내</span>':`<span style="color:#b45309;font-size:11px">· +${_won(x['추가필요'])} 필요</span>`}</div>
+      ${x['해설']?`<div style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5">${x['해설']}</div>`:''}
+    </div>`;
+  }).join('');
 }
 // ===== 부동산 용어 사전 ([용어, 정의, 앱지표?]) =====
 const _GLOSSARY=[
