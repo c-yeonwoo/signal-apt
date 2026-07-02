@@ -297,16 +297,18 @@
     <div class="side">
       <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help"></div>
       <div class="sfilters">
-        <input id="search" placeholder="지역 검색" />
-        <select id="groupFilter" onchange="renderList()">
-          <option value="">전체 지역</option>
-          <option value="서울">서울 · 자치구</option>
-          <option value="경기">경기 · 시군구</option>
-          <option value="인천">인천</option>
-          <option value="지방·광역">지방 · 광역</option>
-        </select>
-        <button id="filterToggle" onclick="toggleFilters()" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;text-align:left;display:flex;align-items:center;gap:4px">시그널·급지 필터 <span id="filterCaret">▾</span></button>
-        <div class="filters" id="filters" style="display:none"></div>
+        <button id="filterToggle" onclick="toggleFilters()" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;text-align:left;display:flex;align-items:center;gap:4px">지역 검색·필터 <span id="filterCaret">▾</span></button>
+        <div id="filterPanel" style="display:none;flex-direction:column;gap:8px">
+          <input id="search" placeholder="지역 검색" />
+          <select id="groupFilter" onchange="renderList()">
+            <option value="">전체 지역</option>
+            <option value="서울">서울 · 자치구</option>
+            <option value="경기">경기 · 시군구</option>
+            <option value="인천">인천</option>
+            <option value="지방·광역">지방 · 광역</option>
+          </select>
+          <div class="filters" id="filters"></div>
+        </div>
       </div>
       <div id="list"></div>
     </div>
@@ -331,6 +333,10 @@
         <div id="cycleMiniChart" style="height:70px"></div>
       </div>
       <div id="chart"></div>
+      <div id="macroMini" style="display:none;border-top:1px solid var(--line)">
+        <div style="font-size:10px;color:var(--dim);padding:4px 12px 0">거시 추세 — <span style="color:#d97706">대출금리(%)</span> · <span style="color:var(--accent)">거래량(건)</span> · 선에 마우스를 올리면 수치</div>
+        <div id="macroMiniChart" style="height:76px"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -913,6 +919,7 @@ window.addEventListener('resize', () => {
   fitHeaderHeight();
   chart.resize();
   if(cycleMini) cycleMini.resize();
+  if(macroMini) macroMini.resize();
   if(typeof uvChart!=='undefined' && uvChart) uvChart.resize();
   Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(e){} });
 });
@@ -1823,15 +1830,15 @@ function drawUvScatter(rows){
 /* ---------- 시그널 탭 ---------- */
 let _filtersOpen=false;
 function toggleFilters(){ _filtersOpen=!_filtersOpen;
-  document.getElementById('filters').style.display=_filtersOpen?'flex':'none';
-  document.getElementById('filterCaret').textContent=_filtersOpen?'▴':'▾';
-  updateFilterToggleLabel(); }
+  document.getElementById('filterPanel').style.display=_filtersOpen?'flex':'none';
+  updateFilterToggleLabel();
+  if(_filtersOpen) setTimeout(()=>document.getElementById('search').focus(),30); }
 function updateFilterToggleLabel(){
   const btn=document.getElementById('filterToggle'); if(!btn) return;
   // 비활성(전체가 아닌) 필터 개수 = 접혔을 때 적용중임을 표시
   const off = SIGNALS.length - active.size + (4 - (typeof activeGrade!=='undefined'?activeGrade.size:4));
   const cnt = off>0 ? ` <span style="color:var(--accent)">· ${off} 적용중</span>` : '';
-  btn.innerHTML = `시그널·급지 필터${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
+  btn.innerHTML = `지역 검색·필터${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
 }
 function renderFilters(){
   const f = document.getElementById('filters'); f.innerHTML = '';
@@ -2058,9 +2065,32 @@ function drawChart(region, m, sig){
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
     series }, true);
   drawCycleMini(region, z0, last);
+  drawMacroMini(region);
   bindCycleZoomSync();
   // 미니차트 표시/숨김으로 차트 컨테이너 높이가 바뀜 → 레이아웃 반영 후 메인차트 리사이즈(오버플로/침범 방지)
-  requestAnimationFrame(()=>{ chart.resize(); if(cycleMini && _showCycle) cycleMini.resize(); });
+  requestAnimationFrame(()=>{ chart.resize(); if(cycleMini && _showCycle) cycleMini.resize(); if(macroMini) macroMini.resize(); });
+}
+// 거시 추세 미니차트 — 대출금리(전국) + 거래량(지역), hover 시 수치
+let macroMini=null;
+function drawMacroMini(region){
+  const wrap=document.getElementById('macroMini'), el=document.getElementById('macroMiniChart');
+  const mc=window._macro, vol=_lastVol;
+  const rateData=(mc&&mc.dates&&mc['대출금리'])? mc.dates.map((d,i)=>[d, mc['대출금리'][i]]).filter(x=>x[1]!=null):[];
+  const volData=(vol&&vol.dates&&vol.counts)? vol.dates.map((d,i)=>[d, vol.counts[i]]).filter(x=>x[1]!=null):[];
+  if(!rateData.length && !volData.length){ wrap.style.display='none'; if(macroMini) macroMini.clear(); return; }
+  wrap.style.display='block';
+  if(!macroMini) macroMini=echarts.init(el);
+  macroMini.resize();
+  macroMini.setOption({ animation:false, grid:{left:10,right:10,top:8,bottom:6},
+    tooltip:{trigger:'axis', axisPointer:{type:'line'}, formatter:ps=>{
+      const d=(ps[0]&&ps[0].axisValueLabel||'').slice(0,7); let s=`<b>${d}</b>`;
+      ps.forEach(p=>{ const v=p.data[1]; s+=`<br>${p.marker}${p.seriesName} `+(p.seriesName.includes('금리')?v+'%':Number(v).toLocaleString()+'건'); }); return s; }},
+    xAxis:{type:'time', show:false},
+    yAxis:[{type:'value',show:false,scale:true},{type:'value',show:false,scale:true}],
+    series:[
+      {name:'대출금리', type:'line', yAxisIndex:0, data:rateData, showSymbol:false, smooth:true, lineStyle:{color:'#d97706',width:2}, z:3},
+      {name:'거래량', type:'line', yAxisIndex:1, data:volData, showSymbol:false, smooth:true, lineStyle:{color:'#2563eb',width:1.5}, areaStyle:{color:'rgba(37,99,235,.08)'}, z:2},
+    ] }, true);
 }
 // 메인 차트 줌/팬 → 미니 파형도 같은 x구간으로 맞춤(정렬 유지). 최초 1회만 바인딩.
 let _cycleZoomBound=false;
