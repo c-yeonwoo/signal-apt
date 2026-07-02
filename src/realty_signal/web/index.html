@@ -334,7 +334,9 @@
       </div>
       <div id="chart"></div>
       <div id="macroMini" style="display:none;border-top:1px solid var(--line)">
-        <div style="font-size:10px;color:var(--dim);padding:4px 12px 0">거시 추세 — <span style="color:#d97706">대출금리(%)</span> · <span style="color:var(--accent)">거래량(건)</span> · 선에 마우스를 올리면 수치</div>
+        <div onclick="toggleMacroMini()" style="font-size:10px;color:var(--dim);padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:6px">
+          <span>거시 추세 — <span style="color:#d97706">대출금리(%)</span> · <span style="color:var(--accent)">거래량(건)</span> · 선에 올리면 수치</span>
+          <span id="macroCaret" style="margin-left:auto">▴</span></div>
         <div id="macroMiniChart" style="height:76px"></div>
       </div>
     </div>
@@ -2065,41 +2067,55 @@ function drawChart(region, m, sig){
     dataZoom:[{type:'inside', startValue:z0, endValue:last}, {type:'slider', startValue:z0, endValue:last, height:22, bottom:14}],
     series }, true);
   drawCycleMini(region, z0, last);
-  drawMacroMini(region);
+  drawMacroMini(region, z0, last);
   bindCycleZoomSync();
   // 미니차트 표시/숨김으로 차트 컨테이너 높이가 바뀜 → 레이아웃 반영 후 메인차트 리사이즈(오버플로/침범 방지)
   requestAnimationFrame(()=>{ chart.resize(); if(cycleMini && _showCycle) cycleMini.resize(); if(macroMini) macroMini.resize(); });
 }
 // 거시 추세 미니차트 — 대출금리(전국) + 거래량(지역), hover 시 수치
 let macroMini=null;
-function drawMacroMini(region){
+let _macroOpen=true, _macroZ0=null, _macroLast=null;
+function drawMacroMini(region, z0, last){
   const wrap=document.getElementById('macroMini'), el=document.getElementById('macroMiniChart');
   const mc=window._macro, vol=_lastVol;
   const rateData=(mc&&mc.dates&&mc['대출금리'])? mc.dates.map((d,i)=>[d, mc['대출금리'][i]]).filter(x=>x[1]!=null):[];
   const volData=(vol&&vol.dates&&vol.counts)? vol.dates.map((d,i)=>[d, vol.counts[i]]).filter(x=>x[1]!=null):[];
   if(!rateData.length && !volData.length){ wrap.style.display='none'; if(macroMini) macroMini.clear(); return; }
   wrap.style.display='block';
+  _macroZ0=z0; _macroLast=last;
+  el.style.display=_macroOpen?'':'none';
+  document.getElementById('macroCaret').textContent=_macroOpen?'▴':'▾';
+  if(!_macroOpen) return;
   if(!macroMini) macroMini=echarts.init(el);
   macroMini.resize();
   macroMini.setOption({ animation:false, grid:{left:10,right:10,top:8,bottom:6},
     tooltip:{trigger:'axis', axisPointer:{type:'line'}, formatter:ps=>{
       const d=(ps[0]&&ps[0].axisValueLabel||'').slice(0,7); let s=`<b>${d}</b>`;
       ps.forEach(p=>{ const v=p.data[1]; s+=`<br>${p.marker}${p.seriesName} `+(p.seriesName.includes('금리')?v+'%':Number(v).toLocaleString()+'건'); }); return s; }},
-    xAxis:{type:'time', show:false},
+    xAxis:{type:'time', show:false, min:z0||null, max:last||null},
     yAxis:[{type:'value',show:false,scale:true},{type:'value',show:false,scale:true}],
     series:[
       {name:'대출금리', type:'line', yAxisIndex:0, data:rateData, showSymbol:false, smooth:true, lineStyle:{color:'#d97706',width:2}, z:3},
       {name:'거래량', type:'line', yAxisIndex:1, data:volData, showSymbol:false, smooth:true, lineStyle:{color:'#2563eb',width:1.5}, areaStyle:{color:'rgba(37,99,235,.08)'}, z:2},
     ] }, true);
 }
-// 메인 차트 줌/팬 → 미니 파형도 같은 x구간으로 맞춤(정렬 유지). 최초 1회만 바인딩.
+function toggleMacroMini(){
+  _macroOpen=!_macroOpen;
+  const el=document.getElementById('macroMiniChart');
+  el.style.display=_macroOpen?'':'none';
+  document.getElementById('macroCaret').textContent=_macroOpen?'▴':'▾';
+  if(_macroOpen && _lastM && selected) drawMacroMini(selected, _macroZ0, _macroLast);
+  requestAnimationFrame(()=>chart.resize());
+}
+// 메인 차트 줌/팬 → 미니 파형·거시차트도 같은 x구간으로 맞춤. 최초 1회만 바인딩.
 let _cycleZoomBound=false;
 function bindCycleZoomSync(){
   if(_cycleZoomBound) return; _cycleZoomBound=true;
   chart.on('datazoom', ()=>{
-    if(!_showCycle || !cycleMini) return;
     const dz=(chart.getOption().dataZoom||[])[0];
-    if(dz && dz.startValue!=null) cycleMini.setOption({xAxis:{min:dz.startValue, max:dz.endValue}});
+    if(!dz || dz.startValue==null) return;
+    if(_showCycle && cycleMini) cycleMini.setOption({xAxis:{min:dz.startValue, max:dz.endValue}});
+    if(_macroOpen && macroMini) macroMini.setOption({xAxis:{min:dz.startValue, max:dz.endValue}});
   });
 }
 // 경기 국면 사인곡선 미니차트 — 침체(저점)→회복→상승(고점)→후퇴 파형으로 국면을 시각화(색 밴드 유지)
