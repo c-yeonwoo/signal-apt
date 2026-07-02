@@ -1393,6 +1393,7 @@ async function loadAllListings(){
   _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
   const types=[..._laSel].join(',')||'경매';
   document.getElementById('laStatus').textContent='불러오는 중…';
+  document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">최초 1회는 데이터 수집으로 수십초 걸릴 수 있어요</span></div>';
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent(types))).json();
     _laData=d.listings||[]; document.getElementById('laStatus').textContent=`${_laData.length}건 · 기준 ${d.asof}`; }
   catch(e){ _laData=[]; document.getElementById('laStatus').textContent='불러오기 실패'; }
@@ -1858,7 +1859,8 @@ async function drawUvMap(){
   const lg=document.getElementById('uvMapLegend');
   if(lg) lg.innerHTML='<b style="font-size:11px">급지</b> '
     + ['A','B','C','D'].map(g=>`<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:${G[g].col};display:inline-block;border-radius:2px"></span>${G[g].label}</span>`).join(' ')
-    + '<br><b style="font-size:11px">규제</b> <span style="color:#dc2626">투기과열</span>·<span style="color:#ea580c">조정</span>·<span style="color:#7c3aed">토허</span>';
+    + '<br><b style="font-size:11px">규제</b> <span style="color:#dc2626">투기과열</span>·<span style="color:#ea580c">조정</span>·<span style="color:#7c3aed">토허</span>'
+    + `<br><span style="font-size:9px;color:var(--dim)">규제 ${_REGULATION.asof}</span>`;
   setTimeout(()=>uvMap.invalidateSize(),90);
 }
 let _uvGradeStats={};
