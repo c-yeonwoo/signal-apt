@@ -1089,27 +1089,105 @@ def addr_search(q: str):
     return {"results": out}
 
 
+_COMPLEX_TTL = 14 * 86400   # 실거래 신고지연(~1개월) 감안, 2주면 신선도 충분
+
+
 @app.get("/api/complex/{region}/{name}")
 def complex_detail(region: str, name: str):
-    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭. DB 캐시(30일)."""
+    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭. DB 캐시(14일)."""
     from realty_signal import db
+    grade = (_regime().get("regions", {}).get(region) or {}).get("급지")
+    signal = _signal_map().get(region)
+
+    def deco(d):   # 급지·시그널은 주간 변동 → 캐시에 굽지 않고 응답 시점에 부착
+        return {**d, "급지": grade, "시그널": signal}
+
     code = _kb().codes.get(region, "")
     if not (code and code.isdigit() and len(code) >= 5):
-        return {"단지명": name, "지원안함": True, "평형별": [], "매매추이": []}
+        return deco({"단지명": name, "지원안함": True, "평형별": [], "매매추이": []})
     lawd5 = code[:5]
     ckey = f"complex:{lawd5}:{name}"
-    cached = db.kv_get(ckey, max_age=30 * 86400)
+    cached = db.kv_get(ckey, max_age=_COMPLEX_TTL)
     if cached is not None:
-        return {**cached, "cached": True}
+        return deco({**cached, "cached": True})
     from realty_signal.ingest import complex as cx
     config.load_env()
     pk = config.public_data_key()
     if not pk:
-        return {"단지명": name, "지원안함": True, "평형별": [], "매매추이": []}
+        return deco({"단지명": name, "지원안함": True, "평형별": [], "매매추이": []})
     data = cx.fetch_complex(lawd5, name, pk)
     data["region"] = region
     db.kv_set(ckey, data)
-    return data
+    return deco(data)
+
+
+def warm_favorite_complexes() -> dict:
+    """전체 관심단지 실거래 캐시 워밍(주간 스케줄러용). 14일내 신선한 건 건너뜀."""
+    from realty_signal import db
+    from realty_signal.ingest import complex as cx
+    config.load_env()
+    pk = config.public_data_key()
+    if not pk:
+        return {"warmed": 0, "skipped": 0, "no_key": True}
+    codes = _kb().codes
+    warmed = skipped = 0
+    for region, name in db.all_fav_complexes():
+        code = codes.get(region, "")
+        if not (code and code.isdigit() and len(code) >= 5):
+            continue
+        ckey = f"complex:{code[:5]}:{name}"
+        if db.kv_get(ckey, max_age=_COMPLEX_TTL) is not None:
+            skipped += 1
+            continue
+        try:
+            data = cx.fetch_complex(code[:5], name, pk)
+            data["region"] = region
+            db.kv_set(ckey, data)
+            warmed += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("관심단지 워밍 실패 %s/%s: %s", region, name, e)
+    return {"warmed": warmed, "skipped": skipped}
+
+
+# 가치기준 → (필드, 작을수록 유리?, 표시라벨, 값포맷)
+_CMP_CRIT = {
+    "가격":     ("최근평단가", True,  "평단가",   lambda v: f"{round(v):,}만"),
+    "상승여력": ("추세pct",   False, "2년 추세", lambda v: f"{v:+g}%"),
+    "전세안정성": ("전세가율", False, "전세가율", lambda v: f"{round(v)}%"),
+    "실투자금": ("갭",       True,  "갭",      lambda v: f"{v/10000:.1f}억"),
+    "유동성":   ("총거래",    False, "거래량",   lambda v: f"{round(v)}건"),
+}
+
+
+def _compare_rule(criterion: str, complexes: list) -> str:
+    """규칙기반 비교 해설 — 선택 가치기준에서 1등 단지 + 반대관점 주의."""
+    spec = _CMP_CRIT.get(criterion)
+    if not spec or not complexes:
+        return "비교할 데이터가 부족합니다."
+    field, lower_better, label, fmt = spec
+    have = [c for c in complexes if c.get(field) is not None]
+    if not have:
+        return f"{label} 데이터가 있는 단지가 없어 비교가 어렵습니다."
+    best = (min if lower_better else max)(have, key=lambda c: c[field])
+    msg = f"‘{criterion}’ 기준으로는 {best.get('단지명','–')}가 {label} {fmt(best[field])}로 가장 유리합니다."
+    # 반대 관점: 전세안정성이 낮으면 하방 주의 등 간단 힌트
+    if criterion == "실투자금":
+        risky = [c for c in have if (c.get("전세가율") or 0) < 60]
+        if any(c is best for c in risky):
+            msg += " 다만 전세가율이 낮아 하방 안전마진은 상대적으로 약할 수 있습니다."
+    elif criterion == "상승여력" and (best.get("추세pct") or 0) < 0:
+        msg += " 단, 최근 2년 추세가 하락이라 반등 신호는 별도 확인이 필요합니다."
+    return msg
+
+
+@app.post("/api/compare-insight")
+def compare_insight_api(request: Request, data: dict = Body(...)):
+    """비교 단지 + 가치기준 → 한줄 해설(Claude, 없으면 규칙기반)."""
+    from realty_signal import ai_report
+    criterion = data.get("criterion") or "가격"
+    complexes = data.get("complexes") or []
+    text = ai_report.compare_insight(criterion, complexes)
+    return {"해설": text or _compare_rule(criterion, complexes), "ai": bool(text)}
 
 
 @app.get("/api/imjang/{region}/{name}")

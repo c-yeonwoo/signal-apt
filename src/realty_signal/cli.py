@@ -102,6 +102,19 @@ def watch(
         top = ", ".join(f"{c['region']} {c['old']}→{c['new']}" for c in changes[:3])
         _macos_notify(f"부동산 시그널 변화 {len(changes)}건 ({as_of})", top)
     history.save_snapshot(df, as_of)
+    _warm_favorites_quiet(quiet)
+
+
+def _warm_favorites_quiet(quiet: bool) -> None:
+    """관심단지 실거래 캐시 주간 워밍 — 사용자 콜드스타트 제거. best-effort."""
+    try:
+        from realty_signal.api import warm_favorite_complexes
+        r = warm_favorite_complexes()
+        if not quiet:
+            console.print(f"[dim]관심단지 워밍: 신규 {r.get('warmed',0)} · 스킵 {r.get('skipped',0)}[/dim]")
+    except Exception as e:  # noqa: BLE001
+        if not quiet:
+            console.print(f"[dim]관심단지 워밍 생략: {e}[/dim]")
 
 
 @app.command()

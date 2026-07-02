@@ -270,6 +270,19 @@ def fav_remove(uid: int, kind: str, key: str) -> None:
     c.close()
 
 
+def all_fav_complexes() -> list[tuple[str, str]]:
+    """전체 사용자 관심단지(kind='complex', key='region|name') → (region, name) 중복 제거. 주간 프리페치용."""
+    c = conn()
+    rows = c.execute("SELECT DISTINCT key FROM favorites WHERE kind='complex'").fetchall()
+    c.close()
+    out = []
+    for (key,) in rows:
+        if key and "|" in key:
+            region, name = key.split("|", 1)
+            out.append((region, name))
+    return out
+
+
 # ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
 def kv_get(k: str, max_age: int | None = None):
     """캐시 값(JSON 역직렬화). 없거나 max_age(초) 초과 시 None."""

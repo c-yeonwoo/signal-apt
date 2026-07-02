@@ -66,3 +66,34 @@ def generate(profile: dict, summary: dict, news: list | None = None,
     except Exception as e:  # 키 오류·레이트리밋·네트워크 → 폴백
         log.warning("AI 리포트 생성 실패: %s", e)
         return None
+
+
+_CMP_SYSTEM = (
+    "당신은 한국 부동산 애널리스트입니다. 사용자가 중시하는 가치 기준에서 비교 단지들을 평가해 "
+    "2~3문장으로 (1)그 기준에서 어느 단지가 유리한지와 데이터 근거, (2)반대 관점의 주의점을 말합니다. "
+    "한국어·구체적·과장 금지. 마크다운·불릿 없이 자연스러운 문장으로만."
+)
+
+
+def compare_insight(criterion: str, complexes: list) -> str | None:
+    """비교 단지 목록 + 가치기준 → 2~3문장 해설(markdown 없음). 불가 시 None(규칙기반 폴백)."""
+    if not available() or not complexes:
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        return None
+    payload = {"중시가치": criterion, "비교단지": complexes}
+    user = ("아래 JSON은 비교 중인 아파트 단지들의 실거래 지표와 사용자가 중시하는 가치입니다. "
+            "이 가치 기준에서 어느 단지가 유리한지 근거와 함께 짧게 해설하세요.\n\n"
+            + json.dumps(payload, ensure_ascii=False, indent=2))
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=MODEL, max_tokens=400, system=_CMP_SYSTEM,
+            messages=[{"role": "user", "content": user}],
+        )
+        return "".join(b.text for b in resp.content if b.type == "text").strip() or None
+    except Exception as e:  # noqa: BLE001
+        log.warning("AI 비교 해설 실패: %s", e)
+        return None
