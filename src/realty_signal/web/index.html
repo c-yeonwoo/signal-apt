@@ -1958,7 +1958,7 @@ async function drawUvMap(){
   const el=document.getElementById('uvMap'); if(!el || typeof L==='undefined') return;
   const onClick=r=>{ if(window._uv&&window._uv[r]) showUvHaesol(r); };
   if(!uvMap){
-    uvMap=L.map(el,{attributionControl:false, scrollWheelZoom:false}).setView([37.45,127.0],9);
+    uvMap=L.map(el,{attributionControl:false, scrollWheelZoom:true}).setView([37.45,127.0],9);
     _mapTile().addTo(uvMap);
     attachOverlayControl(uvMap, 'grade', onClick);   // 기본 급지색, 규제로 전환 가능
   } else { setOverlay(uvMap, uvMap._ovMode||'grade', onClick); }
@@ -1969,6 +1969,27 @@ async function drawUvMap(){
     + '<br><b style="font-size:11px">규제</b> <span style="color:#dc2626">투기과열</span>·<span style="color:#ea580c">조정</span>·<span style="color:#7c3aed">토허</span>'
     + `<br><span style="font-size:9px;color:var(--dim)">규제 ${_REGULATION.asof}</span>`;
   setTimeout(()=>uvMap.invalidateSize(),90);
+}
+// 차트 핀·리스트 hover → 지도에서 해당 시군구 강조(빨간 테두리 + 앞으로 튀어나옴)
+let _uvHiLayer=null;
+function _findUvLayer(region){
+  if(!uvMap||!uvMap._ovLayer) return null;
+  const key=_onorm(region); let found=null;
+  uvMap._ovLayer.eachLayer(l=>{ if(l.feature && _onorm(l.feature.properties.name)===key) found=l; });
+  return found;
+}
+function highlightUvRegion(region){
+  clearUvHighlight();
+  const l=_findUvLayer(region); if(!l) return;
+  _uvHiLayer=l;
+  l.setStyle({color:'#dc2626', weight:4, dashArray:'5 3', fillOpacity:0.72});
+  if(l.bringToFront) l.bringToFront();   // 다른 폴리곤 위로 → 살짝 튀어나온 느낌
+}
+function clearUvHighlight(){
+  if(_uvHiLayer && uvMap && uvMap._ovLayer){
+    try{ uvMap._ovLayer.resetStyle(_uvHiLayer); }catch(e){}
+  }
+  _uvHiLayer=null;
 }
 let _uvGradeStats={};
 // 지역 급지별 그룹 → 각 급지 안에서 '입지 대비 저평가' 순 추천
@@ -2001,7 +2022,7 @@ function uvRow(r, hi, col){
   const uv=r['저평가도'], ipji=r['입지점수']||0;
   const bar=`<span style="display:inline-block;width:44px;height:6px;border-radius:3px;background:var(--line);vertical-align:middle;position:relative">
     <span style="position:absolute;left:0;top:0;height:6px;width:${Math.max(3,Math.min(100,ipji))}%;background:${col};border-radius:3px"></span></span>`;
-  return `<div onclick="showUvHaesol('${r.region}')" title="클릭 → 해설·산점도 위치" style="display:flex;align-items:center;gap:10px;padding:8px 13px;border-bottom:1px solid var(--line);cursor:pointer;${hi?'background:rgba(22,163,74,.06);border-left:3px solid var(--sig-buy)':''}">
+  return `<div onclick="showUvHaesol('${r.region}')" onmouseenter="highlightUvRegion('${r.region}')" onmouseleave="clearUvHighlight()" title="클릭 → 해설·산점도 위치" style="display:flex;align-items:center;gap:10px;padding:8px 13px;border-bottom:1px solid var(--line);cursor:pointer;${hi?'background:rgba(22,163,74,.06);border-left:3px solid var(--sig-buy)':''}">
     <div style="min-width:130px;font-size:13px;font-weight:600">${r.region} ${r['시그널']?badge(r['시그널']):''}</div>
     <div style="min-width:108px;font-size:12px;color:var(--dim)" title="입지점수 0~100 · 교통·학군·환경">입지 <b style="color:var(--txt)">${ipji}</b> ${bar}</div>
     <div style="min-width:104px;font-size:12px">평단 <b>${won(r.price)}/평</b></div>
@@ -2042,8 +2063,11 @@ function drawUvScatter(rows){
                   borderColor:'#ffffff', borderWidth:1}},
     ]
   }, true);
-  uvChart.off('click');
+  uvChart.off('click'); uvChart.off('mouseover'); uvChart.off('mouseout'); uvChart.off('globalout');
   uvChart.on('click', p => { if(p.data && p.data.name) showUvHaesol(p.data.name); });
+  uvChart.on('mouseover', p => { if(p.seriesType==='scatter' && p.data && p.data.name) highlightUvRegion(p.data.name); });
+  uvChart.on('mouseout', () => clearUvHighlight());
+  uvChart.on('globalout', () => clearUvHighlight());
 }
 
 /* ---------- 시그널 탭 ---------- */
