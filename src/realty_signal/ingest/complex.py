@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import difflib
+import re
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -27,9 +29,36 @@ def _items(base: str, lawd5: str, key: str, ym: str) -> list:
     return list(root.iter("item"))
 
 
-def _match(nm: str, target_norm: str) -> bool:
-    n = _norm(nm)
-    return bool(n) and (n == target_norm or target_norm in n or n in target_norm)
+# 국토부 구표기 ↔ 통용 표기 철자 통일(정규화로 흡수 → 별개 단지 오매칭 없이 변형만 일치)
+_SPELL = {"맨숀": "맨션", "빠트": "파트", "아빠트": "아파트"}
+_ROMAN = {"Ⅰ": "1", "Ⅱ": "2", "Ⅲ": "3", "Ⅳ": "4", "Ⅴ": "5", "Ⅵ": "6"}
+
+
+def _canon(s: str) -> str:
+    """비교용 표준형 — 로마숫자→아라비아, _norm(한글·숫자만), 철자변형 통일."""
+    for a, b in _ROMAN.items():
+        s = s.replace(a, b)
+    n = _norm(s)
+    for a, b in _SPELL.items():
+        n = n.replace(a, b)
+    return n
+
+
+def _match(nm: str, target_canon: str) -> bool:
+    """단지명 매칭 — 표준형 정확·부분포함이 기본. 철자변형은 정규화로 흡수.
+
+    숫자(동·단지 번호)가 양쪽에 있고 다르면 불일치(주공1 vs 주공10 방지),
+    그 외 미세 변형만 높은 유사도(0.9)로 안전 허용(다성/주성 같은 별개 단지는 배제).
+    """
+    n = _canon(nm)
+    if not n:
+        return False
+    if n == target_canon or target_canon in n or n in target_canon:
+        return True
+    dn, dt = re.findall(r"\d+", n), re.findall(r"\d+", target_canon)
+    if dn and dt and dn != dt:
+        return False
+    return difflib.SequenceMatcher(None, n, target_canon).ratio() >= 0.9
 
 
 def _amt(it, tag: str) -> float | None:
@@ -47,7 +76,7 @@ def _ym_of(it) -> str:
 def fetch_complex(lawd5: str, apt_name: str, key: str,
                   trade_months: int = 24, rent_months: int = 12) -> dict:
     """단지 실거래 종합. {매매추이(월별 평단가)·평형별(매매·전세·전세가율·갭)·요약}."""
-    cn = _norm(apt_name)
+    cn = _canon(apt_name)
     if not cn:
         return {}
     trades: list[dict] = []
