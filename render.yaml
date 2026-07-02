@@ -5,5 +5,5 @@ services:
     name: realty-signal-map
     runtime: docker
     plan: free
-    healthCheckPath: /api/meta
+    healthCheckPath: /            # /api/* 는 인증 게이트(401) → 공개 루트로 헬스체크
     autoDeploy: true
