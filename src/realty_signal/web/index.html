@@ -300,7 +300,8 @@
           <option value="인천">인천</option>
           <option value="지방·광역">지방 · 광역</option>
         </select>
-        <div class="filters" id="filters"></div>
+        <button id="filterToggle" onclick="toggleFilters()" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;text-align:left;display:flex;align-items:center;gap:4px">시그널·급지 필터 <span id="filterCaret">▾</span></button>
+        <div class="filters" id="filters" style="display:none"></div>
       </div>
       <div id="list"></div>
     </div>
@@ -970,6 +971,15 @@ function switchTab(t){
   if(t==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
   if(t==='news') loadNews();
   if(t==='glossary') renderGlossary();
+  // URL 해시 동기화 — 새로고침 시 현재 탭 유지
+  const hash = listing ? _listingSub : t;
+  if(location.hash.slice(1) !== hash) history.replaceState(null, '', '#' + hash);
+}
+const _ROUTES=['signal','undervalued','listings','auction','quicksale','presale','redev','news','report','mymap','mypage','about','glossary'];
+function routeFromHash(){
+  const h=decodeURIComponent(location.hash.slice(1));
+  if(_ROUTES.includes(h)){ switchTab(h); return true; }
+  return false;
 }
 // ===== 부동산 용어 사전 ([용어, 정의, 앱지표?]) =====
 const _GLOSSARY=[
@@ -1765,6 +1775,18 @@ function drawUvScatter(rows){
 }
 
 /* ---------- 시그널 탭 ---------- */
+let _filtersOpen=false;
+function toggleFilters(){ _filtersOpen=!_filtersOpen;
+  document.getElementById('filters').style.display=_filtersOpen?'flex':'none';
+  document.getElementById('filterCaret').textContent=_filtersOpen?'▴':'▾';
+  updateFilterToggleLabel(); }
+function updateFilterToggleLabel(){
+  const btn=document.getElementById('filterToggle'); if(!btn) return;
+  // 비활성(전체가 아닌) 필터 개수 = 접혔을 때 적용중임을 표시
+  const off = SIGNALS.length - active.size + (4 - (typeof activeGrade!=='undefined'?activeGrade.size:4));
+  const cnt = off>0 ? ` <span style="color:var(--accent)">· ${off} 적용중</span>` : '';
+  btn.innerHTML = `시그널·급지 필터${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
+}
 function renderFilters(){
   const f = document.getElementById('filters'); f.innerHTML = '';
   SIGNALS.forEach(s => {
@@ -1785,6 +1807,7 @@ function renderFilters(){
     g.appendChild(el);
   });
   f.appendChild(g);
+  updateFilterToggleLabel();
 }
 const collapsed = new Set();   // 접힌 그룹/시 키
 const GROUP_ORDER = ['서울','경기','인천','지방·광역'];
@@ -3035,6 +3058,8 @@ async function startApp(needOnboard){
   } else {
     await loadData();
   }
+  routeFromHash();   // 초기 1회 — URL 해시가 있으면 해당 탭으로(새로고침 유지)
+  window.addEventListener('hashchange', routeFromHash);   // 뒤로/앞으로
 }
 (async function init(){
   try{
