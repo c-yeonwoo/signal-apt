@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -23,6 +24,12 @@ _OPEN_PREFIXES = ("/api/auth/",)
 def _uid(request: Request):
     u = auth.current_user(request.cookies.get(auth.COOKIE))
     return u["id"] if u else None
+
+
+def _is_opus_user(request: Request) -> bool:
+    """이 계정이 Opus 4.8 프리미엄 티어인지(화이트리스트). 그 외는 저가 모델."""
+    u = auth.current_user(request.cookies.get(auth.COOKIE))
+    return bool(u) and (u.get("email") or "").lower() in config.opus_whitelist()
 
 
 _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
@@ -190,18 +197,39 @@ def profile_put(request: Request, data: dict = Body(...)):
 def report_ai(request: Request, data: dict = Body(...)):
     """프로필 + 결론 요약 → Claude 심층 리포트. 키 없으면 available:false (프론트 폴백)."""
     from realty_signal import ai_report
+    config.load_env()
     if not ai_report.available():
         return {"available": False}
     uid = _uid(request)
+    if not uid:
+        return {"available": False}
+    opus = _is_opus_user(request)
+    model = ai_report.OPUS if opus else ai_report.SONNET   # 화이트리스트=Opus, 그 외=Sonnet
+    tier = "opus" if opus else "sonnet"
     profile = db.profile_get(uid)
-    news = db.news_recent_for_ai(12)   # 최근 정책·시장 뉴스 맥락 주입
+    summary = data.get("summary") or {}
     fav = db.fav_list(uid)
     favorites = {
         "관심지역": [f["key"] for f in fav if f["kind"] == "region"],
         "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav if f["kind"] == "complex"],
     }
-    report = ai_report.generate(profile, data.get("summary") or {}, news=news, favorites=favorites)
-    return {"available": True, "report": report, "news_used": len(news)} if report else {"available": False}
+    # 캐시: 같은 데이터주차·프로필·관심·티어면 재사용(뉴스는 키에서 제외 — 주 단위 재생성으로 충분)
+    try:
+        wk = _kb().last_date.strftime("%G-W%V")
+    except Exception:  # noqa: BLE001
+        wk = "na"
+    sig = hashlib.md5(json.dumps([profile, summary, favorites, tier], ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
+    ckey = f"aireport:{uid}:{wk}:{sig}"
+    cached = db.kv_get(ckey, max_age=14 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    news = db.news_recent_for_ai(12)   # 최근 정책·시장 뉴스 맥락 주입
+    report = ai_report.generate(profile, summary, news=news, favorites=favorites, model=model)
+    if not report:
+        return {"available": False}
+    out = {"available": True, "report": report, "news_used": len(news), "tier": tier}
+    db.kv_set(ckey, out)
+    return out
 
 
 @app.get("/api/favorites")
@@ -1184,10 +1212,24 @@ def _compare_rule(criterion: str, complexes: list) -> str:
 def compare_insight_api(request: Request, data: dict = Body(...)):
     """비교 단지 + 가치기준 → 한줄 해설(Claude, 없으면 규칙기반)."""
     from realty_signal import ai_report
+    config.load_env()
     criterion = data.get("criterion") or "가격"
     complexes = data.get("complexes") or []
-    text = ai_report.compare_insight(criterion, complexes)
-    return {"해설": text or _compare_rule(criterion, complexes), "ai": bool(text)}
+    opus = _is_opus_user(request)
+    model = ai_report.OPUS if opus else ai_report.HAIKU   # 화이트리스트=Opus, 그 외=Haiku(단순 태스크)
+    tier = "opus" if opus else "haiku"
+    # 캐시: 기준 + 단지 시그니처(이름·핵심수치) + 티어 → 반복 클릭 재과금 방지
+    sig_src = sorted(f"{c.get('단지명')}|{c.get('최근평단가')}|{c.get('전세가율')}|{c.get('갭')}|{c.get('추세pct')}|{c.get('총거래')}" for c in complexes)
+    sig = hashlib.md5(json.dumps([criterion, sig_src, tier], ensure_ascii=False).encode()).hexdigest()[:16]
+    ckey = f"cmpins:{sig}"
+    cached = db.kv_get(ckey, max_age=14 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    text = ai_report.compare_insight(criterion, complexes, model=model)
+    out = {"해설": text or _compare_rule(criterion, complexes), "ai": bool(text)}
+    if text:   # 규칙기반 폴백은 무료·즉시 → 캐시 불필요
+        db.kv_set(ckey, out)
+    return out
 
 
 @app.get("/api/imjang/{region}/{name}")
