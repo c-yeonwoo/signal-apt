@@ -1114,6 +1114,56 @@ def _radar_scan(regions: list[str]) -> list[dict]:
     return out
 
 
+def _opp_score(kind: str, m: dict) -> int | None:
+    """기회도 0~100 (v1 단순 규칙 — 유형 교차 정렬용, 추후 정교화)."""
+    if kind == "급매":
+        g = m.get("급매갭")
+        return None if g is None else max(0, min(100, round(-g * 3)))     # -10%→30, -33%→99
+    if kind == "경매":
+        r = m.get("시세차익률")
+        return None if r is None else max(0, min(100, round(r * 2.5)))    # 20%→50, 40%+→100
+    if kind == "청약":
+        st, dd = m.get("상태"), m.get("Dday")
+        base = 70 if st == "접수중" else 55 if st == "접수예정" else 35
+        if dd is not None and dd >= 0:
+            base += max(0, 20 - min(20, dd))                              # 임박할수록 가점
+        return min(100, base)
+    return None
+
+
+@app.get("/api/listings/all")
+def listings_all(request: Request, types: str = "경매,급매,청약"):
+    """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 기회도. 유형 교차 정렬용."""
+    want = set(t for t in types.split(",") if t)
+    grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
+    out = []
+
+    def add(kind, name, region, signal, mlabel, mval, munit, score, lat, lng, ref):
+        out.append({"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
+                    "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
+                    "기회도": score, "lat": lat, "lng": lng, "ref": ref})
+
+    if "경매" in want:
+        for r in auction.enrich(auction.load(), _signal_map(), {}):
+            add("경매", r.get("단지명"), r.get("region"), r.get("지역시그널"),
+                "시세차익", r.get("시세차익률"), "%", _opp_score("경매", r),
+                r.get("lat"), r.get("lng"), {"id": r.get("id")})
+    if "급매" in want and QUICKSALE_FILE.exists():
+        for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
+            add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
+                "급매갭", m.get("급매갭"), "%", _opp_score("급매", m),
+                m.get("lat"), m.get("lng"), {"평형": m.get("평형"), "호가": m.get("호가")})
+    if "청약" in want:
+        for d in _presale():
+            add("청약", d.get("단지명"), d.get("지역"), d.get("시그널"),
+                "청약상태", d.get("상태"), "", _opp_score("청약", d),
+                None, None, {"관리번호": d.get("관리번호"), "Dday": d.get("Dday"), "주소": d.get("주소")})
+
+    out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
+    return {"listings": out, "asof": str(_kb().last_date.date()),
+            "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약")}}
+
+
 @app.get("/api/quicksale")
 def quicksale():
     """급매 레이더 결과 (캐시). 개인용 — baroezip 공개 API 기반."""
