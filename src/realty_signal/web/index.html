@@ -398,7 +398,7 @@
 <div id="view-presale" style="display:none">
   <div class="sec">
     <h3>청약·분양 단지 <span class="pill">청약홈</span>
-      <button class="chip" onclick="openGajeom()" style="margin-left:8px;background:var(--accent);color:#fff;border-color:var(--accent)">🎯 내 청약 가점 <b id="gajeomBadge">–</b></button></h3>
+      <button class="chip" id="gajeomBtn" onclick="openGajeom()" style="margin-left:8px;display:none;background:var(--accent);color:#fff;border-color:var(--accent)">내 청약 가점 <b id="gajeomBadge">–</b></button></h3>
     <p style="color:var(--dim);font-size:12px;margin:-2px 0 8px">
       최근~예정 청약. 접수중·임박(D-day) → BUY+ 순. 단지 클릭 시 평형별 분양가·특별공급·시세대비 메리트.
       <label style="margin-left:10px"><input type="checkbox" id="psBuyOnly" onchange="renderPresale()"> BUY+ 지역만</label>
@@ -706,20 +706,21 @@
 
 <div id="view-mypage" style="display:none">
  <div style="max-width:980px;margin:0 auto;padding:22px 18px 48px">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-    <div>
-      <h3 style="margin:0 0 3px;font-size:22px">👤 프로필 수정</h3>
-      <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
-    </div>
-    <span onclick="logout()" style="cursor:pointer;color:#dc2626;font-size:13px">로그아웃</span>
+  <div style="margin-bottom:14px">
+    <h3 style="margin:0 0 3px;font-size:22px">프로필 수정</h3>
+    <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
   </div>
 
-  <div id="mp_summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px;max-width:560px"></div>
+  <div id="mp_summary" style="display:flex;gap:10px;margin-bottom:26px;overflow-x:auto;padding-bottom:2px"></div>
 
   <div class="mp-sec">기본 정보</div>
   <div class="grid2">
     <label>주택 보유<br><select id="mp_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
-    <label>거주지(시군구)<br><input id="mp_region" placeholder="예: 노원구" class="ctrl" style="width:100%"></label>
+    <label>거주지<br>
+      <div style="position:relative">
+        <input id="mp_region" placeholder="동·도로명·단지로 검색 (예: 대치동, 은마)" class="ctrl" style="width:100%" oninput="mpRegionSearch()" autocomplete="off">
+        <div id="mpRegionRes" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:240px;overflow:auto;z-index:900"></div>
+      </div></label>
     <label>관심 평수<br><select id="mp_size" class="ctrl" style="width:100%"><option value="">전체</option><option value="s">소형 (~60㎡)</option><option value="m">중형 (60~85㎡)</option><option value="l">대형 (85㎡~)</option></select></label>
     <label>출생연도<br><input id="mp_birth" type="number" min="1940" max="2010" placeholder="예: 1990" class="ctrl" style="width:100%"></label>
   </div>
@@ -732,19 +733,23 @@
     <label>기대출 연원리금(만원)<br><input id="mp_debt" type="number" min="0" placeholder="0" class="ctrl" style="width:100%"></label>
   </div>
 
-  <div class="mp-sec">청약 자격</div>
-  <div class="grid2">
-    <label>무주택 기간(년)<br><input id="mp_nohouse" type="number" min="0" class="ctrl" style="width:100%"></label>
-    <label>청약통장 가입(개월)<br><input id="mp_account" type="number" min="0" class="ctrl" style="width:100%"></label>
-    <label>부양가족 수<br><input id="mp_family" type="number" min="0" class="ctrl" style="width:100%"></label>
-    <label>자녀 수<br><input id="mp_children" type="number" min="0" class="ctrl" style="width:100%"></label>
-    <label>혼인 상태<br><select id="mp_marital" class="ctrl" style="width:100%"><option value="">선택</option><option value="single">미혼</option><option value="newly">예비·신혼(7년 이내)</option><option value="married">기혼</option></select></label>
-    <label>무주택 세대주<br><select id="mp_householder" class="ctrl" style="width:100%"><option value="">선택</option><option value="1">예</option><option value="0">아니오</option></select></label>
-    <label>생애최초 주택구입<br><select id="mp_firsthome" class="ctrl" style="width:100%"><option value="">선택</option><option value="1">예</option><option value="0">아니오</option></select></label>
+  <div class="mp-sec" style="display:flex;align-items:center;gap:10px">청약
+    <label style="font-weight:400;font-size:13px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+      <input type="checkbox" id="mp_chungyak" onchange="toggleChungyak()"> 청약에도 관심 있어요</label></div>
+  <div id="mp-chungyak-fields" style="display:none">
+    <div class="grid2">
+      <label>무주택 기간(년)<br><input id="mp_nohouse" type="number" min="0" class="ctrl" style="width:100%"></label>
+      <label>청약통장 가입(개월)<br><input id="mp_account" type="number" min="0" class="ctrl" style="width:100%"></label>
+      <label>부양가족 수<br><input id="mp_family" type="number" min="0" class="ctrl" style="width:100%"></label>
+      <label>자녀 수<br><input id="mp_children" type="number" min="0" class="ctrl" style="width:100%"></label>
+      <label>혼인 상태<br><select id="mp_marital" class="ctrl" style="width:100%"><option value="">선택</option><option value="single">미혼</option><option value="newly">예비·신혼(7년 이내)</option><option value="married">기혼</option></select></label>
+      <label>무주택 세대주<br><select id="mp_householder" class="ctrl" style="width:100%"><option value="">선택</option><option value="1">예</option><option value="0">아니오</option></select></label>
+      <label>생애최초 주택구입<br><select id="mp_firsthome" class="ctrl" style="width:100%"><option value="">선택</option><option value="1">예</option><option value="0">아니오</option></select></label>
+    </div>
+    <div id="mp_gajeom" style="margin-top:16px;font-size:12px;color:var(--dim)"></div>
   </div>
-  <div id="mp_gajeom" style="margin-top:16px;font-size:12px;color:var(--dim)"></div>
 
-  <button class="btn" onclick="saveMyPage()" style="width:100%;margin-top:24px;max-width:560px;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">프로필 저장</button>
+  <button class="btn" onclick="saveMyPage()" style="display:block;margin:26px auto 0;max-width:360px;width:100%;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">프로필 저장</button>
  </div>
 </div>
 
@@ -1411,7 +1416,7 @@ function renderAiReport(d, eok){
   _reportSummary = {
     매수가능_억: +(d.budget/10000).toFixed(1), 거주지:p['거주지']||null, 주택수:p['주택수'],
     가용자본_만:p['가용자본']||null, 관심평수:p['관심평수']||null,
-    청약가점: gajeomScore(p['무주택기간']||0,p['부양가족']||0,p['청약통장개월']||0).total,
+    청약가점: p['청약관심'] ? gajeomScore(p['무주택기간']||0,p['부양가족']||0,p['청약통장개월']||0).total : null,
     추천지역: inb.slice(0,5).map(c=>({지역:c.region,시그널:c['시그널'],저평가도:c['저평가도'],
       평단가:c['평단가'],예상매수가_억:+((c['예상매수가']||0)/10000).toFixed(1),
       급매:c['급매건수']||0,청약:c['청약건수']||0})),
@@ -2649,8 +2654,28 @@ function fillMyPage(){
   document.getElementById('mp_marital').value = p['혼인상태']||'';
   document.getElementById('mp_householder').value = p['세대주']!=null ? String(p['세대주']) : '';
   document.getElementById('mp_firsthome').value = p['생애최초']!=null ? String(p['생애최초']) : '';
+  document.getElementById('mp_chungyak').checked = !!p['청약관심'];
+  toggleChungyak();
   renderMyPageSummary();
 }
+// 청약 관심 토글 — 체크 시에만 청약 자격 입력 드릴다운
+function toggleChungyak(){
+  const on=document.getElementById('mp_chungyak').checked;
+  document.getElementById('mp-chungyak-fields').style.display = on ? '' : 'none';
+}
+// 거주지 검색(도로명·동·단지) → 시군구 선택
+let _mpRegionT=null;
+function mpRegionSearch(){ clearTimeout(_mpRegionT); _mpRegionT=setTimeout(_mpRegionDo,350); }
+async function _mpRegionDo(){
+  const q=document.getElementById('mp_region').value.trim(), box=document.getElementById('mpRegionRes');
+  if(q.length<2){ box.style.display='none'; return; }
+  let d; try{ d=await (await fetch('/api/addr-search?q='+encodeURIComponent(q))).json(); }catch(e){ box.style.display='none'; return; }
+  const rs=d.results||[];
+  if(!rs.length){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML=rs.map(r=>`<div class="acct-item" onclick="mpPickRegion('${(r.sigungu||'').replace(/'/g,'')}')"><b>${r.sigungu}</b> <span style="font-size:11px;color:var(--dim)">${(r.name||'')} · ${(r.address||'')}</span></div>`).join('');
+}
+function mpPickRegion(sgg){ document.getElementById('mp_region').value=sgg; document.getElementById('mpRegionRes').style.display='none'; }
 // ===== 내 시그널맵 — 거주지·관심지역·관심단지 핀 + 거리/대중교통 =====
 let myMap=null, _myLayer=null, _myMarkers=[], _myPts=[], _mySel=[];
 function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
@@ -2811,14 +2836,16 @@ function renderMyPageSummary(){
   const p=_profile||{};
   const own = p['주택수']===0?'무주택':(p['주택수']===1?'1주택':(p['주택수']>=2?'다주택':'미설정'));
   const sz = {s:'소형',m:'중형',l:'대형'}[p['관심평수']]||'전체';
-  const g = gajeomScore(p['무주택기간']||0, p['부양가족']||0, p['청약통장개월']||0);
-  const chip=(label,val)=>`<div style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:90px">
+  const chip=(label,val)=>`<div style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:90px;white-space:nowrap">
     <div style="font-size:11px;color:var(--dim)">${label}</div><div style="font-weight:700;font-size:14px">${val}</div></div>`;
   document.getElementById('mp_summary').innerHTML =
     chip('주택', own) + chip('거주지', p['거주지']||'–') +
     chip('가용자본', p['가용자본']?_eok(p['가용자본']):'–') +
     chip('연소득', p['연소득']?_eok(p['연소득']):'–') + chip('관심평수', sz) +
-    chip('청약가점', `${g.total}점`);
+    (p['청약관심'] ? chip('청약가점', `${gajeomScore(p['무주택기간']||0,p['부양가족']||0,p['청약통장개월']||0).total}점`) : '');
+  // 청약가점·특공 상세는 청약 관심 시에만
+  if(!p['청약관심']){ document.getElementById('mp_gajeom').innerHTML=''; return; }
+  const g = gajeomScore(p['무주택기간']||0, p['부양가족']||0, p['청약통장개월']||0);
   const elig=teukgong(p).filter(t=>t.ok);
   const tg = elig.length
     ? `<div style="margin-top:7px">특별공급 자격: ${elig.map(t=>`<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="${t.why}">${t.key}</span>`).join(' ')} <span style="color:var(--dim);font-size:11px">· 소득·자산 요건 별도</span></div>`
@@ -2828,13 +2855,18 @@ function renderMyPageSummary(){
 }
 function saveMyPage(){
   const v=id=>document.getElementById(id).value;
-  _profile = {주택수:+v('mp_own'), 무주택기간:+v('mp_nohouse')||0, 가용자본:+v('mp_capital')||0,
+  const chungyak=document.getElementById('mp_chungyak').checked;
+  _profile = {주택수:+v('mp_own'), 가용자본:+v('mp_capital')||0,
     총자산:+v('mp_asset')||0, 관심평수:v('mp_size'), 거주지:v('mp_region').trim(),
-    부양가족:+v('mp_family')||0, 청약통장개월:+v('mp_account')||0,
     연소득:+v('mp_income')||0, 기대출연원리금:+v('mp_debt')||0, 출생연도:+v('mp_birth')||0,
+    청약관심:chungyak};
+  // 청약 관심 시에만 자격 데이터 저장, 아니면 null (카드·청약탭·정렬에서 숨김)
+  Object.assign(_profile, chungyak ? {
+    무주택기간:+v('mp_nohouse')||0, 부양가족:+v('mp_family')||0, 청약통장개월:+v('mp_account')||0,
     자녀수:+v('mp_children')||0, 혼인상태:v('mp_marital'),
     세대주:v('mp_householder')===''?null:+v('mp_householder'),
-    생애최초:v('mp_firsthome')===''?null:+v('mp_firsthome')};
+    생애최초:v('mp_firsthome')===''?null:+v('mp_firsthome'),
+  } : {무주택기간:null, 부양가족:null, 청약통장개월:null, 자녀수:null, 혼인상태:null, 세대주:null, 생애최초:null});
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
   renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults(); renderAha();
   toast('프로필을 저장했습니다.');
@@ -2914,7 +2946,14 @@ function teukgong(p){
 }
 function renderTeukgong(){
   const el=document.getElementById('psTeukgong'); if(!el) return;
-  if(!Object.keys(_profile||{}).length){ el.innerHTML='<span style="color:var(--dim);font-size:12px">마이페이지에서 혼인·자녀·생애최초·세대주를 입력하면 특별공급 자격을 자동 판정합니다.</span>'; return; }
+  const btn=document.getElementById('gajeomBtn');
+  // 청약 관심 없으면 가점·특공 UI 숨김
+  if(!(_profile||{})['청약관심']){
+    if(btn) btn.style.display='none';
+    el.innerHTML='<span style="color:var(--dim);font-size:12px">청약도 보시나요? <b>프로필 수정 → 청약에 관심 있어요</b>를 켜면 내 청약가점·특별공급 자격을 함께 보여드려요.</span>';
+    return;
+  }
+  if(btn){ btn.style.display=''; updateGajeomBadge(); }
   const all=teukgong(_profile), elig=all.filter(t=>t.ok);
   el.innerHTML = elig.length
     ? `<b>내 특별공급 자격:</b> ${elig.map(t=>`<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="${t.why}">${t.key} 가능</span>`).join(' ')}`
@@ -2930,8 +2969,8 @@ function openGajeom(){
 function calcGajeom(){
   const ny=+document.getElementById('gj_nohouse').value||0, fa=+document.getElementById('gj_family').value||0, ac=+document.getElementById('gj_account').value||0;
   const g=gajeomScore(ny,fa,ac);
-  // 프로필에도 반영(다음에 자동)
-  _profile['무주택기간']=ny; _profile['부양가족']=fa; _profile['청약통장개월']=ac;
+  // 프로필에도 반영(다음에 자동) — 가점 계산기 사용 = 청약 관심
+  _profile['무주택기간']=ny; _profile['부양가족']=fa; _profile['청약통장개월']=ac; _profile['청약관심']=true;
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
   updateGajeomBadge();
   const bar=(v,max,c)=>`<div style="background:#eef2f7;border-radius:6px;height:10px;overflow:hidden;margin-top:3px"><div style="width:${v/max*100}%;height:100%;background:${c}"></div></div>`;

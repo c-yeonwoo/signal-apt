@@ -955,13 +955,48 @@ def complex_search(q: str):
     seen, out = set(), []
     for d in data.get("documents", []):
         addr = d.get("road_address_name") or d.get("address_name") or ""
-        region = next((k for k in codes if k in addr), None)   # 주소에 포함된 시군구 코드키 매칭
+        # 주소에 포함된 코드키 중 가장 구체적인 것(시군구 > 시도) 선택 — '서울'보다 '강남구' 우선
+        region = max((k for k in codes if k in addr), key=len, default=None)
         nm = d.get("place_name", "")
         if not region or (nm, region) in seen:
             continue
         seen.add((nm, region))
         out.append({"name": nm, "region": region, "address": addr})
         if len(out) >= 6:
+            break
+    return {"results": out}
+
+
+@app.get("/api/addr-search")
+def addr_search(q: str):
+    """거주지 검색 — 도로명/지번/단지 키워드 → {name, address, sigungu}. 카카오 로컬 키워드."""
+    import json as _json
+    import urllib.parse
+    import urllib.request
+    key = config.kakao_key()
+    if not key:
+        config.load_env(); key = config.kakao_key()
+    if not key or not q.strip():
+        return {"results": []}
+    codes = _kb().codes
+    url = "https://dapi.kakao.com/v2/local/search/keyword.json?" + urllib.parse.urlencode({"query": q, "size": 12})
+    try:
+        data = _json.loads(urllib.request.urlopen(  # noqa: S310
+            urllib.request.Request(url, headers={"Authorization": f"KakaoAK {key}"}), timeout=8).read())
+    except Exception as e:
+        log.warning("주소검색 실패: %s", e)
+        return {"results": []}
+    seen, out = set(), []
+    for d in data.get("documents", []):
+        addr = d.get("road_address_name") or d.get("address_name") or ""
+        sgg = max((k for k in codes if k in addr), key=len, default=None)
+        nm = d.get("place_name", "")
+        key2 = (nm, addr)
+        if not sgg or key2 in seen:
+            continue
+        seen.add(key2)
+        out.append({"name": nm, "address": addr, "sigungu": sgg})
+        if len(out) >= 8:
             break
     return {"results": out}
 
