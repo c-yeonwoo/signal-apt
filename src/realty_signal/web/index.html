@@ -1384,8 +1384,8 @@ function renderQuicksale(){
   });
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
-const _LA_TYPES=['경매','급매','청약'];
-const _LA_COLOR={경매:'#8b5cf6', 급매:'#ea580c', 청약:'#0891b2'};
+const _LA_TYPES=['경매','급매','청약','재건축'];
+const _LA_COLOR={경매:'#8b5cf6', 급매:'#ea580c', 청약:'#0891b2', 재건축:'#16a34a'};
 let _laSel=null, _laData=[];
 function _laInitSel(){ if(_laSel) return; _laSel=new Set(['경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
 async function loadAllListings(){
