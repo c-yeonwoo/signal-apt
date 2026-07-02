@@ -1135,6 +1135,10 @@ def _opportunity(kind: str, m: dict, signal: str | None, grade: str | None):
         if dd is not None and 0 <= dd <= 14:
             base += (15 - dd)                                            # 임박(2주내) 가점
         why.append(f"청약 {st}" + (f" D-{dd}" if dd is not None and dd >= 0 else ""))
+    elif kind == "재건축":
+        p = m.get("잠재력")
+        base = 0 if p is None else round(p * 0.55)                       # 잠재력 100→55
+        why.append(f"재건축 잠재력 {p}" if p is not None else "재건축 잠재력 –")
     else:
         base = 0
     sb, gb = _SIG_BONUS.get(signal or "", 0), _GRADE_BONUS.get(grade or "", 0)
@@ -1172,10 +1176,19 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             add("청약", d.get("단지명"), d.get("지역"), d.get("시그널"),
                 "청약상태", d.get("상태"), "", d, None, None,
                 {"관리번호": d.get("관리번호"), "Dday": d.get("Dday"), "주소": d.get("주소")})
+    if "재건축" in want:
+        sig = _signal_map()
+        for region, s in sig.items():                     # 캐시된 지역만 — 라이브 재계산 없이(opt-in)
+            if not db_has_redev_cache(region):
+                continue
+            for c in _redev_candidates(region):
+                add("재건축", c.get("단지명"), region, s,
+                    "재건축잠재력", c.get("잠재력"), "점", c, None, None,
+                    {"연식년": c.get("연식년"), "평단가": c.get("평단가")})
 
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
     return {"listings": out, "asof": str(_kb().last_date.date()),
-            "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약")}}
+            "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")}}
 
 
 @app.get("/api/quicksale")
