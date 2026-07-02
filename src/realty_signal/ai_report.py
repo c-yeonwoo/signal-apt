@@ -11,7 +11,11 @@ import os
 
 log = logging.getLogger("realty_signal")
 
-MODEL = "claude-opus-4-8"
+# 모델 티어 — 화이트리스트=프리미엄(Opus), 기본=저가. 리포트는 복잡→Sonnet, 해설은 단순→Haiku.
+OPUS = "claude-opus-4-8"
+SONNET = "claude-sonnet-4-6"
+HAIKU = "claude-haiku-4-5"
+MODEL = OPUS   # 하위호환 기본값
 
 _SYSTEM = (
     "당신은 한국 부동산 매수 전략 애널리스트입니다. 사용자의 프로필(주택수·가용자본·거주지·"
@@ -34,7 +38,7 @@ def available() -> bool:
 
 
 def generate(profile: dict, summary: dict, news: list | None = None,
-             favorites: dict | None = None) -> str | None:
+             favorites: dict | None = None, model: str = MODEL) -> str | None:
     """프로필 + 결론 요약 (+최근 뉴스, +관심목록) → Claude 심층 리포트(markdown). 불가 시 None.
 
     favorites: {"관심지역": [...], "관심단지": [...]} — 있으면 리포트 80% 를 이 목록 중심으로.
@@ -57,7 +61,7 @@ def generate(profile: dict, summary: dict, news: list | None = None,
     try:
         client = anthropic.Anthropic()
         resp = client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=2000,
             system=_SYSTEM,
             messages=[{"role": "user", "content": user}],
@@ -75,7 +79,7 @@ _CMP_SYSTEM = (
 )
 
 
-def compare_insight(criterion: str, complexes: list) -> str | None:
+def compare_insight(criterion: str, complexes: list, model: str = HAIKU) -> str | None:
     """비교 단지 목록 + 가치기준 → 2~3문장 해설(markdown 없음). 불가 시 None(규칙기반 폴백)."""
     if not available() or not complexes:
         return None
@@ -90,7 +94,7 @@ def compare_insight(criterion: str, complexes: list) -> str | None:
     try:
         client = anthropic.Anthropic()
         resp = client.messages.create(
-            model=MODEL, max_tokens=400, system=_CMP_SYSTEM,
+            model=model, max_tokens=400, system=_CMP_SYSTEM,
             messages=[{"role": "user", "content": user}],
         )
         return "".join(b.text for b in resp.content if b.type == "text").strip() or None

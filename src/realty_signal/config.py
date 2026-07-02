@@ -27,6 +27,12 @@ def public_data_key() -> str | None:
     return os.environ.get("PUBLIC_DATA_KEY")
 
 
+def opus_whitelist() -> set[str]:
+    """Opus 4.8 프리미엄 모델을 쓸 계정 이메일(소문자) 집합. 그 외는 기본(저가) 모델."""
+    raw = os.environ.get("AI_OPUS_WHITELIST", "")
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
 def odsay_key() -> str | None:
     return os.environ.get("ODSAY_KEY")
 
