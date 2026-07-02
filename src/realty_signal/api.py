@@ -110,22 +110,32 @@ async def _auto_refresh_loop():
         await asyncio.sleep(86400)  # 하루마다 점검
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _startup_bg():
+    """초기 수집·스냅샷을 백그라운드로 — 헬스체크(/)가 데이터 수집을 기다리지 않도록.
+
+    신규 배포 첫 부팅의 KB 수집은 수십 초 걸려, 동기 실행 시 lifespan이 막혀
+    healthcheck 윈도우 내에 서버가 응답하지 못한다(배포 실패). '/'는 정적 SPA라
+    데이터와 무관하므로, 수집은 별도 스레드에서 돌리고 서버는 즉시 뜬다.
+    """
     import asyncio
-    # 캐시가 없으면(신규 배포 등) KB 데이터허브에서 최초 1회 수집.
     if not store.CACHE_FILE.exists():
-        log.warning("캐시 없음 — KB 데이터허브에서 최초 수집 중…")
+        log.warning("캐시 없음 — KB 데이터허브에서 최초 수집 중(백그라운드)…")
         try:
-            store.fetch()
-        except Exception as e:  # 수집 실패해도 서버는 기동(이후 갱신 버튼으로 재시도)
+            await asyncio.to_thread(store.fetch)
+        except Exception as e:  # 수집 실패해도 서버는 기동(이후 갱신으로 재시도)
             log.error("초기 수집 실패: %s", e)
     try:  # 시그널 스냅샷 초기화(최초 1회) — 이후 변동 감지 기준점
         if not db.kv_get("signal_snapshot"):
             _snapshot_signals(str(_kb().last_date.date()))
     except Exception as e:
         log.error("시그널 스냅샷 초기화 실패: %s", e)
-    task = asyncio.create_task(_auto_refresh_loop())  # 백그라운드 자동 갱신
+    await _auto_refresh_loop()  # 백그라운드 자동 갱신(무한 루프)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import asyncio
+    task = asyncio.create_task(_startup_bg())  # 수집·갱신은 백그라운드, 서버는 즉시 서빙
     yield
     task.cancel()
 
