@@ -39,6 +39,21 @@
     border:none; border-radius:999px; padding:13px 22px; font-size:14px; font-weight:700; cursor:pointer;
     box-shadow:0 6px 18px rgba(37,99,235,.4); display:none; }
   #cmpFab:hover { filter:brightness(1.05); }
+  /* 매물 발견 세그먼트 탭 */
+  .mtabs { display:flex; gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel); }
+  .mtabs .subtab { display:flex; flex-direction:column; align-items:center; gap:1px; border:none; border-right:1px solid var(--line);
+    background:var(--panel); color:var(--txt); cursor:pointer; padding:9px 20px; font-size:15px; font-weight:700; line-height:1.15; }
+  .mtabs .subtab:last-child { border-right:none; }
+  .mtabs .subtab small { font-size:10px; font-weight:500; color:var(--dim); }
+  .mtabs .subtab:hover { background:var(--accent-weak); }
+  .mtabs .subtab.on { background:var(--accent); color:#fff; }
+  .mtabs .subtab.on small { color:rgba(255,255,255,.85); }
+  /* 접이식 섹션 헤더(경매 상단 등) */
+  details.sec > summary { list-style:none; cursor:pointer; font-size:15px; font-weight:700; color:var(--txt);
+    display:flex; align-items:center; gap:8px; }
+  details.sec > summary::-webkit-details-marker { display:none; }
+  details.sec > summary::after { content:'▾'; color:var(--dim); font-weight:400; }
+  details.sec[open] > summary::after { content:'▴'; }
   /* 지도 오버레이 컨트롤(급지/규제/끄기) */
   .ov-ctl { display:flex; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.18); }
   .ov-ctl button { border:none; border-right:1px solid var(--line); background:var(--panel); color:var(--dim); font-size:11px; font-weight:600; padding:5px 9px; cursor:pointer; }
@@ -282,12 +297,14 @@
   </div>
 </header>
 
-<div id="listingSubnav" style="padding:8px 16px;border-bottom:1px solid var(--line);gap:8px;align-items:center;display:none">
-  <span style="font-size:12px;color:var(--dim);margin-right:4px">매물 ·</span>
-  <button class="subtab chip" data-sub="auction" onclick="switchTab('auction')">경매</button>
-  <button class="subtab chip" data-sub="quicksale" onclick="switchTab('quicksale')">급매</button>
-  <button class="subtab chip" data-sub="presale" onclick="switchTab('presale')">청약</button>
-  <button class="subtab chip" data-sub="redev" onclick="switchTab('redev')">재건축</button>
+<div id="listingSubnav" style="padding:10px 16px;border-bottom:1px solid var(--line);gap:12px;align-items:center;display:none">
+  <span style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
+  <div class="mtabs">
+    <button class="subtab" data-sub="auction" onclick="switchTab('auction')">경매<small>시세 이하 낙찰</small></button>
+    <button class="subtab" data-sub="quicksale" onclick="switchTab('quicksale')">급매<small>시세 이하 호가</small></button>
+    <button class="subtab" data-sub="presale" onclick="switchTab('presale')">청약<small>신규 분양</small></button>
+    <button class="subtab" data-sub="redev" onclick="switchTab('redev')">재건축<small>미래 가치</small></button>
+  </div>
   <span id="listingFocus" style="margin-left:auto;font-size:12px;color:var(--dim);display:none"></span>
 </div>
 
@@ -345,13 +362,13 @@
 
 <!-- 경매 탭 -->
 <div id="view-auction" style="display:none">
-  <div class="sec">
-    <h3>BUY+ 시그널 지역 (이 지역 매물을 탐색하세요)</h3>
-    <div class="hot" id="hotRegions"></div>
-  </div>
-  <div class="sec">
-    <h3>입찰가 계산 기준 <span class="pill">공식 조정 가능</span></h3>
-    <div class="params">
+  <details class="sec">
+    <summary>BUY+ 시그널 지역 <span style="font-size:12px;font-weight:400;color:var(--dim)">이 지역 매물을 탐색하세요</span></summary>
+    <div class="hot" id="hotRegions" style="margin-top:8px"></div>
+  </details>
+  <details class="sec">
+    <summary>입찰가 계산 기준 · 필터 <span class="pill">공식 조정 가능</span></summary>
+    <div class="params" style="margin-top:10px">
       <label>목표 시세차익률 % <input id="pMargin" type="number" value="10" step="1" oninput="loadAuction()"></label>
       <label>대출비율 % <input id="pLoan" type="number" value="70" step="5" oninput="loadAuction()"></label>
       <label>대출금리 % <input id="pRate" type="number" value="5" step="0.1" oninput="loadAuction()"></label>
@@ -379,7 +396,7 @@
         <span style="color:#94a3b8">※ 시세 미입력 시 감정가로 대체. 위 파라미터(목표차익률·대출·보유개월)를 바꾸면 즉시 재계산됩니다.</span>
       </div>
     </details>
-  </div>
+  </details>
   <div class="sec">
     <h3>경매 전략 (입찰기일 기준)</h3>
     <div class="strat" id="strat"></div>
