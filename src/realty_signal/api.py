@@ -123,14 +123,15 @@ def _seed_if_missing():
             store.build_localities()
         except Exception as e:  # noqa: BLE001
             log.error("localities 시딩 실패: %s", e)
-    if pk and not QUICKSALE_FILE.exists():               # 급매 레이더
+    if pk and _quicksale_stale():                        # 급매 레이더 (없거나 옛 스캔버전이면 재스캔)
         try:
-            log.warning("quicksale 없음 — 급매 레이더 스캔 중…")
+            log.warning("quicksale 없음/구버전 — 급매 레이더 스캔 중…")
             df = _signals_df()
             regions = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
             listings = _radar_scan(regions)
             QUICKSALE_FILE.write_text(json.dumps(
-                {"ready": True, "listings": listings, "regions": regions, "count": len(listings)},
+                {"ready": True, "listings": listings, "regions": regions,
+                 "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER},
                 ensure_ascii=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001
             log.error("quicksale 시딩 실패: %s", e)
@@ -871,6 +872,17 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
 
 
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
+_QUICKSALE_SCAN_VER = 2   # 스캔 로직 버전 — 올리면 배포 후 부팅 시 자동 재스캔(2=지역 좌표 역판정)
+
+
+def _quicksale_stale() -> bool:
+    """급매 캐시가 없거나 옛 스캔버전이면 True → 재스캔 필요."""
+    if not QUICKSALE_FILE.exists():
+        return True
+    try:
+        return json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("_scan_ver", 0) < _QUICKSALE_SCAN_VER
+    except Exception:  # noqa: BLE001
+        return True
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
 
 
