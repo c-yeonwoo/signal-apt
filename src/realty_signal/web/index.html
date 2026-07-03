@@ -31,6 +31,12 @@
     box-shadow:0 1px 2px rgba(2,32,71,.04); }
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
   .page-head { font-size:22px; font-weight:800; margin:0 0 4px; }
+  /* 가격대 듀얼 레인지 — 트랙 투명, 썸만 조작 */
+  #laPriceFilter input[type=range]{ height:22px; }
+  #laPriceFilter input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); border:2px solid #fff; box-shadow:0 1px 3px rgba(2,32,71,.35); cursor:pointer; pointer-events:auto; margin-top:0; }
+  #laPriceFilter input[type=range]::-moz-range-thumb{ width:16px; height:16px; border-radius:50%; background:var(--accent); border:2px solid #fff; cursor:pointer; pointer-events:auto; }
+  #laPriceFilter input[type=range]::-webkit-slider-runnable-track{ background:transparent; }
+  #laPriceFilter input[type=range]::-moz-range-track{ background:transparent; }
   /* 지도 핀 (divIcon) */
   .mappin { width:18px; height:18px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
     border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,.28); box-sizing:border-box; }
@@ -367,6 +373,16 @@
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
+    </div>
+    <div id="laPriceFilter" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px">
+      <span style="font-size:12px;color:var(--dim);white-space:nowrap">가격대 <b id="laPriceLabel" style="color:var(--txt)"></b></span>
+      <div style="position:relative;flex:1;min-width:220px;height:22px">
+        <div style="position:absolute;top:9px;left:0;right:0;height:4px;background:var(--line);border-radius:2px"></div>
+        <div id="laPriceFill" style="position:absolute;top:9px;height:4px;background:var(--accent);border-radius:2px"></div>
+        <input id="laPriceMin" type="range" min="0" max="100" value="0" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+        <input id="laPriceMax" type="range" min="0" max="100" value="100" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+      </div>
+      <span id="laPriceNote" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
     </div>
   </div>
   <div style="padding:0 20px 16px">
@@ -1494,8 +1510,41 @@ function renderQuicksale(){
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
 const _LA_TYPES=['경매','급매','청약','재건축'];
 const _LA_COLOR={경매:'#8b5cf6', 급매:'#ea580c', 청약:'#0891b2', 재건축:'#16a34a'};
-let _laSel=null, _laData=[];
+let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 function _laInitSel(){ if(_laSel) return; _laSel=new Set(['경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
+function initLaPriceFilter(){
+  const box=document.getElementById('laPriceFilter');
+  const priced=_laData.map(x=>x['총액']).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
+  if(priced.length<2){ box.style.display='none'; _laPrice=null; return; }
+  const lo=priced[0];
+  const p95=priced[Math.min(priced.length-1, Math.floor(priced.length*0.95))];
+  const hi=Math.max(p95, lo+10000);                              // 이상치 클램프(95%) — 슬라이더 밀도 확보
+  const step=Math.max(1000, Math.round((hi-lo)/100/1000)*1000);  // ~100틱, 1000만원 단위
+  _laPrice={lo,hi,min:lo,max:hi};
+  const mn=document.getElementById('laPriceMin'), mx=document.getElementById('laPriceMax');
+  [mn,mx].forEach(r=>{ r.min=lo; r.max=hi; r.step=step; });
+  mn.value=lo; mx.value=hi;
+  box.style.display='flex';
+  const nNull=_laData.length-priced.length, nAbove=priced.filter(v=>v>hi).length;
+  document.getElementById('laPriceNote').textContent =
+    [nNull?`가격 미상 ${nNull}건 항상 표시`:'', nAbove?`상한 끝=${(hi/10000).toFixed(0)}억 초과 포함`:''].filter(Boolean).join(' · ');
+  drawLaPrice();
+}
+function onLaPrice(){
+  if(!_laPrice) return;
+  const a=+document.getElementById('laPriceMin').value, b=+document.getElementById('laPriceMax').value;
+  _laPrice.min=Math.min(a,b); _laPrice.max=Math.max(a,b);
+  drawLaPrice(); renderAllListings();
+}
+function drawLaPrice(){
+  if(!_laPrice) return;
+  const {lo,hi,min,max}=_laPrice, span=hi>lo?hi-lo:1;
+  const fill=document.getElementById('laPriceFill');
+  fill.style.left=(min-lo)/span*100+'%'; fill.style.width=(max-min)/span*100+'%';
+  const eok=v=>(v/10000).toFixed(1)+'억';
+  const top = max>=hi ? `${(hi/10000).toFixed(1)}억+` : eok(max);   // 상한 끝이면 '이상'
+  document.getElementById('laPriceLabel').textContent=`${eok(min)} ~ ${top}`;
+}
 async function loadAllListings(){
   _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
   const types=[..._laSel].join(',')||'경매';
@@ -1504,6 +1553,7 @@ async function loadAllListings(){
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent(types))).json();
     _laData=d.listings||[]; document.getElementById('laStatus').textContent=`${_laData.length}건 · 기준 ${d.asof}`; }
   catch(e){ _laData=[]; document.getElementById('laStatus').textContent='불러오기 실패'; }
+  initLaPriceFilter();
   renderAllListings();
 }
 function renderLaTypeChips(){
@@ -1513,9 +1563,16 @@ function renderLaTypeChips(){
   el.querySelectorAll('[data-t]').forEach(c=>c.onclick=()=>{ const t=c.dataset.t;
     _laSel.has(t)?_laSel.delete(t):_laSel.add(t); if(!_laSel.size)_laSel.add(t); loadAllListings(); });
 }
+function _laPricePass(x){
+  if(!_laPrice) return true;
+  const v=x['총액'];
+  if(v==null || v<=0) return true;                              // 가격 미상(청약·재건축)은 항상 통과
+  const cap = _laPrice.max>=_laPrice.hi ? Infinity : _laPrice.max;  // 상한 끝 = 그 이상 전부 포함
+  return v>=_laPrice.min && v<=cap;
+}
 function renderAllListings(){
-  const rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']));
-  document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호 완화 / 급매는 급매 탭에서 스캔)';
+  const rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']) && _laPricePass(x));
+  document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호·가격대 완화 / 급매는 급매 탭에서 스캔)';
   const typeBadge=t=>`<span class="pill" style="background:${_LA_COLOR[t]};color:#fff;border-color:${_LA_COLOR[t]};font-size:10px">${t}</span>`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
