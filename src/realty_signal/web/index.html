@@ -775,7 +775,6 @@
     <label>주택 보유<br><select id="ob_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
     <label>무주택 기간(년)<br><input id="ob_nohouse" type="number" value="0" class="ctrl" style="width:100%"></label>
     <label>가용 자본(만원)<br><input id="ob_capital" type="number" placeholder="예: 50000" class="ctrl" style="width:100%"></label>
-    <label>총자산(만원, 선택)<br><input id="ob_asset" type="number" class="ctrl" style="width:100%"></label>
     <label>관심 평수<br><select id="ob_size" class="ctrl" style="width:100%"><option value="">전체</option><option value="s">소형 (~60㎡)</option><option value="m">중형 (60~85㎡)</option><option value="l">대형 (85㎡~)</option></select></label>
     <label>거주지(시군구)<br><input id="ob_region" placeholder="예: 노원구" class="ctrl" style="width:100%"></label>
     <label>부양가족 수<br><input id="ob_family" type="number" value="0" class="ctrl" style="width:100%"></label>
@@ -810,7 +809,6 @@
   <div class="grid2">
     <label>가용 자본(만원)<br><input id="mp_capital" type="number" placeholder="예: 50000" class="ctrl" style="width:100%"></label>
     <label>연소득(만원)<br><input id="mp_income" type="number" placeholder="DSR 한도 계산" class="ctrl" style="width:100%"></label>
-    <label>총자산(만원, 선택)<br><input id="mp_asset" type="number" class="ctrl" style="width:100%"></label>
     <label>기대출 연원리금(만원)<br><input id="mp_debt" type="number" min="0" placeholder="0" class="ctrl" style="width:100%"></label>
   </div>
 
@@ -1118,6 +1116,10 @@ function tuPrefill(){
   const rg=document.getElementById('tuRegion'); if(rg && !rg.value && p['거주지']) rg.value=p['거주지'];
   const inc=document.getElementById('tuIncome'); if(inc && !inc.value && p['연소득']) inc.value=p['연소득'];
   const cash=document.getElementById('tuCash'); if(cash && (!cash.value||cash.value==='0') && p['가용자본']) cash.value=p['가용자본'];
+  const cards=document.getElementById('tuCards');
+  if(cards && !cards.children.length){   // 계산 전 빈 화면 방지 — 안내 노출
+    document.getElementById('tuEmpty').innerHTML='현재 <b>거주지</b>와 <b>시세</b>를 입력하고 <b>계산</b>을 누르면, 지금 집을 팔아 갈아탈 수 있는 <b>상급지</b>와 그 예산으로 살 수 있는 <b>실제 매물</b>을 보여드립니다.';
+  }
 }
 async function loadTradeup(){
   const region=document.getElementById('tuRegion').value.trim();
@@ -3092,7 +3094,7 @@ async function logout(){ await fetch('/api/auth/logout',{method:'POST'}); locati
 function saveOnboarding(){
   const v=id=>document.getElementById(id).value;
   _profile={주택수:+v('ob_own'), 무주택기간:+v('ob_nohouse'), 가용자본:+v('ob_capital')||0,
-    총자산:+v('ob_asset')||0, 관심평수:v('ob_size'), 거주지:v('ob_region').trim(),
+    관심평수:v('ob_size'), 거주지:v('ob_region').trim(),
     부양가족:+v('ob_family')||0, 청약통장개월:+v('ob_account')||0};
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
   document.getElementById('onbDlg').close();
@@ -3119,7 +3121,6 @@ function fillMyPage(){
   document.getElementById('mp_own').value = p['주택수']!=null ? String(p['주택수']) : '0';
   document.getElementById('mp_nohouse').value = p['무주택기간']??'';
   document.getElementById('mp_capital').value = p['가용자본']??'';
-  document.getElementById('mp_asset').value = p['총자산']??'';
   document.getElementById('mp_size').value = p['관심평수']||'';
   document.getElementById('mp_region').value = p['거주지']||'';
   document.getElementById('mp_family').value = p['부양가족']??'';
@@ -3312,7 +3313,7 @@ function saveMyPage(){
   const v=id=>document.getElementById(id).value;
   const chungyak=document.getElementById('mp_chungyak').checked;
   _profile = {주택수:+v('mp_own'), 가용자본:+v('mp_capital')||0,
-    총자산:+v('mp_asset')||0, 관심평수:v('mp_size'), 거주지:v('mp_region').trim(),
+    관심평수:v('mp_size'), 거주지:v('mp_region').trim(),
     연소득:+v('mp_income')||0, 기대출연원리금:+v('mp_debt')||0, 출생연도:+v('mp_birth')||0,
     청약관심:chungyak};
   // 청약 관심 시에만 자격 데이터 저장, 아니면 null (카드·청약탭·정렬에서 숨김)
