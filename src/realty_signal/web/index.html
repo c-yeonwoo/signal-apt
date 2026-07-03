@@ -209,8 +209,9 @@
   .params label { font-size:12px; color:var(--dim); }
   .params input { width:64px; background:#ffffff; border:1px solid var(--line); color:var(--txt);
                   border-radius:6px; padding:4px 6px; }
-  .btn { padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#eef2f7;
-         color:#475569; cursor:pointer; font-size:13px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; vertical-align:middle;
+         line-height:1.15; white-space:nowrap; padding:6px 12px; border:1px solid var(--line);
+         border-radius:8px; background:#eef2f7; color:#475569; cursor:pointer; font-size:13px; box-sizing:border-box; }
   .btn.primary { border-color:#3b82f6; color:var(--accent); }
   table { width:100%; border-collapse:collapse; font-size:14px; }
   th,td { padding:7px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
@@ -1577,7 +1578,7 @@ function renderAllListings(){
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
       right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
+      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b> · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
     detail:x=>{ const acts = x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
         : cxBtn(x['단지명'], x['지역']);
@@ -3013,7 +3014,7 @@ function renderAuction(rows){
       <span>실거래 ${won(r['최근실거래가'])}</span><span>전세 ${won(r['최근전세가'])}</span>
       <span style="color:#16a34a">권장입찰 <b>${won(r['권장입찰가'])}</b></span><span>임대 ${r['임대수익률']==null?'–':r['임대수익률']+'%'}</span>
       <span>입찰기일 ${r['입찰기일']||'–'}</span></div>
-      <div style="margin-top:7px;display:flex;gap:6px">
+      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>
         ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}${cxBtn(r['단지명'],r['region'])}
         <span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span></div>`,

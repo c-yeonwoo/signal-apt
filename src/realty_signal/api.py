@@ -1366,8 +1366,56 @@ def region_centroids(regions: str):
     return {"centroids": out}
 
 
+@lru_cache(maxsize=1)
+def _sigungu_polys():
+    """수도권 시군구 경계 폴리곤 (sudo_gu.geojson) → [(name, outer_rings, bbox)]. 좌표→구 역판정용."""
+    try:
+        g = json.loads((WEB_DIR / "sudo_gu.geojson").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for f in g.get("features", []):
+        nm = (f.get("properties") or {}).get("name")
+        geom = f.get("geometry") or {}
+        polys = geom.get("coordinates") or []
+        if geom.get("type") == "Polygon":
+            polys = [polys]
+        rings = [poly[0] for poly in polys if poly]          # 외곽 링만(홀 무시 — 시군구엔 사실상 없음)
+        pts = [pt for r in rings for pt in r]
+        if not pts:
+            continue
+        xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+        out.append((nm, rings, (min(xs), min(ys), max(xs), max(ys))))
+    return out
+
+
+def _pip(lng: float, lat: float, ring: list) -> bool:
+    """ray-casting point-in-polygon. ring=[[lng,lat],...]."""
+    inside, n, j = False, len(ring), len(ring) - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if ((yi > lat) != (yj > lat)) and (lng < (xj - xi) * (lat - yi) / ((yj - yi) or 1e-12) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _sigungu_at(lat, lng) -> str | None:
+    """좌표 → 실제 시군구명(수도권). baroezip 급매의 bbox 스캔이 인접 구를 잘못 태깅하는 것 교정."""
+    if not lat or not lng:
+        return None
+    for nm, rings, (x0, y0, x1, y1) in _sigungu_polys():
+        if x0 <= lng <= x1 and y0 <= lat <= y1 and any(_pip(lng, lat, r) for r in rings):
+            return nm
+    return None
+
+
 def _radar_scan(regions: list[str]) -> list[dict]:
-    """급매 레이더 — 지역별 baroezip 공개 spatialmarket 조회 → 급매 매물 + 지역 시그널."""
+    """급매 레이더 — 지역별 baroezip 공개 spatialmarket 조회 → 급매 매물 + 지역 시그널.
+
+    bbox 스캔은 인접 구를 덮으므로, 매물의 실제 좌표로 시군구를 역판정해 지역·급지 오분류를 막는다.
+    """
     from realty_signal.ingest.baroezip import bbox_around, fetch_market
 
     codes = _kb().codes
@@ -1385,8 +1433,9 @@ def _radar_scan(regions: list[str]) -> list[dict]:
             if key in seen:
                 continue
             seen.add(key)
-            m["지역"] = region
-            m["시그널"] = sig.get(region, "")
+            actual = _sigungu_at(m.get("lat"), m.get("lng")) or region   # 좌표 우선, 실패 시 스캔 지역
+            m["지역"] = actual
+            m["시그널"] = sig.get(actual, "")
             out.append(m)
     out.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
     return out
@@ -1442,7 +1491,7 @@ def _build_listings(want: set[str]) -> list[dict]:
         for r in auction.enrich(auction.load(), _signal_map(), {}):
             add("경매", r.get("단지명"), r.get("region"), r.get("지역시그널"),
                 "시세차익", r.get("시세차익률"), "%", r, r.get("lat"), r.get("lng"),
-                {"id": r.get("id")}, total=r.get("권장입찰가"))
+                {"id": r.get("id")}, total=r.get("최저매각가") or r.get("권장입찰가"))
     if "급매" in want and QUICKSALE_FILE.exists():
         for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
