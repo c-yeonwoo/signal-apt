@@ -421,7 +421,7 @@ def evaluate(
         bd = _get(region, "buyer_demand")        # 매수세우위(raw)
         bs = _get(region, "buyer_superiority")   # 매수우위지수
         sale_avg, sale_mom = _momentum(kb.series(region, "sale_change"), c)
-        jeonse_avg, _ = _momentum(kb.series(region, "jeonse_change"), c)
+        jeonse_avg, jeonse_mom = _momentum(kb.series(region, "jeonse_change"), c)
 
         # 시군구는 수급·심리 미조사 → 상위 광역값 상속 (자체 매매모멘텀과 결합)
         inherited_from = None
@@ -439,6 +439,13 @@ def evaluate(
         if inherited_from:
             reasons.append(f"※수급·심리는 {inherited_from} 광역 기준")
             해설 = f"({inherited_from} 광역 수급 + {region} 매매흐름) " + 해설
+        # 전세 선행성(참고 강화 · 등급 영향 X) — 전세가 오르며 매매로 전이 = 실수요 기반 바닥 다지기
+        if jeonse_mom == "상승" and jeonse_state in ("매매전이", "전세난") and signal in ("STRONG_BUY", "BUY", "WATCH"):
+            reasons.append("전세 선행 상승→매매 전이(실수요 바닥)")
+            if pd.notna(sp) and sp <= c.supply_dry:
+                해설 += " 전세가가 먼저 오르며 매매로 전이되는데 입주물량도 적어, 실수요 기반의 바닥 다지기 신호로 볼 수 있습니다."
+            else:
+                해설 += " 전세가가 먼저 오르며 매매로 전이되는 실수요 기반 흐름입니다."
         vr = (volumes or {}).get(region, {}).get("거래량비")
         if vr is not None:
             if vr >= 1.2:
