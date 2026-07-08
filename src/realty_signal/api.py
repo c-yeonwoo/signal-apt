@@ -1272,17 +1272,55 @@ def _complex_signal(region: str, data: dict, signal: str | None) -> dict:
             "분해": {"사이클": round(cyc), "지역": round(reg), "단지": round(comp), "가격": round(price)}}
 
 
+def _gongsi_for(region: str, name: str) -> dict | None:
+    """단지 공동주택 공시가격(VWorld WFS) — 좌표 bbox 조회 → 이름/최근접 매칭. 캐시(90일, 공시가 연1회)."""
+    from realty_signal import db
+    ck = f"gongsi:{region}:{name}"
+    cached = db.kv_get(ck, max_age=90 * 86400)
+    if cached is not None:
+        return cached or None
+    config.load_env()
+    key = config.vworld_data_key()
+    if not key:
+        return None
+    from realty_signal.ingest import gongsi, geocode
+    from realty_signal.ingest.complex import _canon
+    q = f"{region} {name}"
+    coords = geocode.geocode_batch([q], max_miss=1).get("coords", {}).get(q)
+    if not coords:
+        db.kv_set(ck, {}); return None
+    feats = gongsi.fetch_bbox(coords[0], coords[1], key, config.vworld_domain())
+    if not feats:
+        db.kv_set(ck, {}); return None
+    tgt = _canon(name)
+    match = next((f for f in feats if f.get("단지명") and _canon(f["단지명"]) == tgt), None)
+    if not match:   # 이름 매칭 실패 → 최근접
+        match = min(feats, key=lambda f: ((f.get("lat") or 0) - coords[0]) ** 2 + ((f.get("lng") or 0) - coords[1]) ** 2)
+    db.kv_set(ck, match)
+    return match
+
+
 @app.get("/api/complex/{region}/{name}")
 def complex_detail(region: str, name: str):
-    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널. DB 캐시(14일)."""
+    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널 + 공시가격. DB 캐시(14일)."""
     from realty_signal import db
     grade = (_regime().get("regions", {}).get(region) or {}).get("급지")
     signal = _signal_map().get(region)
 
-    def deco(d):   # 급지·시그널·단지시그널은 주간 변동 → 캐시에 굽지 않고 응답 시점에 부착
+    def deco(d):   # 급지·시그널·단지시그널·공시가격은 응답 시점에 부착(각자 캐시)
         out = {**d, "급지": grade, "시그널": signal}
         if not d.get("지원안함") and (d.get("총거래") or d.get("매매추이")):
             out["단지시그널"] = _complex_signal(region, out, signal)
+        try:
+            g = _gongsi_for(region, name)
+            if g and g.get("㎡단가"):
+                out["공시가격"] = g
+                last = out.get("최근평단가")                      # 실거래 평단가(만원/평)
+                gpy = g["㎡단가"] * 3.3058 / 10000                 # 공시 평단가(만원/평)
+                if last and gpy:
+                    out["공시대비"] = round(last / gpy, 2)         # 실거래/공시 배수(>1=실거래 우위)
+        except Exception as e:  # noqa: BLE001
+            log.warning("공시가격 조회 실패 %s/%s: %s", region, name, e)
         return out
 
     code = _kb().codes.get(region, "")
