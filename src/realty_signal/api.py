@@ -504,6 +504,18 @@ def auction_add(data: dict = Body(...)):
     return asdict_listing(auction.add(data))
 
 
+@app.post("/api/auction/parse")
+def auction_parse(request: Request, data: dict = Body(...)):
+    """법원경매 물건 텍스트 붙여넣기 → Claude 파싱 → 구조화 필드(프론트 폼 프리필). 크롤 없음."""
+    from realty_signal import ai_report
+    config.load_env()
+    if not ai_report.available():
+        return {"ok": False, "reason": "no_ai"}
+    model = ai_report.OPUS if _is_opus_user(request) else ai_report.SONNET
+    parsed = ai_report.parse_auction(data.get("text", ""), model=model)
+    return {"ok": bool(parsed), "parsed": parsed or {}}
+
+
 @app.delete("/api/auction/listings/{listing_id}")
 def auction_delete(listing_id: str):
     auction.remove(listing_id)

@@ -412,7 +412,8 @@
         <option value="">전체</option><option value="s">소형(≤60㎡)</option><option value="m">중형(60~85)</option><option value="l">대형(>85)</option></select></label>
       <label>연식 <select id="fAge" onchange="loadAuction()" class="ctrl">
         <option value="">전체</option><option value="new">신축(≤10년)</option><option value="mid">준신축(10~20)</option><option value="old">구축(>20)</option></select></label>
-      <button class="btn primary" onclick="openAdd()">+ 매물 추가</button>
+      <button class="btn primary" onclick="openPaste()">📋 붙여넣기로 추가</button>
+      <button class="btn" onclick="openAdd()">+ 직접 입력</button>
       <button class="btn" onclick="document.getElementById('csv').click()">CSV 임포트</button>
       <button class="btn" id="mktBtn" onclick="refreshMarket()">최근 실거래가 갱신</button>
       <input id="csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)">
@@ -694,6 +695,19 @@
   </div>
   <div id="histBody" style="max-height:62vh;overflow:auto"></div>
   <p style="color:var(--dim);font-size:11px;margin-top:10px">구간수익=그 구간 동안 누적 매매가격지수 변화 · 이후12주=구간 종료 후 12주 변화(시그널 검증). 구간마다 근거가 다릅니다.</p>
+</dialog>
+
+<dialog id="pasteDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h3 style="margin:0">📋 경매 물건 붙여넣기</h3>
+    <span class="btn" style="padding:2px 10px" onclick="document.getElementById('pasteDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 10px">법원경매정보·경매 사이트의 <b>물건 상세 텍스트를 복사해 붙여넣으면</b> 감정가·최저가·소재지·기일을 자동 추출해 폼에 채웁니다. (크롤링 아님 — 값 확인 후 추가)</p>
+  <textarea id="pasteText" rows="9" placeholder="예) 2024타경12345 · 서울 강남구 대치동 ○○아파트 101동 · 감정가 12억 · 최저매각가 7억6800만 · 전용 84.9㎡ · 입찰기일 2026-08-03 …" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px;border:1px solid var(--line);border-radius:8px"></textarea>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+    <span id="pasteStatus" style="font-size:12px;color:var(--dim);margin-right:auto;align-self:center"></span>
+    <button class="btn primary" onclick="parseAuctionPaste()">분석 → 폼 채우기</button>
+  </div>
 </dialog>
 
 <dialog id="addDlg">
@@ -2932,6 +2946,22 @@ async function openHistModal(){
 
 /* ---------- 경매 탭 ---------- */
 function openAdd(){ document.getElementById('addDlg').showModal(); }
+function openPaste(){ document.getElementById('pasteText').value=''; document.getElementById('pasteStatus').textContent=''; document.getElementById('pasteDlg').showModal(); }
+async function parseAuctionPaste(){
+  const text=document.getElementById('pasteText').value.trim(), st=document.getElementById('pasteStatus');
+  if(text.length<10){ st.textContent='물건 정보를 붙여넣어 주세요'; return; }
+  st.textContent='분석 중…';
+  let d; try{ d=await (await fetch('/api/auction/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})).json(); }
+  catch(e){ st.textContent='분석 실패'; return; }
+  if(!d.ok){ st.textContent = d.reason==='no_ai' ? 'AI 미설정 — 직접 입력을 이용하세요' : '추출 실패 — 텍스트를 더 넣거나 직접 입력하세요'; return; }
+  const p=d.parsed||{}, set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
+  document.getElementById('pasteDlg').close();
+  openAdd();
+  set('f_단지명',p['단지명']); set('f_region',p['region']); set('f_사건번호',p['사건번호']);
+  set('f_입찰기일',p['입찰기일']); set('f_감정가',p['감정가']); set('f_최저매각가',p['최저매각가']);
+  set('f_전용면적',p['전용면적']); set('f_유찰횟수',p['유찰횟수']);
+  toast('추출 완료 — 값을 확인하고 추가하세요');
+}
 async function submitAdd(){
   const f = id => document.getElementById('f_'+id).value;
   const data = {};

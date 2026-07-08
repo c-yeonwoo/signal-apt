@@ -101,3 +101,43 @@ def compare_insight(criterion: str, complexes: list, model: str = HAIKU) -> str 
     except Exception as e:  # noqa: BLE001
         log.warning("AI 비교 해설 실패: %s", e)
         return None
+
+
+_AUCTION_PARSE_SYSTEM = (
+    "당신은 법원경매 물건 정보 파서입니다. 붙여넣은 텍스트에서 아래 필드를 추출해 JSON만 출력합니다.\n"
+    "- 단지명: 아파트/건물 단지명(동·호는 제외)\n"
+    "- region: 소재지의 시군구(예: '강남구', '성남시 분당구'). 광역시/특별시는 구까지.\n"
+    "- 사건번호: 예 '2024타경12345'\n"
+    "- 입찰기일: YYYY-MM-DD (여러 개면 다음 기일, 없으면 null)\n"
+    "- 감정가, 최저매각가: 만원 단위 정수. 억/만원 표기를 만원으로 환산(예 '6억 4,800만'→64800, '10억'→100000)\n"
+    "- 전용면적: ㎡ 실수(전용/전용면적 기준. 공급면적만 있으면 null)\n"
+    "- 유찰횟수: 정수(없으면 0)\n"
+    "- 메모: 동·호·층·특이사항을 한 줄로\n"
+    "불명확한 값은 null. 오직 JSON 객체 하나만 출력(설명·코드펜스 금지)."
+)
+
+
+def parse_auction(text: str, model: str = SONNET) -> dict | None:
+    """붙여넣은 법원경매 물건 텍스트 → 구조화 필드(JSON). 불가 시 None."""
+    if not available() or not (text or "").strip():
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        return None
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=model, max_tokens=600, system=_AUCTION_PARSE_SYSTEM,
+            messages=[{"role": "user", "content": text[:6000]}],
+        )
+        raw = "".join(b.text for b in resp.content if b.type == "text").strip()
+        if raw.startswith("```"):                       # 코드펜스 방어
+            raw = raw.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
+        start, end = raw.find("{"), raw.rfind("}")
+        if start < 0 or end < 0:
+            return None
+        return json.loads(raw[start:end + 1])
+    except Exception as e:  # noqa: BLE001
+        log.warning("경매 파싱 실패: %s", e)
+        return None
