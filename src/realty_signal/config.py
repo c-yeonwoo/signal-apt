@@ -42,6 +42,16 @@ def vworld_key() -> str | None:
     return os.environ.get("VWORLD_KEY")
 
 
+def vworld_data_key() -> str | None:
+    """VWorld NED 데이터 API 키(공동주택 공시가격 WFS 등). 도메인 잠금이라 vworld_domain()과 함께 사용."""
+    return os.environ.get("VWORLD_DATA_KEY")
+
+
+def vworld_domain() -> str:
+    """VWorld 키에 등록된 도메인(잠금 해제용). 로컬 기본 localhost, prod는 배포 도메인."""
+    return os.environ.get("VWORLD_DOMAIN", "localhost")
+
+
 def seoul_key() -> str | None:
     return os.environ.get("SEOUL_OPENAPI_KEY")
 
