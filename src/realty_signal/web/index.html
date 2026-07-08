@@ -1521,7 +1521,7 @@ function renderQuicksale(){
       sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span></div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
+      <span>연식 ${m['연식']||'–'}</span></div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     regionOf:m=>m['지역'],
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
@@ -1601,7 +1601,7 @@ function renderAllListings(){
       sub:`${x['총액']?`<b>${_eok(x['총액'])}</b> · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
-        : cxBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
+        : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
       return `<div class="kv"><span>유형 ${x['유형']}</span><span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">기회도 근거: ${x['기회도근거']}</div>`:''}<div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
@@ -2591,6 +2591,19 @@ async function openScoreboard(){
 function naverBtn(cno){
   return cno ? ` <a class="btn" href="https://new.land.naver.com/complexes/${cno}" target="_blank" rel="noopener" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">🟢 네이버부동산</a>` : '';
 }
+function cxSigBtn(name, region){
+  if(!name||!region) return '';
+  return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();loadCxSig(this,'${name.replace(/['"\\]/g,'')}','${region.replace(/['"\\]/g,'')}')">🎯 단지 시그널</span>`;
+}
+async function loadCxSig(btn, name, region){
+  btn.textContent='단지 시그널 조회 중…'; btn.style.pointerEvents='none';
+  let d; try{ d=await (await fetch(`/api/complex/${encodeURIComponent(region)}/${encodeURIComponent(name)}`)).json(); }
+  catch(e){ btn.textContent='조회 실패'; btn.style.pointerEvents=''; return; }
+  const cs=d&&d['단지시그널'];
+  if(cs){ const p=cs['분해']||{};
+    btn.outerHTML=`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px">단지 ${badge(cs['등급'])} <b>${cs['점수']}</b> <span style="color:var(--dim);font-size:10px">사이클${p['사이클']}·지역${p['지역']}·단지${p['단지']}·가격${p['가격']} · 참고용</span></span>`;
+  } else { btn.textContent = d&&d['거래없음']?'실거래 없음' : (d&&d['지원안함']?'미지원 지역':'데이터 없음'); }
+}
 function cxBtn(name, region){
   if(!name||!region) return '';
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
@@ -2704,6 +2717,7 @@ function renderCompareTable(){
   const cell=(c,fn)=> c.d===undefined ? '<span style="color:var(--sig-neutral)">–</span>' : (fn(c.d,main(c.d))??'–');
   // rows: 급지·시그널(맥락) → 평단가 → 추세 → 전세가율 → 갭 → 주력평형 → 최근매매 → 총거래
   const rows=[
+    {crit:null, label:'단지 시그널', get:d=>{ const cs=d&&d['단지시그널']; return cs?`${badge(cs['등급'])} <b>${cs['점수']}</b>`:null; }},
     {crit:null, label:'지역 급지', get:d=>_cmpGradeTag(d&&d['급지'])},
     {crit:null, label:'시그널', get:d=>_cmpSigTag(d&&d['시그널'])},
     {crit:'가격', label:'최근 평단가', val:d=>d&&d['최근평단가'], get:d=>d&&d['최근평단가']?d['최근평단가'].toLocaleString()+'만':null},
