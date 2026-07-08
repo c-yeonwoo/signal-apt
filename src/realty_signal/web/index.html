@@ -2827,6 +2827,16 @@ async function toggleCxFav(){
   await toggleFav('complex', cxFavKey(_cxCur.region,_cxCur.name), _cxCur.name);
   updateCxFavBtn();
 }
+function _cxSigBanner(cs){
+  const p=cs['분해']||{};
+  const bar=(lab,v)=>`<span style="font-size:11px;color:var(--dim)">${lab} <b style="color:var(--txt)">${v??'–'}</b></span>`;
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--accent-weak);border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin-bottom:12px">
+    <span style="font-size:12px;color:var(--dim)">단지 시그널</span>
+    ${badge(cs['등급'])} <b style="font-size:15px">${cs['점수']}</b>
+    <span style="margin-left:auto;display:flex;gap:12px">${bar('사이클',p['사이클'])}${bar('지역',p['지역'])}${bar('단지',p['단지'])}${bar('가격',p['가격'])}</span>
+    <span style="flex-basis:100%;font-size:10px;color:var(--dim)">사이클15%·지역35%·단지30%·가격20% 종합 · 참고용(단지 백테스트 전)</span>
+  </div>`;
+}
 async function openComplex(name, region){
   _cxCur={name,region};
   updateCxFavBtn();
@@ -2846,7 +2856,7 @@ async function openComplex(name, region){
     <td style="padding:8px 6px;text-align:right">${p['최근전세']?_eok(p['최근전세']):'–'}</td>
     <td style="padding:8px 6px;text-align:right;font-weight:700;color:${p['전세가율']>=70?'#16a34a':'var(--txt)'}">${p['전세가율']!=null?p['전세가율']+'%':'–'}</td>
     <td style="padding:8px 6px;text-align:right">${p['갭']!=null?_eok(p['갭']):'–'}</td></tr>`).join('');
-  body.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
+  body.innerHTML=`${d['단지시그널']?_cxSigBanner(d['단지시그널']):''}<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
       <div><div style="font-size:12px;color:var(--dim)">최근 평단가</div>
         <div style="font-size:24px;font-weight:800;line-height:1.1">${(d['최근평단가']||0).toLocaleString()}<span style="font-size:13px">만/평</span></div></div>
       <div style="text-align:right;font-size:12px;color:var(--dim)">${d['기간']||''} · ${d['총거래']}건<br>2년 추세 <b style="color:${d['추세pct']>=0?'#16a34a':'#dc2626'}">${d['추세pct']>0?'+':''}${d['추세pct']??'–'}%</b></div></div>
