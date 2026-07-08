@@ -1227,7 +1227,7 @@ def _uv_map():
 _CX_SIG_GRADE = [(75, "STRONG_BUY"), (62, "BUY"), (50, "WATCH"), (40, "NEUTRAL"), (0, "SELL_RISK")]
 
 
-def _complex_signal(region: str, data: dict, signal: str | None) -> dict:
+def _complex_signal(region: str, data: dict, signal: str | None, gongsi_ratio: float | None = None) -> dict:
     """단지 시그널 — 사이클(권역)·지역시그널·단지지표·가격을 정규화 가중합(참고용, 백테스트 전).
 
     가중치: 사이클 15% · 지역 35% · 단지(추세·전세가율·거래량) 30% · 가격(최근 vs 2년평균) 20%.
@@ -1259,12 +1259,15 @@ def _complex_signal(region: str, data: dict, signal: str | None) -> dict:
     if data.get("총거래"):
         comp += min(15, data["총거래"] / 12)
     comp = clamp(comp)
-    # 가격 — 최근 평단가가 2년 평균 이하면 저평가(눌림목=매수 매력) 가점. 백테스트상 단기 하락은 매도 아님.
-    ts = [x.get("평단가") for x in (data.get("매매추이") or []) if x.get("평단가")]
+    # 가격 — 구조적 저평가 우선: 실거래/공시 배수(있으면). 낮을수록(공시 대비 쌈) 가점, 높으면(거품·세부담) 감점.
     price = 50.0
-    if len(ts) >= 3 and sum(ts):
-        avg = sum(ts) / len(ts)
-        price = clamp(50 + (avg - ts[-1]) / avg * 100 * 1.5)
+    if gongsi_ratio:
+        price = clamp(50 + (1.5 - gongsi_ratio) * 90)   # 1.2→77, 1.5→50, 1.8→23
+    else:   # 공시가 없으면 폴백: 최근 평단가 vs 2년평균(눌림목)
+        ts = [x.get("평단가") for x in (data.get("매매추이") or []) if x.get("평단가")]
+        if len(ts) >= 3 and sum(ts):
+            avg = sum(ts) / len(ts)
+            price = clamp(50 + (avg - ts[-1]) / avg * 100 * 1.5)
     # 가중치: 검증된 지역·사이클을 더 신뢰(지역 40%), 미검증 단지추세는 낮게(단지 25%)
     total = round(cyc * 0.15 + reg * 0.40 + comp * 0.25 + price * 0.20)
     grade = next(g for th, g in _CX_SIG_GRADE if total >= th)
@@ -1307,20 +1310,21 @@ def complex_detail(region: str, name: str):
     grade = (_regime().get("regions", {}).get(region) or {}).get("급지")
     signal = _signal_map().get(region)
 
-    def deco(d):   # 급지·시그널·단지시그널·공시가격은 응답 시점에 부착(각자 캐시)
+    def deco(d):   # 급지·시그널·공시가격·단지시그널은 응답 시점에 부착(각자 캐시)
         out = {**d, "급지": grade, "시그널": signal}
-        if not d.get("지원안함") and (d.get("총거래") or d.get("매매추이")):
-            out["단지시그널"] = _complex_signal(region, out, signal)
-        try:
+        ratio = None
+        try:                                                     # 공시가격 먼저 → 단지시그널 가격 성분에 사용
             g = _gongsi_for(region, name)
             if g and g.get("㎡단가"):
                 out["공시가격"] = g
-                last = out.get("최근평단가")                      # 실거래 평단가(만원/평)
-                gpy = g["㎡단가"] * 3.3058 / 10000                 # 공시 평단가(만원/평)
+                last, gpy = out.get("최근평단가"), g["㎡단가"] * 3.3058 / 10000
                 if last and gpy:
-                    out["공시대비"] = round(last / gpy, 2)         # 실거래/공시 배수(>1=실거래 우위)
+                    ratio = round(last / gpy, 2)                 # 실거래/공시 배수(>1=실거래 우위)
+                    out["공시대비"] = ratio
         except Exception as e:  # noqa: BLE001
             log.warning("공시가격 조회 실패 %s/%s: %s", region, name, e)
+        if not d.get("지원안함") and (d.get("총거래") or d.get("매매추이")):
+            out["단지시그널"] = _complex_signal(region, out, signal, ratio)
         return out
 
     code = _kb().codes.get(region, "")
