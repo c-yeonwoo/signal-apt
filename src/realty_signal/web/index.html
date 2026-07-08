@@ -655,14 +655,14 @@
       <span class="pill">금융 우대 기준 · 원금균등/원리금균등</span>
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim)">
-      <label>매입가(만원) <input id="ln_price" type="number" style="width:90px" oninput="recalcLoan()"></label>
-      <label>LTV % <input id="ln_ltv" type="number" value="80" step="5" style="width:56px" oninput="recalcLoan()"></label>
-      <label>금리 % <input id="ln_rate" type="number" value="3.5" step="0.1" style="width:56px" oninput="recalcLoan()"></label>
-      <label>기간(년) <input id="ln_years" type="number" value="30" step="1" style="width:52px" oninput="recalcLoan()"></label>
-      <label>상환 <select id="ln_method" onchange="recalcLoan()" class="ctrl">
+      <label>매입가(만원) <input id="bid_price" type="number" style="width:90px" oninput="recalcLoan()"></label>
+      <label>LTV % <input id="bid_ltv" type="number" value="80" step="5" style="width:56px" oninput="recalcLoan()"></label>
+      <label>금리 % <input id="bid_rate" type="number" value="3.5" step="0.1" style="width:56px" oninput="recalcLoan()"></label>
+      <label>기간(년) <input id="bid_years" type="number" value="30" step="1" style="width:52px" oninput="recalcLoan()"></label>
+      <label>상환 <select id="bid_method" onchange="recalcLoan()" class="ctrl">
         <option value="원금균등">원금균등</option><option value="원리금균등">원리금균등</option></select></label>
     </div>
-    <div id="ln_out" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"></div>
+    <div id="bid_out" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"></div>
   </div>
 
   <div style="max-height:42vh;overflow:auto">
@@ -1507,7 +1507,7 @@ function renderQuicksale(){
       sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span></div>${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}`,
+      <span>연식 ${m['연식']||'–'}</span></div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     regionOf:m=>m['지역'],
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
@@ -1585,11 +1585,11 @@ function renderAllListings(){
     summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
       right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
       sub:`${x['총액']?`<b>${_eok(x['총액'])}</b> · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
-    detail:x=>{ const acts = x['유형']==='청약'
+    detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
-        : cxBtn(x['단지명'], x['지역']);
+        : cxBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
       return `<div class="kv"><span>유형 ${x['유형']}</span><span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
-        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">기회도 근거: ${x['기회도근거']}</div>`:''}<div style="margin-top:7px">${acts}</div>`; },
+        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">기회도 근거: ${x['기회도근거']}</div>`:''}<div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
@@ -2574,6 +2574,9 @@ async function openScoreboard(){
   document.getElementById('scoreDlg').showModal();
 }
 // ===== 단지 deep-dive =====
+function naverBtn(cno){
+  return cno ? ` <a class="btn" href="https://new.land.naver.com/complexes/${cno}" target="_blank" rel="noopener" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">🟢 네이버부동산</a>` : '';
+}
 function cxBtn(name, region){
   if(!name||!region) return '';
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
@@ -2960,17 +2963,17 @@ async function refreshMarket(){
 
 function firstHomePreset(){
   const on=document.getElementById('ln_first').checked;
-  document.getElementById('ln_ltv').value = on?80:70;
-  document.getElementById('ln_rate').value = on?3.5:4.5;
+  document.getElementById('bid_ltv').value = on?80:70;
+  document.getElementById('bid_rate').value = on?3.5:4.5;
   recalcLoan();
 }
 function recalcLoan(){
   const v=id=>+document.getElementById(id).value;
-  const price=v('ln_price'), ltv=v('ln_ltv')/100, rm=v('ln_rate')/100/12, n=v('ln_years')*12;
-  if(!price||!n){ document.getElementById('ln_out').innerHTML=''; return; }
+  const price=v('bid_price'), ltv=v('bid_ltv')/100, rm=v('bid_rate')/100/12, n=v('bid_years')*12;
+  if(!price||!n){ document.getElementById('bid_out').innerHTML=''; return; }
   const loan=price*ltv, equity=price-loan;
   let monthly, interest;
-  if(document.getElementById('ln_method').value==='원리금균등'){
+  if(document.getElementById('bid_method').value==='원리금균등'){
     monthly = rm? loan*rm*Math.pow(1+rm,n)/(Math.pow(1+rm,n)-1) : loan/n;
     interest = monthly*n - loan;
   }else{ // 원금균등: 첫달 최대
@@ -2978,10 +2981,10 @@ function recalcLoan(){
     interest = loan*rm*(n+1)/2;          // 총이자
   }
   const card=(t,val,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#1e293b'}">${val}</div></div>`;
-  document.getElementById('ln_out').innerHTML =
-    card('자본금', won(equity), '#d97706') + card(`대출금 (LTV ${v('ln_ltv')}%)`, won(loan), '#16a34a') +
-    card(document.getElementById('ln_method').value==='원금균등'?'월납입(첫달)':'월납입금', won(Math.round(monthly))) +
-    card(`이자총액 (${v('ln_years')}년)`, won(Math.round(interest)));
+  document.getElementById('bid_out').innerHTML =
+    card('자본금', won(equity), '#d97706') + card(`대출금 (LTV ${v('bid_ltv')}%)`, won(loan), '#16a34a') +
+    card(document.getElementById('bid_method').value==='원금균등'?'월납입(첫달)':'월납입금', won(Math.round(monthly))) +
+    card(`이자총액 (${v('bid_years')}년)`, won(Math.round(interest)));
 }
 
 async function loadAuction(){
@@ -3070,7 +3073,7 @@ async function openCalc(id, name){
     }).join('')+'</tr>';
   });
   document.getElementById('calcTable').innerHTML = h+'</tbody>';
-  document.getElementById('ln_price').value = rec['입찰가'];  // 대출계산 기본=권장입찰가
+  document.getElementById('bid_price').value = rec['입찰가'];  // 민감도 기본=권장입찰가
   recalcLoan();
   document.getElementById('calcDlg').showModal();
 }

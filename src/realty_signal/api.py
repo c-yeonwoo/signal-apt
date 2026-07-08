@@ -1514,7 +1514,8 @@ def _build_listings(want: set[str]) -> list[dict]:
         for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "급매갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
-                {"평형": m.get("평형"), "호가": m.get("호가")}, total=m.get("호가"))
+                {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no")},
+                total=m.get("호가"))
     if "청약" in want:
         for d in _presale():
             add("청약", d.get("단지명"), d.get("지역"), d.get("시그널"),
