@@ -821,6 +821,11 @@
       </div></label>
     <label>관심 평형 <span style="font-size:11px;color:var(--dim)">(복수 · 미선택=전체)</span><br><div id="mp_sizeChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"></div></label>
     <label>출생연도<br><input id="mp_birth" type="number" min="1940" max="2010" placeholder="예: 1990" class="ctrl" style="width:100%"></label>
+    <label style="grid-column:1/-1">직장 위치 <span style="font-size:11px;color:var(--dim)">(선택 · 관심단지별 통근시간 계산)</span><br>
+      <div style="position:relative">
+        <input id="mp_work" placeholder="역·도로명·건물로 검색 (예: 강남역, 판교테크노밸리)" class="ctrl bigsearch" style="width:100%" oninput="mpWorkSearch()" autocomplete="off">
+        <div id="mpWorkRes" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:240px;overflow:auto;z-index:900"></div>
+      </div></label>
   </div>
 
   <div class="mp-sec">자금 — 매수가능가 계산에 사용</div>
@@ -3185,6 +3190,8 @@ function fillMyPage(){
   document.getElementById('mp_nohouse').value = p['무주택기간']??'';
   document.getElementById('mp_capital').value = p['가용자본']??'';
   _loadSizeSel('mp', p['관심평수']);
+  document.getElementById('mp_work').value = p['직장']||'';
+  _workLatLng = (p['직장lat'] && p['직장lng']) ? [p['직장lat'], p['직장lng']] : null;
   document.getElementById('mp_region').value = p['거주지']||'';
   document.getElementById('mp_family').value = p['부양가족']??'';
   document.getElementById('mp_account').value = p['청약통장개월']??'';
@@ -3217,6 +3224,23 @@ async function _mpRegionDo(){
   box.innerHTML=rs.map(r=>`<div class="acct-item" onclick="mpPickRegion('${(r.sigungu||'').replace(/'/g,'')}')"><b>${r.sigungu}</b> <span style="font-size:11px;color:var(--dim)">${(r.name||'')} · ${(r.address||'')}</span></div>`).join('');
 }
 function mpPickRegion(sgg){ document.getElementById('mp_region').value=sgg; document.getElementById('mpRegionRes').style.display='none'; }
+// 직장 위치 — 검색(addr-search) → 선택 시 지오코딩해 좌표 저장(통근시간용)
+let _mpWorkT, _workLatLng=null;
+function mpWorkSearch(){ clearTimeout(_mpWorkT); _mpWorkT=setTimeout(_mpWorkDo,350); }
+async function _mpWorkDo(){
+  const q=document.getElementById('mp_work').value.trim(), box=document.getElementById('mpWorkRes');
+  if(q.length<2){ box.style.display='none'; return; }
+  let d; try{ d=await (await fetch('/api/addr-search?q='+encodeURIComponent(q))).json(); }catch(e){ box.style.display='none'; return; }
+  const rs=d.results||[]; if(!rs.length){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML=rs.map(r=>{const nm=(r.name||'').replace(/['"\\]/g,''), q2=((r.name||'')+' '+(r.sigungu||'')).replace(/['"\\]/g,'');
+    return `<div class="acct-item" onclick="mpPickWork('${nm}','${q2}')"><b>${r.name}</b> <span style="font-size:11px;color:var(--dim)">${r.sigungu||''} · ${r.address||''}</span></div>`;}).join('');
+}
+async function mpPickWork(label, q){
+  document.getElementById('mp_work').value=label; document.getElementById('mpWorkRes').style.display='none'; _workLatLng=null;
+  try{ const g=await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:[q],max_miss:1})})).json();
+    if(g.coords && g.coords[q]) _workLatLng=g.coords[q]; }catch(e){}
+}
 // 온보딩 거주지 — 도로명·동·단지 검색(addr-search) → 시군구 선택 (마이페이지와 동일)
 let _obRegionT;
 function obRegionSearch(){ clearTimeout(_obRegionT); _obRegionT=setTimeout(_obRegionDo,350); }
@@ -3256,7 +3280,7 @@ function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
   const s=Math.sin(dLat/2)**2 + Math.cos(d(a[0]))*Math.cos(d(b[0]))*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s)); }
 let _myLine=null, _mySearchList=[], _cxFindT2=null;
-const _MMICON={home:'🏠',region:'📍',complex:'🏢',search:'🔎'};
+const _MMICON={home:'🏠',region:'📍',complex:'🏢',search:'🔎',work:'💼'};
 const _SIG_COLOR={STRONG_BUY:'#15803d',BUY:'#16a34a',WATCH:'#ca8a04',NEUTRAL:'#64748b',SELL_RISK:'#dc2626'};
 function _pinIcon(color, sel){
   return L.divIcon({className:'', html:`<div class="mappin${sel?' sel':''}" style="background:${color}"></div>`,
@@ -3291,6 +3315,7 @@ async function drawMyMap(){
     let co={}; try{ co=(await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:q,max_miss:10})})).json()).coords||{}; }catch(e){}
     complexFavs.forEach((k,idx)=>{ const i=k.indexOf('|'), reg=k.slice(0,i), nm=k.slice(i+1); const c=co[q[idx]]; if(c) pts.push({kind:'complex',name:nm,region:reg,lat:c[0],lng:c[1],color:'#ea580c'}); });
   }
+  if(p['직장lat'] && p['직장lng']) pts.push({kind:'work',name:p['직장']||'직장',region:'',lat:p['직장lat'],lng:p['직장lng'],color:'#0f172a'});
   _mySearchList.forEach(s=> pts.push({kind:'search',name:s.name,region:s.region,lat:s.lat,lng:s.lng,color:'#7c3aed'}));
   _myPts=pts; _mySel=[];
   if(_myLine){ _myLine.remove(); _myLine=null; }
@@ -3391,7 +3416,15 @@ function myPinClick(i){
       <span class="btn" style="padding:4px 10px;font-size:12px" onclick="addToCompare('${nm}','${pt.region}');updateCmpChip()">＋ 비교</span>
       <span class="btn" style="padding:4px 10px;font-size:12px" onclick="openComplex('${nm}','${pt.region}')">상세 ›</span></div>`;
   } else info+=`<div style="margin-top:8px"><span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널 보기 →</span></div>`;
+  const wp=_profile||{};
+  const commute = (pt.kind!=='work' && wp['직장lat'] && wp['직장lng']);
+  if(commute) info+=`<div style="margin-top:7px;font-size:12px;color:var(--dim)">💼 ${wp['직장']||'직장'}까지 <span id="mmCommute">계산 중…</span></div>`;
   document.getElementById('myMapInfo').innerHTML = info;
+  if(commute){ (async()=>{
+    try{ const r=await (await fetch(`/api/transit?sx=${pt.lng}&sy=${pt.lat}&ex=${wp['직장lng']}&ey=${wp['직장lat']}`)).json();
+      const el=document.getElementById('mmCommute'); if(el) el.innerHTML = (r.available&&r.route)?`대중교통 <b style="color:var(--accent)">${r.route.min}분</b> (환승 ${r.route.transfer}회)`:'정보 없음';
+    }catch(e){ const el=document.getElementById('mmCommute'); if(el) el.textContent='정보 없음'; }
+  })(); }
   if(_mySel.length===2) myMeasure();
 }
 async function myMeasure(){
@@ -3439,6 +3472,9 @@ function saveMyPage(){
   const chungyak=document.getElementById('mp_chungyak').checked;
   _profile = {주택수:+v('mp_own'), 가용자본:+v('mp_capital')||0,
     관심평수:[..._sizeSel.mp], 거주지:v('mp_region').trim(),
+    직장:v('mp_work').trim(),
+    직장lat:_workLatLng?_workLatLng[0]:((_profile||{})['직장lat']||null),
+    직장lng:_workLatLng?_workLatLng[1]:((_profile||{})['직장lng']||null),
     연소득:+v('mp_income')||0, 기대출연원리금:+v('mp_debt')||0, 출생연도:+v('mp_birth')||0,
     청약관심:chungyak};
   // 청약 관심 시에만 자격 데이터 저장, 아니면 null (카드·청약탭·정렬에서 숨김)
