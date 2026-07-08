@@ -854,7 +854,8 @@
 <div id="view-mymap" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
   <h2 class="page-head">내 시그널 맵</h2>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 12px">🏠 거주지 · 📍 관심지역 · 🏢 관심단지 + <b>단지 검색·비교·급지색</b>을 지도 위에서. <b>핀 두 개 클릭</b> → 거리·대중교통(선으로 표시).</p>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 10px">🏠 거주지 · 📍 관심지역 · 🏢 관심단지 + <b>단지 검색·비교·급지색</b>을 지도 위에서. 핀 색 = 시그널, <b>핀 두 개 클릭</b> → 거리·대중교통.</p>
+  <div id="mmSummary" style="display:none;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="position:relative;flex:1;min-width:220px;max-width:360px">
       <input id="mmSearch" class="bigsearch" placeholder="단지 검색 — 지도 표시·비교 추가" oninput="mmSearchDeb()" onkeydown="if(event.key==='Enter')mmDoSearch()" style="width:100%">
@@ -3256,6 +3257,7 @@ function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s)); }
 let _myLine=null, _mySearchList=[], _cxFindT2=null;
 const _MMICON={home:'🏠',region:'📍',complex:'🏢',search:'🔎'};
+const _SIG_COLOR={STRONG_BUY:'#15803d',BUY:'#16a34a',WATCH:'#ca8a04',NEUTRAL:'#64748b',SELL_RISK:'#dc2626'};
 function _pinIcon(color, sel){
   return L.divIcon({className:'', html:`<div class="mappin${sel?' sel':''}" style="background:${color}"></div>`,
     iconSize:sel?[24,24]:[18,18], iconAnchor:sel?[6,24]:[4,18]}); }
@@ -3282,8 +3284,8 @@ async function drawMyMap(){
   let cen={};
   if(regionsNeeded.length){ try{ cen=(await (await fetch('/api/region-centroids?regions='+encodeURIComponent(regionsNeeded.join(',')))).json()).centroids||{}; }catch(e){} }
   const pts=[];
-  if(p['거주지'] && cen[p['거주지']]) pts.push({kind:'home',name:p['거주지'],region:p['거주지'],lat:cen[p['거주지']][0],lng:cen[p['거주지']][1],color:'#2563eb'});
-  regionFavs.forEach(r=>{ if(cen[r] && r!==p['거주지']){ const s=sm[r]||{}; pts.push({kind:'region',name:r,region:r,lat:cen[r][0],lng:cen[r][1],color:'#16a34a',sig:s.signal,grade:s['급지']}); } });
+  if(p['거주지'] && cen[p['거주지']]){ const hs=sm[p['거주지']]||{}; pts.push({kind:'home',name:p['거주지'],region:p['거주지'],lat:cen[p['거주지']][0],lng:cen[p['거주지']][1],color:'#2563eb',sig:hs.signal,grade:hs['급지']}); }
+  regionFavs.forEach(r=>{ if(cen[r] && r!==p['거주지']){ const s=sm[r]||{}; pts.push({kind:'region',name:r,region:r,lat:cen[r][0],lng:cen[r][1],color:(_SIG_COLOR[s.signal]||'#16a34a'),sig:s.signal,grade:s['급지']}); } });
   if(complexFavs.length){
     const q=complexFavs.map(k=>{const i=k.indexOf('|');return k.slice(0,i)+' '+k.slice(i+1);});
     let co={}; try{ co=(await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:q,max_miss:10})})).json()).coords||{}; }catch(e){}
@@ -3308,6 +3310,32 @@ async function drawMyMap(){
   updateCmpChip();
   renderCompareTable();
   if(pts.length){ const g=L.featureGroup(_myMarkers); myMap.fitBounds(g.getBounds().pad(0.25)); }
+  renderMmSummary(); _loadMyCxSigs();
+}
+function renderMmSummary(){
+  const box=document.getElementById('mmSummary'); if(!box) return;
+  const home=_myPts.find(p=>p.kind==='home');
+  const regs=_myPts.filter(p=>p.kind==='region'), cxs=_myPts.filter(p=>p.kind==='complex');
+  if(!home && !regs.length && !cxs.length){ box.style.display='none'; return; }
+  const buyish=s=>['STRONG_BUY','BUY'].includes(s);
+  const cxRated=cxs.filter(p=>p.cxsig).length, cxBuy=cxs.filter(p=>p.cxsig&&buyish(p.cxsig['등급'])).length;
+  const card=(t,v,sub)=>`<div style="flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 13px"><div style="font-size:11px;color:var(--dim)">${t}</div><div style="font-size:15px;font-weight:800;margin-top:2px">${v}</div>${sub?`<div style="font-size:10px;color:var(--dim);margin-top:1px">${sub}</div>`:''}</div>`;
+  box.style.display='flex';
+  box.innerHTML =
+    (home?card('거주지 시그널', home.sig?badge(home.sig):'–', home.name):'') +
+    (regs.length?card('관심지역 매수신호', `${regs.filter(p=>buyish(p.sig)).length} / ${regs.length}`, '📍 BUY+ 지역 수'):'') +
+    (cxs.length?card('관심단지 매수신호', `${cxBuy} / ${cxs.length}`, cxRated<cxs.length?'단지 시그널 계산 중…':'🏢 단지 시그널 기준'):'');
+}
+async function _loadMyCxSigs(){
+  const targets=_myPts.map((pt,i)=>({pt,i})).filter(o=>o.pt.kind==='complex'||o.pt.kind==='search');
+  if(!targets.length){ return; }
+  await Promise.all(targets.map(async ({pt,i})=>{
+    try{ const d=await (await fetch(`/api/complex/${encodeURIComponent(pt.region)}/${encodeURIComponent(pt.name)}`)).json();
+      if(d && d['단지시그널']){ pt.cxsig=d['단지시그널']; pt.color=_SIG_COLOR[d['단지시그널']['등급']]||pt.color;
+        if(_myMarkers[i]) _myMarkers[i].setIcon(_pinIcon(pt.color, _mySel.includes(i))); }
+    }catch(e){}
+  }));
+  renderMmSummary();
 }
 // 단지 검색 → 지도에 핀 추가(내장)
 function mmSearchDeb(){ clearTimeout(_cxFindT2); _cxFindT2=setTimeout(mmDoSearch,350); }
@@ -3354,6 +3382,9 @@ function myPinClick(i){
   if(uv) info+=`<div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.7">평단 ${won(uv.price)}/평 · 입지 ${uv['입지점수']??'–'}<br>업무지구 ${uv['transit_min']??'–'}분${uv['최단업무지구']?'('+uv['최단업무지구']+')':''} · 학원 ${uv['school']??'–'} · 공원 ${uv['공원']??'–'}</div>`;
   const nm=pt.name.replace(/'/g,'');
   if(pt.kind==='complex' || pt.kind==='search'){
+    if(pt.cxsig){ const cs=pt.cxsig, q=cs['분해']||{};
+      info+=`<div style="margin-top:7px;font-size:12px">단지 시그널 ${badge(cs['등급'])} <b>${cs['점수']}</b> <span style="color:var(--dim);font-size:10px">사이클${q['사이클']}·지역${q['지역']}·단지${q['단지']}·가격${q['가격']} · 참고용</span></div>`;
+    }
     const favd=(_favs||new Set()).has('complex:'+pt.region+'|'+pt.name);
     info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
       <span class="btn" style="padding:4px 10px;font-size:12px${favd?';background:var(--accent);color:#fff':''}" onclick="mmToggleFav('${nm}','${pt.region}')">${favd?'★ 관심단지':'☆ 관심단지'}</span>
