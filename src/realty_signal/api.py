@@ -1247,25 +1247,26 @@ def _complex_signal(region: str, data: dict, signal: str | None) -> dict:
     uv = _uv_map().get(region)
     if uv is not None:
         reg = clamp(reg + uv * 0.4)
-    # 단지 지표
+    # 단지 지표 — 백테스트 결과 단지 단기 가격추세는 예측력 약함 → 추세추종 영향 축소, 구조지표(전세가율·거래량) 위주
     comp = 50.0
     tr = data.get("추세pct")
     if tr is not None:
-        comp += clamp(tr * 2, -22, 22)
+        comp += clamp(tr * 1.2, -14, 14)          # 추세 영향 축소(백테스트 매수 56%)
     plist = data.get("평형별") or []
     main = max(plist, key=lambda p: p.get("매매건수", 0)) if plist else {}
     if main.get("전세가율"):
-        comp += (main["전세가율"] - 60) * 0.4
+        comp += (main["전세가율"] - 60) * 0.5       # 전세가율(하방지지)에 더 의존
     if data.get("총거래"):
         comp += min(15, data["총거래"] / 12)
     comp = clamp(comp)
-    # 가격 — 최근 평단가가 2년 평균 이하면 저평가(매수 매력) 가점
+    # 가격 — 최근 평단가가 2년 평균 이하면 저평가(눌림목=매수 매력) 가점. 백테스트상 단기 하락은 매도 아님.
     ts = [x.get("평단가") for x in (data.get("매매추이") or []) if x.get("평단가")]
     price = 50.0
     if len(ts) >= 3 and sum(ts):
         avg = sum(ts) / len(ts)
         price = clamp(50 + (avg - ts[-1]) / avg * 100 * 1.5)
-    total = round(cyc * 0.15 + reg * 0.35 + comp * 0.30 + price * 0.20)
+    # 가중치: 검증된 지역·사이클을 더 신뢰(지역 40%), 미검증 단지추세는 낮게(단지 25%)
+    total = round(cyc * 0.15 + reg * 0.40 + comp * 0.25 + price * 0.20)
     grade = next(g for th, g in _CX_SIG_GRADE if total >= th)
     return {"등급": grade, "점수": total,
             "분해": {"사이클": round(cyc), "지역": round(reg), "단지": round(comp), "가격": round(price)}}
@@ -1301,6 +1302,77 @@ def complex_detail(region: str, name: str):
     data["region"] = region
     db.kv_set(ckey, data)
     return deco(data)
+
+
+def _complex_backtest(sample: int = 30, months: int = 36) -> dict:
+    """단지 가격추세 백테스트 — 표본 단지의 월별 평단가로 '3개월 추세 전환 → 6개월 방향 유지' 적중률.
+
+    단지 시그널의 단지-고유 성분(가격추세)을 검증(지역·사이클 성분은 지역 성적표가 검증).
+    표본 단지별 국토부 실거래를 길게(months) 받아야 해 비용이 커서 결과는 캐시(30일).
+    """
+    from realty_signal import db
+    from realty_signal.ingest import complex as cx
+    config.load_env()
+    pk = config.public_data_key()
+    if not pk:
+        return {"ready": False}
+    codes = _kb().codes
+    pool, seen = [], set()
+    if QUICKSALE_FILE.exists():                       # 급매 단지 풀에서 표본 추출
+        for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
+            r, n = m.get("지역"), m.get("단지명")
+            code = codes.get(r, "")
+            if r and n and (r, n) not in seen and code[:5].isdigit() and len(code) >= 5:
+                seen.add((r, n)); pool.append((code[:5], r, n))
+    pool = pool[:sample]
+    buy = {"hit": 0, "n": 0, "fwd": []}
+    sell = {"hit": 0, "n": 0, "fwd": []}
+    n_cx, L = 0, 6
+    for lawd5, r, n in pool:
+        try:
+            d = cx.fetch_complex(lawd5, n, pk, trade_months=months, rent_months=1)
+        except Exception:  # noqa: BLE001
+            continue
+        ps = [x["평단가"] for x in (d.get("매매추이") or []) if x.get("평단가")]
+        if len(ps) < 12:
+            continue
+        n_cx += 1
+        for t in range(3, len(ps) - L):
+            mom, fwd = ps[t] / ps[t - 3] - 1, ps[t + L] / ps[t] - 1
+            if mom >= 0.02:
+                buy["n"] += 1; buy["fwd"].append(fwd * 100); buy["hit"] += fwd > 0
+            elif mom <= -0.02:
+                sell["n"] += 1; sell["fwd"].append(fwd * 100); sell["hit"] += fwd < 0
+
+    def _avg(xs):
+        return round(sum(xs) / len(xs), 1) if xs else None
+
+    def _blk(a):
+        return {"평가수": a["n"], "적중률": round(a["hit"] / a["n"] * 100) if a["n"] else None,
+                "이후6개월평균": _avg(a["fwd"])}
+
+    out = {"ready": True, "표본단지수": n_cx, "months": months,
+           "매수": _blk(buy), "매도": _blk(sell),
+           "설명": "표본 단지 월별 평단가로 '3개월 추세 전환 이후 6개월 방향 유지'를 검증. "
+                   "단지-고유 가격추세 성분(지역·사이클은 지역 성적표가 별도 검증)."}
+    db.kv_set("complex_backtest", out)
+    return out
+
+
+@app.get("/api/complex-backtest")
+def complex_backtest_api():
+    """단지 시그널(가격추세 성분) 검증 성적표. 캐시(30일) — 없으면 미계산 안내."""
+    from realty_signal import db
+    cached = db.kv_get("complex_backtest", max_age=30 * 86400)
+    return {**cached, "cached": True} if cached is not None else {"ready": False}
+
+
+@app.post("/api/complex-backtest/run")
+def complex_backtest_run(request: Request):
+    """단지 백테스트 계산·캐시(수 분 소요, 관리자용). 로그인 필요."""
+    if not _uid(request):
+        return {"ready": False, "error": "로그인 필요"}
+    return _complex_backtest()
 
 
 def warm_favorite_complexes() -> dict:
