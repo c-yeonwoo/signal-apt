@@ -1214,15 +1214,75 @@ def addr_search(q: str):
 _COMPLEX_TTL = 14 * 86400   # 실거래 신고지연(~1개월) 감안, 2주면 신선도 충분
 
 
+@lru_cache(maxsize=1)
+def _uv_map():
+    """시군구 → 저평가도 (localities 캐시). 단지 시그널의 지역 가점용."""
+    df = store.load_localities()
+    if df.empty:
+        return {}
+    return {r["region"]: r.get("저평가도")
+            for r in json.loads(df.to_json(orient="records", force_ascii=False))}
+
+
+_CX_SIG_GRADE = [(75, "STRONG_BUY"), (62, "BUY"), (50, "WATCH"), (40, "NEUTRAL"), (0, "SELL_RISK")]
+
+
+def _complex_signal(region: str, data: dict, signal: str | None) -> dict:
+    """단지 시그널 — 사이클(권역)·지역시그널·단지지표·가격을 정규화 가중합(참고용, 백테스트 전).
+
+    가중치: 사이클 15% · 지역 35% · 단지(추세·전세가율·거래량) 30% · 가격(최근 vs 2년평균) 20%.
+    """
+    def clamp(v, lo=0.0, hi=100.0):
+        return max(lo, min(hi, v))
+
+    regime = _regime()
+    rg = (regime.get("regions") or {}).get(region) or {}
+    if rg.get("막차"):
+        cyc = 15.0
+    elif regime.get("endgame"):
+        cyc = 25.0
+    else:
+        cyc = 68.0
+    reg = {"STRONG_BUY": 90, "BUY": 72, "WATCH": 52, "NEUTRAL": 42, "SELL_RISK": 18}.get(signal or "", 45.0)
+    uv = _uv_map().get(region)
+    if uv is not None:
+        reg = clamp(reg + uv * 0.4)
+    # 단지 지표
+    comp = 50.0
+    tr = data.get("추세pct")
+    if tr is not None:
+        comp += clamp(tr * 2, -22, 22)
+    plist = data.get("평형별") or []
+    main = max(plist, key=lambda p: p.get("매매건수", 0)) if plist else {}
+    if main.get("전세가율"):
+        comp += (main["전세가율"] - 60) * 0.4
+    if data.get("총거래"):
+        comp += min(15, data["총거래"] / 12)
+    comp = clamp(comp)
+    # 가격 — 최근 평단가가 2년 평균 이하면 저평가(매수 매력) 가점
+    ts = [x.get("평단가") for x in (data.get("매매추이") or []) if x.get("평단가")]
+    price = 50.0
+    if len(ts) >= 3 and sum(ts):
+        avg = sum(ts) / len(ts)
+        price = clamp(50 + (avg - ts[-1]) / avg * 100 * 1.5)
+    total = round(cyc * 0.15 + reg * 0.35 + comp * 0.30 + price * 0.20)
+    grade = next(g for th, g in _CX_SIG_GRADE if total >= th)
+    return {"등급": grade, "점수": total,
+            "분해": {"사이클": round(cyc), "지역": round(reg), "단지": round(comp), "가격": round(price)}}
+
+
 @app.get("/api/complex/{region}/{name}")
 def complex_detail(region: str, name: str):
-    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭. DB 캐시(14일)."""
+    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널. DB 캐시(14일)."""
     from realty_signal import db
     grade = (_regime().get("regions", {}).get(region) or {}).get("급지")
     signal = _signal_map().get(region)
 
-    def deco(d):   # 급지·시그널은 주간 변동 → 캐시에 굽지 않고 응답 시점에 부착
-        return {**d, "급지": grade, "시그널": signal}
+    def deco(d):   # 급지·시그널·단지시그널은 주간 변동 → 캐시에 굽지 않고 응답 시점에 부착
+        out = {**d, "급지": grade, "시그널": signal}
+        if not d.get("지원안함") and (d.get("총거래") or d.get("매매추이")):
+            out["단지시그널"] = _complex_signal(region, out, signal)
+        return out
 
     code = _kb().codes.get(region, "")
     if not (code and code.isdigit() and len(code) >= 5):
