@@ -10,6 +10,7 @@ import difflib
 import re
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 
 from realty_signal.auction import _norm, _recent_yms
 
@@ -19,11 +20,20 @@ _HDR = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
 _PYEONG = 3.3058
 
 
+def _items_parallel(base: str, lawd5: str, key: str, yms: list[str]) -> list:
+    """여러 월(ym)의 실거래를 병렬 조회 — 순차 36콜(수십초)을 몇 초로 단축."""
+    out: list = []
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        for items in ex.map(lambda ym: _items(base, lawd5, key, ym), yms):
+            out.extend(items)
+    return out
+
+
 def _items(base: str, lawd5: str, key: str, ym: str) -> list:
     url = f"{base}?serviceKey={key}&LAWD_CD={lawd5}&DEAL_YMD={ym}&numOfRows=900&pageNo=1"
     try:
         root = ET.fromstring(urllib.request.urlopen(  # noqa: S310
-            urllib.request.Request(url, headers=_HDR), timeout=30).read())
+            urllib.request.Request(url, headers=_HDR), timeout=12).read())
     except Exception:
         return []
     return list(root.iter("item"))
@@ -80,27 +90,25 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     if not cn:
         return {}
     trades: list[dict] = []
-    for ym in _recent_yms(trade_months):
-        for it in _items(_TRADE, lawd5, key, ym):
-            if not _match(it.findtext("aptNm") or "", cn):
-                continue
-            area, amt = _amt(it, "excluUseAr"), _amt(it, "dealAmount")
-            if not area or area <= 0 or not amt:
-                continue
-            trades.append({"ym": _ym_of(it), "area": area, "amt": amt,
-                           "pyeong": round(area / _PYEONG), "ppy": amt / (area / _PYEONG)})
+    for it in _items_parallel(_TRADE, lawd5, key, _recent_yms(trade_months)):
+        if not _match(it.findtext("aptNm") or "", cn):
+            continue
+        area, amt = _amt(it, "excluUseAr"), _amt(it, "dealAmount")
+        if not area or area <= 0 or not amt:
+            continue
+        trades.append({"ym": _ym_of(it), "area": area, "amt": amt,
+                       "pyeong": round(area / _PYEONG), "ppy": amt / (area / _PYEONG)})
     rents: list[dict] = []
-    for ym in _recent_yms(rent_months):
-        for it in _items(_RENT, lawd5, key, ym):
-            if not _match(it.findtext("aptNm") or "", cn):
-                continue
-            mr = _amt(it, "monthlyRent") or 0
-            if mr > 0:  # 전세만 (월세 제외)
-                continue
-            area, dep = _amt(it, "excluUseAr"), _amt(it, "deposit")
-            if not area or area <= 0 or not dep:
-                continue
-            rents.append({"ym": _ym_of(it), "area": area, "pyeong": round(area / _PYEONG), "deposit": dep})
+    for it in _items_parallel(_RENT, lawd5, key, _recent_yms(rent_months)):
+        if not _match(it.findtext("aptNm") or "", cn):
+            continue
+        mr = _amt(it, "monthlyRent") or 0
+        if mr > 0:  # 전세만 (월세 제외)
+            continue
+        area, dep = _amt(it, "excluUseAr"), _amt(it, "deposit")
+        if not area or area <= 0 or not dep:
+            continue
+        rents.append({"ym": _ym_of(it), "area": area, "pyeong": round(area / _PYEONG), "deposit": dep})
     if not trades:
         return {"단지명": apt_name, "매매추이": [], "평형별": [], "거래없음": True}
 

@@ -1462,8 +1462,14 @@ def _opportunity(kind: str, m: dict, signal: str | None, grade: str | None):
     why = []
     if kind == "급매":
         g = m.get("급매갭")
-        base = 0 if g is None else min(60, round(-g * 2))                 # -30%→60
-        why.append(f"급매갭 {g}%" if g is not None else "급매갭 –")
+        if g is None:
+            base = 0; why.append("급매갭 –")
+        elif g <= -35:                     # 비현실적 할인 = 미끼·허위·특수물건 의심 → 상위 노출 억제
+            base = 15; why.append(f"급매갭 {g}%(⚠️비현실적·확인필요)")
+        elif g < 0:
+            base = min(60, round(-g * 2)); why.append(f"급매갭 {g}%")        # -30%→60
+        else:                              # 호가 ≥ 시세 → 급매 아님
+            base = 0; why.append(f"급매갭 {g}%(시세 이상)")
     elif kind == "경매":
         r = m.get("시세차익률")
         base = 0 if r is None else max(0, min(60, round(r * 1.8)))        # 33%→60
