@@ -277,14 +277,12 @@
     <span>Signal APT</span>
   </h1>
   <div class="tabs">
-    <button class="tab on" data-tab="signal" onclick="switchTab('signal')">시그널</button>
-    <button class="tab" data-tab="undervalued" onclick="switchTab('undervalued')">저평가</button>
-    <button class="tab" data-tab="listings" onclick="switchTab('listings')">매물</button>
-    <button class="tab" data-tab="tradeup" onclick="switchTab('tradeup')" title="지금 집을 팔고 상급지로 갈아탈 수 있는지 — 예산·급지 기반 착지 후보">갈아타기</button>
-    <button class="tab" data-tab="news" onclick="switchTab('news')">뉴스</button>
-    <button class="tab" data-tab="report" onclick="acctGo('report')" title="내 관심 기반 개인화 매수전략 — 최종 결론">AI 리포트</button>
+    <button class="tab on" data-group="market" onclick="switchTab('signal')" title="경기 국면·지역 성적표·저평가 랭킹">📈 시장·지역</button>
+    <button class="tab" data-group="listings" onclick="switchTab('all')" title="경매·급매·청약·재건축·갈아타기 — 실제 매물">🏢 매물</button>
+    <button class="tab" data-group="find" onclick="switchTab('mymap')" title="내 시그널 지도 · 개인화 AI 리포트">🎯 내 집찾기</button>
   </div>
   <div class="right">
+    <button class="navlink" onclick="switchTab('news')" title="부동산 뉴스·AI 요약">뉴스</button>
     <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">가이드</button>
     <button class="navlink" id="alertBtn" onclick="openAlerts()" style="position:relative" title="즐겨찾기 지역 시그널 변동 알림">🔔<span id="alertBadge" style="display:none;position:absolute;top:-3px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
     <span class="date" id="date" title="자동 갱신(주간 cron)"></span>
@@ -302,15 +300,9 @@
   </div>
 </header>
 
-<div id="listingSubnav" style="padding:10px 16px;border-bottom:1px solid var(--line);gap:12px;align-items:center;display:none">
-  <span style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
-  <div class="mtabs">
-    <button class="subtab" data-sub="all" onclick="switchTab('all')">전체<small>기회도순</small></button>
-    <button class="subtab" data-sub="auction" onclick="switchTab('auction')">경매<small>시세 이하 낙찰</small></button>
-    <button class="subtab" data-sub="quicksale" onclick="switchTab('quicksale')">급매<small>시세 이하 호가</small></button>
-    <button class="subtab" data-sub="presale" onclick="switchTab('presale')">청약<small>신규 분양</small></button>
-    <button class="subtab" data-sub="redev" onclick="switchTab('redev')">재건축<small>미래 가치</small></button>
-  </div>
+<div id="groupSubnav" style="padding:10px 16px;border-bottom:1px solid var(--line);gap:12px;align-items:center;display:none">
+  <span id="groupSubLabel" style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
+  <div class="mtabs" id="groupSubTabs"></div>
   <span id="listingFocus" style="margin-left:auto;font-size:12px;color:var(--dim);display:none"></span>
 </div>
 
@@ -1099,7 +1091,22 @@ function renderMtFilter(hostId, rerender){
   el.querySelectorAll('[data-g]').forEach(c=>c.onclick=()=>{ const g=c.dataset.g;
     _mtGradeSet.has(g)?_mtGradeSet.delete(g):_mtGradeSet.add(g); rerender(); });
 }
-const _LISTING=['all','auction','quicksale','presale','redev'];   // 매물 하위탭(전체 통합 + 유형별)
+// ===== 4탭 IA — 상단 그룹 → 하위 뷰 =====
+const _GROUPS={
+  market:   ['signal','undervalued'],
+  listings: ['all','auction','quicksale','presale','redev','tradeup'],
+  find:     ['mymap','report'],
+};
+const _GROUP_LABEL={market:'시장 분석', listings:'매물 발견', find:'내 집찾기'};
+const _SUBMETA={
+  signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'저평가',d:'지역 랭킹'},
+  all:{l:'전체',d:'기회도순'}, auction:{l:'경매',d:'시세 이하 낙찰'}, quicksale:{l:'급매',d:'시세 이하 호가'},
+  presale:{l:'청약',d:'신규 분양'}, redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
+  mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
+};
+const _LISTING=_GROUPS.listings;                 // 매물 그룹(하위탭)
+const _ALLVIEWS=['signal','undervalued','all','auction','quicksale','presale','redev','tradeup','mymap','report','news','glossary','about','mypage'];
+function _groupOf(v){ for(const g in _GROUPS) if(_GROUPS[g].includes(v)) return g; return null; }
 let _listingSub='all';
 let _focusRegion=null;   // 관심지역 → 매물 좁히기(옵션, 강제 X)
 function focusListings(region){
@@ -1117,34 +1124,43 @@ function renderListingFocus(){
 }
 function inFocus(region){ return !_focusRegion || (region||'').includes(_focusRegion) || _focusRegion.includes(region||'§'); }
 const _LISTLOAD={all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
-function switchTab(t){
-  if(_LISTING.includes(t)){ _listingSub=t; t='listings'; }   // 4탭 → 매물 그룹으로 라우팅
-  const listing = t==='listings';
-  document.body.className = 'tab-'+t;
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
-  const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
-  const sub=document.getElementById('listingSubnav'); if(sub) sub.style.display = listing?'flex':'none';
-  ['signal','all','auction','undervalued','presale','quicksale','redev','mypage','mymap','report','tradeup','news','glossary','about'].forEach(v=>
-    document.getElementById('view-'+v).style.display = (v===t || (listing && v===_listingSub))?'':'none');
-  if(listing){
-    document.querySelectorAll('#listingSubnav .subtab').forEach(b=>b.classList.toggle('on', b.dataset.sub===_listingSub));
-    renderListingFocus();
-    (_LISTLOAD[_listingSub]||(()=>{}))();
-  }
-  if(t==='signal'){ chart.resize(); renderScoreboard(); renderAha(); }
-  if(t==='undervalued') loadUndervalued();
-  if(t==='mypage') fillMyPage();
-  if(typeof updateCmpFab==='function') updateCmpFab();
-  if(t==='mymap') drawMyMap();
-  if(t==='report'){ applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion(); }
-  if(t==='tradeup') tuPrefill();
-  if(t==='news') loadNews();
-  if(t==='glossary') renderGlossary();
-  // URL 해시 동기화 — 새로고침 시 현재 탭 유지
-  const hash = listing ? _listingSub : t;
-  if(location.hash.slice(1) !== hash) history.replaceState(null, '', '#' + hash);
+function renderGroupSubnav(grp, active){
+  document.getElementById('groupSubLabel').textContent=_GROUP_LABEL[grp]||'';
+  document.getElementById('groupSubTabs').innerHTML=_GROUPS[grp].map(v=>{const m=_SUBMETA[v];
+    return `<button class="subtab${v===active?' on':''}" data-sub="${v}" onclick="switchTab('${v}')">${m.l}<small>${m.d}</small></button>`;}).join('');
+  const lf=document.getElementById('listingFocus'); if(lf) lf.style.display=(grp==='listings'&&_focusRegion)?'':'none';
+  if(grp==='listings') renderListingFocus();
 }
-const _ROUTES=['signal','undervalued','listings','all','auction','quicksale','presale','redev','tradeup','news','report','mymap','mypage','about','glossary'];
+const _LOAD={
+  signal:()=>{chart.resize(); renderScoreboard(); renderAha();},
+  undervalued:()=>loadUndervalued(),
+  all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev(),
+  tradeup:()=>tuPrefill(), mymap:()=>drawMyMap(),
+  report:()=>{applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion();},
+  news:()=>loadNews(), glossary:()=>renderGlossary(), mypage:()=>fillMyPage(),
+};
+function switchTab(t){
+  // 그룹 alias — 상단 메인탭 클릭 시 그룹 기본 뷰로
+  if(t==='market') t='signal'; else if(t==='listings') t='all'; else if(t==='find') t='mymap';
+  const grp=_groupOf(t);
+  if(_LISTING.includes(t)) _listingSub=t;   // 매물 하위탭 기억(포커스 헬퍼 호환)
+  document.body.className='tab-'+t;
+  // 상단 메인탭 — 그룹 기준 활성
+  document.querySelectorAll('.tabs .tab').forEach(b=>b.classList.toggle('on', b.dataset.group===grp));
+  const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
+  // 서브내비 — 그룹에 하위뷰 2개 이상일 때만
+  const showSub=grp && _GROUPS[grp].length>1;
+  const sn=document.getElementById('groupSubnav'); if(sn) sn.style.display=showSub?'flex':'none';
+  if(showSub) renderGroupSubnav(grp, t);
+  // 뷰 토글
+  _ALLVIEWS.forEach(v=>{const el=document.getElementById('view-'+v); if(el) el.style.display=(v===t)?'':'none';});
+  // 뷰 로더
+  (_LOAD[t]||(()=>{}))();
+  if(typeof updateCmpFab==='function') updateCmpFab();
+  // URL 해시 동기화 — 새로고침 시 현재 탭 유지
+  if(location.hash.slice(1)!==t) history.replaceState(null, '', '#'+t);
+}
+const _ROUTES=[..._ALLVIEWS, 'market','listings','find'];
 function routeFromHash(){
   const h=decodeURIComponent(location.hash.slice(1));
   if(_ROUTES.includes(h)){ switchTab(h); return true; }
@@ -3679,7 +3695,7 @@ async function startApp(needOnboard){
   } else {
     await loadData();
   }
-  routeFromHash();   // 초기 1회 — URL 해시가 있으면 해당 탭으로(새로고침 유지)
+  if(!routeFromHash()) switchTab('signal');   // 해시 있으면 해당 탭, 없으면 기본(시장·지역) — 서브내비 렌더 위해 명시 진입
   window.addEventListener('hashchange', routeFromHash);   // 뒤로/앞으로
 }
 (async function init(){
