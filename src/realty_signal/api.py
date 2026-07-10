@@ -440,6 +440,40 @@ def meta():
     }
 
 
+def _file_mtime(p) -> int | None:
+    try:
+        return int(p.stat().st_mtime)
+    except Exception:
+        return None
+
+
+@app.get("/api/freshness")
+def freshness():
+    """데이터 소스별 최종 갱신 시각·주기 — 유저가 분석 신선도를 확인. (읽기 전용, 부작용 없음)"""
+    from realty_signal.auction import AUCTION_FILE
+    last_date = str(_kb().last_date.date())
+    sources = [
+        {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
+         "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동",
+         "note": "KB국민은행 주간 시계열로 전세수급·매수우위·매매모멘텀·국면을 산출. 기준일이 곧 분석 기준입니다."},
+        {"key": "trade", "label": "국토부 실거래", "ts": db.kv_max_ts("complex:"),
+         "cycle": "조회 시 · 14일 캐시", "note": "단지 조회 시 국토부 실거래를 수집(14일 캐시), 관심단지는 주 1회 자동 프리페치."},
+        {"key": "quicksale", "label": "급매 스캔", "ts": _file_mtime(QUICKSALE_FILE),
+         "cycle": "관리자 스캔 시", "note": "BUY+ 시그널 지역의 시세 이하 호가를 스캔해 적재."},
+        {"key": "auction", "label": "경매 물건", "ts": _file_mtime(AUCTION_FILE),
+         "cycle": "관리자 등록·갱신 시", "note": "법원경매 물건과 시세를 관리자가 등록·갱신."},
+        {"key": "presale", "label": "청약", "ts": None, "cycle": "실시간",
+         "note": "청약홈(applyhome) API를 조회 시점에 실시간 반영."},
+        {"key": "redev", "label": "재건축·정비사업", "ts": db.kv_ts("redev_zones") or db.kv_max_ts("redev_cand:"),
+         "cycle": "주 1회 자동", "note": "서울 정비사업 단계 + 국토부 실거래로 잠재력·가치를 산출."},
+        {"key": "gongsi", "label": "공동주택 공시가격", "ts": db.kv_max_ts("gongsi:"),
+         "cycle": "연 1회 · 90일 캐시", "note": "국토부 공시가격(VWorld). 실거래/공시 배수로 저평가·보유세 근거."},
+        {"key": "news", "label": "부동산 뉴스", "ts": db.kv_ts("news_fetched"),
+         "cycle": "조회 시 갱신", "note": "네이버 뉴스에서 부동산 관련 기사를 수집·요약."},
+    ]
+    return {"기준일": last_date, "now": int(__import__("time").time()), "sources": sources}
+
+
 _SEOUL_AGG = {"강남11개구", "강북14개구"}
 
 
