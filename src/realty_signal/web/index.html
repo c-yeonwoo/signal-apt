@@ -377,6 +377,14 @@
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+      <span class="chip" id="laBuyChip" onclick="toggleLaBuyOnly()" title="매수·적극매수 시그널 지역 매물만" style="font-size:12px;white-space:nowrap">매수신호만</span>
+      <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
+        <select id="laSort" class="ctrl" onchange="onLaSort()" style="font-size:12px;padding:3px 6px">
+          <option value="opp">기회도순</option>
+          <option value="signal">시그널 강한순</option>
+          <option value="price_asc">가격 낮은순</option>
+          <option value="price_desc">가격 높은순</option>
+        </select></span>
       <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
     </div>
     <div id="laPriceFilter" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px">
@@ -1642,6 +1650,9 @@ function renderQuicksale(){
 const _LA_TYPES=['경매','급매','청약','재건축'];
 const _LA_COLOR={경매:'#8b5cf6', 급매:'#ea580c', 청약:'#0891b2', 재건축:'#16a34a'};
 let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
+let _laSort='opp', _laBuyOnly=false;          // 정렬 기준 + 매수신호(BUY+)만 필터
+function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
+function toggleLaBuyOnly(){ _laBuyOnly=!_laBuyOnly; document.getElementById('laBuyChip').classList.toggle('on', _laBuyOnly); renderAllListings(); }
 function _laInitSel(){ if(_laSel) return; _laSel=new Set(['경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
 function initLaPriceFilter(){
   const box=document.getElementById('laPriceFilter');
@@ -1702,7 +1713,18 @@ function _laPricePass(x){
   return v>=_laPrice.min && v<=cap;
 }
 function renderAllListings(){
-  const rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']) && _laPricePass(x));
+  const _BUYSIG=new Set(['STRONG_BUY','BUY']);
+  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']) && _laPricePass(x)
+    && (!_laBuyOnly || _BUYSIG.has(x['시그널'])));
+  // 정렬 — 기회도순(기본)·시그널 강한순·가격순. null 지표는 뒤로.
+  const opp=x=>x['기회도']??-1, tot=x=>(x['총액']!=null&&x['총액']>0)?x['총액']:null;
+  const sr=x=>_SIGRANK[x['시그널']]??9;
+  rows=rows.slice().sort((a,b)=>{
+    if(_laSort==='signal') return sr(a)-sr(b) || opp(b)-opp(a);
+    if(_laSort==='price_asc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pa-pb; }
+    if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
+    return opp(b)-opp(a);   // opp 기본
+  });
   document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호·가격대 완화 / 급매는 급매 탭에서 스캔)';
   const typeBadge=t=>`<span class="pill" style="background:${_LA_COLOR[t]};color:#fff;border-color:${_LA_COLOR[t]};font-size:10px">${t}</span>`;
   mapSplit('laList','laMap',rows,{
