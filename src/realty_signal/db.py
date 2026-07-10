@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS news(link TEXT PRIMARY KEY, title TEXT, descr TEXT,
     source TEXT, topic TEXT, pubdate TEXT, ts INTEGER);
 CREATE INDEX IF NOT EXISTS ix_news_ts ON news(ts);
+CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT, category TEXT, region TEXT, tags TEXT, source TEXT, eff_date TEXT, body TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS ix_policy_ts ON policy(ts);
 """
 
 _migrated = [False]
@@ -325,6 +328,75 @@ def kv_max_ts(prefix: str) -> int | None:
     row = c.execute("SELECT MAX(ts) FROM kv WHERE k LIKE ?", (prefix + "%",)).fetchone()
     c.close()
     return row[0] if row and row[0] is not None else None
+
+
+# ---------- 정책 KB (뉴스로 안 잡히는 제도·개발계획을 큐레이션) ----------
+def _policy_row(r) -> dict:
+    return {"id": r[0], "title": r[1], "category": r[2], "region": r[3],
+            "tags": r[4], "source": r[5], "eff_date": r[6], "body": r[7], "ts": r[8]}
+
+
+def policy_add(title: str, body: str, category: str = "", region: str = "",
+               tags: str = "", source: str = "", eff_date: str = "") -> int:
+    c = conn()
+    cur = c.execute(
+        "INSERT INTO policy(title,category,region,tags,source,eff_date,body,ts) VALUES(?,?,?,?,?,?,?,?)",
+        (title, category, region, tags, source, eff_date, body, int(time.time())))
+    c.commit()
+    rid = cur.lastrowid
+    c.close()
+    return rid
+
+
+def policy_all(limit: int = 200) -> list[dict]:
+    c = conn()
+    rows = c.execute("SELECT id,title,category,region,tags,source,eff_date,body,ts "
+                     "FROM policy ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    c.close()
+    return [_policy_row(r) for r in rows]
+
+
+def policy_delete(pid: int) -> None:
+    c = conn()
+    c.execute("DELETE FROM policy WHERE id=?", (pid,))
+    c.commit()
+    c.close()
+
+
+def policy_count() -> int:
+    c = conn()
+    n = c.execute("SELECT COUNT(*) FROM policy").fetchone()[0]
+    c.close()
+    return n
+
+
+def policy_search(query: str, region: str = "", limit: int = 5) -> list[dict]:
+    """키워드 스코어링 검색 — title(×3)·tags/region(×2)·body(×1). 쿼리 비면 최근순."""
+    rows = policy_all(200)
+    q = (query or "").strip()
+    if not q and not region:
+        return rows[:limit]
+    toks = [t for t in q.replace(",", " ").split() if len(t) >= 2]
+    scored = []
+    for r in rows:
+        s = 0
+        hay_title = (r["title"] or "")
+        hay_tag = (r["tags"] or "") + " " + (r["region"] or "") + " " + (r["category"] or "")
+        hay_body = (r["body"] or "")
+        for t in toks:
+            if t in hay_title:
+                s += 3
+            if t in hay_tag:
+                s += 2
+            if t in hay_body:
+                s += 1
+        if region and (region in (r["region"] or "") or (r["region"] or "") in region or not r["region"]):
+            s += 2
+        if s > 0:
+            scored.append((s, r))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    out = [r for _, r in scored[:limit]]
+    return out or rows[:limit]
 
 
 # ---------- news (부동산 뉴스 KB — 누적) ----------

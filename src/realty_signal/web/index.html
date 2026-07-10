@@ -704,7 +704,7 @@
   <p style="color:var(--dim);font-size:11px;margin-top:10px">구간수익=그 구간 동안 누적 매매가격지수 변화 · 이후12주=구간 종료 후 12주 변화(시그널 검증). 구간마다 근거가 다릅니다.</p>
 </dialog>
 
-<dialog id="adminDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--txt)">
+<dialog id="adminDlg" style="width:640px;max-width:95vw;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
     <h3 style="margin:0">🛠 관리자 — 데이터 운영</h3>
     <span class="btn" style="padding:2px 10px" onclick="document.getElementById('adminDlg').close()">✕</span>
@@ -724,6 +724,23 @@
         <span class="btn" onclick="adminWarmRedev()">재건축 워밍</span>
         <span class="btn" onclick="adminRunBacktest()">단지 백테스트 재계산</span>
       </div></div>
+    <div><div style="font-size:12px;font-weight:700;margin-bottom:6px">🦊 Nick 정책 KB <span style="font-weight:400;color:var(--dim)">— 챗봇이 정책·개발계획 질문에 인용</span></div>
+      <div id="polList" style="max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;margin-bottom:8px;font-size:12px">불러오는 중…</div>
+      <details><summary style="cursor:pointer;font-size:12px;color:var(--accent)">+ 정책 추가</summary>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          <input id="pol_title" placeholder="제목* (예: 스트레스 DSR 3단계)" class="ctrl" style="font-size:12px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input id="pol_category" placeholder="분류 (대출규제/개발계획/정비사업…)" class="ctrl" style="font-size:12px;flex:1;min-width:130px">
+            <input id="pol_region" placeholder="지역 (전국/수도권/강남구…)" class="ctrl" style="font-size:12px;flex:1;min-width:110px">
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input id="pol_source" placeholder="출처 (국토부…)" class="ctrl" style="font-size:12px;flex:1;min-width:110px">
+            <input id="pol_eff" placeholder="기준·시행일 (예: 2025-07)" class="ctrl" style="font-size:12px;flex:1;min-width:110px">
+          </div>
+          <input id="pol_tags" placeholder="검색 태그 (공백 구분: DSR 대출 한도)" class="ctrl" style="font-size:12px">
+          <textarea id="pol_body" rows="3" placeholder="내용* — 제도/계획 개요, 시장 영향" class="ctrl" style="font-size:12px;resize:vertical;font-family:inherit"></textarea>
+          <span class="btn primary" style="align-self:flex-start" onclick="adminAddPolicy()">저장</span>
+        </div></details></div>
     <div id="adminStatus" style="font-size:12px;color:var(--dim);min-height:18px"></div>
   </div>
 </dialog>
@@ -3204,9 +3221,36 @@ async function importCsv(input){
   input.value=''; alert(`${r.added}건 추가됨`); loadAuction();
 }
 async function delListing(id){ await fetch('/api/auction/listings/'+id, {method:'DELETE'}); loadAuction(); }
-function openAdmin(){ if(!_isAdmin){ toast('관리자 권한이 필요합니다'); return; } document.getElementById('adminStatus').textContent=''; document.getElementById('adminDlg').showModal(); }
+function openAdmin(){ if(!_isAdmin){ toast('관리자 권한이 필요합니다'); return; } document.getElementById('adminStatus').textContent=''; document.getElementById('adminDlg').showModal(); loadAdminPolicy(); }
 function closeAdmin(){ document.getElementById('adminDlg').close(); }
 function _adminStatus(t){ const e=document.getElementById('adminStatus'); if(e) e.textContent=t; }
+async function loadAdminPolicy(){
+  const el=document.getElementById('polList'); if(!el) return;
+  try{ const d=await (await fetch('/api/admin/policy')).json();
+    const ps=d.policies||[];
+    el.innerHTML = ps.length ? ps.map(p=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid var(--line)">
+        <div style="flex:1;min-width:0"><b>${(p.title||'').replace(/</g,'&lt;')}</b>
+          <span style="color:var(--dim)">${p.category?' · '+p.category:''}${p.region?' · '+p.region:''}${p.eff_date?' · '+p.eff_date:''}</span></div>
+        <span onclick="adminDelPolicy(${p.id})" title="삭제" style="cursor:pointer;color:var(--danger);font-size:12px">✕</span></div>`).join('')
+      : '<span style="color:var(--dim)">등록된 정책이 없습니다.</span>';
+  }catch(e){ el.innerHTML='<span style="color:var(--dim)">불러오기 실패(관리자 전용)</span>'; }
+}
+async function adminAddPolicy(){
+  const g=id=>document.getElementById(id).value.trim();
+  const title=g('pol_title'), body=g('pol_body');
+  if(!title||!body){ _adminStatus('제목과 내용은 필수입니다'); return; }
+  _adminStatus('정책 저장 중…');
+  try{ const r=await (await fetch('/api/admin/policy',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({title,body,category:g('pol_category'),region:g('pol_region'),tags:g('pol_tags'),source:g('pol_source'),eff_date:g('pol_eff')})})).json();
+    if(r.ok){ ['pol_title','pol_category','pol_region','pol_source','pol_eff','pol_tags','pol_body'].forEach(i=>document.getElementById(i).value='');
+      _adminStatus('✓ 정책 추가됨'); loadAdminPolicy(); }
+    else _adminStatus('저장 실패'); }
+  catch(e){ _adminStatus('저장 실패'); }
+}
+async function adminDelPolicy(id){
+  try{ await fetch('/api/admin/policy/'+id,{method:'DELETE'}); loadAdminPolicy(); _adminStatus('삭제됨'); }
+  catch(e){ _adminStatus('삭제 실패'); }
+}
 async function adminWarmRedev(){
   _adminStatus('재건축 데이터 워밍 중… (수십 초 소요)');
   try{ const r=await (await fetch('/api/redev/warm',{method:'POST'})).json();
