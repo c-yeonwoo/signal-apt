@@ -24,6 +24,7 @@ SYSTEM = (
     "3. 개별 단지의 매수·매도를 지시하지 않는다. 정보 제공·의사결정 보조이며, 최종 판단·실거래 확인은 이용자 책임임을 필요 시 덧붙인다. (유사투자자문 아님)\n"
     "4. 한국어로 간결하고 구체적으로. 표·불릿 남발 없이 핵심부터. 근거가 된 데이터의 기준일이 오래됐으면 그 점을 밝힌다.\n"
     "5. 여러 지표가 필요하면 tool 을 여러 번 호출해 종합한다. 사용자가 지역/단지를 명시하지 않으면 되묻거나 list_signal_regions 로 후보를 제시한다.\n"
+    "6. 정책·규제·개발계획(대출규제·DSR·신도시·GTX·재건축 규제 등) 질문은 get_policy 로 지식베이스를 조회해 답하고, 결과의 출처(source)와 기준일(eff_date)을 함께 밝히며 '정책은 이후 변경됐을 수 있으니 최신 공고 확인'을 덧붙인다. 조회 결과가 없으면 모른다고 말한다(정책을 지어내지 말 것).\n"
 )
 
 # Anthropic tool 스키마 — 각 tool 은 api.py 의 내부 데이터 함수에 매핑된다(server-side 실행).
@@ -73,6 +74,15 @@ TOOLS = [
         "name": "get_freshness",
         "description": "각 데이터 소스가 마지막으로 갱신된 시점과 분석 기준일. 답변의 신선도를 밝힐 때 사용.",
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_policy",
+        "description": "부동산 정책·규제·개발계획 지식베이스 검색(스트레스 DSR, 대출규제, 3기 신도시, GTX, 재건축 규제 등). "
+                       "제도·개발계획 질문에 사용. 결과의 source·eff_date(시행/기준일)를 반드시 함께 인용하고, 정책은 변경될 수 있음을 밝힌다.",
+        "input_schema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "검색어(정책명·키워드)"},
+            "region": {"type": "string", "description": "관련 지역(선택)"},
+        }, "required": ["query"]},
     },
 ]
 

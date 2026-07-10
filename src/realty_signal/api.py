@@ -32,6 +32,12 @@ def _is_opus_user(request: Request) -> bool:
     return bool(u) and (u.get("email") or "").lower() in config.opus_whitelist()
 
 
+def _is_admin(request: Request) -> bool:
+    """관리자(데이터 운영) 계정인지 — ADMIN_EMAILS 화이트리스트."""
+    u = auth.current_user(request.cookies.get(auth.COOKIE))
+    return bool(u) and (u.get("email") or "").lower() in config.admin_whitelist()
+
+
 _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
 
 
@@ -529,7 +535,79 @@ def _advisor_tool(name: str, args: dict) -> dict:
             return {"error": "뉴스 조회 실패"}
     if name == "get_freshness":
         return freshness()
+    if name == "get_policy":
+        _seed_policies()
+        hits = db.policy_search(args.get("query") or "", args.get("region") or "", limit=5)
+        if not hits:
+            return {"result": "정책 지식베이스에 관련 항목이 없습니다."}
+        return {"docs": [{"title": h["title"], "category": h["category"], "region": h["region"],
+                          "source": h["source"], "eff_date": h["eff_date"],
+                          "body": (h["body"] or "")[:1200]} for h in hits]}
     return {"error": f"알 수 없는 tool: {name}"}
+
+
+# 정책 KB 초기 시드 — 뉴스로 안 잡히는 '제도·개발계획'의 구조적 개요(운영자가 admin 에서 보강).
+# 세부 수치·시행일은 변동되므로 각 항목에 출처·기준·확인 안내를 포함.
+_POLICY_SEED = [
+    {"title": "스트레스 DSR (총부채원리금상환비율)", "category": "대출규제", "region": "전국",
+     "tags": "DSR 대출 한도 금리 스트레스", "source": "금융위원회", "eff_date": "2024~단계 시행",
+     "body": "대출 심사 시 미래 금리 상승 위험을 반영해 실제 금리에 '스트레스 금리'를 가산, 한도를 보수적으로 산정하는 제도. 단계적으로 적용 범위·가산폭이 확대돼 왔다. 차주의 연소득 대비 원리금 부담(DSR) 한도(대체로 40%)와 결합해 대출 가능액을 좌우한다. 세부 가산율·적용 시점은 시기별로 다르니 은행/금융위 최신 공고 확인 필요."},
+    {"title": "생애최초 주택구입 LTV 우대", "category": "대출규제", "region": "전국",
+     "tags": "생애최초 LTV 담보인정비율 첫집", "source": "국토부·금융위", "eff_date": "확인요망",
+     "body": "생애최초 구입자는 일반 대비 완화된 LTV(담보인정비율)를 적용받아 자기자본 부담이 낮아진다(대체로 최대 80% 수준, 한도 상한 존재). DSR 규제는 별도로 적용되므로 소득에 따라 실제 한도가 제한될 수 있다. 정확한 비율·한도는 시기·규제지역 여부에 따라 다르니 확인 필요."},
+    {"title": "3기 신도시", "category": "개발계획", "region": "수도권",
+     "tags": "3기 신도시 공급 택지 남양주 하남 고양 부천 인천 광명시흥",
+     "source": "국토부", "eff_date": "지구별 상이(조성 진행 중)",
+     "body": "수도권 주택공급을 위한 대규모 공공택지. 대표 지구: 남양주 왕숙, 하남 교산, 고양 창릉, 부천 대장, 인천 계양, 광명·시흥 등. 광역교통(GTX·도로) 연계와 사전청약·본청약 일정이 지구별로 다르게 진행된다. 입주 시기·물량은 지구별 공고 확인."},
+    {"title": "GTX (수도권 광역급행철도)", "category": "개발계획", "region": "수도권",
+     "tags": "GTX A B C 광역교통 역세권 교통",
+     "source": "국토부", "eff_date": "노선별 상이(개통 단계)",
+     "body": "수도권 외곽과 서울 도심을 고속으로 연결하는 광역급행철도. A(파주운정~동탄), B(인천~남양주), C(양주~수원) 등 노선이 단계적으로 추진·개통된다. 역 신설 예정지 주변은 접근성 개선 기대가 가격에 선반영되는 경향이 있어, 개통 시점·확정 여부를 구분해 해석해야 한다."},
+    {"title": "재건축 규제(안전진단·재건축초과이익환수)", "category": "정비사업", "region": "전국",
+     "tags": "재건축 안전진단 재초환 정비사업 규제",
+     "source": "국토부", "eff_date": "제도 변동 잦음(확인요망)",
+     "body": "재건축은 안전진단 통과가 사업의 초기 관문이며, 기준 완화·강화가 시기별로 반복된다. 재건축초과이익환수제(재초환)는 조합원 초과이익의 일부를 부담금으로 환수하는 제도로, 면제·완화 논의가 이어져 왔다. 사업 단계별 규제는 변동이 크므로 개별 단지의 진행 단계와 최신 제도를 함께 확인해야 한다."},
+]
+
+
+def _seed_policies() -> None:
+    """정책 KB가 비어 있으면 구조적 개요를 1회 시드(운영자가 admin 에서 보강)."""
+    try:
+        if db.policy_count() == 0:
+            for p in _POLICY_SEED:
+                db.policy_add(**p)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@app.get("/api/admin/policy")
+def admin_policy_list(request: Request):
+    if not _is_admin(request):
+        return JSONResponse({"error": "admin_only"}, status_code=403)
+    _seed_policies()
+    return {"policies": db.policy_all()}
+
+
+@app.post("/api/admin/policy")
+def admin_policy_add(request: Request, data: dict = Body(...)):
+    if not _is_admin(request):
+        return JSONResponse({"error": "admin_only"}, status_code=403)
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not title or not body:
+        return {"ok": False, "reason": "title_body_required"}
+    pid = db.policy_add(title=title, body=body, category=(data.get("category") or "").strip(),
+                        region=(data.get("region") or "").strip(), tags=(data.get("tags") or "").strip(),
+                        source=(data.get("source") or "").strip(), eff_date=(data.get("eff_date") or "").strip())
+    return {"ok": True, "id": pid}
+
+
+@app.delete("/api/admin/policy/{pid}")
+def admin_policy_delete(request: Request, pid: int):
+    if not _is_admin(request):
+        return JSONResponse({"error": "admin_only"}, status_code=403)
+    db.policy_delete(pid)
+    return {"ok": True}
 
 
 @app.post("/api/advisor")
