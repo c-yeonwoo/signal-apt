@@ -350,6 +350,20 @@ def _kb():
 
 
 @lru_cache(maxsize=1)
+def _codes_nospace():
+    """공백 제거 키 → 지역코드. 매물/급매 지역('성남시분당구')과 codes 키('성남시 분당구') 표기차 흡수."""
+    return {k.replace(" ", ""): v for k, v in (_kb().codes or {}).items()}
+
+
+def _code_of(region: str) -> str:
+    """지역명 → 지역코드. 정확 매칭 실패 시 공백 무시로 재시도(경기 시-구 매물 실거래 매칭 보장)."""
+    if not region:
+        return ""
+    codes = _kb().codes or {}
+    return codes.get(region) or _codes_nospace().get(region.replace(" ", ""), "")
+
+
+@lru_cache(maxsize=1)
 def _regime():
     from realty_signal.signals.regime import compute_regime
     import json as _json
@@ -547,7 +561,7 @@ def asdict_listing(lst):
 def _region_grades(region: str):
     """시군구 단지별 급지 랭킹 (국토부 실거래 평단가 순위). 캐시."""
     from realty_signal.ingest.complex_grade import region_grades
-    code = _kb().codes.get(region, "")
+    code = _code_of(region)
     if not (code and code.isdigit() and code[2:5] != "000"):
         return []  # 시군구 단위만 (광역/시도는 단지 랭킹 부적합)
     config.load_env()
@@ -936,7 +950,7 @@ def _redev_candidates(region: str):
     if cached is not None:
         return cached
     from realty_signal.ingest import redev as rd
-    code = _kb().codes.get(region, "")
+    code = _code_of(region)
     if not (code and code.isdigit() and code[2:5] != "000"):
         return []
     config.load_env()
@@ -1005,7 +1019,7 @@ def redev_stages(region: str | None = None):
     from realty_signal.ingest import redev as rd
     sgg5 = None
     if region:
-        code = _kb().codes.get(region, "")
+        code = _code_of(region)
         sgg5 = code[:5] if (code and code.isdigit()) else None
     return {"region": region or "서울 전체", **rd.stage_summary(_redev_progress(), sgg5)}
 
@@ -1328,7 +1342,7 @@ def complex_detail(region: str, name: str):
             out["단지시그널"] = _complex_signal(region, out, signal, ratio)
         return out
 
-    code = _kb().codes.get(region, "")
+    code = _code_of(region)
     if not (code and code.isdigit() and len(code) >= 5):
         return deco({"단지명": name, "지원안함": True, "평형별": [], "매매추이": []})
     lawd5 = code[:5]
@@ -1364,7 +1378,7 @@ def _complex_backtest(sample: int = 30, months: int = 36) -> dict:
     if QUICKSALE_FILE.exists():                       # 급매 단지 풀에서 표본 추출
         for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
             r, n = m.get("지역"), m.get("단지명")
-            code = codes.get(r, "")
+            code = _code_of(r)
             if r and n and (r, n) not in seen and code[:5].isdigit() and len(code) >= 5:
                 seen.add((r, n)); pool.append((code[:5], r, n))
     pool = pool[:sample]
@@ -1429,7 +1443,7 @@ def warm_favorite_complexes() -> dict:
     codes = _kb().codes
     warmed = skipped = 0
     for region, name in db.all_fav_complexes():
-        code = codes.get(region, "")
+        code = _code_of(region)
         if not (code and code.isdigit() and len(code) >= 5):
             continue
         ckey = f"complex:{code[:5]}:{name}"
@@ -1540,7 +1554,7 @@ def agents_nearby(region: str, name: str):
     q = f"{region} {name}"
     coords = geocode.geocode_batch([q], max_miss=1).get("coords", {}).get(q)
     if not coords:
-        c = _region_centroid(region, _kb().codes.get(region, ""))
+        c = _region_centroid(region, _code_of(region))
         coords = list(c) if c else None
     if not coords:
         return {"available": True, "agents": [], "no_coord": True}
@@ -1559,7 +1573,7 @@ def region_centroids(regions: str):
     codes = _kb().codes
     out = {}
     for region in [r for r in regions.split(",") if r][:60]:
-        c = _region_centroid(region, codes.get(region, ""))
+        c = _region_centroid(region, _code_of(region))
         if c:
             out[region] = [c[0], c[1]]
     return {"centroids": out}
@@ -1621,7 +1635,7 @@ def _radar_scan(regions: list[str]) -> list[dict]:
     sig = _signal_map()
     seen, out = set(), []
     for region in regions:
-        code = codes.get(region, "")
+        code = _code_of(region)
         c = _region_centroid(region, code)
         if not c:
             continue
