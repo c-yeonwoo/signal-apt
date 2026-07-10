@@ -555,6 +555,40 @@ def advisor_api(request: Request, data: dict = Body(...)):
             "기준일": str(_kb().last_date.date())}
 
 
+@app.post("/api/advisor/stream")
+def advisor_stream_api(request: Request, data: dict = Body(...)):
+    """자문 챗봇 스트리밍(SSE) — 답변 델타·tool 상태를 순차 전송. 로그인 필요."""
+    from fastapi.responses import StreamingResponse
+    from realty_signal import advisor
+    config.load_env()
+    uid = _uid(request)
+    asof = str(_kb().last_date.date())
+    opus = _is_opus_user(request)
+    messages = (data.get("messages") or [])[-12:]
+
+    def _one(ev: dict) -> str:
+        return f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+
+    def gen():
+        if not uid:
+            yield _one({"type": "error", "message": "login_required"}); return
+        if not advisor.available():
+            yield _one({"type": "error", "message": "no_ai"}); return
+        if not messages:
+            yield _one({"type": "error", "message": "empty"}); return
+        model = advisor.OPUS if opus else advisor.SONNET
+        try:
+            for ev in advisor.run_advisor_stream(messages, _advisor_tool, model=model):
+                if ev.get("type") == "done":
+                    ev["기준일"] = asof
+                yield _one(ev)
+        except Exception:  # noqa: BLE001
+            yield _one({"type": "error", "message": "failed"})
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 _SEOUL_AGG = {"강남11개구", "강북14개구"}
 
 
