@@ -1815,7 +1815,7 @@ function _mapTile(){
 }
 // ===== 지도 오버레이(급지색 · 규제지역) — 모든 지도 공용, 배타적 선택 =====
 // 규제지역: 국토부 지정(참고용, 시군구 근사). 토허제는 실제 동/구역 단위 — 여기선 구 단위 표기.
-const _REGULATION = { asof:'2025 기준(참고용·국토부 확인)', map:{
+let _REGULATION = { asof:'2025 기준(참고용·국토부 확인)', map:{
   '강남구':['투기과열지구','조정대상지역','토지거래허가구역'],
   '서초구':['투기과열지구','조정대상지역','토지거래허가구역'],
   '송파구':['투기과열지구','조정대상지역','토지거래허가구역'],
@@ -3888,6 +3888,7 @@ async function toggleFav(kind, key, label){
 }
 async function startApp(needOnboard){
   try{ _mapCfg=await (await fetch('/api/mapconfig')).json(); }catch(e){ _mapCfg=_mapCfg||{}; }   // 지도 타일 설정 선로드
+  fetch('/api/regulation').then(r=>r.json()).then(d=>{ if(d&&d.map) _REGULATION=d; }).catch(()=>{});   // 규제지역 정본(백엔드) — 폴백은 위 기본값
   await loadFavs();
   renderFilters();
   document.getElementById('search').oninput = renderList;
@@ -3970,7 +3971,7 @@ function advRender(){
       ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','강남구 시그널을 근거와 함께 설명해줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)">💡 ${q}</span>`).join('')}</div>`;
     return;
   }
-  const TOOLKR={list_signal_regions:'지역 시그널',get_region_signal:'지역 분석',get_complex:'단지 실거래',get_backtest:'적중률',get_regime:'경기 국면',get_news:'뉴스',get_freshness:'신선도',get_policy:'정책'};
+  const TOOLKR={list_signal_regions:'지역 시그널',get_region_signal:'지역 분석',get_complex:'단지 실거래',get_backtest:'적중률',get_regime:'경기 국면',get_news:'뉴스',get_freshness:'신선도',get_policy:'정책',get_regulation:'규제지역'};
   b.innerHTML=_advMsgs.map(m=>{
     if(m.role==='user') return `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:#fff;border-radius:12px 12px 3px 12px;padding:8px 11px;white-space:pre-wrap">${(m.text||'').replace(/</g,'&lt;')}</div>`;
     const used=(m.used&&m.used.length)?`<div style="margin-top:6px;font-size:10px;color:var(--dim)">🔎 근거: ${m.used.map(u=>TOOLKR[u]||u).join(', ')}${m.asof?' · 기준 '+m.asof:''}</div>`:'';

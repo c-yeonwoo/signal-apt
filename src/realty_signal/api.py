@@ -482,11 +482,37 @@ def freshness():
 
 _ADV_RANK = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4}
 
+# 규제지역(국토부 지정, 참고용·시군구 근사) — 프론트 지도 오버레이와 공용 정본. 지정/해제는 수시 변경.
+_REGULATION_ASOF = "2025 기준(참고용·국토부 확인)"
+_REGULATION = {
+    "강남구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
+    "서초구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
+    "송파구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
+    "용산구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
+    "양천구": ["토지거래허가구역"], "영등포구": ["토지거래허가구역"], "성동구": ["토지거래허가구역"],
+}
+
+
+def _regulation_of(region: str) -> list[str]:
+    r = (region or "").strip()
+    return _REGULATION.get(r) or next((v for k, v in _REGULATION.items() if k in r or r in k), [])
+
+
+@app.get("/api/regulation")
+def regulation_api():
+    """규제지역 지정 현황(참고용). 프론트 지도 오버레이·챗봇 공용 정본."""
+    return {"asof": _REGULATION_ASOF, "map": _REGULATION}
+
 
 def _adv_region_row(r: dict) -> dict:
-    """자문 tool 용 지역 시그널 축약."""
-    return {k: r.get(k) for k in ("region", "signal", "급지", "전세수급", "매수우위지수",
-            "매매모멘텀", "공급압력", "저평가도", "수급출처", "근거", "해설") if r.get(k) is not None}
+    """자문 tool 용 지역 시그널 축약(+규제지역)."""
+    out = {k: r.get(k) for k in ("region", "signal", "급지", "전세수급", "매수우위지수",
+           "매매모멘텀", "공급압력", "저평가도", "수급출처", "근거", "해설") if r.get(k) is not None}
+    reg = _regulation_of(r.get("region") or "")
+    if reg:
+        out["규제지역"] = reg
+        out["규제기준"] = _REGULATION_ASOF
+    return out
 
 
 def _advisor_tool(name: str, args: dict) -> dict:
@@ -535,6 +561,12 @@ def _advisor_tool(name: str, args: dict) -> dict:
             return {"error": "뉴스 조회 실패"}
     if name == "get_freshness":
         return freshness()
+    if name == "get_regulation":
+        region = (args.get("region") or "").strip()
+        if region:
+            reg = _regulation_of(region)
+            return {"region": region, "규제지역": reg or "지정 없음(참고용)", "기준": _REGULATION_ASOF}
+        return {"규제지역_전체": _REGULATION, "기준": _REGULATION_ASOF}
     if name == "get_policy":
         _seed_policies()
         hits = db.policy_search(args.get("query") or "", args.get("region") or "", limit=5)
