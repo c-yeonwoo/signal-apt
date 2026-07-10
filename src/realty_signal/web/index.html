@@ -3863,5 +3863,70 @@ async function startApp(needOnboard){
   <span onclick="openScoreboard()" style="cursor:pointer;color:var(--accent)">시그널 성적표</span>
   <span style="margin-left:auto">지표는 참고용 · 투자 판단·실거래 확인은 이용자 책임</span>
 </footer>
+
+<!-- AI 자문 챗봇 (근거기반 tool-use) -->
+<button id="advFab" onclick="advToggle()" title="AI 부동산 자문 — 우리 데이터 근거로 답합니다"
+  style="position:fixed;right:22px;bottom:22px;z-index:1350;background:var(--accent);color:#fff;border:none;border-radius:26px;padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 6px 20px rgba(37,99,235,.4);cursor:pointer">💬 AI 자문</button>
+<div id="advPanel" style="display:none;position:fixed;right:22px;bottom:22px;z-index:1400;width:390px;max-width:calc(100vw - 24px);height:600px;max-height:calc(100vh - 40px);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(2,32,71,.28);flex-direction:column;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent-weak)">
+    <span style="font-weight:800">💬 팔레트 자문</span>
+    <span id="advAsof" style="font-size:11px;color:var(--dim)"></span>
+    <span onclick="advToggle()" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:18px;line-height:1">✕</span>
+  </div>
+  <div id="advBody" style="flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6"></div>
+  <div style="padding:8px 12px 4px;border-top:1px solid var(--line)">
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <textarea id="advInput" rows="1" placeholder="예: 지금 시장 국면 어때? / 강남구 시그널 설명해줘" onkeydown="advKey(event)"
+        style="flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;max-height:96px;background:var(--bg);color:var(--txt)"></textarea>
+      <button id="advSendBtn" onclick="advSend()" class="btn" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 14px">전송</button>
+    </div>
+    <div style="font-size:10px;color:var(--dim);margin:5px 2px 6px">우리 데이터를 근거로 답하는 정보 제공용 · 특정 매수·매도 권유 아님 · 최종 판단은 이용자 책임</div>
+  </div>
+</div>
+<script>
+let _advMsgs=[], _advBusy=false;
+function advToggle(){
+  const p=document.getElementById('advPanel'), f=document.getElementById('advFab');
+  const open=p.style.display==='none'||!p.style.display;
+  p.style.display=open?'flex':'none'; f.style.display=open?'none':'block';
+  if(open){ if(!_advMsgs.length) advRender(); document.getElementById('advInput').focus(); }
+}
+function advKey(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); advSend(); } }
+function advSuggest(t){ document.getElementById('advInput').value=t; advSend(); }
+function advRender(){
+  const b=document.getElementById('advBody'); if(!b) return;
+  const asof=document.getElementById('advAsof'); if(asof && !asof.textContent && typeof meta!=='undefined' && meta.last_date) asof.textContent='기준 '+meta.last_date;
+  if(!_advMsgs.length){
+    b.innerHTML=`<div style="color:var(--dim)">안녕하세요! 수집된 <b>시그널·실거래·급매·경매·청약·재건축·공시·뉴스</b> 데이터를 근거로 답하는 자문 봇이에요. 무엇이든 물어보세요.</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+      ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','강남구 시그널을 근거와 함께 설명해줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)">💡 ${q}</span>`).join('')}</div>`;
+    return;
+  }
+  b.innerHTML=_advMsgs.map(m=>{
+    if(m.role==='user') return `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:#fff;border-radius:12px 12px 3px 12px;padding:8px 11px;white-space:pre-wrap">${(m.text||'').replace(/</g,'&lt;')}</div>`;
+    if(m.role==='typing') return `<div style="align-self:flex-start;color:var(--dim)">🤖 데이터 조회·분석 중…</div>`;
+    const used=(m.used&&m.used.length)?`<div style="margin-top:6px;font-size:10px;color:var(--dim)">🔎 근거: ${m.used.join(', ')}${m.asof?' · 기준 '+m.asof:''}</div>`:'';
+    return `<div style="align-self:flex-start;max-width:92%;background:var(--bg);border:1px solid var(--line);border-radius:12px 12px 12px 3px;padding:9px 12px">${mdLite(m.text||'')}${used}</div>`;
+  }).join('');
+  b.scrollTop=b.scrollHeight;
+}
+async function advSend(text){
+  if(_advBusy) return;
+  const inp=document.getElementById('advInput');
+  const q=(text||inp.value||'').trim(); if(!q) return;
+  inp.value=''; _advMsgs.push({role:'user',text:q}); _advMsgs.push({role:'typing'}); advRender();
+  _advBusy=true; document.getElementById('advSendBtn').disabled=true;
+  try{
+    const payload={messages:_advMsgs.filter(m=>m.role==='user'||m.role==='assistant').map(m=>({role:m.role,text:m.text}))};
+    const r=await (await fetch('/api/advisor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})).json();
+    _advMsgs=_advMsgs.filter(m=>m.role!=='typing');
+    _advMsgs.push({role:'assistant',text:r.answer||'답변을 생성하지 못했습니다.',used:r.used||[],asof:r['기준일']});
+  }catch(e){
+    _advMsgs=_advMsgs.filter(m=>m.role!=='typing');
+    _advMsgs.push({role:'assistant',text:'연결에 문제가 있어 답변하지 못했습니다. 잠시 후 다시 시도해 주세요.'});
+  }
+  _advBusy=false; document.getElementById('advSendBtn').disabled=false; advRender();
+}
+</script>
 </body>
 </html>
