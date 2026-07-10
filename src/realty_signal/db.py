@@ -311,6 +311,22 @@ def kv_keys(prefix: str) -> list[str]:
     return [r[0] for r in rows]
 
 
+def kv_ts(k: str) -> int | None:
+    """캐시 키의 마지막 기록 시각(unix). 없으면 None. (데이터 신선도 표시용)"""
+    c = conn()
+    row = c.execute("SELECT ts FROM kv WHERE k=?", (k,)).fetchone()
+    c.close()
+    return row[0] if row else None
+
+
+def kv_max_ts(prefix: str) -> int | None:
+    """prefix 로 시작하는 캐시 키들 중 가장 최근 기록 시각(unix). 없으면 None."""
+    c = conn()
+    row = c.execute("SELECT MAX(ts) FROM kv WHERE k LIKE ?", (prefix + "%",)).fetchone()
+    c.close()
+    return row[0] if row and row[0] is not None else None
+
+
 # ---------- news (부동산 뉴스 KB — 누적) ----------
 def news_upsert(items: list[dict]) -> int:
     """뉴스 항목 누적(link PK 중복 무시). 새로 추가된 건수 반환."""
