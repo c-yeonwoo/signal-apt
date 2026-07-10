@@ -144,3 +144,55 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
     except Exception as e:  # noqa: BLE001
         log.warning("advisor 실패: %s", e)
         return {"answer": None, "used": sorted(set(used)), "rounds": 0}
+
+
+def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6):
+    """tool-use 루프를 스트리밍으로. 이벤트 dict 를 yield:
+       {"type":"status","tool":name} · {"type":"delta","text":...} · {"type":"done","used":[...]} · {"type":"error"}.
+    """
+    if not available():
+        yield {"type": "error", "message": "no_ai"}
+        return
+    try:
+        import anthropic
+    except ImportError:
+        yield {"type": "error", "message": "no_ai"}
+        return
+    convo = _to_blocks(messages)
+    if not convo:
+        yield {"type": "error", "message": "empty"}
+        return
+    used: list[str] = []
+    try:
+        client = anthropic.Anthropic()
+        for _ in range(max_rounds):
+            with client.messages.stream(
+                model=model, max_tokens=1500, system=SYSTEM, tools=TOOLS, messages=convo,
+            ) as stream:
+                for chunk in stream.text_stream:
+                    if chunk:
+                        yield {"type": "delta", "text": chunk}
+                final = stream.get_final_message()
+            if final.stop_reason == "tool_use":
+                convo.append({"role": "assistant", "content": final.content})
+                results = []
+                for block in final.content:
+                    if getattr(block, "type", None) != "tool_use":
+                        continue
+                    used.append(block.name)
+                    yield {"type": "status", "tool": block.name}
+                    try:
+                        out = tool_exec(block.name, dict(block.input or {}))
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("advisor(stream) tool %s 실패: %s", block.name, e)
+                        out = {"error": "조회 실패"}
+                    results.append({"type": "tool_result", "tool_use_id": block.id,
+                                    "content": json.dumps(out, ensure_ascii=False, default=str)[:8000]})
+                convo.append({"role": "user", "content": results})
+                continue
+            yield {"type": "done", "used": sorted(set(used))}
+            return
+        yield {"type": "done", "used": sorted(set(used))}
+    except Exception as e:  # noqa: BLE001
+        log.warning("advisor(stream) 실패: %s", e)
+        yield {"type": "error", "message": "failed", "used": sorted(set(used))}
