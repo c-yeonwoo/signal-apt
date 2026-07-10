@@ -45,13 +45,13 @@ _ROMAN = {"Ⅰ": "1", "Ⅱ": "2", "Ⅲ": "3", "Ⅳ": "4", "Ⅴ": "5", "Ⅵ": "6"
 
 
 def _canon(s: str) -> str:
-    """비교용 표준형 — 로마숫자→아라비아, _norm(한글·숫자만), 철자변형 통일."""
+    """비교용 표준형 — 로마숫자→아라비아, _norm(한글·숫자만), 철자변형 통일, '마을' 표기차 흡수."""
     for a, b in _ROMAN.items():
         s = s.replace(a, b)
     n = _norm(s)
     for a, b in _SPELL.items():
         n = n.replace(a, b)
-    return n
+    return n.replace("마을", "")   # '강선마을8단지'(국토부) ↔ '강선8단지'(통용) 정렬
 
 
 def _match(nm: str, target_canon: str) -> bool:
@@ -63,11 +63,15 @@ def _match(nm: str, target_canon: str) -> bool:
     n = _canon(nm)
     if not n:
         return False
-    if n == target_canon or target_canon in n or n in target_canon:
-        return True
+    # 숫자(동·단지 번호)가 양쪽에 있고 다르면 먼저 불일치 처리 — '주공1'이 '주공10'에 부분포함돼 오매칭되는 것 방지
     dn, dt = re.findall(r"\d+", n), re.findall(r"\d+", target_canon)
     if dn and dt and dn != dt:
         return False
+    if n == target_canon or target_canon in n or n in target_canon:
+        return True
+    # 시공사명 순서만 다른 경우('강선8단지럭키롯데' ↔ '강선8단지롯데럭키') — 단지번호 일치 하 문자 멀티셋 동일이면 허용
+    if sorted(n) == sorted(target_canon):
+        return True
     return difflib.SequenceMatcher(None, n, target_canon).ratio() >= 0.9
 
 
