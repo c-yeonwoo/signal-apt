@@ -567,6 +567,56 @@ def _advisor_tool(name: str, args: dict) -> dict:
             reg = _regulation_of(region)
             return {"region": region, "규제지역": reg or "지정 없음(참고용)", "기준": _REGULATION_ASOF}
         return {"규제지역_전체": _REGULATION, "기준": _REGULATION_ASOF}
+    if name == "get_presale":
+        region = (args.get("region") or "").strip()
+        try:
+            items = _presale()
+        except Exception:  # noqa: BLE001
+            return {"error": "청약 조회 실패"}
+        if region:
+            items = [d for d in items if region in (d.get("지역") or "") or region in (d.get("주소") or "")]
+        items = sorted(items, key=lambda d: (d.get("Dday") if d.get("Dday") is not None else 999))[:12]
+        if not items:
+            return {"result": "조건에 맞는 청약 단지가 없습니다."}
+        return {"presales": [{"단지명": d.get("단지명"), "지역": d.get("지역"), "상태": d.get("상태"),
+                "Dday": d.get("Dday"), "다음일정": d.get("다음일정"), "시그널": d.get("시그널"),
+                "지역급지": d.get("지역급지"), "정비사업": d.get("정비사업")} for d in items]}
+    if name == "get_redev":
+        region = (args.get("region") or "").strip()
+        if not region:
+            return {"error": "region 이 필요합니다."}
+        if not db_has_redev_cache(region):
+            return {"result": f"{region} 재건축 데이터가 아직 준비되지 않았습니다(관리자 워밍 후 조회 가능)."}
+        cands = (_redev_candidates(region) or [])[:10]
+        return {"region": region, "시그널": _signal_map().get(region, ""), "candidates": cands}
+    if name == "get_listings":
+        region = (args.get("region") or "").strip()
+        kind = args.get("kind") or "급매"
+        out: dict = {}
+        if kind in ("급매", "전체"):
+            try:
+                qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
+            except Exception:  # noqa: BLE001
+                qs = []
+            if region:
+                qs = [m for m in qs if region in (m.get("지역") or "")]
+            qs = sorted(qs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
+            out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
+                          "호가": m.get("호가"), "급매갭": m.get("급매갭"), "시그널": m.get("시그널")} for m in qs]
+        if kind in ("경매", "전체"):
+            from realty_signal.auction import AUCTION_FILE
+            try:
+                au = json.loads(AUCTION_FILE.read_text(encoding="utf-8")) if AUCTION_FILE.exists() else []
+                au = au if isinstance(au, list) else au.get("listings", [])
+            except Exception:  # noqa: BLE001
+                au = []
+            if region:
+                au = [m for m in au if region in (m.get("region") or "")]
+            out["경매"] = [{"단지명": m.get("단지명"), "region": m.get("region"), "최저매각가": m.get("최저매각가"),
+                          "감정가": m.get("감정가"), "유찰횟수": m.get("유찰횟수"), "입찰기일": m.get("입찰기일")} for m in au[:10]]
+        if not out.get("급매") and not out.get("경매"):
+            return {"result": "해당 조건의 매물이 없습니다(급매는 관리자 스캔 시점 기준)."}
+        return out
     if name == "get_policy":
         _seed_policies()
         hits = db.policy_search(args.get("query") or "", args.get("region") or "", limit=5)
