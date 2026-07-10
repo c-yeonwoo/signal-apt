@@ -33,6 +33,13 @@ def opus_whitelist() -> set[str]:
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
+def admin_whitelist() -> set[str]:
+    """관리자(데이터 운영) 계정 이메일(소문자). 미설정 시 Opus 화이트리스트로 폴백."""
+    raw = os.environ.get("ADMIN_EMAILS", "")
+    ids = {e.strip().lower() for e in raw.split(",") if e.strip()}
+    return ids or opus_whitelist()
+
+
 def odsay_key() -> str | None:
     return os.environ.get("ODSAY_KEY")
 
