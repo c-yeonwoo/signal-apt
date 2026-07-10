@@ -103,6 +103,39 @@ def compare_insight(criterion: str, complexes: list, model: str = HAIKU) -> str 
         return None
 
 
+_CMP_RECO_SYSTEM = (
+    "당신은 한국 부동산 애널리스트입니다. 사용자가 여러 아파트를 비교 중이고, 중시하는 가치들을 골랐습니다. "
+    "제공된 실거래 지표와 데이터로 계산된 종합점수 순위를 바탕으로, "
+    "(1)어느 단지를 추천하는지와 그 이유(선택한 가치별 근거), (2)차순위 단지의 장점, (3)추천 단지의 한 가지 주의점을 "
+    "3~4문장으로 말합니다. 제공된 지표에 없는 사실(학군·교통 등)은 지어내지 말고, 주어진 수치 근거만 사용합니다. "
+    "한국어·구체적·과장 금지. 마크다운·불릿 없이 자연스러운 문장으로만."
+)
+
+
+def compare_recommend(criteria: list, complexes: list, ranked: list, model: str = SONNET) -> str | None:
+    """중시가치(복수) + 비교단지 + 계산된 순위 → 추천 단지·근거 3~4문장. 불가 시 None(규칙기반 폴백)."""
+    if not available() or not complexes or not criteria:
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        return None
+    payload = {"중시가치": criteria, "비교단지": complexes, "종합점수순위": ranked}
+    user = ("아래 JSON은 비교 중인 아파트 단지들의 실거래 지표, 사용자가 중시하는 가치들, "
+            "그리고 그 가치들로 계산된 종합점수 순위입니다. 순위 1위를 우선 추천하되 근거를 데이터로 설명하세요.\n\n"
+            + json.dumps(payload, ensure_ascii=False, indent=2))
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=model, max_tokens=600, system=_CMP_RECO_SYSTEM,
+            messages=[{"role": "user", "content": user}],
+        )
+        return "".join(b.text for b in resp.content if b.type == "text").strip() or None
+    except Exception as e:  # noqa: BLE001
+        log.warning("AI 비교 추천 실패: %s", e)
+        return None
+
+
 _AUCTION_PARSE_SYSTEM = (
     "당신은 법원경매 물건 정보 파서입니다. 붙여넣은 텍스트에서 아래 필드를 추출해 JSON만 출력합니다.\n"
     "- 단지명: 아파트/건물 단지명(동·호는 제외)\n"
