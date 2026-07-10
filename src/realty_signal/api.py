@@ -236,7 +236,8 @@ def auth_me(request: Request):
     if not u:
         return JSONResponse({"auth": False}, status_code=401)
     return {"auth": True, "email": u["email"], "profile": db.profile_get(u["id"]),
-            "onboarded": bool(db.profile_get(u["id"]))}
+            "onboarded": bool(db.profile_get(u["id"])),
+            "admin": (u["email"] or "").lower() in config.admin_whitelist()}
 
 
 # ---------- 프로필 / 즐겨찾기 ----------
