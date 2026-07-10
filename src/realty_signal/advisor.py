@@ -76,6 +76,13 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_regulation",
+        "description": "규제지역(투기과열지구·조정대상지역·토지거래허가구역) 지정 현황. region 지정 시 해당 지역, 생략 시 전체. 세제·대출·거래 규제와 직결되므로 지역/단지 매수 상담 시 확인. 지정/해제는 수시 변경되니 기준일을 밝힌다.",
+        "input_schema": {"type": "object", "properties": {
+            "region": {"type": "string", "description": "지역명(생략 시 전체 규제지역)"},
+        }},
+    },
+    {
         "name": "get_policy",
         "description": "부동산 정책·규제·개발계획 지식베이스 검색(스트레스 DSR, 대출규제, 3기 신도시, GTX, 재건축 규제 등). "
                        "제도·개발계획 질문에 사용. 결과의 source·eff_date(시행/기준일)를 반드시 함께 인용하고, 정책은 변경될 수 있음을 밝힌다.",
