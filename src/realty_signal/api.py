@@ -474,6 +474,87 @@ def freshness():
     return {"기준일": last_date, "now": int(__import__("time").time()), "sources": sources}
 
 
+_ADV_RANK = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4}
+
+
+def _adv_region_row(r: dict) -> dict:
+    """자문 tool 용 지역 시그널 축약."""
+    return {k: r.get(k) for k in ("region", "signal", "급지", "전세수급", "매수우위지수",
+            "매매모멘텀", "공급압력", "저평가도", "수급출처", "근거", "해설") if r.get(k) is not None}
+
+
+def _advisor_tool(name: str, args: dict) -> dict:
+    """자문 에이전트 tool 실행 — 기존 데이터 함수로 위임(server-side)."""
+    if name == "list_signal_regions":
+        rows = signals()
+        want = (args.get("signal") or "").upper()
+        if want:
+            rows = [r for r in rows if r.get("signal") == want]
+        rows = sorted(rows, key=lambda r: (_ADV_RANK.get(r.get("signal"), 9), -(r.get("전세수급") or 0)))
+        lim = min(int(args.get("limit") or 15), 40)
+        return {"regions": [{"region": r.get("region"), "signal": r.get("signal"),
+                             "급지": r.get("급지"), "전세수급": r.get("전세수급"),
+                             "매수우위지수": r.get("매수우위지수")} for r in rows[:lim]]}
+    if name == "get_region_signal":
+        region = (args.get("region") or "").strip()
+        rows = signals()
+        hit = next((r for r in rows if r.get("region") == region), None) \
+            or next((r for r in rows if region and region in (r.get("region") or "")), None)
+        return _adv_region_row(hit) if hit else {"error": f"'{region}' 지역 데이터를 찾지 못했습니다."}
+    if name == "get_complex":
+        region, nm = (args.get("region") or "").strip(), (args.get("name") or "").strip()
+        if not region or not nm:
+            return {"error": "region 과 name 이 모두 필요합니다."}
+        try:
+            d = complex_detail(region, nm)
+        except Exception:  # noqa: BLE001
+            return {"error": "실거래 조회에 실패했습니다."}
+        if not d or d.get("거래없음"):
+            return {"error": f"{region} {nm} 의 최근 실거래를 찾지 못했습니다."}
+        keep = {k: d.get(k) for k in ("단지명", "최근평단가", "추세pct", "총거래", "기간",
+                "급지", "시그널", "단지시그널", "공시대비") if d.get(k) is not None}
+        keep["평형별"] = (d.get("평형별") or [])[:6]
+        return keep
+    if name == "get_backtest":
+        bt = _backtest()
+        return {"by_signal": bt.get("by_signal"), "설명": bt.get("설명"),
+                "data_age_days": round(_data_age_days() or 0, 1)}
+    if name == "get_regime":
+        rg = _regime() or {}
+        return {k: rg.get(k) for k in ("phase", "beta", "gap", "color", "desc") if k in rg}
+    if name == "get_news":
+        try:
+            return news_summary(topic=args.get("topic"))
+        except Exception:  # noqa: BLE001
+            return {"error": "뉴스 조회 실패"}
+    if name == "get_freshness":
+        return freshness()
+    return {"error": f"알 수 없는 tool: {name}"}
+
+
+@app.post("/api/advisor")
+def advisor_api(request: Request, data: dict = Body(...)):
+    """근거기반 부동산 자문 챗봇 — Claude tool-use 로 우리 데이터를 조회해 답변. 로그인 필요."""
+    from realty_signal import advisor
+    config.load_env()
+    if not _uid(request):
+        return {"ok": False, "reason": "login_required"}
+    if not advisor.available():
+        return {"ok": False, "reason": "no_ai",
+                "answer": "AI 자문은 서버에 ANTHROPIC_API_KEY 가 설정되어야 이용할 수 있습니다."}
+    messages = data.get("messages") or []
+    if not isinstance(messages, list) or not messages:
+        return {"ok": False, "reason": "empty"}
+    messages = messages[-12:]                              # 최근 12턴만(비용·컨텍스트 방어)
+    model = advisor.OPUS if _is_opus_user(request) else advisor.SONNET
+    res = advisor.run_advisor(messages, _advisor_tool, model=model)
+    if not res.get("answer"):
+        return {"ok": False, "reason": "failed",
+                "answer": "지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다."}
+    return {"ok": True, "answer": res["answer"], "used": res.get("used", []),
+            "기준일": str(_kb().last_date.date())}
+
+
 _SEOUL_AGG = {"강남11개구", "강북14개구"}
 
 
