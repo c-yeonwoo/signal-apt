@@ -1491,6 +1491,77 @@ def _compare_rule(criterion: str, complexes: list) -> str:
     return msg
 
 
+def _compare_score(criteria: list, complexes: list) -> tuple[list, int]:
+    """선택 가치기준들로 각 단지를 랭크정규화(0~1, 유리할수록 1) 후 합산 → (점수 내림차순 목록, 사용된 기준수)."""
+    valid = [c for c in complexes if c.get("단지명")]
+    total: dict = {c["단지명"]: 0.0 for c in valid}
+    detail: dict = {c["단지명"]: {} for c in valid}
+    used = 0
+    for crit in criteria:
+        spec = _CMP_CRIT.get(crit)
+        if not spec:
+            continue
+        field, lower, label, fmt = spec
+        have = [(c, c[field]) for c in valid if c.get(field) is not None]
+        if len(have) < 2:                       # 값 가진 단지 2개 미만이면 변별 불가 → 스킵
+            for c, v in have:
+                detail[c["단지명"]][crit] = fmt(v)
+            continue
+        used += 1
+        vals = [v for _, v in have]
+        lo, hi = min(vals), max(vals)
+        span = (hi - lo) or 1
+        for c, v in have:
+            s = (hi - v) / span if lower else (v - lo) / span   # 유리할수록 1
+            total[c["단지명"]] += s
+            detail[c["단지명"]][crit] = fmt(v)
+    ranked = sorted(valid, key=lambda c: total[c["단지명"]], reverse=True)
+    return [{"단지명": c["단지명"], "급지": c.get("급지"), "시그널": c.get("시그널"),
+             "점수": round(total[c["단지명"]], 2), "지표": detail[c["단지명"]]} for c in ranked], used
+
+
+def _recommend_rule(criteria: list, ranked: list) -> str:
+    """규칙기반 추천 해설 — 종합점수 1위 + 차순위 + 근거 수치."""
+    if not ranked:
+        return "비교할 데이터가 부족합니다."
+    w = ranked[0]
+    parts = ", ".join(f"{k} {v}" for k, v in (w.get("지표") or {}).items())
+    msg = f"선택하신 {'·'.join(criteria)} 기준을 종합하면 {w['단지명']}가 가장 부합합니다"
+    msg += f" ({parts})." if parts else "."
+    if len(ranked) > 1:
+        msg += f" 차순위는 {ranked[1]['단지명']}입니다."
+    return msg
+
+
+@app.post("/api/compare-recommend")
+def compare_recommend_api(request: Request, data: dict = Body(...)):
+    """비교 단지(2+) + 중시가치(복수) → 종합점수 순위 + 추천 단지·해설(Claude, 없으면 규칙기반)."""
+    from realty_signal import ai_report
+    config.load_env()
+    criteria = [c for c in (data.get("criteria") or []) if c in _CMP_CRIT]
+    complexes = data.get("complexes") or []
+    if not criteria or len(complexes) < 2:
+        return {"ok": False, "reason": "need_criteria_and_2_complexes"}
+    ranked, used = _compare_score(criteria, complexes)
+    if not ranked or not used:
+        return {"ok": False, "reason": "no_comparable_data"}
+    opus = _is_opus_user(request)
+    model = ai_report.OPUS if opus else ai_report.SONNET   # 추천은 다인자 종합 → Sonnet 이상
+    tier = "opus" if opus else "sonnet"
+    sig_src = sorted(f"{c.get('단지명')}|{c.get('최근평단가')}|{c.get('전세가율')}|{c.get('갭')}|{c.get('추세pct')}|{c.get('총거래')}" for c in complexes)
+    sig = hashlib.md5(json.dumps([sorted(criteria), sig_src, tier], ensure_ascii=False).encode()).hexdigest()[:16]
+    ckey = f"cmpreco:{sig}"
+    cached = db.kv_get(ckey, max_age=14 * 86400)
+    if cached is not None:
+        return {**cached, "cached": True}
+    text = ai_report.compare_recommend(criteria, complexes, ranked, model=model)
+    out = {"ok": True, "추천": ranked[0]["단지명"], "순위": ranked,
+           "해설": text or _recommend_rule(criteria, ranked), "ai": bool(text)}
+    if text:
+        db.kv_set(ckey, out)
+    return out
+
+
 @app.post("/api/compare-insight")
 def compare_insight_api(request: Request, data: dict = Body(...)):
     """비교 단지 + 가치기준 → 한줄 해설(Claude, 없으면 규칙기반)."""
