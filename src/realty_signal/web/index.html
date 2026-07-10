@@ -277,7 +277,8 @@
     <span>Signal APT</span>
   </h1>
   <div class="tabs">
-    <button class="tab on" data-group="market" onclick="switchTab('signal')" title="경기 국면·지역 성적표·저평가 랭킹">📈 시장·지역</button>
+    <button class="tab on" data-group="home" onclick="switchTab('dashboard')" title="오늘의 국면·관심지역·기회 요약">🏠 홈</button>
+    <button class="tab" data-group="market" onclick="switchTab('signal')" title="경기 국면·지역 성적표·저평가 랭킹">📈 시장·지역</button>
     <button class="tab" data-group="listings" onclick="switchTab('all')" title="경매·급매·청약·재건축·갈아타기 — 실제 매물">🏢 매물</button>
     <button class="tab" data-group="find" onclick="switchTab('mymap')" title="내 시그널 지도 · 개인화 AI 리포트">🎯 내 집찾기</button>
   </div>
@@ -304,6 +305,13 @@
   <span id="groupSubLabel" style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
   <div class="mtabs" id="groupSubTabs"></div>
   <span id="listingFocus" style="margin-left:auto;font-size:12px;color:var(--dim);display:none"></span>
+</div>
+
+<!-- 대시보드 홈 -->
+<div id="view-dashboard" style="display:none;padding:22px 20px;max-width:1080px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto">
+  <div id="dashHello" style="font-size:20px;font-weight:800;margin-bottom:2px"></div>
+  <div style="color:var(--dim);font-size:13px;margin-bottom:18px">오늘의 시장 국면과 내 관심 지역·기회를 한눈에.</div>
+  <div id="dashBody"></div>
 </div>
 
 <!-- 시그널 탭 -->
@@ -1093,6 +1101,7 @@ function renderMtFilter(hostId, rerender){
 }
 // ===== 4탭 IA — 상단 그룹 → 하위 뷰 =====
 const _GROUPS={
+  home:     ['dashboard'],
   market:   ['signal','undervalued'],
   listings: ['all','auction','quicksale','presale','redev','tradeup'],
   find:     ['mymap','report'],
@@ -1105,7 +1114,7 @@ const _SUBMETA={
   mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
 };
 const _LISTING=_GROUPS.listings;                 // 매물 그룹(하위탭)
-const _ALLVIEWS=['signal','undervalued','all','auction','quicksale','presale','redev','tradeup','mymap','report','news','glossary','about','mypage'];
+const _ALLVIEWS=['dashboard','signal','undervalued','all','auction','quicksale','presale','redev','tradeup','mymap','report','news','glossary','about','mypage'];
 function _groupOf(v){ for(const g in _GROUPS) if(_GROUPS[g].includes(v)) return g; return null; }
 let _listingSub='all';
 let _focusRegion=null;   // 관심지역 → 매물 좁히기(옵션, 강제 X)
@@ -1132,6 +1141,7 @@ function renderGroupSubnav(grp, active){
   if(grp==='listings') renderListingFocus();
 }
 const _LOAD={
+  dashboard:()=>loadDashboard(),
   signal:()=>{chart.resize(); renderScoreboard(); renderAha();},
   undervalued:()=>loadUndervalued(),
   all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev(),
@@ -1160,11 +1170,66 @@ function switchTab(t){
   // URL 해시 동기화 — 새로고침 시 현재 탭 유지
   if(location.hash.slice(1)!==t) history.replaceState(null, '', '#'+t);
 }
-const _ROUTES=[..._ALLVIEWS, 'market','listings','find'];
+const _ROUTES=[..._ALLVIEWS, 'market','listings','find','home'];
 function routeFromHash(){
   const h=decodeURIComponent(location.hash.slice(1));
   if(_ROUTES.includes(h)){ switchTab(h); return true; }
   return false;
+}
+// ===== 대시보드 홈 — 국면·관심지역·오늘의 기회 요약 =====
+const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;${extra}">${inner}</div>`;
+const _dashH=t=>`<div style="font-size:13px;font-weight:700;color:var(--dim);margin-bottom:10px;letter-spacing:.02em">${t}</div>`;
+async function loadDashboard(){
+  const body=document.getElementById('dashBody'); if(!body) return;
+  const nm=(_userEmail||'').split('@')[0]||'회원';
+  document.getElementById('dashHello').textContent=`안녕하세요, ${nm}님 👋`;
+  // 1) 경기 국면
+  let regimeH=_dashH('오늘의 경기 국면')+'<div style="color:var(--dim);font-size:13px">불러오는 중…</div>';
+  try{ const rg=await (await fetch('/api/regime')).json();
+    if(rg&&rg.phase){ const C={green:'#22c55e',yellow:'#ca8a04',orange:'#ea580c',red:'#ef4444'}[rg.color]||'#94a3b8';
+      regimeH=_dashH('오늘의 경기 국면')
+        +`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:22px;font-weight:800;color:${C}">${rg.phase}</span>`
+        +`<span style="color:var(--dim);font-size:13px">수도권 유동성 · β ${rg.beta} · 급지갭 ${rg.gap}</span></div>`
+        +(rg.desc?`<div style="color:var(--dim);font-size:12.5px;margin-top:8px;line-height:1.55">${rg.desc}</div>`:''); }
+    else regimeH=_dashH('오늘의 경기 국면')+'<div style="color:var(--dim);font-size:13px">국면 데이터가 아직 없습니다.</div>';
+  }catch(e){ regimeH=_dashH('오늘의 경기 국면')+'<div style="color:var(--dim);font-size:13px">국면 데이터를 불러오지 못했습니다.</div>'; }
+  // 2) 관심 지역 시그널
+  const favR=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
+  const favRows=favR.map(r=>(allSignals||[]).find(s=>s.region===r)).filter(Boolean);
+  let favH=_dashH('내 관심 지역');
+  if(favRows.length){
+    favH+=favRows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('signal');selectRegion('${r.region}')">
+      <b style="min-width:74px">${r.region}</b>${badge(r.signal)}
+      <span style="margin-left:auto;color:var(--dim);font-size:12px">전세 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}</span>
+      <span style="color:var(--accent);font-size:12px">보기 →</span></div>`).join('');
+  } else {
+    favH+=`<div style="color:var(--dim);font-size:13px;padding:6px 0">아직 관심 지역이 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 ★로 추가 →</span></div>`;
+  }
+  // 3) 바로가기
+  const go=(t,ico,label,desc)=>`<div onclick="switchTab('${t}')" style="flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line)'">
+    <div style="font-size:22px">${ico}</div><div style="font-weight:700;margin-top:4px">${label}</div><div style="color:var(--dim);font-size:12px;margin-top:2px">${desc}</div></div>`;
+  const shortcutsH=_dashH('바로가기')+`<div style="display:flex;gap:10px;flex-wrap:wrap">
+    ${go('report','🎯','AI 리포트','내 조건 맞춤 매수전략')}
+    ${go('mymap','🗺️','내 시그널맵','즐겨찾기 지도로 보기')}
+    ${go('all','🏢','매물 전체','경매·급매·청약·재건축')}
+    ${go('tradeup','↗️','갈아타기','상급지 이동 시뮬레이션')}</div>`;
+  // 레이아웃 — 기회 카드는 자리표시 후 비동기 채움
+  body.innerHTML=
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+       ${_dashCard(regimeH)}${_dashCard(favH)}</div>`
+    +_dashCard(_dashH('오늘의 기회 <span style="font-weight:400">· 기회도 상위</span>')+'<div id="dashOpp" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
+    +_dashCard(shortcutsH);
+  // 3) 오늘의 기회 (비동기)
+  try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent('경매,급매'))).json();
+    const items=(d.listings||[]).slice().sort((a,b)=>(b['기회도']??0)-(a['기회도']??0)).slice(0,5);
+    const el=document.getElementById('dashOpp'); if(!el) return;
+    if(!items.length){ el.innerHTML='표시할 기회 매물이 없습니다. <span style="color:var(--accent);cursor:pointer" onclick="switchTab(\'quicksale\')">급매 스캔은 매물 탭에서 →</span>'; return; }
+    const tcol={경매:'#8b5cf6',급매:'#ea580c',청약:'#0891b2',재건축:'#16a34a'};
+    el.innerHTML=items.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('all')">
+      <span class="pill" style="background:${tcol[x['유형']]||'#94a3b8'};color:#fff;border-color:${tcol[x['유형']]||'#94a3b8'};font-size:10px">${x['유형']}</span>
+      <b>${x['단지명']||'–'}</b>${x['시그널']?badge(x['시그널']):''}
+      <span style="margin-left:auto;color:var(--dim);font-size:12px">${x['총액']?_eok(x['총액'])+' · ':''}${x['지역']||''} · 기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span></div>`).join('');
+  }catch(e){ const el=document.getElementById('dashOpp'); if(el) el.innerHTML='기회 매물을 불러오지 못했습니다.'; }
 }
 // ===== 갈아타기 전략 (현 자산 매도 → 상급지 착지) =====
 let _tuData=null;
@@ -3695,7 +3760,7 @@ async function startApp(needOnboard){
   } else {
     await loadData();
   }
-  if(!routeFromHash()) switchTab('signal');   // 해시 있으면 해당 탭, 없으면 기본(시장·지역) — 서브내비 렌더 위해 명시 진입
+  if(!routeFromHash()) switchTab('dashboard');   // 해시 있으면 해당 탭, 없으면 대시보드 홈
   window.addEventListener('hashchange', routeFromHash);   // 뒤로/앞으로
 }
 (async function init(){
