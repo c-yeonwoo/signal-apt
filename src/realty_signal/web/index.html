@@ -341,6 +341,7 @@
         <span id="sigbadge" style="font-size:18px;font-weight:700"></span>
         <span id="sigsub" style="color:var(--dim);font-size:12.5px"></span>
         <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 급매물(+경매·청약)만 좁혀 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 급매물 ›</button>
+        <button class="chip" onclick="askNickRegion()" title="Nick에게 이 지역을 물어보기" style="white-space:nowrap">🦊 Nick에게</button>
         <div style="margin-left:auto;position:relative">
           <button class="chip" id="ovlBtn" onclick="toggleOverlayMenu(event)" style="white-space:nowrap" title="차트에 겹쳐 볼 항목 선택">오버레이 ▾</button>
           <div id="ovlMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px;z-index:1200;min-width:210px">
@@ -1236,7 +1237,10 @@ async function loadDashboard(){
   // 3) 바로가기
   const go=(t,ico,label,desc)=>`<div onclick="switchTab('${t}')" style="flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line)'">
     <div style="font-size:22px">${ico}</div><div style="font-weight:700;margin-top:4px">${label}</div><div style="color:var(--dim);font-size:12px;margin-top:2px">${desc}</div></div>`;
+  const nickCard=`<div onclick="askNick('지금 수도권 시장 국면과 매수 시그널이 강한 지역을 근거와 함께 알려줘.')" style="flex:1;min-width:150px;background:var(--accent-weak);border:1px solid var(--accent);border-radius:12px;padding:14px;cursor:pointer">
+    <div style="font-size:22px">🦊</div><div style="font-weight:700;margin-top:4px">Nick에게 물어보기</div><div style="color:var(--dim);font-size:12px;margin-top:2px">데이터 근거 AI 자문</div></div>`;
   const shortcutsH=_dashH('바로가기')+`<div style="display:flex;gap:10px;flex-wrap:wrap">
+    ${nickCard}
     ${go('report','🎯','AI 리포트','내 조건 맞춤 매수전략')}
     ${go('mymap','🗺️','내 시그널맵','즐겨찾기 지도로 보기')}
     ${go('all','🏢','매물 전체','경매·급매·청약·재건축')}
@@ -1656,7 +1660,7 @@ function renderQuicksale(){
       sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span></div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
+      <span>연식 ${m['연식']||'–'}</span></div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     regionOf:m=>m['지역'],
     color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
@@ -1750,7 +1754,7 @@ function renderAllListings(){
       sub:`${x['총액']?`<b>${_eok(x['총액'])}</b> · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
-        : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
+        : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
       return `<div class="kv"><span>유형 ${x['유형']}</span><span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">기회도 근거: ${x['기회도근거']}</div>`:''}<div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
@@ -2757,6 +2761,18 @@ async function openScoreboard(){
 // ===== 단지 deep-dive =====
 function naverBtn(cno){
   return cno ? ` <a class="btn" href="https://new.land.naver.com/complexes/${cno}" target="_blank" rel="noopener" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">🟢 네이버부동산</a>` : '';
+}
+// Nick 문맥 진입 — 버튼에서 챗봇을 열고 질문을 미리 채워 전송
+function askNick(q){
+  const p=document.getElementById('advPanel'), f=document.getElementById('advFab');
+  if(p){ p.style.display='flex'; } if(f){ f.style.display='none'; }
+  if(typeof advSuggest==='function') advSuggest(q);
+}
+function askNickRegion(){ if(typeof selected==='string'&&selected) askNick(`지금 ${selected} 시장 어때? 시그널·경기국면·백테스트 적중률 근거로 설명해줘.`); }
+function nickCxBtn(name, region){
+  if(!name||!region) return '';
+  const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
+  return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();askNick('${r} ${n} 지금 어때? 실거래·단지시그널·공시대비 근거로 알려줘.')">🦊 Nick에게</span>`;
 }
 function cxSigBtn(name, region){
   if(!name||!region) return '';

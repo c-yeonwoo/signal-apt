@@ -370,28 +370,75 @@ def policy_count() -> int:
     return n
 
 
+# 동의어·별칭 그룹 — 사용자 표현과 KB 용어의 간극을 메워 리콜↑ (임베딩 없이 시맨틱 근접)
+_POLICY_SYN = [
+    {"dsr", "총부채", "원리금", "대출한도", "한도", "스트레스dsr", "상환능력"},
+    {"ltv", "담보인정", "자기자본", "계약금", "대출비율"},
+    {"gtx", "광역급행", "지하철", "전철", "교통", "역세권", "노선"},
+    {"신도시", "택지", "공급", "분양", "사전청약", "본청약", "3기"},
+    {"재건축", "재개발", "정비사업", "안전진단", "재초환", "초과이익", "리모델링"},
+    {"규제", "규제지역", "조정대상", "투기과열", "완화", "해제"},
+    {"금리", "기준금리", "이자", "대출금리"},
+    {"청약", "가점", "특별공급", "특공", "생애최초"},
+]
+
+
+def _tok(s: str) -> set[str]:
+    """한국어 토큰 집합 — 단어(영문·숫자·한글 런) + 한글 2-gram. 부분일치·표기차 흡수."""
+    import re
+    s = (s or "").lower()
+    out: set[str] = set()
+    for w in re.findall(r"[a-z0-9]+|[가-힣]+", s):
+        if len(w) >= 2:
+            out.add(w)
+        if re.match(r"[가-힣]+", w) and len(w) >= 2:
+            for i in range(len(w) - 1):        # 한글 2-gram
+                out.add(w[i:i + 2])
+    return out
+
+
+def _expand(toks: set[str]) -> set[str]:
+    """동의어 그룹에 걸리면 그룹 전체를 쿼리에 추가."""
+    ex = set(toks)
+    for g in _POLICY_SYN:
+        if toks & g:
+            ex |= g
+    return ex
+
+
 def policy_search(query: str, region: str = "", limit: int = 5) -> list[dict]:
-    """키워드 스코어링 검색 — title(×3)·tags/region(×2)·body(×1). 쿼리 비면 최근순."""
+    """한국어 토큰화 + 동의어 확장 + BM25형 필드가중 검색. 쿼리 비면 최근순."""
     rows = policy_all(200)
     q = (query or "").strip()
     if not q and not region:
         return rows[:limit]
-    toks = [t for t in q.replace(",", " ").split() if len(t) >= 2]
-    scored = []
+    import math
+    qtoks = _expand(_tok(q))
+    if not qtoks and not region:
+        return rows[:limit]
+    # idf — 여러 문서에 흔한 토큰은 가중치↓
+    N = max(1, len(rows))
+    df: dict[str, int] = {}
+    doc_tok = []
     for r in rows:
-        s = 0
-        hay_title = (r["title"] or "")
-        hay_tag = (r["tags"] or "") + " " + (r["region"] or "") + " " + (r["category"] or "")
-        hay_body = (r["body"] or "")
-        for t in toks:
-            if t in hay_title:
-                s += 3
-            if t in hay_tag:
-                s += 2
-            if t in hay_body:
-                s += 1
+        title_t = _tok(r["title"])
+        meta_t = _tok((r["tags"] or "") + " " + (r["region"] or "") + " " + (r["category"] or ""))
+        body_t = _tok(r["body"])
+        allt = title_t | meta_t | body_t
+        doc_tok.append((title_t, meta_t, body_t))
+        for t in allt:
+            df[t] = df.get(t, 0) + 1
+    scored = []
+    for r, (title_t, meta_t, body_t) in zip(rows, doc_tok):
+        s = 0.0
+        for t in qtoks:
+            if t not in title_t and t not in meta_t and t not in body_t:
+                continue
+            idf = math.log(1 + N / (1 + df.get(t, 0)))
+            w = 3 if t in title_t else (2 if t in meta_t else 1)
+            s += w * idf
         if region and (region in (r["region"] or "") or (r["region"] or "") in region or not r["region"]):
-            s += 2
+            s += 2.0
         if s > 0:
             scored.append((s, r))
     scored.sort(key=lambda x: x[0], reverse=True)
