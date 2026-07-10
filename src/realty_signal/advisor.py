@@ -83,6 +83,28 @@ TOOLS = [
         }},
     },
     {
+        "name": "get_presale",
+        "description": "청약(분양) 단지 현황 — 접수중·예정, D-day, 지역 시그널·급지. region 지정 시 해당 지역. '청약 뭐 있어?' 류에 사용.",
+        "input_schema": {"type": "object", "properties": {
+            "region": {"type": "string", "description": "지역명(생략 시 전체, D-day 임박순)"},
+        }},
+    },
+    {
+        "name": "get_redev",
+        "description": "지역 재건축 잠재력 단지(연식·용적률·세대수·시세 기반 후보). region 필수. '○○ 재건축 어디 유망?' 류에 사용. 데이터 미준비 지역은 그 사실을 안내.",
+        "input_schema": {"type": "object", "properties": {
+            "region": {"type": "string", "description": "지역명(시군구)"},
+        }, "required": ["region"]},
+    },
+    {
+        "name": "get_listings",
+        "description": "실제 매물 — 급매(시세 이하 호가)·경매. region 으로 좁힘. kind: '급매'|'경매'|'전체'. '강남 급매 있어?' 류에 사용. 급매는 관리자 스캔 시점 기준.",
+        "input_schema": {"type": "object", "properties": {
+            "region": {"type": "string", "description": "지역명(선택)"},
+            "kind": {"type": "string", "enum": ["급매", "경매", "전체"], "description": "매물 종류(기본 급매)"},
+        }},
+    },
+    {
         "name": "get_policy",
         "description": "부동산 정책·규제·개발계획 지식베이스 검색(스트레스 DSR, 대출규제, 3기 신도시, GTX, 재건축 규제 등). "
                        "제도·개발계획 질문에 사용. 결과의 source·eff_date(시행/기준일)를 반드시 함께 인용하고, 정책은 변경될 수 있음을 밝힌다.",
