@@ -1259,12 +1259,14 @@ async function loadDashboard(){
   body.innerHTML=
     _dashCard(_dashH('내 예산 추천 지역')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px;border-left:3px solid var(--accent)')
     +'<div id="dashChangesWrap"></div>'
+    +'<div id="dashFeedWrap"></div>'
     +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
        ${_dashCard(regimeH)}${_dashCard(favH)}</div>`
     +_dashCard(_dashH('오늘의 기회 <span style="font-weight:400">· 기회도 상위</span>')+'<div id="dashOpp" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
     +_dashCard(shortcutsH);
   _loadDashBudget();
   _loadDashChanges();
+  _loadDashFeed();
   // 3) 오늘의 기회 (비동기)
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent('경매,급매'))).json();
     const items=(d.listings||[]).slice().sort((a,b)=>(b['기회도']??0)-(a['기회도']??0)).slice(0,5);
@@ -1315,6 +1317,30 @@ async function _loadDashChanges(){
     <span style="font-size:12px">${badge(c.from)} <span style="color:var(--dim)">→</span> ${badge(c.to)}</span>
     <span style="margin-left:auto;color:var(--dim);font-size:11px">${c.date||''} · 보기 →</span></div>`).join('');
   wrap.innerHTML=_dashCard(_dashH('내 관심지역 시그널 변동 <span style="font-weight:400">· 최근</span>')+rows, 'margin-bottom:14px');
+}
+// 내 관심 피드 — 관심 지역·단지의 활동(급매·청약·최근 실거래)
+async function _loadDashFeed(){
+  const wrap=document.getElementById('dashFeedWrap'); if(!wrap) return;
+  let d; try{ d=await (await fetch('/api/myfeed')).json(); }catch(e){ return; }
+  if(!d.ok || d.empty || !(d.items||[]).length){ wrap.innerHTML=''; return; }
+  const money=v=>v?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):'–';
+  const rows=d.items.map(it=>{
+    if(it.type==='region'){
+      const bits=[]; if(it['급매']) bits.push(`급매 ${it['급매']}건${it['급매갭']!=null?`(최대 ${it['급매갭']}%)`:''}`);
+      if(it['청약임박']) bits.push(`청약 임박 ${it['청약임박']}건${it['청약단지']?`·${it['청약단지']}`:''}`);
+      const meta=bits.length?bits.join(' · '):'새 매물 없음';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="focusListings('${it.region}')">
+        <b style="min-width:74px">${it.region}</b>${it.signal?badge(it.signal):''}
+        <span style="margin-left:auto;color:var(--dim);font-size:12px">${meta}</span>
+        <span style="color:var(--accent);font-size:12px;white-space:nowrap">매물 →</span></div>`;
+    }
+    const cs=it['단지등급']?`${badge(it['단지등급'])} ${it['단지점수']??''}`:'';
+    const meta=it['데이터없음']?'실거래 준비 중':`${it['최근평단가']?money(it['최근평단가'])+'/평':''}${it['추세pct']!=null?` · 2년 ${it['추세pct']>0?'+':''}${it['추세pct']}%`:''}`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openComplex('${(it.name||'').replace(/'/g,'')}','${(it.region||'').replace(/'/g,'')}')">
+      <b>${it.name}</b><span style="color:var(--dim);font-size:11px">${it.region}</span> ${cs}
+      <span style="margin-left:auto;color:var(--dim);font-size:12px">${meta}</span></div>`;
+  }).join('');
+  wrap.innerHTML=_dashCard(_dashH('내 관심 피드 <span style="font-weight:400">· 지역·단지 소식</span>')+rows, 'margin-bottom:14px');
 }
 // ===== 갈아타기 전략 (현 자산 매도 → 상급지 착지) =====
 let _tuData=null;

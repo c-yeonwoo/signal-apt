@@ -340,6 +340,50 @@ def alerts_seen(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/myfeed")
+def myfeed(request: Request):
+    """내 관심 피드 — 즐겨찾기 지역·단지의 활동(급매·청약·최근 실거래) 개인화 집계. 로그인 필요."""
+    uid = _uid(request)
+    if not uid:
+        return {"ok": False, "reason": "login_required"}
+    favs = db.fav_list(uid)
+    regions = [f["key"] for f in favs if f["kind"] == "region"]
+    complexes = [f["key"] for f in favs if f["kind"] == "complex"]   # "region|name"
+    if not regions and not complexes:
+        return {"ok": True, "empty": True, "items": []}
+    sig = _signal_map()
+    # 급매(지역별)
+    qs = []
+    try:
+        qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
+    except Exception:  # noqa: BLE001
+        qs = []
+    # 청약(지역별, 임박)
+    ps = []
+    try:
+        ps = [d for d in _presale() if (d.get("Dday") is not None and d["Dday"] >= 0 and d["Dday"] <= 45)]
+    except Exception:  # noqa: BLE001
+        ps = []
+    items = []
+    for r in regions:
+        rq = [m for m in qs if r in (m.get("지역") or "")]
+        gap = min([m.get("급매갭") for m in rq if m.get("급매갭") is not None], default=None)
+        rp = [d for d in ps if r in (d.get("지역") or "")]
+        items.append({"type": "region", "region": r, "signal": sig.get(r, ""),
+                      "급매": len(rq), "급매갭": gap, "청약임박": len(rp),
+                      "청약단지": (rp[0].get("단지명") if rp else None)})
+    for key in complexes:
+        region, _, name = key.partition("|")
+        code = _code_of(region)
+        d = db.kv_get(f"complex:{code[:5]}:{name}", max_age=30 * 86400) if code[:5].isdigit() else None
+        cs = (d or {}).get("단지시그널") or {}
+        items.append({"type": "complex", "region": region, "name": name,
+                      "최근평단가": (d or {}).get("최근평단가"), "추세pct": (d or {}).get("추세pct"),
+                      "단지등급": cs.get("등급"), "단지점수": cs.get("점수"),
+                      "데이터없음": d is None})
+    return {"ok": True, "empty": False, "items": items, "기준일": str(_kb().last_date.date())}
+
+
 WEB_DIR = Path(__file__).parent / "web"
 _METRIC_LABEL = {
     "jeonse_supply": "전세수급지수",
