@@ -1248,11 +1248,13 @@ async function loadDashboard(){
   // 레이아웃 — 예산 맞춤(aha) 최상단, 기회 카드는 자리표시 후 비동기 채움
   body.innerHTML=
     _dashCard(_dashH('💰 내 예산 맞춤 · 지금 살만한 곳')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px;border:1px solid var(--accent)')
+    +'<div id="dashChangesWrap"></div>'
     +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
        ${_dashCard(regimeH)}${_dashCard(favH)}</div>`
     +_dashCard(_dashH('오늘의 기회 <span style="font-weight:400">· 기회도 상위</span>')+'<div id="dashOpp" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
     +_dashCard(shortcutsH);
   _loadDashBudget();
+  _loadDashChanges();
   // 3) 오늘의 기회 (비동기)
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent('경매,급매'))).json();
     const items=(d.listings||[]).slice().sort((a,b)=>(b['기회도']??0)-(a['기회도']??0)).slice(0,5);
@@ -1291,6 +1293,18 @@ async function _loadDashBudget(){
     }
     el.innerHTML=h;
   }catch(e){ el.innerHTML='<span style="color:var(--dim)">추천을 불러오지 못했습니다.</span>'; }
+}
+// 이번 주 내 관심지역 시그널 변동(리텐션 루프) — 변동 있을 때만 노출
+async function _loadDashChanges(){
+  const wrap=document.getElementById('dashChangesWrap'); if(!wrap) return;
+  let d; try{ d=await (await fetch('/api/alerts')).json(); }catch(e){ return; }
+  const ch=(d.changes||[]).slice(0,5);
+  if(!ch.length){ wrap.innerHTML=''; return; }
+  const rows=ch.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('signal');selectRegion('${c.region}')">
+    <b style="min-width:74px">${c.region}</b>
+    <span style="font-size:12px">${badge(c.from)} <span style="color:var(--dim)">→</span> ${badge(c.to)}</span>
+    <span style="margin-left:auto;color:var(--dim);font-size:11px">${c.date||''} · 보기 →</span></div>`).join('');
+  wrap.innerHTML=_dashCard(_dashH('📣 내 관심지역 시그널 변동 <span style="font-weight:400">· 최근</span>')+rows, 'margin-bottom:14px');
 }
 // ===== 갈아타기 전략 (현 자산 매도 → 상급지 착지) =====
 let _tuData=null;
