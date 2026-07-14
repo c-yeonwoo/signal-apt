@@ -2658,7 +2658,7 @@ function reasonGraphic(region, sig){
 }
 function drawChart(region, m, sig){
   const colors = {jeonse_supply:"#0284c7", buyer_superiority:"#7c3aed", buyer_demand:"#db2777",
-                  sale_change:"#d97706", jeonse_change:"#059669", price_index:"#f1f5f9"};
+                  sale_change:"#d97706", jeonse_change:"#059669", price_index:"#1e293b"};
   const series = [];
   const mk = (k, axis, extra={}) => { if(!m[k]) return;
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
@@ -2671,7 +2671,7 @@ function drawChart(region, m, sig){
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#7c3aed'}}]}});
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#16a34a'}}]}});
-  mk("price_index", 0, { lineStyle:{width:2.4, color:'#f1f5f9'}, z:3 });  // 누적 매매가격지수(실제 가격)
+  mk("price_index", 0, { lineStyle:{width:2.4, color:'#1e293b'}, z:3 });  // 누적 매매가격지수(실제 가격) — 밝은 배경 대비
   const mc = window._macro;
   if(mc) series.push({ name:'주택구매력', type:'line', yAxisIndex:0, showSymbol:false, z:0,
     lineStyle:{width:1.2, type:'dashed', color:'#94a3b8'}, itemStyle:{color:'#94a3b8'},
