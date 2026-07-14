@@ -1945,6 +1945,22 @@ def agents_nearby(region: str, name: str):
 
 
 _NBHD_CATS = [("SW8", "지하철역"), ("SC4", "학교"), ("MT1", "대형마트"), ("HP8", "병원")]
+# 주요 업무지구 (lat, lng) — 통근시간 기준점
+_JOB_HUBS = [("강남", 37.4979, 127.0276), ("여의도", 37.5219, 126.9245), ("광화문", 37.5716, 126.9769)]
+
+
+def _nbhd_commute(lat: float, lng: float) -> dict:
+    """지역 중심 → 주요 업무지구 대중교통 소요(분). ODsay 키 없거나 실패 항목은 생략."""
+    from realty_signal.ingest import locality
+    out = {}
+    for name, jlat, jlng in _JOB_HUBS:
+        try:
+            r = locality.transit_between(lng, lat, jlng, jlat)   # sx=경도, sy=위도
+            if r and r.get("min"):
+                out[name] = {"min": r["min"], "transfer": r.get("transfer")}
+        except Exception:  # noqa: BLE001
+            continue
+    return out
 
 
 def _nbhd_infra(lat: float, lng: float, key: str, radius: int = 1500) -> dict:
@@ -1998,18 +2014,25 @@ def neighborhood(region: str):
     dev = db.policy_search(region, region=region, limit=3)
     dev = [{"title": d["title"], "eff_date": d["eff_date"]} for d in dev
            if d.get("category") in ("개발계획", "정비사업")]
+    c = _region_centroid(region, _code_of(region))
     # 생활인프라(카카오, 30일 캐시)
-    infra = None
     ck = f"nbhd_infra:{region}"
     infra = db.kv_get(ck, max_age=30 * 86400)
     if infra is None:
         config.load_env()
         kkey = config.kakao_key()
-        c = _region_centroid(region, _code_of(region))
         if kkey and c:
             infra = _nbhd_infra(c[0], c[1], kkey)
             if infra:
                 db.kv_set(ck, infra)
+    # 업무지구 통근(ODsay, 30일 캐시)
+    cmk = f"nbhd_commute:{region}"
+    commute = db.kv_get(cmk, max_age=30 * 86400)
+    if commute is None and c:
+        config.load_env()
+        commute = _nbhd_commute(c[0], c[1])
+        if commute:
+            db.kv_set(cmk, commute)
     return {
         "ok": True, "region": region, "시그널": sigrow.get("signal"),
         "급지": sigrow.get("급지"), "해설": sigrow.get("해설"), "근거": sigrow.get("근거"),
@@ -2023,6 +2046,7 @@ def neighborhood(region: str):
         "미래가치": {"재건축후보수": redev_n, "개발계획": dev},
         "매물": {"급매": _qs_count(), "청약": ps_cnt},
         "생활인프라": infra or {}, "인프라기준": "구 중심 반경 1.5km · 카카오 로컬(참고용)",
+        "통근": commute or {}, "통근기준": "구 중심 → 업무지구 대중교통(ODsay·참고용)",
     }
 
 
