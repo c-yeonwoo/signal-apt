@@ -2145,7 +2145,7 @@ def _nbhd_infra(lat: float, lng: float, key: str, radius: int = 1500) -> dict:
 
 _NBHD_METRIC_KEYS = (
     "시그널", "전세수급", "매수우위지수", "매매모멘텀", "평단가", "저평가도",
-    "공급압력", "급매", "청약", "국면",
+    "공급압력", "급매", "청약", "국면", "거래량비",
 )
 _SIG_RANK = {"SELL_RISK": 0, "NEUTRAL": 1, "WATCH": 2, "BUY": 3, "STRONG_BUY": 4}
 
@@ -2153,6 +2153,7 @@ _SIG_RANK = {"SELL_RISK": 0, "NEUTRAL": 1, "WATCH": 2, "BUY": 3, "STRONG_BUY": 4
 def _nbhd_metrics(payload: dict) -> dict:
     """주간 diff용 핵심 지표만 추출."""
     m = payload.get("매물") or {}
+    vol = payload.get("거래량") or {}
     return {
         "시그널": payload.get("시그널"),
         "전세수급": payload.get("전세수급"),
@@ -2165,6 +2166,7 @@ def _nbhd_metrics(payload: dict) -> dict:
         "청약": m.get("청약"),
         "국면": (payload.get("국면") or {}).get("phase"),
         "급지": payload.get("급지"),
+        "거래량비": vol.get("거래량비"),
     }
 
 
@@ -2249,6 +2251,8 @@ def neighborhood(request: Request, region: str):
             db.kv_set(cmk, commute)
     asof = str(_kb().last_date.date())
     week = _nbhd_week()
+    from realty_signal import personal_layer as pl
+    vol = pl.volume_summary(region)
     out = {
         "ok": True, "region": region, "시그널": sigrow.get("signal"),
         "급지": sigrow.get("급지"), "해설": sigrow.get("해설"), "근거": sigrow.get("근거"),
@@ -2261,13 +2265,21 @@ def neighborhood(request: Request, region: str):
         "규제지역": _regulation_of(region), "규제기준": _REGULATION_ASOF,
         "미래가치": {"재건축후보수": redev_n, "개발계획": dev},
         "매물": {"급매": _qs_count(), "청약": ps_cnt},
+        "거래량": vol,
+        "거시": pl.macro_latest(),
+        "입지상세": pl.locality_bits(lr),
+        "외부확인": pl.ext_links(region),
+        "임장체크항목": pl.IMJANG_CHECKS,
         "생활인프라": infra or {}, "인프라기준": "구 중심 반경 1.5km · 카카오 로컬(참고용)",
         "통근": commute or {}, "통근기준": "구 중심 → 업무지구 대중교통(ODsay·참고용)",
         "기준일": asof, "week": week,
     }
-    # 로그인 시: 이번 주 스냅샷 저장 + 지난 스냅샷 diff
+    # 로그인 시: 이번 주 스냅샷 저장 + 지난 스냅샷 diff + 관심단지 공시 샘플·체크리스트
     uid = _uid(request)
     if uid:
+        out["공시샘플"] = pl.fav_gongsi_samples(uid, region)
+        ck = db.kv_get(f"checklist:{uid}:{region}", max_age=365 * 86400) or {}
+        out["임장체크"] = ck if isinstance(ck, dict) else {}
         metrics = _nbhd_metrics(out)
         metrics["기준일"] = asof
         db.nbhd_snap_save(uid, region, week, metrics)
@@ -2288,22 +2300,77 @@ def neighborhood_compare(request: Request, a: str, b: str):
     db_ = neighborhood(request, b)
     if not da.get("ok") or not db_.get("ok"):
         return {"ok": False, "reason": "no_region", "a": da, "b": db_}
+    keys = ["시그널", "급지", "평단가", "저평가도", "입지점수", "전세수급", "매수우위지수",
+            "매매모멘텀", "공급압력", "급매", "청약", "국면", "거래량비"]
     def _val(d, k):
         if k in ("급매", "청약"):
             return (d.get("매물") or {}).get(k)
         if k == "국면":
             return (d.get("국면") or {}).get("phase")
+        if k == "거래량비":
+            return (d.get("거래량") or {}).get("거래량비")
         return d.get(k)
-    keys = ["시그널", "급지", "평단가", "저평가도", "입지점수", "전세수급", "매수우위지수",
-            "매매모멘텀", "공급압력", "급매", "청약", "국면"]
     rows = [{"key": k, "a": _val(da, k), "b": _val(db_, k)} for k in keys]
     return {"ok": True, "a": {"region": da["region"], "시그널": da.get("시그널")},
             "b": {"region": db_["region"], "시그널": db_.get("시그널")},
             "rows": rows, "기준일": da.get("기준일")}
 
 
-@app.get("/api/region-centroids")
-def region_centroids(regions: str):
+@app.post("/api/checklist/{region}")
+def save_checklist(request: Request, region: str, data: dict = Body(...)):
+    """임장 체크리스트 저장(지역 단위). {checks: {id: bool}}."""
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    checks = data.get("checks") if isinstance(data.get("checks"), dict) else {}
+    from realty_signal import personal_layer as pl
+    allowed = {c["id"] for c in pl.IMJANG_CHECKS}
+    clean = {k: bool(v) for k, v in checks.items() if k in allowed}
+    db.kv_set(f"checklist:{uid}:{region}", clean)
+    return {"ok": True, "checks": clean}
+
+
+@app.get("/api/loan-scenarios")
+def loan_scenarios(request: Request, capital: float | None = None, income: float | None = None,
+                   rate: float = 0.04, years: int = 30, price: float | None = None):
+    """LTV 60/70/80 시나리오. capital 생략 시 프로필 가용자본."""
+    from realty_signal import personal_layer as pl
+    uid = _uid(request)
+    if capital is None and uid:
+        p = db.profile_get(uid) or {}
+        capital = float(p.get("가용자본") or 0) or None
+        if income is None and p.get("연소득"):
+            income = float(p["연소득"])
+    if not capital or capital <= 0:
+        return {"ok": False, "reason": "need_capital"}
+    # macro 금리 있으면 기본값으로
+    if rate == 0.04:
+        m = pl.macro_latest()
+        if m.get("대출금리"):
+            try:
+                rate = float(m["대출금리"]) / 100.0
+            except (TypeError, ValueError):
+                pass
+    rows = pl.loan_scenarios(capital, income, rate, years, _max_purchase)
+    out = {"ok": True, "capital": capital, "income": income, "rate": rate, "years": years, "scenarios": rows}
+    if price:
+        out["목표가"] = price
+        out["목표대비"] = [{"ltv": r["ltv"], "여유": round(r["매수가능가"] - price),
+                         "가능": r["매수가능가"] >= price} for r in rows]
+    return out
+
+
+@app.get("/api/complex/{region}/{name}/building")
+def complex_building(region: str, name: str):
+    """단지 건축물대장(용적률·세대·연식) — 펼칠 때 온디맨드."""
+    from realty_signal import personal_layer as pl
+    config.load_env()
+    pk = config.public_data_key()
+    code = _code_of(region)
+    b = pl.building_for_complex(region, name, code, pk or "")
+    if not b:
+        return {"ok": False, "reason": "not_found"}
+    return {"ok": True, "building": b}
     """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).
 
     핀 폴백용: 단지 지오코딩 실패 단지를 지역 중심에 표시해 항상 클릭/포커스 가능.
