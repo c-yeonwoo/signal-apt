@@ -41,6 +41,10 @@ CREATE INDEX IF NOT EXISTS ix_news_ts ON news(ts);
 CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT, category TEXT, region TEXT, tags TEXT, source TEXT, eff_date TEXT, body TEXT, ts INTEGER);
 CREATE INDEX IF NOT EXISTS ix_policy_ts ON policy(ts);
+CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid INTEGER, name TEXT, props TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS ix_events_name_ts ON events(name, ts);
+CREATE INDEX IF NOT EXISTS ix_events_uid_ts ON events(uid, ts);
 """
 
 _migrated = [False]
@@ -292,6 +296,55 @@ def all_fav_regions() -> list[str]:
     rows = c.execute("SELECT DISTINCT key FROM favorites WHERE kind='region'").fetchall()
     c.close()
     return [k for (k,) in rows if k]
+
+
+def users_with_region_favs() -> list[dict]:
+    """관심지역(kind=region)이 1개 이상인 유저 목록. 주간 다이제스트용."""
+    c = conn()
+    rows = c.execute(
+        "SELECT u.id, u.email, GROUP_CONCAT(f.key, '|') "
+        "FROM users u JOIN favorites f ON f.uid=u.id AND f.kind='region' "
+        "GROUP BY u.id, u.email"
+    ).fetchall()
+    c.close()
+    out = []
+    for uid, email, keys in rows:
+        regions = [k for k in (keys or "").split("|") if k]
+        if regions:
+            out.append({"id": uid, "email": email, "regions": regions})
+    return out
+
+
+# ---------- funnel events ----------
+_ALLOWED_EVENTS = frozenset({
+    "signup", "profile_complete", "fav_add", "report_open", "nick_ask", "nbhd_open",
+})
+
+
+def event_log(uid: int | None, name: str, props: dict | None = None) -> bool:
+    """퍼널 이벤트 1건 기록. 허용 이름만 저장. uid 없으면 스킵."""
+    if not uid or name not in _ALLOWED_EVENTS:
+        return False
+    c = conn()
+    c.execute(
+        "INSERT INTO events(uid,name,props,ts) VALUES(?,?,?,?)",
+        (uid, name, json.dumps(props or {}, ensure_ascii=False), int(time.time())),
+    )
+    c.commit()
+    c.close()
+    return True
+
+
+def event_counts(days: int = 30) -> list[dict]:
+    """최근 N일 이벤트명별 건수 (관리·검증용)."""
+    since = int(time.time()) - max(1, days) * 86400
+    c = conn()
+    rows = c.execute(
+        "SELECT name, COUNT(*) FROM events WHERE ts>=? GROUP BY name ORDER BY COUNT(*) DESC",
+        (since,),
+    ).fetchall()
+    c.close()
+    return [{"name": n, "count": cnt} for n, cnt in rows]
 
 
 # ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
