@@ -419,10 +419,17 @@ def myfeed(request: Request):
         region, _, name = key.partition("|")
         code = _code_of(region)
         d = db.kv_get(f"complex:{code[:5]}:{name}", max_age=30 * 86400) if code[:5].isdigit() else None
+        metrics = _main_flat_metrics(d or {})
+        # 캐시에 단지시그널이 없어도 지역시그널+실거래로 즉시 산출(공시비율은 myfeed에서 생략 — 느림)
         cs = (d or {}).get("단지시그널") or {}
+        if d and not cs.get("등급") and (d.get("총거래") or d.get("매매추이")):
+            cs = _complex_signal(region, d, sig.get(region, ""), None)
         items.append({"type": "complex", "region": region, "name": name,
                       "최근평단가": (d or {}).get("최근평단가"), "추세pct": (d or {}).get("추세pct"),
                       "단지등급": cs.get("등급"), "단지점수": cs.get("점수"),
+                      "전세가율": metrics.get("전세가율"), "갭": metrics.get("갭"),
+                      "주력평형": metrics.get("주력평형"), "spark": metrics.get("spark") or [],
+                      "근거부족": cs.get("근거부족") or [],
                       "데이터없음": d is None})
     return {"ok": True, "empty": False, "items": items, "기준일": str(_kb().last_date.date())}
 
@@ -655,6 +662,12 @@ def _advisor_tool(name: str, args: dict) -> dict:
         keep = {k: d.get(k) for k in ("단지명", "최근평단가", "추세pct", "총거래", "기간",
                 "급지", "시그널", "단지시그널", "공시대비") if d.get(k) is not None}
         keep["평형별"] = (d.get("평형별") or [])[:6]
+        m = _main_flat_metrics(d)
+        keep["주력"] = {k: m[k] for k in ("주력평형", "전세가율", "갭", "최근매매", "최근전세") if m.get(k) is not None}
+        missing = [k for k in ("전세가율", "갭") if m.get(k) is None]
+        if missing:
+            keep["데이터없음필드"] = missing
+            keep["안내"] = "없는 수치(전세가율·갭 등)는 추정·지어내지 말 것. 지역 시그널(시그널)과 단지시그널은 별개."
         return keep
     if name == "get_backtest":
         bt = _backtest()
@@ -1679,10 +1692,26 @@ def _uv_map():
 _CX_SIG_GRADE = [(75, "STRONG_BUY"), (62, "BUY"), (50, "WATCH"), (40, "NEUTRAL"), (0, "SELL_RISK")]
 
 
+def _main_flat_metrics(data: dict) -> dict:
+    """주력 평형(매매건수 max)의 전세가율·갭 + 실거래 spark. 캐시/피드 공통 — 없는 필드는 None."""
+    plist = data.get("평형별") or []
+    main = max(plist, key=lambda p: p.get("매매건수", 0) or 0) if plist else {}
+    spark = [x.get("평단가") for x in (data.get("매매추이") or []) if x.get("평단가") is not None][-12:]
+    return {
+        "주력평형": main.get("평형"),
+        "전세가율": main.get("전세가율"),
+        "갭": main.get("갭"),
+        "최근매매": main.get("최근매매"),
+        "최근전세": main.get("최근전세"),
+        "spark": spark,
+    }
+
+
 def _complex_signal(region: str, data: dict, signal: str | None, gongsi_ratio: float | None = None) -> dict:
     """단지 시그널 — 사이클(권역)·지역시그널·단지지표·가격을 정규화 가중합(참고용, 백테스트 전).
 
-    가중치: 사이클 15% · 지역 35% · 단지(추세·전세가율·거래량) 30% · 가격(최근 vs 2년평균) 20%.
+    가중치(전세가율 있음): 사이클 15% · 지역 40% · 단지 25% · 가격 20%.
+    전세가율 없음: 단지 가중 축소(17%)·지역↑(48%) — 검증된 KB 지역시그널에 더 의존.
     """
     def clamp(v, lo=0.0, hi=100.0):
         return max(lo, min(hi, v))
@@ -1705,9 +1734,10 @@ def _complex_signal(region: str, data: dict, signal: str | None, gongsi_ratio: f
     if tr is not None:
         comp += clamp(tr * 1.2, -14, 14)          # 추세 영향 축소(백테스트 매수 56%)
     plist = data.get("평형별") or []
-    main = max(plist, key=lambda p: p.get("매매건수", 0)) if plist else {}
-    if main.get("전세가율"):
-        comp += (main["전세가율"] - 60) * 0.5       # 전세가율(하방지지)에 더 의존
+    main = max(plist, key=lambda p: p.get("매매건수", 0) or 0) if plist else {}
+    has_jeonse = main.get("전세가율") is not None
+    if has_jeonse:
+        comp += (main["전세가율"] - 60) * 0.55     # 전세가율(하방지지)에 더 의존
     if data.get("총거래"):
         comp += min(15, data["총거래"] / 12)
     comp = clamp(comp)
@@ -1720,11 +1750,16 @@ def _complex_signal(region: str, data: dict, signal: str | None, gongsi_ratio: f
         if len(ts) >= 3 and sum(ts):
             avg = sum(ts) / len(ts)
             price = clamp(50 + (avg - ts[-1]) / avg * 100 * 1.5)
-    # 가중치: 검증된 지역·사이클을 더 신뢰(지역 40%), 미검증 단지추세는 낮게(단지 25%)
-    total = round(cyc * 0.15 + reg * 0.40 + comp * 0.25 + price * 0.20)
+    # 전세 없으면 미검증 단지축 비중↓ — 지역 KB 시그널을 더 신뢰
+    w_reg, w_comp = (0.40, 0.25) if has_jeonse else (0.48, 0.17)
+    total = round(cyc * 0.15 + reg * w_reg + comp * w_comp + price * 0.20)
     grade = next(g for th, g in _CX_SIG_GRADE if total >= th)
-    return {"등급": grade, "점수": total,
-            "분해": {"사이클": round(cyc), "지역": round(reg), "단지": round(comp), "가격": round(price)}}
+    out = {"등급": grade, "점수": total,
+           "분해": {"사이클": round(cyc), "지역": round(reg), "단지": round(comp), "가격": round(price)}}
+    if not has_jeonse:
+        out["근거부족"] = ["전세가율"]
+        out["주의"] = "전세가율 없음 — 단지 가중 축소, 지역시그널 비중↑"
+    return out
 
 
 def _gongsi_for(region: str, name: str) -> dict | None:
