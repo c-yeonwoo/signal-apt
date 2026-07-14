@@ -417,6 +417,17 @@
 
 <!-- 경매 탭 -->
 <div id="view-auction" style="display:none">
+  <div class="sec" style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px">경매 매물 빠르게 넣기</div>
+    <p style="color:var(--dim);font-size:12px;margin:0 0 10px;line-height:1.55">법원 경매·온비드 물건 상세 페이지에서 북마클릿을 누르면 본문 텍스트가 클립보드에 복사되고 Signal APT 붙여넣기 창이 열립니다. 상업 경매사이트 자동 크롤은 하지 않습니다.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <a id="aucBookmarklet" href="#" class="btn primary" style="padding:6px 12px;text-decoration:none;cursor:grab" title="이 링크를 북마크바로 드래그">📌 경매 긁어오기</a>
+      <span class="btn" onclick="openPaste()">📋 붙여넣기</span>
+      <span class="btn" onclick="openAdd()">+ 직접 입력</span>
+      <span class="btn" onclick="document.getElementById('csv').click()">CSV</span>
+    </div>
+    <p style="color:var(--dim);font-size:11px;margin:8px 0 0">북마크바에 드래그 → 법원경매 물건 페이지에서 클릭 → 붙여넣기 확인 후 추가</p>
+  </div>
   <details class="sec">
     <summary>BUY+ 시그널 지역 <span style="font-size:12px;font-weight:400;color:var(--dim)">이 지역 매물을 탐색하세요</span></summary>
     <div class="hot" id="hotRegions" style="margin-top:8px"></div>
@@ -726,7 +737,9 @@
         <span class="btn" onclick="openAdd()">+ 직접 입력</span>
         <span class="btn" onclick="document.getElementById('csv').click()">CSV 임포트</span>
         <span class="btn" id="mktBtn" onclick="refreshMarket()">최근 실거래가 갱신</span>
-      </div></div>
+      </div>
+      <p style="color:var(--dim);font-size:11px;margin:8px 0 0">경매 탭의 <b>경매 긁어오기</b> 북마클릿으로 법원 물건 페이지 → 붙여넣기 자동화.</p>
+    </div>
     <div><div style="font-size:12px;font-weight:700;margin-bottom:6px">급매 · 재건축 · 검증</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <span class="btn" id="qsBtn" onclick="refreshQuicksale()">BUY+ 급매 스캔</span>
@@ -1255,6 +1268,7 @@ function switchTab(t){
 const _ROUTES=[..._ALLVIEWS, 'market','listings','find','home'];
 function routeFromHash(){
   const h=decodeURIComponent(location.hash.slice(1));
+  if(h==='auction-paste'){ switchTab('auction'); openPasteFromClipboard(); return true; }
   if(_ROUTES.includes(h)){ switchTab(h); return true; }
   return false;
 }
@@ -1383,10 +1397,19 @@ async function _loadDashFeed(){
         <span style="color:var(--accent);font-size:12px;white-space:nowrap">매물 →</span></div>`;
     }
     const cs=it['단지등급']?`${badge(it['단지등급'])} ${it['단지점수']??''}`:'';
-    const meta=it['데이터없음']?'실거래 준비 중':`${it['최근평단가']?money(it['최근평단가'])+'/평':''}${it['추세pct']!=null?` · 2년 ${it['추세pct']>0?'+':''}${it['추세pct']}%`:''}`;
+    const bits=[];
+    if(it['데이터없음']) bits.push('실거래 준비 중');
+    else {
+      if(it['최근평단가']) bits.push(money(it['최근평단가'])+'/평');
+      if(it['전세가율']!=null) bits.push(`전세가율 ${it['전세가율']}%`);
+      else if((it['근거부족']||[]).includes('전세가율')) bits.push('전세가율 없음');
+      if(it['갭']!=null) bits.push('갭 '+money(it['갭']));
+      if(it['추세pct']!=null) bits.push(`2년 ${it['추세pct']>0?'+':''}${it['추세pct']}%`);
+    }
+    const spark=(it.spark&&it.spark.length>=2)?`<span style="margin-left:6px;opacity:.85">${_sparkMini(it.spark)}</span>`:'';
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openComplex('${(it.name||'').replace(/'/g,'')}','${(it.region||'').replace(/'/g,'')}')">
       <b>${it.name}</b><span style="color:var(--dim);font-size:11px">${it.region}</span> ${cs}
-      <span style="margin-left:auto;color:var(--dim);font-size:12px">${meta}</span></div>`;
+      <span style="margin-left:auto;color:var(--dim);font-size:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end">${bits.join(' · ')}${spark}</span></div>`;
   }).join('');
   wrap.innerHTML=_dashCard(_dashH('내 관심 피드 <span style="font-weight:400">· 지역·단지 소식</span>')+rows, 'margin-bottom:14px');
 }
@@ -3057,6 +3080,12 @@ function _spark(vals){
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:66px;background:var(--bg);border:1px solid var(--line);border-radius:8px">
     <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
 }
+function _sparkMini(vals){
+  if(!vals||vals.length<2) return '';
+  const w=72,h=18,pad=1, mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
+  const pts=vals.map((v,i)=>`${(pad+i*(w-2*pad)/(vals.length-1)).toFixed(1)},${(h-pad-(v-mn)/rng*(h-2*pad)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="72" height="18" style="vertical-align:middle;flex-shrink:0"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>`;
+}
 // ===== 단지 통합 검색 =====
 let _cxFindT;
 function openComplexFind(){
@@ -3249,11 +3278,16 @@ function cmpAddCol(name,region){
 }
 // ===== 관심목록 모달 (관심지역/관심단지 분리) =====
 function openFavList(){ renderFavList(); document.getElementById('favListDlg').showModal(); }
-function renderFavList(){
+async function renderFavList(){
   const body=document.getElementById('favListBody'); if(!body) return;
   const regions=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
   const complexes=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8));
   const sm={}; (allSignals||[]).forEach(s=>sm[s.region]=s);
+  const cxMeta={};
+  try{ const d=await (await fetch('/api/myfeed')).json();
+    (d.items||[]).filter(i=>i.type==='complex').forEach(i=>{ cxMeta[i.region+'|'+i.name]=i; });
+  }catch(e){}
+  const money=v=>v?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):'–';
   const rSec=`<div style="font-size:13px;font-weight:700;margin:2px 0 6px">📍 관심지역 <span style="color:var(--dim);font-weight:400">${regions.length}</span></div>`
     + (regions.length? regions.map(r=>{const s=sm[r]||{};
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)">
@@ -3262,9 +3296,16 @@ function renderFavList(){
       : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 시그널 목록에서 ☆로 추가하세요.</div>');
   const cSec=`<div style="font-size:13px;font-weight:700;margin:18px 0 6px">🏢 관심단지 <span style="color:var(--dim);font-weight:400">${complexes.length}</span></div>`
     + (complexes.length? complexes.map(k=>{const i=k.indexOf('|'), reg=k.slice(0,i), nm=k.slice(i+1), nq=nm.replace(/['"\\]/g,''), kq=k.replace(/['"\\]/g,'');
+        const m=cxMeta[k]||{};
+        const bits=[];
+        if(m['단지등급']) bits.push(badge(m['단지등급']));
+        if(m['전세가율']!=null) bits.push(`전세 ${m['전세가율']}%`);
+        if(m['갭']!=null) bits.push('갭 '+money(m['갭']));
+        if(m['최근평단가']) bits.push(money(m['최근평단가'])+'/평');
+        const meta=bits.length?`<span style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:4px;flex-wrap:wrap">${bits.join(' · ')}${(m.spark&&m.spark.length>=2)?_sparkMini(m.spark):''}</span>`:'';
         return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)">
-          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${nm}</b> <span style="font-size:11px;color:var(--dim)">${reg}</span></span>
-          <span style="display:flex;gap:9px;white-space:nowrap">
+          <span style="min-width:0;overflow:hidden"><b>${nm}</b> <span style="font-size:11px;color:var(--dim)">${reg}</span><div style="margin-top:3px">${meta}</div></span>
+          <span style="display:flex;gap:9px;white-space:nowrap;flex-shrink:0">
             <span onclick="addToCompare('${nq}','${reg}')" style="cursor:pointer;color:var(--accent);font-size:12px">＋비교</span>
             <span onclick="document.getElementById('favListDlg').close();openComplex('${nq}','${reg}')" style="cursor:pointer;font-size:12px">상세</span>
             <span onclick="favRemove('complex','${kq}','${nq}')" style="cursor:pointer;color:#dc2626;font-size:12px">✕</span></span></div>`;}).join('')
@@ -3288,11 +3329,14 @@ async function toggleCxFav(){
 function _cxSigBanner(cs){
   const p=cs['분해']||{};
   const bar=(lab,v)=>`<span style="font-size:11px;color:var(--dim)">${lab} <b style="color:var(--txt)">${v??'–'}</b></span>`;
+  const note=cs['주의']
+    ? `<span style="flex-basis:100%;font-size:10px;color:#b45309">${cs['주의']}</span>`
+    : `<span style="flex-basis:100%;font-size:10px;color:var(--dim)">사이클15%·지역40%·단지25%·가격20% 종합 · 참고용 — 전세가율 없으면 단지↓·지역↑. 지역 KB 시그널과 별개.</span>`;
   return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--accent-weak);border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin-bottom:12px">
     <span style="font-size:12px;color:var(--dim)">단지 시그널</span>
     ${badge(cs['등급'])} <b style="font-size:15px">${cs['점수']}</b>
     <span style="margin-left:auto;display:flex;gap:12px">${bar('사이클',p['사이클'])}${bar('지역',p['지역'])}${bar('단지',p['단지'])}${bar('가격',p['가격'])}</span>
-    <span style="flex-basis:100%;font-size:10px;color:var(--dim)">사이클15%·지역40%·단지25%·가격20% 종합 · 참고용 — 백테스트상 단지 단기 가격추세는 예측력 약해(매수 56%) 검증된 지역·사이클 위주로 가중.</span>
+    ${note}
   </div>`;
 }
 async function openComplex(name, region){
@@ -3452,6 +3496,26 @@ async function openHistModal(){
 /* ---------- 경매 탭 ---------- */
 function openAdd(){ document.getElementById('addDlg').showModal(); }
 function openPaste(){ document.getElementById('pasteText').value=''; document.getElementById('pasteStatus').textContent=''; document.getElementById('pasteDlg').showModal(); }
+function openPasteFromClipboard(){
+  openPaste();
+  document.getElementById('pasteStatus').textContent='클립보드에서 읽는 중… (권한 허용 필요)';
+  if(!(navigator.clipboard&&navigator.clipboard.readText)){
+    document.getElementById('pasteStatus').textContent='클립보드 자동 읽기 불가 — Ctrl/Cmd+V로 붙여넣으세요';
+    return;
+  }
+  navigator.clipboard.readText().then(t=>{
+    const el=document.getElementById('pasteText');
+    if(t&&t.trim().length>20){ el.value=t.trim(); document.getElementById('pasteStatus').textContent='클립보드 내용을 채웠습니다 — 확인 후 분석'; }
+    else document.getElementById('pasteStatus').textContent='클립보드가 비었습니다 — Ctrl/Cmd+V';
+  }).catch(()=>{ document.getElementById('pasteStatus').textContent='클립보드 권한 거부 — Ctrl/Cmd+V로 붙여넣으세요'; });
+}
+function setupAuctionBookmarklet(){
+  const a=document.getElementById('aucBookmarklet'); if(!a) return;
+  const dest=location.origin+'/#auction-paste';
+  // 북마클릿: 현재 페이지 본문 → 클립보드 → Signal APT 붙여넣기 탭
+  a.href="javascript:void((async function(){var t=(document.body&&document.body.innerText||'').replace(/\\n{3,}/g,'\\n\\n').slice(0,15000);try{await navigator.clipboard.writeText(t);}catch(e){}window.open('"+dest+"','_blank');})())";
+  a.onclick=function(e){ e.preventDefault(); toast('이 버튼을 북마크 바로 드래그하세요'); };
+}
 async function parseAuctionPaste(){
   const text=document.getElementById('pasteText').value.trim(), st=document.getElementById('pasteStatus');
   if(text.length<10){ st.textContent='물건 정보를 붙여넣어 주세요'; return; }
@@ -3883,6 +3947,13 @@ async function _loadMyCxSigs(){
     try{ const d=await (await fetch(`/api/complex/${encodeURIComponent(pt.region)}/${encodeURIComponent(pt.name)}`)).json();
       if(d && d['단지시그널']){ pt.cxsig=d['단지시그널']; pt.color=_SIG_COLOR[d['단지시그널']['등급']]||pt.color;
         if(_myMarkers[i]) _myMarkers[i].setIcon(_pinIcon(pt.color, _mySel.includes(i))); }
+      if(d){
+        const plist=d['평형별']||[];
+        const main=plist.length?plist.reduce((a,b)=>(a['매매건수']||0)>=(b['매매건수']||0)?a:b):{};
+        pt.전세가율=main['전세가율']; pt.갭=main['갭'];
+        pt.spark=(d['매매추이']||[]).map(x=>x['평단가']).filter(v=>v!=null).slice(-12);
+        pt.최근평단가=d['최근평단가'];
+      }
     }catch(e){}
   }));
   renderMmSummary();
@@ -3933,8 +4004,14 @@ function myPinClick(i){
   const nm=pt.name.replace(/'/g,'');
   if(pt.kind==='complex' || pt.kind==='search'){
     if(pt.cxsig){ const cs=pt.cxsig, q=cs['분해']||{};
-      info+=`<div style="margin-top:7px;font-size:12px">단지 시그널 ${badge(cs['등급'])} <b>${cs['점수']}</b> <span style="color:var(--dim);font-size:10px">사이클${q['사이클']}·지역${q['지역']}·단지${q['단지']}·가격${q['가격']} · 참고용</span></div>`;
+      info+=`<div style="margin-top:7px;font-size:12px">단지 시그널 ${badge(cs['등급'])} <b>${cs['점수']}</b> <span style="color:var(--dim);font-size:10px">사이클${q['사이클']}·지역${q['지역']}·단지${q['단지']}·가격${q['가격']} · 참고용</span>${cs['주의']?`<div style="font-size:10px;color:#b45309;margin-top:2px">${cs['주의']}</div>`:''}</div>`;
     }
+    const bits=[];
+    if(pt['최근평단가']) bits.push(`${won(pt['최근평단가'])}/평`);
+    if(pt['전세가율']!=null) bits.push(`전세가율 ${pt['전세가율']}%`);
+    if(pt['갭']!=null) bits.push(`갭 ${won(pt['갭'])}`);
+    if(bits.length || (pt.spark&&pt.spark.length>=2))
+      info+=`<div style="margin-top:6px;font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${bits.join(' · ')}${(pt.spark&&pt.spark.length>=2)?_sparkMini(pt.spark):''}</div>`;
     const favd=(_favs||new Set()).has('complex:'+pt.region+'|'+pt.name);
     info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
       <span class="btn" style="padding:4px 10px;font-size:12px${favd?';background:var(--accent);color:#fff':''}" onclick="mmToggleFav('${nm}','${pt.region}')">${favd?'★ 관심단지':'☆ 관심단지'}</span>
@@ -4166,6 +4243,7 @@ async function startApp(needOnboard){
   }
   if(!routeFromHash()) switchTab('dashboard');   // 해시 있으면 해당 탭, 없으면 대시보드 홈
   window.addEventListener('hashchange', routeFromHash);   // 뒤로/앞으로
+  setupAuctionBookmarklet();
 }
 (async function init(){
   try{
