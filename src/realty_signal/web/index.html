@@ -1245,12 +1245,14 @@ async function loadDashboard(){
     ${go('mymap','🗺️','내 시그널맵','즐겨찾기 지도로 보기')}
     ${go('all','🏢','매물 전체','경매·급매·청약·재건축')}
     ${go('tradeup','↗️','갈아타기','상급지 이동 시뮬레이션')}</div>`;
-  // 레이아웃 — 기회 카드는 자리표시 후 비동기 채움
+  // 레이아웃 — 예산 맞춤(aha) 최상단, 기회 카드는 자리표시 후 비동기 채움
   body.innerHTML=
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+    _dashCard(_dashH('💰 내 예산 맞춤 · 지금 살만한 곳')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px;border:1px solid var(--accent)')
+    +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
        ${_dashCard(regimeH)}${_dashCard(favH)}</div>`
     +_dashCard(_dashH('오늘의 기회 <span style="font-weight:400">· 기회도 상위</span>')+'<div id="dashOpp" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
     +_dashCard(shortcutsH);
+  _loadDashBudget();
   // 3) 오늘의 기회 (비동기)
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent('경매,급매'))).json();
     const items=(d.listings||[]).slice().sort((a,b)=>(b['기회도']??0)-(a['기회도']??0)).slice(0,5);
@@ -1262,6 +1264,33 @@ async function loadDashboard(){
       <b>${x['단지명']||'–'}</b>${x['시그널']?badge(x['시그널']):''}
       <span style="margin-left:auto;color:var(--dim);font-size:12px">${x['총액']?_eok(x['총액'])+' · ':''}${x['지역']||''} · 기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span></div>`).join('');
   }catch(e){ const el=document.getElementById('dashOpp'); if(el) el.innerHTML='기회 매물을 불러오지 못했습니다.'; }
+}
+// 내 예산 맞춤(aha) — 실거주 매수 타깃: 가용자본→매수가능가→예산내 BUY+ 지역 top
+async function _loadDashBudget(){
+  const el=document.getElementById('dashBudget'); if(!el) return;
+  const p=_profile||{}, cap=+p['가용자본']||0;
+  if(!cap){
+    el.innerHTML=`<div style="line-height:1.6">가용자본을 입력하면 <b>내 예산으로 살 수 있는 매수 시그널 지역</b>을 바로 추천해 드려요.
+      <div style="margin-top:8px"><span class="btn primary" style="padding:6px 13px" onclick="acctGo('profile')">가용자본 입력하기 →</span></div></div>`;
+    return;
+  }
+  try{
+    const q=`/api/conclusion?capital=${cap}`+(p['연소득']?`&income=${+p['연소득']}`:'');
+    const d=await (await fetch(q)).json();
+    const inb=(d.cards||[]).filter(c=>c['예산내']).slice(0,3);
+    const budget=d.budget;
+    let h=`<div style="font-size:12px;color:var(--dim);margin-bottom:8px">자기자본 <b style="color:var(--txt)">${_eok(cap)}</b>${p['연소득']?` · 연소득 ${_eok(p['연소득'])}`:''} → 대출 포함 <b style="color:var(--accent)">약 ${_eok(budget)}</b>까지 매수 가능 <span style="font-size:10px">(LTV·DSR·취득세 반영, 참고용)</span></div>`;
+    if(inb.length){
+      h+=inb.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('signal');selectRegion('${c.region}')">
+        <b style="min-width:74px">${c.region}</b>${badge(c['시그널'])}
+        <span style="margin-left:auto;color:var(--dim);font-size:12px">예상 ${c['예상매수가']?_eok(c['예상매수가']):'–'}${c['저평가도']?` · 저평가 ${c['저평가도']}`:''}${c['급매건수']?` · 급매 ${c['급매건수']}건`:''}</span>
+        <span style="color:var(--accent);font-size:12px">보기 →</span></div>`).join('');
+      h+=`<div style="margin-top:10px"><span class="btn" style="padding:5px 12px" onclick="switchTab('report')">🎯 내 조건 전체 리포트 →</span></div>`;
+    } else {
+      h+=`<div style="color:var(--dim);padding:6px 0">현재 예산 내 <b>매수 시그널(BUY+)</b> 지역이 없어요. 예산을 높이거나 <span style="color:var(--accent);cursor:pointer" onclick="switchTab('report')">전체 리포트</span>에서 관망 지역을 확인해 보세요.</div>`;
+    }
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<span style="color:var(--dim)">추천을 불러오지 못했습니다.</span>'; }
 }
 // ===== 갈아타기 전략 (현 자산 매도 → 상급지 착지) =====
 let _tuData=null;
