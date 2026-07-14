@@ -2108,9 +2108,60 @@ def _nbhd_infra(lat: float, lng: float, key: str, radius: int = 1500) -> dict:
     return out
 
 
+_NBHD_METRIC_KEYS = (
+    "시그널", "전세수급", "매수우위지수", "매매모멘텀", "평단가", "저평가도",
+    "공급압력", "급매", "청약", "국면",
+)
+_SIG_RANK = {"SELL_RISK": 0, "NEUTRAL": 1, "WATCH": 2, "BUY": 3, "STRONG_BUY": 4}
+
+
+def _nbhd_metrics(payload: dict) -> dict:
+    """주간 diff용 핵심 지표만 추출."""
+    m = payload.get("매물") or {}
+    return {
+        "시그널": payload.get("시그널"),
+        "전세수급": payload.get("전세수급"),
+        "매수우위지수": payload.get("매수우위지수"),
+        "매매모멘텀": payload.get("매매모멘텀"),
+        "평단가": payload.get("평단가"),
+        "저평가도": payload.get("저평가도"),
+        "공급압력": payload.get("공급압력"),
+        "급매": m.get("급매"),
+        "청약": m.get("청약"),
+        "국면": (payload.get("국면") or {}).get("phase"),
+        "급지": payload.get("급지"),
+    }
+
+
+def _nbhd_diff(curr: dict, prev: dict) -> list[dict]:
+    """curr vs prev 지표 변화 목록."""
+    out = []
+    for k in _NBHD_METRIC_KEYS:
+        a, b = curr.get(k), prev.get(k)
+        if a is None and b is None:
+            continue
+        if a == b:
+            continue
+        item = {"key": k, "from": b, "to": a}
+        if k == "시그널":
+            item["delta"] = _SIG_RANK.get(a, 1) - _SIG_RANK.get(b, 1)
+        elif isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            item["delta"] = round(a - b, 2)
+        out.append(item)
+    return out
+
+
+def _nbhd_week() -> str:
+    try:
+        return _kb().last_date.strftime("%G-W%V")
+    except Exception:  # noqa: BLE001
+        import datetime as _dt
+        return _dt.date.today().strftime("%G-W%V")
+
+
 @app.get("/api/neighborhood/{region}")
-def neighborhood(region: str):
-    """동네 딥다이브 — 보유 데이터(시그널·가격·수급·미래가치·매물) 재조립 + 생활인프라(카카오). 임장 전 동네 파악."""
+def neighborhood(request: Request, region: str):
+    """동네 딥다이브 — 보유 데이터 재조립 + 생활인프라. 로그인 시 주간 스냅샷 저장·지난 대비 diff."""
     sigrow = next((r for r in signals() if r.get("region") == region), None) \
         or next((r for r in signals() if region and region in (r.get("region") or "")), None)
     if not sigrow:
@@ -2161,7 +2212,9 @@ def neighborhood(region: str):
         commute = _nbhd_commute(c[0], c[1])
         if commute:
             db.kv_set(cmk, commute)
-    return {
+    asof = str(_kb().last_date.date())
+    week = _nbhd_week()
+    out = {
         "ok": True, "region": region, "시그널": sigrow.get("signal"),
         "급지": sigrow.get("급지"), "해설": sigrow.get("해설"), "근거": sigrow.get("근거"),
         "전세수급": sigrow.get("전세수급"), "매수우위지수": sigrow.get("매수우위지수"),
@@ -2175,7 +2228,43 @@ def neighborhood(region: str):
         "매물": {"급매": _qs_count(), "청약": ps_cnt},
         "생활인프라": infra or {}, "인프라기준": "구 중심 반경 1.5km · 카카오 로컬(참고용)",
         "통근": commute or {}, "통근기준": "구 중심 → 업무지구 대중교통(ODsay·참고용)",
+        "기준일": asof, "week": week,
     }
+    # 로그인 시: 이번 주 스냅샷 저장 + 지난 스냅샷 diff
+    uid = _uid(request)
+    if uid:
+        metrics = _nbhd_metrics(out)
+        metrics["기준일"] = asof
+        db.nbhd_snap_save(uid, region, week, metrics)
+        prev = db.nbhd_snap_prev(uid, region, week)
+        if prev and prev.get("data"):
+            out["prev"] = {"week": prev["week"], "data": prev["data"]}
+            out["diff"] = _nbhd_diff(metrics, prev["data"])
+        out["snap_weeks"] = db.nbhd_snap_weeks(uid, region)
+    return out
+
+
+@app.get("/api/neighborhood-compare")
+def neighborhood_compare(request: Request, a: str, b: str):
+    """두 동네 핵심 지표 나란히 비교(관심 후보 좁힐 때)."""
+    if not a or not b or a == b:
+        return {"ok": False, "reason": "need_two_regions"}
+    da = neighborhood(request, a)
+    db_ = neighborhood(request, b)
+    if not da.get("ok") or not db_.get("ok"):
+        return {"ok": False, "reason": "no_region", "a": da, "b": db_}
+    def _val(d, k):
+        if k in ("급매", "청약"):
+            return (d.get("매물") or {}).get(k)
+        if k == "국면":
+            return (d.get("국면") or {}).get("phase")
+        return d.get(k)
+    keys = ["시그널", "급지", "평단가", "저평가도", "입지점수", "전세수급", "매수우위지수",
+            "매매모멘텀", "공급압력", "급매", "청약", "국면"]
+    rows = [{"key": k, "a": _val(da, k), "b": _val(db_, k)} for k in keys]
+    return {"ok": True, "a": {"region": da["region"], "시그널": da.get("시그널")},
+            "b": {"region": db_["region"], "시그널": db_.get("시그널")},
+            "rows": rows, "기준일": da.get("기준일")}
 
 
 @app.get("/api/region-centroids")

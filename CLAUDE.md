@@ -34,6 +34,8 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
 - 주간 이메일: `signal digest --send` (SMTP_HOST/SMTP_FROM). 관심지역 ★ 유저 대상.
 - Nick 프로필 주입: advisor `build_system(profile, favorites)`. 소프트 한도: Nick 주 15회·리포트 주 3회
   (`NICK_WEEKLY_LIMIT`/`REPORT_WEEKLY_LIMIT`). Opus 화이트리스트·관리자는 무제한.
+- 동네 리포트 v2: 열면 주간 스냅샷 저장 → 지난 주차 대비 diff · 관심지역 2동네 비교.
+- 폐기(개인용): 정책 KB 자동 소싱 · Toss 페이월 — 당분간 미추진.
 
 ## KB 데이터허브 API (자동 수집)
 

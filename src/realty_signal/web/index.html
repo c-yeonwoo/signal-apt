@@ -754,12 +754,19 @@
   </div>
 </dialog>
 
-<dialog id="nbhdDlg" style="width:640px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+<dialog id="nbhdDlg" style="width:720px;max-width:96vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px;flex-wrap:wrap">
     <h3 id="nbhdTitle" style="margin:0">동네 리포트</h3>
-    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('nbhdDlg').close()">✕</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+      <label style="font-size:12px;color:var(--dim);display:flex;align-items:center;gap:5px">비교
+        <select id="nbhdCmpSel" class="ctrl" onchange="nbhdCompare()" style="font-size:12px;padding:4px 8px;max-width:140px">
+          <option value="">관심지역 선택</option>
+        </select>
+      </label>
+      <span class="btn" style="padding:2px 11px" onclick="document.getElementById('nbhdDlg').close()">✕</span>
+    </div>
   </div>
-  <div style="color:var(--dim);font-size:12px;margin-bottom:12px">임장 전, 이 동네를 데이터로 먼저 파악하세요.</div>
+  <div style="color:var(--dim);font-size:12px;margin-bottom:12px">임장 전, 이 동네를 데이터로 먼저 파악하세요. 열면 주간 스냅샷이 저장됩니다.</div>
   <div id="nbhdBody" style="max-height:70vh;overflow:auto"></div>
 </dialog>
 
@@ -2904,12 +2911,20 @@ function nickCxBtn(name, region){
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
   return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();askNick('${r} ${n} 지금 어때? 실거래·단지시그널·공시대비 근거로 알려줘.')">Nick에게 물어보기</span>`;
 }
-// ===== 동네 리포트 =====
+// ===== 동네 리포트 (v2: 주간 스냅샷·diff·관심지역 비교) =====
+let _nbhdCur=null;
+function _nbhdFillCmpSel(cur){
+  const sel=document.getElementById('nbhdCmpSel'); if(!sel) return;
+  const favs=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7)).filter(r=>r&&r!==cur);
+  sel.innerHTML='<option value="">관심지역 선택</option>'+favs.map(r=>`<option value="${r}">${r}</option>`).join('');
+}
 async function openNbhd(region){
   if(!region) return;
   track('nbhd_open',{region});
+  _nbhdCur=region;
   document.getElementById('nbhdTitle').textContent=region+' 리포트';
   document.getElementById('nbhdBody').innerHTML='<div style="color:var(--dim);font-size:13px;padding:12px">불러오는 중…</div>';
+  _nbhdFillCmpSel(region);
   document.getElementById('nbhdDlg').showModal();
   let d; try{ d=await (await fetch('/api/neighborhood/'+encodeURIComponent(region))).json(); }
   catch(e){ document.getElementById('nbhdBody').innerHTML='<div style="color:var(--dim);padding:12px">불러오지 못했습니다.</div>'; return; }
@@ -2918,11 +2933,33 @@ async function openNbhd(region){
 }
 function _nbSec(title, inner){ return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--dim);margin-bottom:7px">${title}</div>${inner}</div>`; }
 function _nbStat(label, val){ return `<div style="display:inline-flex;flex-direction:column;gap:1px;min-width:92px;padding:8px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px"><span style="font-size:11px;color:var(--dim)">${label}</span><span style="font-weight:700;font-size:14px">${val}</span></div>`; }
+function _nbDiffRow(it){
+  const lab={시그널:'시그널',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',평단가:'평단가',저평가도:'저평가도',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면'};
+  const money=v=>v==null?'–':(typeof v==='number'&&v>=1000?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
+  let arrow='', col='var(--dim)';
+  if(it.key==='시그널' && it.delta!=null){ arrow=it.delta>0?' ▲':(it.delta<0?' ▼':''); col=it.delta>0?'var(--sig-buy)':(it.delta<0?'var(--sig-sell)':'var(--dim)'); }
+  else if(typeof it.delta==='number'){ arrow=(it.delta>0?' +':(it.delta<0?' ':''))+it.delta; col=it.delta>0?'var(--sig-buy)':(it.delta<0?'var(--sig-sell)':'var(--dim)'); }
+  const from=it.key==='평단가'?money(it.from):it.from;
+  const to=it.key==='평단가'?money(it.to):it.to;
+  return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13px">
+    <span style="min-width:72px;color:var(--dim)">${lab[it.key]||it.key}</span>
+    <span>${from??'–'} <span style="color:var(--dim)">→</span> <b>${to??'–'}</b>
+    <span style="color:${col};font-size:12px">${arrow}</span></span></div>`;
+}
 function renderNbhd(d){
   const b=document.getElementById('nbhdBody');
   const money=v=>v?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):'–';
+  // 0) 주간 diff
+  let h='';
+  if(d.diff && d.diff.length){
+    h+=_nbSec(`지난 스냅샷 대비 <span style="font-weight:400">· ${d.prev&&d.prev.week?d.prev.week+' → ':''}${d.week||''}</span>`,
+      d.diff.map(_nbDiffRow).join('')
+      +`<div style="font-size:10px;color:var(--dim);margin-top:6px">열 때마다 이번 주(${d.week||''}) 스냅샷이 갱신됩니다. 저장 주차 ${(d.snap_weeks||[]).length}회</div>`);
+  } else if(d.week){
+    h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:12px;padding:8px 10px;background:var(--bg);border-radius:10px;border:1px solid var(--line)">이번 주 스냅샷 저장됨 (${d.week}${d['기준일']?' · 기준 '+d['기준일']:''}). 다음 주 이후부터 변화가 표시됩니다.</div>`;
+  }
   // 1) 요약
-  let h=_nbSec('요약',
+  h+=_nbSec('요약',
     `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">${badge(d['시그널'])}
       ${d['급지']?`<span class="pill">급지 ${d['급지']}</span>`:''}${d['국면']&&d['국면'].phase?`<span class="pill">국면 ${d['국면'].phase}</span>`:''}
       ${(d['규제지역']||[]).map(x=>`<span class="pill" style="border-color:var(--danger);color:var(--danger)">${x}</span>`).join('')}</div>
@@ -2957,9 +2994,37 @@ function renderNbhd(d){
        ${Object.entries(inf).map(([k,v])=>_nbStat(k, (v!=null?v:'–'))).join('')}</div>
        <div style="font-size:10px;color:var(--dim);margin-top:6px">${d['인프라기준']||''}</div>`);
   }
-  // 7) Nick
+  // 8) Nick
   h+=`<div style="border-top:1px solid var(--line);padding-top:12px"><span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.region} 동네 어때? 살기·교통·학군·투자관점 종합해서 근거로 알려줘.')">이 동네 Nick에게 물어보기</span></div>`;
   b.innerHTML=h;
+}
+async function nbhdCompare(){
+  const b=document.getElementById('nbhdCmpSel')?.value;
+  if(!b || !_nbhdCur) return;
+  const body=document.getElementById('nbhdBody');
+  body.innerHTML='<div style="color:var(--dim);padding:12px">비교 중…</div>';
+  let d; try{ d=await (await fetch(`/api/neighborhood-compare?a=${encodeURIComponent(_nbhdCur)}&b=${encodeURIComponent(b)}`)).json(); }
+  catch(e){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교를 불러오지 못했습니다.</div>'; return; }
+  if(!d.ok){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교할 지역을 찾지 못했습니다.</div>'; return; }
+  const money=v=>v==null?'–':(typeof v==='number'&&v>=100?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
+  const lab={시그널:'시그널',급지:'급지',평단가:'평단가',저평가도:'저평가도',입지점수:'입지점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면'};
+  const rows=(d.rows||[]).map(r=>{
+    const va=r.key==='시그널'?badge(r.a):(r.key==='평단가'?money(r.a):(r.a??'–'));
+    const vb=r.key==='시그널'?badge(r.b):(r.key==='평단가'?money(r.b):(r.b??'–'));
+    return `<tr style="border-top:1px solid var(--line)"><td style="padding:8px 6px;color:var(--dim);font-size:12px">${lab[r.key]||r.key}</td>
+      <td style="padding:8px 6px;text-align:center;font-weight:600">${va}</td>
+      <td style="padding:8px 6px;text-align:center;font-weight:600">${vb}</td></tr>`;
+  }).join('');
+  body.innerHTML=`<div style="margin-bottom:10px"><span class="btn" style="padding:4px 10px;font-size:12px" onclick="openNbhd('${_nbhdCur}')">← ${_nbhdCur} 리포트</span></div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">${d.a.region} vs ${d.b.region}
+      <span style="font-weight:400;color:var(--dim);font-size:11px"> · 기준 ${d['기준일']||''}</span></div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">지표</th>
+        <th style="padding:6px">${d.a.region}</th><th style="padding:6px">${d.b.region}</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <span class="btn" style="padding:5px 12px" onclick="openNbhd('${d.b.region}')">${d.b.region} 리포트 →</span>
+      <span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.a.region}과 ${d.b.region} 비교해줘. 예산·실거주 관점에서 근거로.')">Nick에게 비교 물어보기</span></div>`;
 }
 function cxSigBtn(name, region){
   if(!name||!region) return '';
