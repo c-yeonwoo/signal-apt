@@ -42,7 +42,7 @@
     border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,.28); box-sizing:border-box; }
   .mappin.sel { width:24px; height:24px; box-shadow:0 0 0 4px var(--ring),0 2px 6px rgba(0,0,0,.3); z-index:1000; }
   /* 매물 발견 세그먼트 탭 */
-  .mtabs { display:flex; gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel); }
+  .mtabs { display:flex; gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel); flex-wrap:wrap; align-items:stretch; }
   .mtabs .subtab { display:flex; flex-direction:column; align-items:center; gap:1px; border:none; border-right:1px solid var(--line);
     background:var(--panel); color:var(--txt); cursor:pointer; padding:9px 20px; font-size:15px; font-weight:700; line-height:1.15; }
   .mtabs .subtab:last-child { border-right:none; }
@@ -50,6 +50,12 @@
   .mtabs .subtab:hover { background:var(--accent-weak); }
   .mtabs .subtab.on { background:var(--accent); color:#fff; }
   .mtabs .subtab.on small { color:rgba(255,255,255,.85); }
+  .mtabs .subtab.more { color:var(--dim); font-weight:600; background:var(--bg); }
+  .mtabs .subtab.more.open { color:var(--txt); background:var(--accent-weak); }
+  .mtabs .subtab.more.on { background:var(--accent); color:#fff; }
+  .mtabs .subtab.more small { font-weight:500; }
+  .mtabs .submore { display:flex; gap:0; border-left:1px dashed var(--line); }
+  .mtabs .submore .subtab { font-size:14px; padding:9px 16px; font-weight:600; }
   /* 접이식 섹션 헤더(경매 상단 등) */
   details.sec > summary { list-style:none; cursor:pointer; font-size:15px; font-weight:700; color:var(--txt);
     display:flex; align-items:center; gap:8px; }
@@ -622,7 +628,7 @@
     <div style="display:flex;flex-direction:column;gap:8px">
       <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 가용자본을 넣고, 예산 안 매수 시그널 지역을 확인합니다.</div>
       <div class="astep"><b style="color:var(--accent)">2</b> <b>시장·지역</b> — 시그널·저평가를 보고 <b>동네 리포트</b>로 임장 전 맥락을 파악한 뒤 ★로 관심 등록합니다.</div>
-      <div class="astep"><b style="color:var(--accent)">3</b> <b>매물</b> — 관심 동네의 급매·청약·경매를 통합 목록에서 좁혀 봅니다.</div>
+      <div class="astep"><b style="color:var(--accent)">3</b> <b>매물</b> — 전체·급매·청약에서 관심 동네를 좁힙니다. 경매·재건축·갈아타기는 더보기에서.</div>
       <div class="astep"><b style="color:var(--accent)">4</b> <b>내 집찾기</b> — 시그널맵·AI 리포트로 조건을 정리하고, 주간 변동을 추적합니다.</div>
     </div>
     <p style="color:var(--dim);font-size:11px;margin-top:20px">※ 모든 지표는 참고용입니다. 투자 판단과 실거래 확인은 이용자 책임입니다.</p>
@@ -1143,14 +1149,19 @@ function renderMtFilter(hostId, rerender){
 const _GROUPS={
   home:     ['dashboard'],
   market:   ['signal','undervalued'],
-  listings: ['all','auction','quicksale','presale','redev','tradeup'],
+  listings: ['all','quicksale','presale','auction','redev','tradeup'],  // 전체 순서(라우팅용)
   find:     ['mymap','report'],
 };
+// 매물 2단: 기본(실거주) / 더보기(투자·특수)
+const _LISTING_PRIMARY=['all','quicksale','presale'];
+const _LISTING_MORE=['auction','redev','tradeup'];
+let _listingMoreOpen=false;
 const _GROUP_LABEL={market:'시장 분석', listings:'매물 발견', find:'내 집찾기'};
 const _SUBMETA={
   signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'저평가',d:'지역 랭킹'},
-  all:{l:'전체',d:'기회도순'}, auction:{l:'경매',d:'시세 이하 낙찰'}, quicksale:{l:'급매',d:'시세 이하 호가'},
-  presale:{l:'청약',d:'신규 분양'}, redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
+  all:{l:'전체',d:'기회도순'}, quicksale:{l:'급매',d:'시세 이하 호가'},
+  presale:{l:'청약',d:'신규 분양'}, auction:{l:'경매',d:'시세 이하 낙찰'},
+  redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
   mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
 };
 const _LISTING=_GROUPS.listings;                 // 매물 그룹(하위탭)
@@ -1173,10 +1184,34 @@ function renderListingFocus(){
 }
 function inFocus(region){ return !_focusRegion || (region||'').includes(_focusRegion) || _focusRegion.includes(region||'§'); }
 const _LISTLOAD={all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
+function _subBtn(v, active){
+  const m=_SUBMETA[v];
+  return `<button class="subtab${v===active?' on':''}" data-sub="${v}" onclick="switchTab('${v}')">${m.l}<small>${m.d}</small></button>`;
+}
+function toggleListingMore(ev){
+  if(ev) ev.stopPropagation();
+  _listingMoreOpen=!_listingMoreOpen;
+  // 더보기 닫을 때 더보기 탭에 있으면 기본(전체)로
+  const cur=_listingSub;
+  if(!_listingMoreOpen && _LISTING_MORE.includes(cur)){ switchTab('all'); return; }
+  renderGroupSubnav('listings', cur);
+}
 function renderGroupSubnav(grp, active){
   document.getElementById('groupSubLabel').textContent=_GROUP_LABEL[grp]||'';
-  document.getElementById('groupSubTabs').innerHTML=_GROUPS[grp].map(v=>{const m=_SUBMETA[v];
-    return `<button class="subtab${v===active?' on':''}" data-sub="${v}" onclick="switchTab('${v}')">${m.l}<small>${m.d}</small></button>`;}).join('');
+  const tabs=document.getElementById('groupSubTabs');
+  if(grp==='listings'){
+    const inMore=_LISTING_MORE.includes(active);
+    if(inMore) _listingMoreOpen=true;
+    let h=_LISTING_PRIMARY.map(v=>_subBtn(v, active)).join('');
+    const open=_listingMoreOpen;
+    h+=`<button class="subtab more${open?' open':''}" type="button" onclick="toggleListingMore(event)" title="경매·재건축·갈아타기">더보기<small>${open?'접기':'경매·재건축·갈아타기'}</small></button>`;
+    if(open){
+      h+=`<span class="submore">${_LISTING_MORE.map(v=>_subBtn(v, active)).join('')}</span>`;
+    }
+    tabs.innerHTML=h;
+  } else {
+    tabs.innerHTML=_GROUPS[grp].map(v=>_subBtn(v, active)).join('');
+  }
   const lf=document.getElementById('listingFocus'); if(lf) lf.style.display=(grp==='listings'&&_focusRegion)?'':'none';
   if(grp==='listings') renderListingFocus();
 }
