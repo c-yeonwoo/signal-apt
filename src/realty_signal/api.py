@@ -132,8 +132,7 @@ def _seed_if_missing():
     if pk and _quicksale_stale():                        # 급매 레이더 (없거나 옛 스캔버전이면 재스캔)
         try:
             log.warning("quicksale 없음/구버전 — 급매 레이더 스캔 중…")
-            df = _signals_df()
-            regions = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
+            regions = _scan_regions()
             listings = _radar_scan(regions)
             QUICKSALE_FILE.write_text(json.dumps(
                 {"ready": True, "listings": listings, "regions": regions,
@@ -1252,7 +1251,7 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
 
 
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
-_QUICKSALE_SCAN_VER = 2   # 스캔 로직 버전 — 올리면 배포 후 부팅 시 자동 재스캔(2=지역 좌표 역판정)
+_QUICKSALE_SCAN_VER = 3   # 스캔 로직 버전 — 올리면 배포 후 부팅 시 자동 재스캔(3=BUY+∪관심지역 커버리지 확대)
 
 
 def _quicksale_stale() -> bool:
@@ -2281,16 +2280,29 @@ def quicksale():
     return {"ready": False, "listings": [], "regions": []}
 
 
+def _scan_regions() -> list[str]:
+    """급매 스캔 대상 = BUY+ 시그널 지역 ∪ 전체 사용자 관심 지역(중복 제거).
+
+    관심 지역엔 시그널과 무관하게 급매 데이터가 항상 있도록 보장 → 관심 피드·동네 리포트 밀도↑.
+    """
+    df = _signals_df()
+    buy = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
+    valid = set(df["region"])
+    favs = [r for r in db.all_fav_regions() if r in valid]   # 유효 지역만
+    seen, out = set(), []
+    for r in buy + favs:
+        if r not in seen:
+            seen.add(r); out.append(r)
+    return out
+
+
 @app.post("/api/quicksale/refresh")
 def quicksale_refresh(data: dict = Body(default={})):
-    """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ 시그널 지역 전체 스캔."""
-    regions = data.get("regions")
-    if not regions:
-        df = _signals_df()
-        regions = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
+    """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
+    regions = data.get("regions") or _scan_regions()
     listings = _radar_scan(regions)
     result = {"ready": True, "listings": listings, "regions": regions,
-              "count": len(listings)}
+              "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
     QUICKSALE_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 

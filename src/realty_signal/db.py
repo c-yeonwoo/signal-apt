@@ -286,6 +286,14 @@ def all_fav_complexes() -> list[tuple[str, str]]:
     return out
 
 
+def all_fav_regions() -> list[str]:
+    """전체 사용자 관심지역(kind='region') → 지역명 중복 제거. 급매 스캔 커버리지 확대용."""
+    c = conn()
+    rows = c.execute("SELECT DISTINCT key FROM favorites WHERE kind='region'").fetchall()
+    c.close()
+    return [k for (k,) in rows if k]
+
+
 # ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
 def kv_get(k: str, max_age: int | None = None):
     """캐시 값(JSON 역직렬화). 없거나 max_age(초) 초과 시 None."""
