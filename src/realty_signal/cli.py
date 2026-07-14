@@ -105,6 +105,30 @@ def watch(
     _warm_favorites_quiet(quiet)
 
 
+@app.command("digest")
+def digest_cmd(
+    send: bool = typer.Option(False, help="SMTP_HOST/SMTP_FROM 설정 시 실제 발송"),
+    quiet: bool = typer.Option(False, help="dry-run 본문 출력 생략"),
+):
+    """관심지역 보유 유저에게 주간 시그널 다이제스트 생성(·발송).
+
+    발송에는 SMTP_HOST, SMTP_FROM, (선택) SMTP_USER/SMTP_PASS/SMTP_PORT 필요.
+    미설정 시 본문만 출력(dry-run).
+    """
+    from realty_signal import config
+    from realty_signal.digest import run_digest, smtp_configured
+
+    config.load_env()
+    if send and not smtp_configured():
+        console.print("[yellow]SMTP 미설정[/yellow] — dry-run으로 출력합니다. "
+                      "(SMTP_HOST, SMTP_FROM 필요)")
+    stats = run_digest(send=send, quiet=quiet)
+    console.print(
+        f"[green]다이제스트[/green] 대상 {stats['total']} · "
+        f"발송 {stats['sent']} · dry-run {stats['dry_run']} · 오류 {stats['errors']}"
+    )
+
+
 def _warm_favorites_quiet(quiet: bool) -> None:
     """관심단지 실거래 캐시 주간 워밍 — 사용자 콜드스타트 제거. best-effort."""
     try:

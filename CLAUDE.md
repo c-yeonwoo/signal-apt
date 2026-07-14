@@ -20,6 +20,7 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
 .venv/bin/signal build <kb.xlsx>      # 수동 엑셀 파싱 → 캐시
 .venv/bin/signal serve                # 대시보드 http://127.0.0.1:8765
 .venv/bin/signal watch [--notify]     # 지난주 대비 등급 변화 알림 + 스냅샷 갱신
+.venv/bin/signal digest [--send]      # 관심지역 주간 이메일 다이제스트(SMTP 없으면 dry-run)
 .venv/bin/signal report <kb.xlsx>     # 터미널 시그널 리포트
 .venv/bin/pytest -q                   # 테스트
 ```
@@ -30,6 +31,7 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
 - 매수우위/전세수급은 KB 광역 단위만 → 시군구는 모멘텀+입주물량 기반.
 - 입주물량(`kb_supply`): aptMovinCnt, 공급압력=향후/과거. >1.3 공급과잉, 하락동반 시 SELL_RISK.
 - 변화감지(`signals/history`): snapshot.json 비교, 매주 launchd(토 09:00) `watch --notify`.
+- 주간 이메일: `signal digest --send` (SMTP_HOST/SMTP_FROM). 관심지역 ★ 유저 대상.
 
 ## KB 데이터허브 API (자동 수집)
 

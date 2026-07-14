@@ -340,7 +340,7 @@
         <button id="sideToggle" onclick="toggleSide()" title="목록 접기/펼치기" style="font-size:15px">◀</button>
         <span id="sigbadge" style="font-size:18px;font-weight:700"></span>
         <span id="sigsub" style="color:var(--dim);font-size:12.5px"></span>
-        <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 급매물(+경매·청약)만 좁혀 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 급매물 ›</button>
+        <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 급매·경매·청약을 통합 매물에서 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 매물 ›</button>
         <button class="chip" onclick="openNbhd(selected)" title="임장 전 동네 파악 — 시그널·가격·미래가치·생활인프라" style="white-space:nowrap">동네 리포트</button>
         <button class="chip" onclick="askNickRegion()" title="Nick에게 이 지역을 물어보기" style="white-space:nowrap">Nick에게 물어보기</button>
         <div style="margin-left:auto;position:relative">
@@ -600,29 +600,30 @@
         <circle cx="60" cy="14" r="6" fill="#22c55e"/></svg>
       <h2 style="margin:0;font-size:24px">시그널 APT란?</h2>
     </div>
-    <p style="color:var(--txt);font-size:15px;line-height:1.6;margin:6px 0 4px"><b>데이터로 찾는 아파트 매매 타이밍.</b> 전문가 상담 없이도, 시장 지표와 흐름을 스스로 보고 매수 의사결정을 내릴 수 있게 돕는 서비스입니다.</p>
+    <p style="color:var(--txt);font-size:15px;line-height:1.6;margin:6px 0 4px"><b>데이터로 증명하는, 내 집 마련의 나침반.</b> 전문가 상담 없이도, 시장 지표와 흐름을 스스로 보고 매수 의사결정을 내릴 수 있게 돕는 서비스입니다.</p>
     <p style="color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 20px">KB 주간지수·국토부 실거래·청약홈·경매·정비사업 등 공개 데이터를 우리 방식으로 가공해 <b>매수/매도 시그널</b>을 냅니다. 감이 아니라 <b>과거 구간으로 검증된 적중률</b>로 말합니다.</p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
       <div class="acard" onclick="openScoreboard()" style="border:2px solid var(--ring)">
-        <div style="font-size:20px">📊</div><b>시그널 성적표</b>
+        <b>시그널 성적표</b>
         <span>과거 구간으로 검증한 매수·매도 <b style="color:var(--sig-buy)">적중률</b>. "정말 맞나요?"의 답.</span></div>
       <div class="acard" onclick="openCycleGuide()">
         <b>경기 국면 가이드</b>
         <span>회복·상승·후퇴·침체 4국면과 자산격차. 사이클 읽는 법.</span></div>
       <div class="acard" onclick="switchTab('glossary')">
-        <div style="font-size:20px">📖</div><b>용어사전</b>
+        <b>용어사전</b>
         <span>전세가율·DSR·비례율 등 매매·투자에 꼭 필요한 개념.</span></div>
       <div class="acard" onclick="openSources()">
-        <div style="font-size:20px">ⓘ</div><b>데이터 출처·갱신주기</b>
+        <b>데이터 출처·갱신주기</b>
         <span>어떤 공개 데이터를 어떻게·얼마나 자주 쓰는지.</span></div>
     </div>
 
     <h3 style="font-size:16px;margin:26px 0 8px">이렇게 쓰세요</h3>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="astep"><b style="color:var(--accent)">1</b> <b>시그널</b> 탭 — 시장 국면과 지역별 매수/매도 시그널을 봅니다.</div>
-      <div class="astep"><b style="color:var(--accent)">2</b> <b>저평가</b> 탭 — 지역 급지 대비 입지가 좋고 싼 곳을 발굴합니다.</div>
-      <div class="astep"><b style="color:var(--accent)">3</b> <b>매물</b>(경매·급매·청약·재건축) · <b>AI 리포트</b> — 내 예산으로 실행합니다.</div>
+      <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 가용자본을 넣고, 예산 안 매수 시그널 지역을 확인합니다.</div>
+      <div class="astep"><b style="color:var(--accent)">2</b> <b>시장·지역</b> — 시그널·저평가를 보고 <b>동네 리포트</b>로 임장 전 맥락을 파악한 뒤 ★로 관심 등록합니다.</div>
+      <div class="astep"><b style="color:var(--accent)">3</b> <b>매물</b> — 관심 동네의 급매·청약·경매를 통합 목록에서 좁혀 봅니다.</div>
+      <div class="astep"><b style="color:var(--accent)">4</b> <b>내 집찾기</b> — 시그널맵·AI 리포트로 조건을 정리하고, 주간 변동을 추적합니다.</div>
     </div>
     <p style="color:var(--dim);font-size:11px;margin-top:20px">※ 모든 지표는 참고용입니다. 투자 판단과 실거래 확인은 이용자 책임입니다.</p>
   </div>
@@ -1160,7 +1161,7 @@ let _focusRegion=null;   // 관심지역 → 매물 좁히기(옵션, 강제 X)
 function focusListings(region){
   _focusRegion = region || null;
   if(_focusRegion){ const s=document.getElementById('rdRegion'); if(s && [...s.options].some(o=>o.value===_focusRegion)) s.value=_focusRegion; }
-  switchTab('quicksale');   // 급매를 기본 진입으로
+  switchTab('all');   // 기본 여정: 통합 매물(지역 필터)
 }
 function clearListingFocus(){ _focusRegion=null; renderListingFocus(); (_LISTLOAD[_listingSub]||(()=>{}))(); }
 function renderListingFocus(){
@@ -1244,17 +1245,21 @@ async function loadDashboard(){
   } else {
     favH+=`<div style="color:var(--dim);font-size:13px;padding:6px 0">아직 관심 지역이 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 ★로 추가 →</span></div>`;
   }
-  // 3) 바로가기
+  // 3) 바로가기 — 기본 여정 우선(예산→시장→매물→리포트), 투자 인접은 뒤로
   const go=(t,label,desc)=>`<div onclick="switchTab('${t}')" style="flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line)'">
     <div style="font-weight:700">${label}</div><div style="color:var(--dim);font-size:12px;margin-top:3px">${desc}</div></div>`;
   const nickCard=`<div onclick="askNick('지금 수도권 시장 국면과 매수 시그널이 강한 지역을 근거와 함께 알려줘.')" style="flex:1;min-width:150px;background:var(--accent-weak);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer">
     <div style="font-weight:700">🦊 Nick에게 물어보기</div><div style="color:var(--dim);font-size:12px;margin-top:3px">데이터 근거 AI 자문</div></div>`;
-  const shortcutsH=_dashH('바로가기')+`<div style="display:flex;gap:10px;flex-wrap:wrap">
-    ${nickCard}
+  const journeyH=_dashH('다음 단계')+`<div style="font-size:12.5px;color:var(--dim);line-height:1.55;margin-bottom:10px">예산 확인 → 시그널 지역 → 동네 리포트 → ★관심 → 매물</div>`
+    +`<div style="display:flex;gap:10px;flex-wrap:wrap">
+    ${go('signal','시장·지역','시그널·저평가·동네 리포트')}
+    ${go('all','매물 전체','관심 동네 기회 좁히기')}
     ${go('report','AI 리포트','내 조건 맞춤 매수전략')}
+    ${nickCard}</div>`;
+  const shortcutsH=_dashH('더 보기')+`<div style="display:flex;gap:10px;flex-wrap:wrap">
     ${go('mymap','내 시그널맵','즐겨찾기 지도로 보기')}
-    ${go('all','매물 전체','경매·급매·청약·재건축')}
-    ${go('tradeup','갈아타기','상급지 이동 시뮬레이션')}</div>`;
+    ${go('tradeup','갈아타기','상급지 이동 시뮬레이션')}
+    ${go('about','가이드','성적표·국면·용어·출처')}</div>`;
   // 레이아웃 — 예산 맞춤(aha) 최상단, 기회 카드는 자리표시 후 비동기 채움
   body.innerHTML=
     _dashCard(_dashH('내 예산 추천 지역')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px;border-left:3px solid var(--accent)')
@@ -1263,6 +1268,7 @@ async function loadDashboard(){
     +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
        ${_dashCard(regimeH)}${_dashCard(favH)}</div>`
     +_dashCard(_dashH('오늘의 기회 <span style="font-weight:400">· 기회도 상위</span>')+'<div id="dashOpp" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
+    +_dashCard(journeyH,'margin-bottom:14px')
     +_dashCard(shortcutsH);
   _loadDashBudget();
   _loadDashChanges();
@@ -2056,6 +2062,13 @@ function toast(msg){
   t.textContent=msg; t.style.opacity='1';
   clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';},3200);
 }
+/** 퍼널 이벤트 — 실패해도 UX 방해 없음(fire-and-forget). */
+function track(name, props){
+  try{
+    fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name, props:props||{}})}).catch(()=>{});
+  }catch(e){}
+}
 function mdLite(s){
   // 줄 단위 처리 — 빈 줄은 건너뛰어 불필요한 세로 여백 제거(타이트)
   return (s||'').split(/\n/).map(ln=>{
@@ -2086,6 +2099,7 @@ async function loadConclusion(){
   const rate = (+document.getElementById('ccRate').value || 4) / 100;
   const box = document.getElementById('ccCards'); const empty = document.getElementById('ccEmpty');
   if(capital <= 0){ box.innerHTML=''; empty.textContent='가용자본을 입력하세요.'; return; }
+  track('report_open',{capital});
   empty.textContent='분석 중…'; box.innerHTML='';
   const qs = `capital=${capital}&ltv=${ltv}&pyeong=${pyeong}&rate=${rate}` + (income>0?`&income=${income}`:'');
   const d = await (await fetch(`/api/conclusion?${qs}`)).json();
@@ -2857,6 +2871,7 @@ function nickCxBtn(name, region){
 // ===== 동네 리포트 =====
 async function openNbhd(region){
   if(!region) return;
+  track('nbhd_open',{region});
   document.getElementById('nbhdTitle').textContent=region+' 리포트';
   document.getElementById('nbhdBody').innerHTML='<div style="color:var(--dim);font-size:13px;padding:12px">불러오는 중…</div>';
   document.getElementById('nbhdDlg').showModal();
@@ -3562,6 +3577,7 @@ async function authSubmit(){
   const me = await (await fetch('/api/auth/me')).json();   // 로그인 후 프로필 재조회
   _userEmail = me.email||''; _profile = me.profile||{}; _isAdmin = !!me.admin;
   document.getElementById('authGate').style.display='none';
+  if(signup) track('signup');
   await startApp(signup);   // 가입이면 온보딩
 }
 async function logout(){ await fetch('/api/auth/logout',{method:'POST'}); location.reload(); }
@@ -3571,6 +3587,7 @@ function saveOnboarding(){
     관심평수:[..._sizeSel.ob], 거주지:v('ob_region').trim(),
     부양가족:+v('ob_family')||0, 청약통장개월:+v('ob_account')||0};
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
+  if(_profile['가용자본']) track('profile_complete',{capital:_profile['가용자본']});
   document.getElementById('onbDlg').close();
   applyProfileHeader(); loadData();
 }
@@ -3894,6 +3911,7 @@ function saveMyPage(){
     생애최초:v('mp_firsthome')===''?null:+v('mp_firsthome'),
   } : {무주택기간:null, 부양가족:null, 청약통장개월:null, 자녀수:null, 혼인상태:null, 세대주:null, 생애최초:null});
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
+  if(_profile['가용자본']) track('profile_complete',{capital:_profile['가용자본']});
   renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults(); renderAha();
   toast('프로필을 저장했습니다.');
   if(typeof loadData==='function') loadData();
@@ -4022,7 +4040,8 @@ async function toggleFav(kind, key, label){
   if(_favs.has(id)){ _favs.delete(id);
     await fetch('/api/favorites?kind='+kind+'&key='+encodeURIComponent(key),{method:'DELETE'}); }
   else { _favs.add(id);
-    await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,label})}); }
+    await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,label})});
+    track('fav_add',{kind,key}); }
   if(typeof renderList==='function') renderList();
   if(kind==='region') loadAlerts();   // 즐겨찾기 변경 → 알림 다이제스트 갱신
 }
@@ -4129,6 +4148,7 @@ async function advSend(text){
   if(_advBusy) return;
   const inp=document.getElementById('advInput');
   const q=(text||inp.value||'').trim(); if(!q) return;
+  track('nick_ask',{q:q.slice(0,80)});
   inp.value=''; inp.style.height='auto';
   _advMsgs.push({role:'user',text:q});
   const asst={role:'assistant',text:'',used:[],asof:null,status:null,streaming:true};

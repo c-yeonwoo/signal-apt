@@ -383,6 +383,28 @@ def myfeed(request: Request):
     return {"ok": True, "empty": False, "items": items, "기준일": str(_kb().last_date.date())}
 
 
+@app.post("/api/events")
+def track_event(request: Request, data: dict = Body(...)):
+    """퍼널 이벤트 최소셋. name: signup|profile_complete|fav_add|report_open|nick_ask|nbhd_open."""
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    name = (data.get("name") or "").strip()
+    props = data.get("props") if isinstance(data.get("props"), dict) else {}
+    ok = db.event_log(uid, name, props)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "invalid_event"}, status_code=400)
+    return {"ok": True}
+
+
+@app.get("/api/admin/events")
+def admin_events(request: Request, days: int = 30):
+    """최근 N일 이벤트 집계(관리자)."""
+    if not _is_admin(request):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+    return {"ok": True, "days": days, "counts": db.event_counts(days)}
+
+
 WEB_DIR = Path(__file__).parent / "web"
 _METRIC_LABEL = {
     "jeonse_supply": "전세수급지수",
