@@ -1944,6 +1944,88 @@ def agents_nearby(region: str, name: str):
     return out
 
 
+_NBHD_CATS = [("SW8", "지하철역"), ("SC4", "학교"), ("MT1", "대형마트"), ("HP8", "병원")]
+
+
+def _nbhd_infra(lat: float, lng: float, key: str, radius: int = 1500) -> dict:
+    """카카오 로컬 카테고리 검색으로 생활인프라 개수(구 중심 반경). 실패 시 해당 항목 생략."""
+    import urllib.parse
+    import urllib.request
+    out = {}
+    for code, label in _NBHD_CATS:
+        try:
+            url = "https://dapi.kakao.com/v2/local/search/category.json?" + urllib.parse.urlencode(
+                {"category_group_code": code, "x": lng, "y": lat, "radius": radius, "size": 1})
+            req = urllib.request.Request(url, headers={"Authorization": f"KakaoAK {key}"})
+            data = json.loads(urllib.request.urlopen(req, timeout=6).read())  # noqa: S310
+            out[label] = (data.get("meta") or {}).get("total_count")
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+@app.get("/api/neighborhood/{region}")
+def neighborhood(region: str):
+    """동네 딥다이브 — 보유 데이터(시그널·가격·수급·미래가치·매물) 재조립 + 생활인프라(카카오). 임장 전 동네 파악."""
+    sigrow = next((r for r in signals() if r.get("region") == region), None) \
+        or next((r for r in signals() if region and region in (r.get("region") or "")), None)
+    if not sigrow:
+        return {"ok": False, "reason": "no_region"}
+    region = sigrow["region"]
+    rg = (_regime().get("regions", {}) or {}).get(region, {})
+    # 가격·저평가(localities)
+    loc = store.load_localities()
+    lr = {}
+    if not loc.empty:
+        for r in json.loads(loc.to_json(orient="records", force_ascii=False)):
+            if r.get("region") == region:
+                lr = r
+                break
+    # 매물 건수(이 동네)
+    def _qs_count():
+        try:
+            qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
+            return sum(1 for m in qs if region in (m.get("지역") or ""))
+        except Exception:  # noqa: BLE001
+            return 0
+    ps_cnt = 0
+    try:
+        ps_cnt = sum(1 for d in _presale() if region in (d.get("지역") or ""))
+    except Exception:  # noqa: BLE001
+        pass
+    # 미래가치
+    redev_n = len(_redev_candidates(region) or []) if db_has_redev_cache(region) else None
+    dev = db.policy_search(region, region=region, limit=3)
+    dev = [{"title": d["title"], "eff_date": d["eff_date"]} for d in dev
+           if d.get("category") in ("개발계획", "정비사업")]
+    # 생활인프라(카카오, 30일 캐시)
+    infra = None
+    ck = f"nbhd_infra:{region}"
+    infra = db.kv_get(ck, max_age=30 * 86400)
+    if infra is None:
+        config.load_env()
+        kkey = config.kakao_key()
+        c = _region_centroid(region, _code_of(region))
+        if kkey and c:
+            infra = _nbhd_infra(c[0], c[1], kkey)
+            if infra:
+                db.kv_set(ck, infra)
+    return {
+        "ok": True, "region": region, "시그널": sigrow.get("signal"),
+        "급지": sigrow.get("급지"), "해설": sigrow.get("해설"), "근거": sigrow.get("근거"),
+        "전세수급": sigrow.get("전세수급"), "매수우위지수": sigrow.get("매수우위지수"),
+        "매매모멘텀": sigrow.get("매매모멘텀"), "공급압력": sigrow.get("공급압력"),
+        "수급출처": sigrow.get("수급출처"),
+        "국면": {"phase": rg.get("phase") or _regime().get("phase"),
+                "color": _regime().get("color")},
+        "평단가": lr.get("price"), "저평가도": lr.get("저평가도"), "입지점수": lr.get("입지점수"),
+        "규제지역": _regulation_of(region), "규제기준": _REGULATION_ASOF,
+        "미래가치": {"재건축후보수": redev_n, "개발계획": dev},
+        "매물": {"급매": _qs_count(), "청약": ps_cnt},
+        "생활인프라": infra or {}, "인프라기준": "구 중심 반경 1.5km · 카카오 로컬(참고용)",
+    }
+
+
 @app.get("/api/region-centroids")
 def region_centroids(regions: str):
     """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).

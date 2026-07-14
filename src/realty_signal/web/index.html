@@ -341,6 +341,7 @@
         <span id="sigbadge" style="font-size:18px;font-weight:700"></span>
         <span id="sigsub" style="color:var(--dim);font-size:12.5px"></span>
         <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 급매물(+경매·청약)만 좁혀 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 급매물 ›</button>
+        <button class="chip" onclick="openNbhd(selected)" title="임장 전 동네 파악 — 시그널·가격·미래가치·생활인프라" style="white-space:nowrap">🏘 동네 딥다이브</button>
         <button class="chip" onclick="askNickRegion()" title="Nick에게 이 지역을 물어보기" style="white-space:nowrap">🦊 Nick에게</button>
         <div style="margin-left:auto;position:relative">
           <button class="chip" id="ovlBtn" onclick="toggleOverlayMenu(event)" style="white-space:nowrap" title="차트에 겹쳐 볼 항목 선택">오버레이 ▾</button>
@@ -744,6 +745,15 @@
         </div></details></div>
     <div id="adminStatus" style="font-size:12px;color:var(--dim);min-height:18px"></div>
   </div>
+</dialog>
+
+<dialog id="nbhdDlg" style="width:640px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h3 id="nbhdTitle" style="margin:0">🏘 동네 딥다이브</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('nbhdDlg').close()">✕</span>
+  </div>
+  <div style="color:var(--dim);font-size:12px;margin-bottom:12px">임장 전, 이 동네를 데이터로 먼저 파악하세요.</div>
+  <div id="nbhdBody" style="max-height:70vh;overflow:auto"></div>
 </dialog>
 
 <dialog id="pasteDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--txt)">
@@ -2817,6 +2827,55 @@ function nickCxBtn(name, region){
   if(!name||!region) return '';
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
   return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();askNick('${r} ${n} 지금 어때? 실거래·단지시그널·공시대비 근거로 알려줘.')">🦊 Nick에게</span>`;
+}
+// ===== 동네 딥다이브 =====
+async function openNbhd(region){
+  if(!region) return;
+  document.getElementById('nbhdTitle').textContent='🏘 '+region+' 딥다이브';
+  document.getElementById('nbhdBody').innerHTML='<div style="color:var(--dim);font-size:13px;padding:12px">불러오는 중…</div>';
+  document.getElementById('nbhdDlg').showModal();
+  let d; try{ d=await (await fetch('/api/neighborhood/'+encodeURIComponent(region))).json(); }
+  catch(e){ document.getElementById('nbhdBody').innerHTML='<div style="color:var(--dim);padding:12px">불러오지 못했습니다.</div>'; return; }
+  if(!d.ok){ document.getElementById('nbhdBody').innerHTML='<div style="color:var(--dim);padding:12px">이 지역 데이터를 찾지 못했습니다.</div>'; return; }
+  renderNbhd(d);
+}
+function _nbSec(title, inner){ return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--dim);margin-bottom:7px">${title}</div>${inner}</div>`; }
+function _nbStat(label, val){ return `<div style="display:inline-flex;flex-direction:column;gap:1px;min-width:92px;padding:8px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px"><span style="font-size:11px;color:var(--dim)">${label}</span><span style="font-weight:700;font-size:14px">${val}</span></div>`; }
+function renderNbhd(d){
+  const b=document.getElementById('nbhdBody');
+  const money=v=>v?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):'–';
+  // 1) 요약
+  let h=_nbSec('요약',
+    `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">${badge(d['시그널'])}
+      ${d['급지']?`<span class="pill">급지 ${d['급지']}</span>`:''}${d['국면']&&d['국면'].phase?`<span class="pill">국면 ${d['국면'].phase}</span>`:''}
+      ${(d['규제지역']||[]).map(x=>`<span class="pill" style="border-color:var(--danger);color:var(--danger)">${x}</span>`).join('')}</div>
+     ${d['해설']?`<div style="font-size:12.5px;line-height:1.55;color:var(--txt)">${(d['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`:''}`);
+  // 2) 가격·저평가
+  h+=_nbSec('가격 · 저평가', `<div style="display:flex;gap:8px;flex-wrap:wrap">
+     ${_nbStat('평단가', money(d['평단가']))}${d['저평가도']!=null?_nbStat('저평가도', d['저평가도']):''}${d['입지점수']!=null?_nbStat('입지점수', d['입지점수']):''}${d['공급압력']!=null?_nbStat('입주물량', d['공급압력']+'x'):''}</div>`);
+  // 3) 수급·심리
+  h+=_nbSec('수급 · 심리', `<div style="display:flex;gap:8px;flex-wrap:wrap">
+     ${d['전세수급']!=null?_nbStat('전세수급', d['전세수급']):''}${d['매수우위지수']!=null?_nbStat('매수우위', d['매수우위지수']):''}${d['매매모멘텀']?_nbStat('매매모멘텀', d['매매모멘텀']):''}</div>`);
+  // 4) 미래가치
+  const fv=d['미래가치']||{}; const dev=(fv['개발계획']||[]);
+  h+=_nbSec('미래가치',
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${dev.length?'8px':'0'}">${fv['재건축후보수']!=null?_nbStat('재건축 후보', fv['재건축후보수']+'곳'):_nbStat('재건축', '워밍 필요')}</div>
+     ${dev.length?`<div style="font-size:12px;color:var(--dim)">관련 제도·개발(수도권): ${dev.map(x=>`<b style="color:var(--txt)">${x.title}</b>`).join(' · ')}</div>`:''}`);
+  // 5) 매물
+  const m=d['매물']||{};
+  h+=_nbSec('매물 현황', `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+     ${_nbStat('급매', (m['급매']||0)+'건')}${_nbStat('청약', (m['청약']||0)+'건')}
+     <span class="btn" style="padding:5px 12px" onclick="document.getElementById('nbhdDlg').close();focusListings('${d.region}')">이 동네 매물 보기 →</span></div>`);
+  // 6) 생활인프라
+  const inf=d['생활인프라']||{};
+  if(Object.keys(inf).length){
+    h+=_nbSec('생활 인프라', `<div style="display:flex;gap:8px;flex-wrap:wrap">
+       ${Object.entries(inf).map(([k,v])=>_nbStat(k, (v!=null?v:'–'))).join('')}</div>
+       <div style="font-size:10px;color:var(--dim);margin-top:6px">${d['인프라기준']||''}</div>`);
+  }
+  // 7) Nick
+  h+=`<div style="border-top:1px solid var(--line);padding-top:12px"><span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.region} 동네 어때? 살기·교통·학군·투자관점 종합해서 근거로 알려줘.')">🦊 이 동네 Nick에게 물어보기</span></div>`;
+  b.innerHTML=h;
 }
 function cxSigBtn(name, region){
   if(!name||!region) return '';
