@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid INTEGER, name TEXT, props TEXT, ts INTEGER);
 CREATE INDEX IF NOT EXISTS ix_events_name_ts ON events(name, ts);
 CREATE INDEX IF NOT EXISTS ix_events_uid_ts ON events(uid, ts);
+CREATE TABLE IF NOT EXISTS nbhd_snap(uid INTEGER, region TEXT, week TEXT, data TEXT, ts INTEGER,
+    PRIMARY KEY(uid, region, week));
+CREATE INDEX IF NOT EXISTS ix_nbhd_snap_uid_region ON nbhd_snap(uid, region, ts);
 """
 
 _migrated = [False]
@@ -367,6 +370,51 @@ def usage_inc(uid: int, kind: str) -> int:
     n = usage_get(uid, kind) + 1
     kv_set(key, n)
     return n
+
+
+# ---------- 동네 리포트 스냅샷 (주간 diff·비교) ----------
+def nbhd_snap_save(uid: int, region: str, week: str, data: dict) -> None:
+    c = conn()
+    c.execute(
+        "INSERT OR REPLACE INTO nbhd_snap(uid,region,week,data,ts) VALUES(?,?,?,?,?)",
+        (uid, region, week, json.dumps(data, ensure_ascii=False), int(time.time())),
+    )
+    c.commit()
+    c.close()
+
+
+def nbhd_snap_get(uid: int, region: str, week: str) -> dict | None:
+    c = conn()
+    row = c.execute(
+        "SELECT data FROM nbhd_snap WHERE uid=? AND region=? AND week=?",
+        (uid, region, week),
+    ).fetchone()
+    c.close()
+    return json.loads(row[0]) if row and row[0] else None
+
+
+def nbhd_snap_prev(uid: int, region: str, before_week: str) -> dict | None:
+    """before_week 이전 가장 최근 스냅샷 {week, data}."""
+    c = conn()
+    row = c.execute(
+        "SELECT week, data FROM nbhd_snap WHERE uid=? AND region=? AND week<? "
+        "ORDER BY week DESC LIMIT 1",
+        (uid, region, before_week),
+    ).fetchone()
+    c.close()
+    if not row:
+        return None
+    return {"week": row[0], "data": json.loads(row[1]) if row[1] else {}}
+
+
+def nbhd_snap_weeks(uid: int, region: str, limit: int = 8) -> list[str]:
+    c = conn()
+    rows = c.execute(
+        "SELECT week FROM nbhd_snap WHERE uid=? AND region=? ORDER BY week DESC LIMIT ?",
+        (uid, region, limit),
+    ).fetchall()
+    c.close()
+    return [w for (w,) in rows]
 
 
 # ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
