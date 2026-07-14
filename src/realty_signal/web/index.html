@@ -2087,6 +2087,7 @@ async function genAiReport(){
     const r=await (await fetch('/api/report/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({summary:_reportSummary})})).json();
     if(r.available && r.report) body.innerHTML=mdLite(r.report);
+    else if(r.reason==='limit'){ body.innerHTML=old; toast(r.message||'이번 주 AI 심층 리포트 한도에 도달했습니다.'); }
     else { body.innerHTML=old; toast('AI 심층 분석은 ANTHROPIC_API_KEY 설정 시 사용 가능 (지금은 규칙기반 리포트)'); }
   }catch(e){ body.innerHTML=old; toast('AI 리포트 생성 실패'); }
 }
@@ -4091,6 +4092,7 @@ async function startApp(needOnboard){
   <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent-weak)">
     <span style="font-weight:800">🦊 Nick <span style="font-weight:400;font-size:11px;color:var(--dim)">부동산 자문</span></span>
     <span id="advAsof" style="font-size:11px;color:var(--dim)"></span>
+    <span id="advUsage" style="font-size:11px;color:var(--dim)"></span>
     <span onclick="advToggle()" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:18px;line-height:1">✕</span>
   </div>
   <div id="advBody" style="flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6"></div>
@@ -4103,12 +4105,24 @@ async function startApp(needOnboard){
   </div>
 </div>
 <script>
-let _advMsgs=[], _advBusy=false;
+let _advMsgs=[], _advBusy=false, _advUsage=null;
+function _advSetUsage(u){
+  _advUsage=u||null;
+  const el=document.getElementById('advUsage'); if(!el) return;
+  if(!u){ el.textContent=''; return; }
+  if(u.unlimited){ el.textContent='무제한'; return; }
+  el.textContent=`이번 주 ${u.used||0}/${u.limit}회`;
+}
+async function _advLoadUsage(){
+  try{ const d=await (await fetch('/api/usage')).json();
+    if(d.ok && d.nick) _advSetUsage(d.nick);
+  }catch(e){}
+}
 function advToggle(){
   const p=document.getElementById('advPanel'), f=document.getElementById('advFab');
   const open=p.style.display==='none'||!p.style.display;
   p.style.display=open?'flex':'none'; f.style.display=open?'none':'block';
-  if(open){ if(!_advMsgs.length) advRender(); document.getElementById('advInput').focus(); }
+  if(open){ if(!_advMsgs.length) advRender(); _advLoadUsage(); document.getElementById('advInput').focus(); }
 }
 function advKey(e){
   if(e.key!=='Enter') return;
@@ -4125,9 +4139,14 @@ function advRender(){
   const b=document.getElementById('advBody'); if(!b) return;
   const asof=document.getElementById('advAsof'); if(asof && !asof.textContent && typeof meta!=='undefined' && meta.last_date) asof.textContent='기준 '+meta.last_date;
   if(!_advMsgs.length){
-    b.innerHTML=`<div style="color:var(--dim)">안녕하세요, <b>Nick</b>이에요 🦊 수집된 <b>시그널·실거래·급매·경매·청약·재건축·공시·뉴스</b> 데이터를 근거로 답해드려요. 무엇이든 물어보세요.</div>
+    const p=_profile||{};
+    const bits=[];
+    if(p['가용자본']) bits.push('예산');
+    if(p['거주지']) bits.push(p['거주지']);
+    const hint=bits.length?`프로필(${bits.join('·')})을 참고해 답합니다. `:'가용자본을 프로필에 넣으면 예산에 맞춰 답합니다. ';
+    b.innerHTML=`<div style="color:var(--dim)">안녕하세요, <b>Nick</b>이에요. ${hint}수집된 <b>시그널·실거래·급매·경매·청약·재건축·공시·뉴스</b> 데이터를 근거로 답합니다. 무엇이든 물어보세요.</div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
-      ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','강남구 시그널을 근거와 함께 설명해줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)">${q}</span>`).join('')}</div>`;
+      ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','내 예산으로 볼만한 지역 알려줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)">${q}</span>`).join('')}</div>`;
     return;
   }
   const TOOLKR={list_signal_regions:'지역 시그널',get_region_signal:'지역 분석',get_complex:'단지 실거래',get_backtest:'적중률',get_regime:'경기 국면',get_news:'뉴스',get_freshness:'신선도',get_policy:'정책',get_regulation:'규제지역',get_presale:'청약',get_redev:'재건축',get_listings:'매물'};
@@ -4143,7 +4162,13 @@ function advRender(){
   }).join('');
   b.scrollTop=b.scrollHeight;
 }
-function _advErr(m){ return m==='no_ai'?'AI 자문은 서버에 ANTHROPIC_API_KEY 설정이 필요합니다.':m==='login_required'?'로그인이 필요합니다.':'지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다.'; }
+function _advErr(m, usage){
+  if(m==='limit'){
+    const lim=(usage&&usage.limit)!=null?usage.limit:15;
+    return `이번 주 Nick 질문 한도(${lim}회)에 도달했습니다. 관심지역 추적·동네 리포트·시그널은 계속 이용할 수 있습니다.`;
+  }
+  return m==='no_ai'?'AI 자문은 서버에 ANTHROPIC_API_KEY 설정이 필요합니다.':m==='login_required'?'로그인이 필요합니다.':'지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다.';
+}
 async function advSend(text){
   if(_advBusy) return;
   const inp=document.getElementById('advInput');
@@ -4169,8 +4194,8 @@ async function advSend(text){
         let ev; try{ ev=JSON.parse(line.slice(5).trim()); }catch(e){ continue; }
         if(ev.type==='delta'){ asst.status=null; asst.text+=ev.text; advRender(); }
         else if(ev.type==='status'){ asst.status=ev.tool; advRender(); }
-        else if(ev.type==='done'){ asst.used=ev.used||[]; asst.asof=ev['기준일']; }
-        else if(ev.type==='error'){ if(!(asst.text||'').trim()) asst.text=_advErr(ev.message); }
+        else if(ev.type==='done'){ asst.used=ev.used||[]; asst.asof=ev['기준일']; if(ev.usage) _advSetUsage(ev.usage); }
+        else if(ev.type==='error'){ if(!(asst.text||'').trim()) asst.text=_advErr(ev.message, ev.usage); if(ev.usage) _advSetUsage(ev.usage); }
       }
     }
   }catch(e){ if(!(asst.text||'').trim()) asst.text='연결에 문제가 있어 답변하지 못했습니다. 잠시 후 다시 시도해 주세요.'; }

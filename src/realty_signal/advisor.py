@@ -16,7 +16,7 @@ OPUS = "claude-opus-4-8"
 SONNET = "claude-sonnet-4-6"
 
 SYSTEM = (
-    "당신은 한국 부동산 의사결정을 돕는 데이터 애널리스트 '팔레트 자문'입니다. "
+    "당신은 한국 부동산 의사결정을 돕는 데이터 애널리스트 'Nick'입니다. "
     "Signal APT 앱이 수집·산출한 데이터(지역 시그널, 국면, 실거래, 급매·경매·청약·재건축, 공시가격, 뉴스, 백테스트 적중률)를 근거로 답합니다.\n"
     "\n원칙(반드시 준수):\n"
     "1. 근거 없는 단정 금지. 수치·판단이 필요하면 반드시 제공된 tool 로 조회한 결과만 사용한다. 조회로 확인되지 않으면 '데이터에 없다'고 솔직히 말한다.\n"
@@ -25,7 +25,50 @@ SYSTEM = (
     "4. 한국어로 간결하고 구체적으로. 표·불릿 남발 없이 핵심부터. 근거가 된 데이터의 기준일이 오래됐으면 그 점을 밝힌다.\n"
     "5. 여러 지표가 필요하면 tool 을 여러 번 호출해 종합한다. 사용자가 지역/단지를 명시하지 않으면 되묻거나 list_signal_regions 로 후보를 제시한다.\n"
     "6. 정책·규제·개발계획(대출규제·DSR·신도시·GTX·재건축 규제 등) 질문은 get_policy 로 지식베이스를 조회해 답하고, 결과의 출처(source)와 기준일(eff_date)을 함께 밝히며 '정책은 이후 변경됐을 수 있으니 최신 공고 확인'을 덧붙인다. 조회 결과가 없으면 모른다고 말한다(정책을 지어내지 말 것).\n"
+    "7. 아래에 '사용자 프로필'이 주어지면 예산·거주지·관심지역을 우선 고려한다. 프로필에 없는 사실은 지어내지 말고, 예산 밖 후보를 말할 때는 예산 초과임을 명시한다.\n"
 )
+
+
+def _fmt_manwon(v) -> str | None:
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    if n >= 10000:
+        return f"{n/10000:.1f}억"
+    return f"{int(n):,}만"
+
+
+def build_system(profile: dict | None = None, favorites: dict | None = None) -> str:
+    """SYSTEM + 사용자 프로필/관심목록 컨텍스트. 비어 있으면 SYSTEM만."""
+    bits = []
+    p = profile or {}
+    if p.get("가용자본"):
+        bits.append(f"가용자본 {_fmt_manwon(p['가용자본'])}")
+    if p.get("연소득"):
+        bits.append(f"연소득 {_fmt_manwon(p['연소득'])}")
+    if p.get("주택수") is not None and p.get("주택수") != "":
+        bits.append(f"주택수 {p['주택수']}")
+    if p.get("거주지"):
+        bits.append(f"거주지 {p['거주지']}")
+    if p.get("관심평수"):
+        sizes = p["관심평수"] if isinstance(p["관심평수"], list) else [p["관심평수"]]
+        bits.append("관심평수 " + ",".join(str(s) for s in sizes if s is not None))
+    if p.get("청약관심"):
+        bits.append("청약 관심 있음")
+    fav = favorites or {}
+    regs = fav.get("관심지역") or []
+    cxs = fav.get("관심단지") or []
+    if regs:
+        bits.append("관심지역 " + ", ".join(regs[:12]))
+    if cxs:
+        bits.append("관심단지 " + ", ".join(cxs[:12]))
+    if not bits:
+        return SYSTEM
+    return SYSTEM + "\n사용자 프로필(답변 시 참고):\n- " + "\n- ".join(bits) + "\n"
+
 
 # Anthropic tool 스키마 — 각 tool 은 api.py 의 내부 데이터 함수에 매핑된다(server-side 실행).
 TOOLS = [
@@ -138,7 +181,8 @@ def _to_blocks(messages: list) -> list:
     return out
 
 
-def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6) -> dict:
+def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6,
+                system: str | None = None) -> dict:
     """tool-use 루프 실행. messages=[{role,text}...]. tool_exec(name, input)->dict.
 
     반환 {"answer": str, "used": [tool 이름들], "rounds": n}. 실패 시 answer=None.
@@ -152,12 +196,13 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
     convo = _to_blocks(messages)
     if not convo:
         return {"answer": None, "used": [], "rounds": 0}
+    sys_prompt = system or SYSTEM
     used: list[str] = []
     try:
         client = anthropic.Anthropic()
         for _ in range(max_rounds):
             resp = client.messages.create(
-                model=model, max_tokens=1500, system=SYSTEM, tools=TOOLS, messages=convo,
+                model=model, max_tokens=1500, system=sys_prompt, tools=TOOLS, messages=convo,
             )
             if resp.stop_reason == "tool_use":
                 convo.append({"role": "assistant", "content": resp.content})
@@ -185,7 +230,8 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
         return {"answer": None, "used": sorted(set(used)), "rounds": 0}
 
 
-def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6):
+def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6,
+                       system: str | None = None):
     """tool-use 루프를 스트리밍으로. 이벤트 dict 를 yield:
        {"type":"status","tool":name} · {"type":"delta","text":...} · {"type":"done","used":[...]} · {"type":"error"}.
     """
@@ -201,12 +247,13 @@ def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_round
     if not convo:
         yield {"type": "error", "message": "empty"}
         return
+    sys_prompt = system or SYSTEM
     used: list[str] = []
     try:
         client = anthropic.Anthropic()
         for _ in range(max_rounds):
             with client.messages.stream(
-                model=model, max_tokens=1500, system=SYSTEM, tools=TOOLS, messages=convo,
+                model=model, max_tokens=1500, system=sys_prompt, tools=TOOLS, messages=convo,
             ) as stream:
                 for chunk in stream.text_stream:
                     if chunk:

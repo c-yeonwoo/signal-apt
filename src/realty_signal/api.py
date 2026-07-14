@@ -38,6 +38,33 @@ def _is_admin(request: Request) -> bool:
     return bool(u) and (u.get("email") or "").lower() in config.admin_whitelist()
 
 
+def _fav_context(uid: int) -> dict:
+    fav = db.fav_list(uid)
+    return {
+        "관심지역": [f["key"] for f in fav if f["kind"] == "region"],
+        "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav if f["kind"] == "complex"],
+    }
+
+
+def _usage_status(uid: int, kind: str, *, unlimited: bool) -> dict:
+    """kind=nick|report. unlimited면 한도 없음."""
+    used = db.usage_get(uid, kind)
+    if unlimited:
+        return {"kind": kind, "used": used, "limit": None, "remaining": None, "unlimited": True}
+    limit = config.nick_weekly_limit() if kind == "nick" else config.report_weekly_limit()
+    return {
+        "kind": kind, "used": used, "limit": limit,
+        "remaining": max(0, limit - used), "unlimited": False,
+    }
+
+
+def _usage_allow(uid: int, kind: str, *, unlimited: bool) -> tuple[bool, dict]:
+    st = _usage_status(uid, kind, unlimited=unlimited)
+    if st["unlimited"]:
+        return True, st
+    return st["remaining"] > 0, st
+
+
 _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
 
 
@@ -268,15 +295,16 @@ def report_ai(request: Request, data: dict = Body(...)):
     if not uid:
         return {"available": False}
     opus = _is_opus_user(request)
+    unlimited = opus or _is_admin(request)
+    ok, ust = _usage_allow(uid, "report", unlimited=unlimited)
+    if not ok:
+        return {"available": False, "reason": "limit", "usage": ust,
+                "message": f"이번 주 AI 심층 리포트 한도({ust['limit']}회)에 도달했습니다. 규칙기반 리포트는 계속 이용할 수 있습니다."}
     model = ai_report.OPUS if opus else ai_report.SONNET   # 화이트리스트=Opus, 그 외=Sonnet
     tier = "opus" if opus else "sonnet"
     profile = db.profile_get(uid)
     summary = data.get("summary") or {}
-    fav = db.fav_list(uid)
-    favorites = {
-        "관심지역": [f["key"] for f in fav if f["kind"] == "region"],
-        "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav if f["kind"] == "complex"],
-    }
+    favorites = _fav_context(uid)
     # 캐시: 같은 데이터주차·프로필·관심·티어면 재사용(뉴스는 키에서 제외 — 주 단위 재생성으로 충분)
     try:
         wk = _kb().last_date.strftime("%G-W%V")
@@ -286,14 +314,30 @@ def report_ai(request: Request, data: dict = Body(...)):
     ckey = f"aireport:{uid}:{wk}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
-        return {**cached, "cached": True}
+        return {**cached, "cached": True, "usage": ust}
     news = db.news_recent_for_ai(12)   # 최근 정책·시장 뉴스 맥락 주입
     report = ai_report.generate(profile, summary, news=news, favorites=favorites, model=model)
     if not report:
         return {"available": False}
-    out = {"available": True, "report": report, "news_used": len(news), "tier": tier}
-    db.kv_set(ckey, out)
+    db.usage_inc(uid, "report")
+    ust = _usage_status(uid, "report", unlimited=unlimited)
+    out = {"available": True, "report": report, "news_used": len(news), "tier": tier, "usage": ust}
+    db.kv_set(ckey, {k: v for k, v in out.items() if k != "usage"})
     return out
+
+
+@app.get("/api/usage")
+def usage_get(request: Request):
+    """주간 Nick/리포트 사용량(소프트 한도 UI용)."""
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    unlimited = _is_opus_user(request) or _is_admin(request)
+    return {
+        "ok": True,
+        "nick": _usage_status(uid, "nick", unlimited=unlimited),
+        "report": _usage_status(uid, "report", unlimited=unlimited),
+    }
 
 
 @app.get("/api/favorites")
@@ -762,22 +806,32 @@ def advisor_api(request: Request, data: dict = Body(...)):
     """근거기반 부동산 자문 챗봇 — Claude tool-use 로 우리 데이터를 조회해 답변. 로그인 필요."""
     from realty_signal import advisor
     config.load_env()
-    if not _uid(request):
+    uid = _uid(request)
+    if not uid:
         return {"ok": False, "reason": "login_required"}
     if not advisor.available():
         return {"ok": False, "reason": "no_ai",
                 "answer": "AI 자문은 서버에 ANTHROPIC_API_KEY 가 설정되어야 이용할 수 있습니다."}
+    unlimited = _is_opus_user(request) or _is_admin(request)
+    ok, ust = _usage_allow(uid, "nick", unlimited=unlimited)
+    if not ok:
+        return {"ok": False, "reason": "limit", "usage": ust,
+                "answer": f"이번 주 Nick 질문 한도({ust['limit']}회)에 도달했습니다. "
+                          "관심지역 추적·동네 리포트·시그널은 계속 이용할 수 있습니다."}
     messages = data.get("messages") or []
     if not isinstance(messages, list) or not messages:
         return {"ok": False, "reason": "empty"}
     messages = messages[-12:]                              # 최근 12턴만(비용·컨텍스트 방어)
     model = advisor.OPUS if _is_opus_user(request) else advisor.SONNET
-    res = advisor.run_advisor(messages, _advisor_tool, model=model)
+    system = advisor.build_system(db.profile_get(uid), _fav_context(uid))
+    res = advisor.run_advisor(messages, _advisor_tool, model=model, system=system)
     if not res.get("answer"):
         return {"ok": False, "reason": "failed",
                 "answer": "지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다."}
+    db.usage_inc(uid, "nick")
+    ust = _usage_status(uid, "nick", unlimited=unlimited)
     return {"ok": True, "answer": res["answer"], "used": res.get("used", []),
-            "기준일": str(_kb().last_date.date())}
+            "기준일": str(_kb().last_date.date()), "usage": ust}
 
 
 @app.post("/api/advisor/stream")
@@ -789,7 +843,11 @@ def advisor_stream_api(request: Request, data: dict = Body(...)):
     uid = _uid(request)
     asof = str(_kb().last_date.date())
     opus = _is_opus_user(request)
+    unlimited = opus or _is_admin(request)
     messages = (data.get("messages") or [])[-12:]
+    profile = db.profile_get(uid) if uid else {}
+    favorites = _fav_context(uid) if uid else {}
+    system = advisor.build_system(profile, favorites)
 
     def _one(ev: dict) -> str:
         return f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
@@ -801,11 +859,16 @@ def advisor_stream_api(request: Request, data: dict = Body(...)):
             yield _one({"type": "error", "message": "no_ai"}); return
         if not messages:
             yield _one({"type": "error", "message": "empty"}); return
+        ok, ust = _usage_allow(uid, "nick", unlimited=unlimited)
+        if not ok:
+            yield _one({"type": "error", "message": "limit", "usage": ust}); return
         model = advisor.OPUS if opus else advisor.SONNET
         try:
-            for ev in advisor.run_advisor_stream(messages, _advisor_tool, model=model):
+            for ev in advisor.run_advisor_stream(messages, _advisor_tool, model=model, system=system):
                 if ev.get("type") == "done":
+                    db.usage_inc(uid, "nick")
                     ev["기준일"] = asof
+                    ev["usage"] = _usage_status(uid, "nick", unlimited=unlimited)
                 yield _one(ev)
         except Exception:  # noqa: BLE001
             yield _one({"type": "error", "message": "failed"})
