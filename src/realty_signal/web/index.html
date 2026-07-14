@@ -193,7 +193,12 @@
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:12px; height:calc(100vh - 178px); min-height:420px; }
   .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
-  .ms-map { flex:1; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(37,99,235,0.06); }
+  .ms-map { flex:1; position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(37,99,235,0.06); }
+  .ms-viewport-hint { font-size:11px; color:var(--dim); padding:8px 13px; border-bottom:1px solid var(--line); background:#f8fafc; }
+  .ms-map-cta { position:absolute; z-index:800; left:50%; top:12px; transform:translateX(-50%); pointer-events:none; }
+  .ms-map-cta button { pointer-events:auto; background:var(--accent); color:#fff; border:none; border-radius:999px;
+    padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(37,99,235,.35); white-space:nowrap; }
+  .ms-map-cta button:hover { filter:brightness(1.06); }
   .ms-row { padding:10px 13px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
   .ms-row:hover { background:#eef2f7; }
   .ms-row.sel { background:#eff6ff; box-shadow:inset 3px 0 0 var(--accent); }
@@ -1926,20 +1931,86 @@ function renderAllListings(){
 }
 // ===== 재사용 좌우 분할 지도 컴포넌트 (Leaflet + CartoDB dark) =====
 const _ms={};
-async function mapSplit(listId, mapId, items, opt){
-  const listEl=document.getElementById(listId); listEl.innerHTML='';
-  items.forEach((it,i)=>{
-    const s=opt.summary(it,i);
+function _boundsKey(b){ return [b.getSouth(),b.getWest(),b.getNorth(),b.getEast()].map(x=>x.toFixed(4)).join(','); }
+function ensureMapCta(mapId){
+  const st=_ms[mapId]; if(!st||st._ctaEl) return st&&st._ctaEl;
+  const mapEl=document.getElementById(mapId); if(!mapEl) return null;
+  const el=document.createElement('div'); el.className='ms-map-cta'; el.style.display='none';
+  el.innerHTML='<button type="button">이 지역 매물 다시 찾기</button>';
+  el.querySelector('button').onclick=()=>applyViewportFilter(mapId);
+  mapEl.appendChild(el); st._ctaEl=el; return el;
+}
+function showMapCta(mapId){ const el=ensureMapCta(mapId); if(el) el.style.display='block'; }
+function hideMapCta(mapId){ const st=_ms[mapId]; if(st&&st._ctaEl) st._ctaEl.style.display='none'; }
+function bindMapViewport(mapId, listId){
+  const st=initMap(mapId); st.listId=listId;
+  if(st._vpBound) return; st._vpBound=true;
+  let t;
+  st.map.on('moveend zoomend', ()=>{ clearTimeout(t); t=setTimeout(()=>showMapCtaIfNeeded(mapId), 150); });
+}
+function showMapCtaIfNeeded(mapId){
+  const st=_ms[mapId]; if(!st||st._vpApplying||!st.lastBoundsKey) return;
+  if(st._suppressCtaUntil&&Date.now()<st._suppressCtaUntil) return;
+  const key=_boundsKey(st.map.getBounds());
+  if(key!==st.lastBoundsKey) showMapCta(mapId); else hideMapCta(mapId);
+}
+function renderMsList(mapId, indices){
+  const st=_ms[mapId]; if(!st||!st.listId) return;
+  const listEl=document.getElementById(st.listId); if(!listEl) return;
+  const items=st.items, opt=st.opt;
+  listEl.innerHTML='';
+  const hint=document.createElement('div'); hint.className='ms-viewport-hint';
+  hint.textContent=`지도 영역 ${indices.length}건`;
+  listEl.appendChild(hint);
+  if(!indices.length){
+    const empty=document.createElement('div');
+    empty.style.cssText='padding:16px;color:var(--dim);font-size:13px;line-height:1.5';
+    empty.textContent='이 구역에 표시된 매물이 없습니다. 지도를 옮긴 뒤 「이 지역 매물 다시 찾기」를 눌러보세요.';
+    listEl.appendChild(empty); return;
+  }
+  indices.forEach(i=>{
+    const it=items[i], s=opt.summary(it,i);
     const row=document.createElement('div'); row.className='ms-row'; row.dataset.i=i;
     row.innerHTML=`<div class="r1"><span class="nm">${s.nm}</span><span>${s.right||''}</span></div>${s.sub?`<div class="sub">${s.sub}</div>`:''}`;
     const det=document.createElement('div'); det.className='ms-detail'; det.style.display='none';
-    row.onclick=()=>{ const open=det.style.display==='none';
-      listEl.querySelectorAll('.ms-detail').forEach(d=>d.style.display='none');
-      listEl.querySelectorAll('.ms-row').forEach(r=>r.classList.remove('sel'));
-      if(open){ det.innerHTML=opt.detail(it); det.style.display='block'; row.classList.add('sel'); }
-      focusPin(mapId,i); };
+    row.onclick=()=>selectMsRow(mapId, i);
     listEl.appendChild(row); listEl.appendChild(det);
   });
+}
+function applyViewportFilter(mapId){
+  const st=_ms[mapId]; if(!st||!st.map||!st.items) return;
+  st._vpApplying=true;
+  const prevSel=st.sel;
+  const b=st.map.getBounds(), indices=[];
+  (st.items||[]).forEach((it,i)=>{ const c=st.coords&&st.coords[i];
+    if(c&&b.contains(L.latLng(c[0],c[1]))) indices.push(i); });
+  st.viewIndices=indices; st.lastBoundsKey=_boundsKey(b);
+  renderMsList(mapId, indices); hideMapCta(mapId); st._vpApplying=false;
+  if(prevSel!=null&&indices.includes(prevSel)) selectMsRow(mapId, prevSel);
+}
+async function selectMsRow(mapId, i){
+  const st=_ms[mapId]; if(!st||!st.listId) return;
+  const listEl=document.getElementById(st.listId);
+  let row=listEl&&listEl.querySelector(`.ms-row[data-i="${i}"]`);
+  if(!row&&st.coords&&st.coords[i]&&st.map.getBounds().contains(L.latLng(st.coords[i][0],st.coords[i][1]))){
+    applyViewportFilter(mapId);
+    row=listEl&&listEl.querySelector(`.ms-row[data-i="${i}"]`);
+  }
+  if(row){
+    const det=row.nextElementSibling;
+    listEl.querySelectorAll('.ms-detail').forEach(d=>d.style.display='none');
+    listEl.querySelectorAll('.ms-row').forEach(r=>r.classList.remove('sel'));
+    if(det&&det.classList.contains('ms-detail')){
+      det.innerHTML=st.opt.detail(st.items[i]); det.style.display='block';
+      row.classList.add('sel'); row.scrollIntoView({block:'nearest',behavior:'smooth'});
+    }
+  }
+  await _focusPinOnly(mapId, i);
+}
+async function mapSplit(listId, mapId, items, opt){
+  const st=initMap(mapId);
+  st.listId=listId; st.items=items; st.opt=opt;
+  bindMapViewport(mapId, listId);
   const coords={}, need=[], fb=new Set(); opt._fb=fb;
   items.forEach((it,i)=>{ const c=opt.coord&&opt.coord(it); if(c&&c[0]) coords[i]=c;
     else if(opt.geoq){ const q=opt.geoq(it); if(q) need.push({i,q}); } });
@@ -1965,6 +2036,7 @@ async function mapSplit(listId, mapId, items, opt){
       if(changed) plotPins(mapId, items, coords, opt);
     }catch(e){}
   }
+  applyViewportFilter(mapId);
 }
 // 공용 지도 타일 — VWorld 키 있으면 한글, 없으면 CartoDB voyager(전 지도 통일)
 let _mapCfg=null;
@@ -2042,13 +2114,15 @@ function plotPins(mapId, items, coords, opt){
     const icon=L.divIcon({className:'',html:`<div class="mpin${isfb?' fb':''}" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
     const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사 (지역 중심)</span>`:'');
     const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(lbl);
+    mk.on('click', e=>{ L.DomEvent.stopPropagation(e); selectMsRow(mapId, i); });
     st.markers[i]=mk; });
   const ms=Object.values(st.markers);
-  if(ms.length){ const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
+  if(ms.length){ st._suppressCtaUntil=Date.now()+900;
+    const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
   setTimeout(()=>st.map.invalidateSize(),150);
 }
-// 핀 클릭: 핀 없으면 즉시 지오코딩→생성 후, 항상 지도 중앙 + 반경 ~2.5km(zoom 14)
-async function focusPin(mapId,i){
+// 핀 포커스: 핀 없으면 즉시 지오코딩→생성 후, 지도 중앙 + 반경 ~2.5km(zoom 14)
+async function _focusPinOnly(mapId,i){
   const st=_ms[mapId]; if(!st) return;
   if(!st.markers[i] && st.opt && st.opt.geoq && st.items){   // 청약 등 미지오코딩 단지 on-demand
     const q=st.opt.geoq(st.items[i]);
@@ -2059,8 +2133,10 @@ async function focusPin(mapId,i){
   }
   const st2=_ms[mapId], mk=st2.markers[i];
   if(st2.sel!=null && st2.markers[st2.sel]){ const e=st2.markers[st2.sel].getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.remove('sel');} }
-  if(mk){ st2.map.setView(mk.getLatLng(),14,{animate:true}); mk.openPopup();
+  if(mk){ st2._suppressCtaUntil=Date.now()+900;
+    st2.map.setView(mk.getLatLng(),14,{animate:true}); mk.openPopup();
     const e=mk.getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.add('sel');} st2.sel=i; } }
+async function focusPin(mapId,i){ await selectMsRow(mapId, i); }
 // ===== 범용 대출계산기 (경매/급매/청약/재건축 공통) =====
 function openLoanCalc(price, label, ltv){
   document.getElementById('loanTitle').textContent='대출 계산기';
