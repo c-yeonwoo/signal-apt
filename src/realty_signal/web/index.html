@@ -1240,7 +1240,7 @@ async function loadDashboard(){
     favH+=favRows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('signal');selectRegion('${r.region}')">
       <b style="min-width:74px">${r.region}</b>${badge(r.signal)}
       <span style="margin-left:auto;color:var(--dim);font-size:12px">전세 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}</span>
-      <span style="color:var(--accent);font-size:12px">보기 →</span></div>`).join('');
+      <span onclick="event.stopPropagation();openNbhd('${r.region}')" style="color:var(--accent);font-size:12px;white-space:nowrap">동네 리포트</span></div>`).join('');
   } else {
     favH+=`<div style="color:var(--dim);font-size:13px;padding:6px 0">아직 관심 지역이 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 ★로 추가 →</span></div>`;
   }
@@ -1296,7 +1296,7 @@ async function _loadDashBudget(){
       h+=inb.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('signal');selectRegion('${c.region}')">
         <b style="min-width:74px">${c.region}</b>${badge(c['시그널'])}
         <span style="margin-left:auto;color:var(--dim);font-size:12px">예상 ${c['예상매수가']?_eok(c['예상매수가']):'–'}${c['저평가도']?` · 저평가 ${c['저평가도']}`:''}${c['급매건수']?` · 급매 ${c['급매건수']}건`:''}</span>
-        <span style="color:var(--accent);font-size:12px">보기 →</span></div>`).join('');
+        <span onclick="event.stopPropagation();openNbhd('${c.region}')" style="color:var(--accent);font-size:12px;white-space:nowrap">동네 리포트</span></div>`).join('');
       h+=`<div style="margin-top:10px"><span class="btn" style="padding:5px 12px" onclick="switchTab('report')">내 조건 전체 리포트 →</span></div>`;
     } else {
       h+=`<div style="color:var(--dim);padding:6px 0">현재 예산 내 <b>매수 시그널(BUY+)</b> 지역이 없어요. 예산을 높이거나 <span style="color:var(--accent);cursor:pointer" onclick="switchTab('report')">전체 리포트</span>에서 관망 지역을 확인해 보세요.</div>`;
@@ -3789,7 +3789,9 @@ function myPinClick(i){
       <span class="btn" style="padding:4px 10px;font-size:12px${favd?';background:var(--accent);color:#fff':''}" onclick="mmToggleFav('${nm}','${pt.region}')">${favd?'★ 관심단지':'☆ 관심단지'}</span>
       <span class="btn" style="padding:4px 10px;font-size:12px" onclick="addToCompare('${nm}','${pt.region}');updateCmpChip()">＋ 비교</span>
       <span class="btn" style="padding:4px 10px;font-size:12px" onclick="openComplex('${nm}','${pt.region}')">상세 ›</span></div>`;
-  } else info+=`<div style="margin-top:8px"><span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널 보기 →</span></div>`;
+  } else info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+      <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openNbhd('${pt.region}')">동네 리포트</span>
+      <span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널 보기 →</span></div>`;
   const wp=_profile||{};
   const commute = (pt.kind!=='work' && wp['직장lat'] && wp['직장lng']);
   if(commute) info+=`<div style="margin-top:7px;font-size:12px;color:var(--dim)">💼 ${wp['직장']||'직장'}까지 <span id="mmCommute">계산 중…</span></div>`;
