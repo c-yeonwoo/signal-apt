@@ -2866,7 +2866,14 @@ function renderNbhd(d){
   h+=_nbSec('매물 현황', `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
      ${_nbStat('급매', (m['급매']||0)+'건')}${_nbStat('청약', (m['청약']||0)+'건')}
      <span class="btn" style="padding:5px 12px" onclick="document.getElementById('nbhdDlg').close();focusListings('${d.region}')">이 동네 매물 보기 →</span></div>`);
-  // 6) 생활인프라
+  // 6) 업무지구 통근
+  const cm=d['통근']||{};
+  if(Object.keys(cm).length){
+    h+=_nbSec('업무지구 통근', `<div style="display:flex;gap:8px;flex-wrap:wrap">
+       ${Object.entries(cm).map(([k,v])=>_nbStat(k, (v&&v.min!=null?v.min+'분':'–'))).join('')}</div>
+       <div style="font-size:10px;color:var(--dim);margin-top:6px">${d['통근기준']||''}</div>`);
+  }
+  // 7) 생활인프라
   const inf=d['생활인프라']||{};
   if(Object.keys(inf).length){
     h+=_nbSec('생활 인프라', `<div style="display:flex;gap:8px;flex-wrap:wrap">
