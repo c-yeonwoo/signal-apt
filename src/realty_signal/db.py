@@ -347,6 +347,28 @@ def event_counts(days: int = 30) -> list[dict]:
     return [{"name": n, "count": cnt} for n, cnt in rows]
 
 
+def _iso_week() -> str:
+    import datetime as _dt
+    return _dt.date.today().strftime("%G-W%V")
+
+
+def usage_get(uid: int, kind: str) -> int:
+    """주간 사용량(kind=nick|report)."""
+    v = kv_get(f"usage:{kind}:{uid}:{_iso_week()}")
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def usage_inc(uid: int, kind: str) -> int:
+    """주간 사용량 +1 후 현재값."""
+    key = f"usage:{kind}:{uid}:{_iso_week()}"
+    n = usage_get(uid, kind) + 1
+    kv_set(key, n)
+    return n
+
+
 # ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
 def kv_get(k: str, max_age: int | None = None):
     """캐시 값(JSON 역직렬화). 없거나 max_age(초) 초과 시 None."""

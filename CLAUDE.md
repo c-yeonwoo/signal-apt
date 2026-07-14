@@ -32,6 +32,8 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
 - 입주물량(`kb_supply`): aptMovinCnt, 공급압력=향후/과거. >1.3 공급과잉, 하락동반 시 SELL_RISK.
 - 변화감지(`signals/history`): snapshot.json 비교, 매주 launchd(토 09:00) `watch --notify`.
 - 주간 이메일: `signal digest --send` (SMTP_HOST/SMTP_FROM). 관심지역 ★ 유저 대상.
+- Nick 프로필 주입: advisor `build_system(profile, favorites)`. 소프트 한도: Nick 주 15회·리포트 주 3회
+  (`NICK_WEEKLY_LIMIT`/`REPORT_WEEKLY_LIMIT`). Opus 화이트리스트·관리자는 무제한.
 
 ## KB 데이터허브 API (자동 수집)
 
