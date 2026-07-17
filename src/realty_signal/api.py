@@ -13,7 +13,7 @@ from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from realty_signal import auction, auth, config, db, store
-from realty_signal.signals.engine import SignalConfig, evaluate
+from realty_signal.signals.engine import SignalConfig
 
 log = logging.getLogger("realty_signal")
 
@@ -21,48 +21,15 @@ log = logging.getLogger("realty_signal")
 _OPEN_PREFIXES = ("/api/auth/",)
 
 
-def _uid(request: Request):
-    u = auth.current_user(request.cookies.get(auth.COOKIE))
-    return u["id"] if u else None
+from realty_signal.routes import deps
+from realty_signal.services import market_data as md
 
-
-def _is_opus_user(request: Request) -> bool:
-    """이 계정이 Opus 4.8 프리미엄 티어인지(화이트리스트). 그 외는 저가 모델."""
-    u = auth.current_user(request.cookies.get(auth.COOKIE))
-    return bool(u) and (u.get("email") or "").lower() in config.opus_whitelist()
-
-
-def _is_admin(request: Request) -> bool:
-    """관리자(데이터 운영) 계정인지 — ADMIN_EMAILS 화이트리스트."""
-    u = auth.current_user(request.cookies.get(auth.COOKIE))
-    return bool(u) and (u.get("email") or "").lower() in config.admin_whitelist()
-
-
-def _fav_context(uid: int) -> dict:
-    fav = db.fav_list(uid)
-    return {
-        "관심지역": [f["key"] for f in fav if f["kind"] == "region"],
-        "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav if f["kind"] == "complex"],
-    }
-
-
-def _usage_status(uid: int, kind: str, *, unlimited: bool) -> dict:
-    """kind=nick|report. unlimited면 한도 없음."""
-    used = db.usage_get(uid, kind)
-    if unlimited:
-        return {"kind": kind, "used": used, "limit": None, "remaining": None, "unlimited": True}
-    limit = config.nick_weekly_limit() if kind == "nick" else config.report_weekly_limit()
-    return {
-        "kind": kind, "used": used, "limit": limit,
-        "remaining": max(0, limit - used), "unlimited": False,
-    }
-
-
-def _usage_allow(uid: int, kind: str, *, unlimited: bool) -> tuple[bool, dict]:
-    st = _usage_status(uid, kind, unlimited=unlimited)
-    if st["unlimited"]:
-        return True, st
-    return st["remaining"] > 0, st
+_uid = deps.uid
+_is_opus_user = deps.is_opus_user
+_is_admin = deps.is_admin
+_fav_context = deps.fav_context
+_usage_status = deps.usage_status
+_usage_allow = deps.usage_allow
 
 
 _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
@@ -70,12 +37,7 @@ _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점
 
 def _data_age_days() -> float | None:
     """현재 캐시 데이터의 경과일(없으면 None)."""
-    try:
-        last = _kb().last_date
-        import datetime as _dt
-        return (_dt.datetime.now() - last.to_pydatetime()).total_seconds() / 86400
-    except Exception:
-        return None
+    return md.data_age_days()
 
 
 def _do_refresh() -> dict:
@@ -83,11 +45,8 @@ def _do_refresh() -> dict:
     import time
     kb = store.fetch()
     db.kv_set("last_kb_fetch", time.time())   # 마지막 수집 시각(스케줄러 기준)
-    _kb.cache_clear()
-    _signals_df.cache_clear()
-    _regime.cache_clear()
+    md.clear_caches()
     _presale.cache_clear()
-    _backtest.cache_clear()
     changed = _snapshot_signals(str(kb.last_date.date()))
     return {"ok": True, "last_date": str(kb.last_date.date()), "regions": len(kb.regions),
             "signal_changes": len(changed)}
@@ -193,8 +152,7 @@ def _seed_if_missing():
         except Exception as e:  # noqa: BLE001
             log.error("재건축 시딩 실패: %s", e)
     try:  # 시딩 전 빈 데이터로 캐시된 파생결과 무효화
-        _regime.cache_clear()
-        _signals_df.cache_clear()
+        md.clear_caches()
     except Exception:  # noqa: BLE001
         pass
 
@@ -235,21 +193,25 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="realty-signal-map", lifespan=lifespan)
 
+from realty_signal.routes.auth import router as auth_router  # noqa: E402
+from realty_signal.routes.alerts import router as alerts_router  # noqa: E402
+from realty_signal.routes.advisor import router as advisor_router  # noqa: E402
+from realty_signal.routes.market import router as market_router  # noqa: E402
 from realty_signal.routes.brain import router as brain_router  # noqa: E402
 
+app.include_router(auth_router)
+app.include_router(alerts_router)
+app.include_router(advisor_router)
+app.include_router(market_router)
 app.include_router(brain_router)
 
 
 def _signal_config() -> SignalConfig:
-    from realty_signal.brain.config_store import active_config
-    return active_config()
+    return md.signal_config()
 
 
 def _clear_signal_caches() -> None:
-    _kb.cache_clear()
-    _signals_df.cache_clear()
-    _regime.cache_clear()
-    _backtest.cache_clear()
+    md.clear_caches()
 
 
 @app.middleware("http")
@@ -262,131 +224,6 @@ async def _auth_gate(request: Request, call_next):
     return await call_next(request)
 
 
-# ---------- 인증 ----------
-@app.post("/api/auth/signup")
-def auth_signup(data: dict = Body(...)):
-    token, err = auth.signup(data.get("email", ""), data.get("pw", ""))
-    if err:
-        return JSONResponse({"ok": False, "error": err}, status_code=400)
-    r = JSONResponse({"ok": True})
-    r.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
-    return r
-
-
-@app.post("/api/auth/login")
-def auth_login(data: dict = Body(...)):
-    token, err = auth.login(data.get("email", ""), data.get("pw", ""))
-    if err:
-        return JSONResponse({"ok": False, "error": err}, status_code=401)
-    r = JSONResponse({"ok": True})
-    r.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
-    return r
-
-
-@app.post("/api/auth/logout")
-def auth_logout(request: Request):
-    auth.logout(request.cookies.get(auth.COOKIE))
-    r = JSONResponse({"ok": True})
-    r.delete_cookie(auth.COOKIE)
-    return r
-
-
-@app.get("/api/auth/me")
-def auth_me(request: Request):
-    u = auth.current_user(request.cookies.get(auth.COOKIE))
-    if not u:
-        return JSONResponse({"auth": False}, status_code=401)
-    return {"auth": True, "email": u["email"], "profile": db.profile_get(u["id"]),
-            "onboarded": bool(db.profile_get(u["id"])),
-            "admin": (u["email"] or "").lower() in config.admin_whitelist()}
-
-
-# ---------- 프로필 / 즐겨찾기 ----------
-@app.get("/api/profile")
-def profile_get(request: Request):
-    return db.profile_get(_uid(request))
-
-
-@app.put("/api/profile")
-def profile_put(request: Request, data: dict = Body(...)):
-    db.profile_set(_uid(request), data)
-    return {"ok": True}
-
-
-@app.post("/api/report/ai")
-def report_ai(request: Request, data: dict = Body(...)):
-    """프로필 + 결론 요약 → Claude 심층 리포트. 키 없으면 available:false (프론트 폴백)."""
-    from realty_signal import ai_report
-    config.load_env()
-    if not ai_report.available():
-        return {"available": False}
-    uid = _uid(request)
-    if not uid:
-        return {"available": False}
-    opus = _is_opus_user(request)
-    unlimited = opus or _is_admin(request)
-    ok, ust = _usage_allow(uid, "report", unlimited=unlimited)
-    if not ok:
-        return {"available": False, "reason": "limit", "usage": ust,
-                "message": f"이번 주 AI 심층 리포트 한도({ust['limit']}회)에 도달했습니다. 규칙기반 리포트는 계속 이용할 수 있습니다."}
-    model = ai_report.OPUS if opus else ai_report.SONNET   # 화이트리스트=Opus, 그 외=Sonnet
-    tier = "opus" if opus else "sonnet"
-    profile = db.profile_get(uid)
-    summary = data.get("summary") or {}
-    favorites = _fav_context(uid)
-    # 캐시: 같은 데이터주차·프로필·관심·티어면 재사용(뉴스는 키에서 제외 — 주 단위 재생성으로 충분)
-    try:
-        wk = _kb().last_date.strftime("%G-W%V")
-    except Exception:  # noqa: BLE001
-        wk = "na"
-    sig = hashlib.md5(json.dumps([profile, summary, favorites, tier], ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
-    ckey = f"aireport:{uid}:{wk}:{sig}"
-    cached = db.kv_get(ckey, max_age=14 * 86400)
-    if cached is not None:
-        return {**cached, "cached": True, "usage": ust}
-    news = db.news_recent_for_ai(12)   # 최근 정책·시장 뉴스 맥락 주입
-    report = ai_report.generate(profile, summary, news=news, favorites=favorites, model=model)
-    if not report:
-        return {"available": False}
-    db.usage_inc(uid, "report")
-    ust = _usage_status(uid, "report", unlimited=unlimited)
-    out = {"available": True, "report": report, "news_used": len(news), "tier": tier, "usage": ust}
-    db.kv_set(ckey, {k: v for k, v in out.items() if k != "usage"})
-    return out
-
-
-@app.get("/api/usage")
-def usage_get(request: Request):
-    """주간 Nick/리포트 사용량(소프트 한도 UI용)."""
-    uid = _uid(request)
-    if not uid:
-        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
-    unlimited = _is_opus_user(request) or _is_admin(request)
-    return {
-        "ok": True,
-        "nick": _usage_status(uid, "nick", unlimited=unlimited),
-        "report": _usage_status(uid, "report", unlimited=unlimited),
-    }
-
-
-@app.get("/api/favorites")
-def favorites_get(request: Request):
-    return {"favorites": db.fav_list(_uid(request))}
-
-
-@app.post("/api/favorites")
-def favorites_add(request: Request, data: dict = Body(...)):
-    db.fav_add(_uid(request), data.get("kind", "region"), data.get("key", ""), data.get("label", ""))
-    return {"ok": True}
-
-
-@app.delete("/api/favorites")
-def favorites_del(request: Request, kind: str, key: str):
-    db.fav_remove(_uid(request), kind, key)
-    return {"ok": True}
-
-
-# ---------- 알림 (Alert Engine v1) ----------
 def _user_nbhd_diffs(uid: int, regions: set[str]) -> dict[str, list]:
     out: dict[str, list] = {}
     for region in regions:
@@ -398,58 +235,6 @@ def _user_nbhd_diffs(uid: int, regions: set[str]) -> dict[str, list]:
         if curr and prev:
             out[region] = _nbhd_diff(curr, prev)
     return out
-
-
-@app.get("/api/alerts/prefs")
-def alerts_prefs_get(request: Request):
-    uid = _uid(request)
-    if not uid:
-        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
-    from realty_signal.brain.alerts import merge_prefs
-    return {"ok": True, "prefs": merge_prefs(db.alert_prefs_get(uid))}
-
-
-@app.put("/api/alerts/prefs")
-def alerts_prefs_put(request: Request, data: dict = Body(...)):
-    uid = _uid(request)
-    if not uid:
-        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
-    prefs = data.get("prefs") if isinstance(data.get("prefs"), dict) else data
-    return {"ok": True, "prefs": db.alert_prefs_set(uid, prefs)}
-
-
-@app.get("/api/alerts")
-def alerts(request: Request):
-    """Alert Engine v1 — 시그널 변동·고타이밍 매물·동네 diff."""
-    from realty_signal.brain import alerts as alert_engine
-
-    uid = _uid(request)
-    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
-    log_ = db.kv_get("signal_changes") or []
-    seen = db.kv_get(f"alerts_seen:{uid}") or "" if uid else ""
-    prefs = db.alert_prefs_get(uid) if uid else {}
-    listings = _build_listings({"경매", "급매"}) if favs and prefs.get("high_timing", True) else []
-    nbhd_diffs = _user_nbhd_diffs(uid, favs) if uid and favs else {}
-    payload = alert_engine.evaluate(
-        favs, prefs,
-        signal_changes=log_,
-        signal_map=_signal_map(),
-        listings=listings,
-        nbhd_diffs=nbhd_diffs,
-        seen_before=seen,
-    )
-    return payload
-
-
-@app.post("/api/alerts/seen")
-def alerts_seen(request: Request):
-    """알림 확인 처리 — 현재 데이터 기준일을 '마지막 확인'으로 기록."""
-    try:
-        last = str(_kb().last_date.date())
-    except Exception:
-        last = ""
-    db.kv_set(f"alerts_seen:{_uid(request)}", last)
-    return {"ok": True}
 
 
 @app.get("/api/myfeed")
@@ -503,69 +288,29 @@ def myfeed(request: Request):
     return {"ok": True, "empty": False, "items": items, "기준일": str(_kb().last_date.date())}
 
 
-@app.post("/api/events")
-def track_event(request: Request, data: dict = Body(...)):
-    """퍼널 이벤트 최소셋. name: signup|profile_complete|fav_add|report_open|nick_ask|nbhd_open|listing_detail_open|listing_click|timing_card_expand."""
-    uid = _uid(request)
-    if not uid:
-        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
-    name = (data.get("name") or "").strip()
-    props = data.get("props") if isinstance(data.get("props"), dict) else {}
-    ok = db.event_log(uid, name, props)
-    if not ok:
-        return JSONResponse({"ok": False, "error": "invalid_event"}, status_code=400)
-    return {"ok": True}
-
-
-@app.get("/api/admin/events")
-def admin_events(request: Request, days: int = 30):
-    """최근 N일 이벤트 집계(관리자)."""
-    if not _is_admin(request):
-        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
-    return {"ok": True, "days": days, "counts": db.event_counts(days)}
-
-
 WEB_DIR = Path(__file__).parent / "web"
-_METRIC_LABEL = {
-    "jeonse_supply": "전세수급지수",
-    "buyer_demand": "매수세우위",
-    "buyer_superiority": "매수우위지수",
-    "sale_change": "매매증감%",
-    "jeonse_change": "전세증감%",
-}
 
 
-@lru_cache(maxsize=1)
 def _kb():
-    return store.load()
+    return md.kb()
 
 
-@lru_cache(maxsize=1)
 def _codes_nospace():
     """공백 제거 키 → 지역코드. 매물/급매 지역('성남시분당구')과 codes 키('성남시 분당구') 표기차 흡수."""
-    return {k.replace(" ", ""): v for k, v in (_kb().codes or {}).items()}
+    return md.codes_nospace()
 
 
 def _code_of(region: str) -> str:
     """지역명 → 지역코드. 정확 매칭 실패 시 공백 무시로 재시도(경기 시-구 매물 실거래 매칭 보장)."""
-    if not region:
-        return ""
-    codes = _kb().codes or {}
-    return codes.get(region) or _codes_nospace().get(region.replace(" ", ""), "")
+    return md.code_of(region)
 
 
-@lru_cache(maxsize=1)
 def _regime():
-    from realty_signal.signals.regime import compute_regime
-    import json as _json
-    codes = _json.loads(store.CODES_FILE.read_text(encoding="utf-8")) if store.CODES_FILE.exists() else {}
-    return compute_regime(_kb(), store.load_localities(), codes)
+    return md.regime()
 
 
-@lru_cache(maxsize=1)
 def _signals_df():
-    return evaluate(_kb(), _signal_config(), store.load_supply(), store.load_macro(),
-                    store.load_volumes(), _regime())
+    return md.signals_df()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -584,95 +329,8 @@ def sudo_gu_geojson():
                     headers={"Cache-Control": "public, max-age=86400"})
 
 
-@app.post("/api/refresh")
-def refresh():
-    """KB 데이터허브에서 최신 지표를 재수집하고 캐시/시그널을 갱신."""
-    return _do_refresh()
-
-
-@lru_cache(maxsize=1)
 def _backtest():
-    from realty_signal.signals.engine import backtest_summary
-    return backtest_summary(_kb(), _signal_config())
-
-
-@app.get("/api/backtest")
-def backtest():
-    """시그널 적중률 — 전 지역 과거 구간의 실제 가격 결과로 산출(보유 데이터만)."""
-    return {**_backtest(), "data_age_days": round(_data_age_days() or 0, 1)}
-
-
-@app.get("/api/meta")
-def meta():
-    kb = _kb()
-    c = _signal_config()
-    from realty_signal.brain.config_store import active_meta
-    cfg_meta = active_meta()
-    # 전세수급지수 구간(색·설명) — 차트 배경 밴드용
-    jeonse_zones = [
-        {"from": 0, "to": c.jeonse_oversupply, "label": "공급우위", "color": "#3b82f6",
-         "desc": "전세 공급이 수요보다 많음. 전세가 안정·약세."},
-        {"from": c.jeonse_oversupply, "to": c.jeonse_tight, "label": "보통", "color": "#64748b",
-         "desc": "전세 수급 균형 구간."},
-        {"from": c.jeonse_tight, "to": c.jeonse_crunch, "label": "타이트", "color": "#eab308",
-         "desc": "전세 매물이 마르기 시작. 전세난 전환 관찰 구간."},
-        {"from": c.jeonse_crunch, "to": c.jeonse_spillover, "label": "전세난", "color": "#f97316",
-         "desc": "전세 구하기 어려움. 수요가 매매로 넘어올 압력."},
-        {"from": c.jeonse_spillover, "to": 200, "label": "매매전이", "color": "#ef4444",
-         "desc": "전세난 심화 → 매매가 상승 압력으로 전이되는 구간."},
-    ]
-    return {
-        "regions": kb.regions,
-        "metrics": [{"key": k, "label": _METRIC_LABEL.get(k, k)} for k in kb.metrics],
-        "last_date": str(kb.last_date.date()),
-        "signal_config_version": cfg_meta.get("version", "v1"),
-        "zones": {
-            "jeonse_supply": jeonse_zones,
-            "buyer_demand_buy": c.demand_buy,        # 매수세우위 매수신호선
-            "buyer_idx_strong": c.buyeridx_strong,   # 매수우위지수 강세선
-        },
-    }
-
-
-def _file_mtime(p) -> int | None:
-    try:
-        return int(p.stat().st_mtime)
-    except Exception:
-        return None
-
-
-@app.get("/api/freshness")
-def freshness():
-    """데이터 소스별 최종 갱신 시각·주기 — 유저가 분석 신선도를 확인. (읽기 전용, 부작용 없음)"""
-    from realty_signal.auction import AUCTION_FILE
-    last_date = str(_kb().last_date.date())
-    sources = [
-        {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
-         "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동",
-         "note": "KB국민은행 주간 시계열로 전세수급·매수우위·매매모멘텀·국면을 산출. 기준일이 곧 분석 기준입니다."},
-        {"key": "trade", "label": "국토부 실거래", "ts": db.kv_max_ts("complex:"),
-         "cycle": "조회 시 · 14일 캐시", "note": "단지 조회 시 국토부 실거래를 수집(14일 캐시), 관심단지는 주 1회 자동 프리페치."},
-        {"key": "quicksale", "label": "급매 스캔", "ts": _file_mtime(QUICKSALE_FILE),
-         "cycle": "관리자 스캔 시", "note": "BUY+ 시그널 지역의 시세 이하 호가를 스캔해 적재."},
-        {"key": "auction", "label": "경매 물건", "ts": _file_mtime(AUCTION_FILE),
-         "cycle": "관리자 등록·갱신 시", "note": "법원경매 물건과 시세를 관리자가 등록·갱신."},
-        {"key": "presale", "label": "청약", "ts": None, "cycle": "실시간",
-         "note": "청약홈(applyhome) API를 조회 시점에 실시간 반영."},
-        {"key": "redev", "label": "재건축·정비사업", "ts": db.kv_ts("redev_zones") or db.kv_max_ts("redev_cand:"),
-         "cycle": "주 1회 자동", "note": "서울 정비사업 단계 + 국토부 실거래로 잠재력·가치를 산출."},
-        {"key": "gongsi", "label": "공동주택 공시가격", "ts": db.kv_max_ts("gongsi:"),
-         "cycle": "연 1회 · 90일 캐시", "note": "국토부 공시가격(VWorld). 실거래/공시 배수로 저평가·보유세 근거."},
-        {"key": "news", "label": "부동산 뉴스", "ts": db.kv_ts("news_fetched"),
-         "cycle": "조회 시 갱신", "note": "네이버 뉴스에서 부동산 관련 기사를 수집·요약."},
-        {"key": "volume", "label": "국토부 거래량", "ts": _file_mtime(store.VOLUME_FILE),
-         "cycle": "signal volumes 시", "note": "시군구 월별 거래건수·거래량비. 시장강도 프록시 입력."},
-        {"key": "strength", "label": "시장강도 프록시", "ts": _file_mtime(store.CACHE_DIR / "market_strength.json"),
-         "cycle": "KB 갱신 시 자동", "note": "거래량비+급매 밀도 프록시(부동산지인/아실 대체)."},
-    ]
-    from realty_signal.ingest import pipeline
-    health = pipeline.cache_health()
-    return {"기준일": last_date, "now": int(__import__("time").time()),
-            "sources": sources, "pipeline": health}
+    return md.backtest()
 
 
 _ADV_RANK = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4}
@@ -948,146 +606,8 @@ def _nick_remember(uid: int, messages: list, answer: str | None = None) -> None:
         log.warning("nick memory skip: %s", e)
 
 
-@app.get("/api/advisor/memory")
-def advisor_memory_get(request: Request):
-    """Nick episodic memory 조회."""
-    from realty_signal.brain import memory as nick_mem
-    uid = _uid(request)
-    if not uid:
-        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
-    return {"ok": True, "memory": nick_mem.to_public(nick_mem.load(uid))}
-
-
-@app.delete("/api/advisor/memory")
-def advisor_memory_clear(request: Request):
-    """Nick 대화 기억 초기화."""
-    from realty_signal.brain import memory as nick_mem
-    uid = _uid(request)
-    if not uid:
-        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
-    nick_mem.clear(uid)
-    return {"ok": True}
-
-
-@app.post("/api/advisor")
-def advisor_api(request: Request, data: dict = Body(...)):
-    """근거기반 부동산 자문 챗봇 — Claude tool-use 로 우리 데이터를 조회해 답변. 로그인 필요."""
-    from realty_signal import advisor
-    config.load_env()
-    uid = _uid(request)
-    if not uid:
-        return {"ok": False, "reason": "login_required"}
-    if not advisor.available():
-        return {"ok": False, "reason": "no_ai",
-                "answer": "AI 자문은 서버에 ANTHROPIC_API_KEY 가 설정되어야 이용할 수 있습니다."}
-    unlimited = _is_opus_user(request) or _is_admin(request)
-    ok, ust = _usage_allow(uid, "nick", unlimited=unlimited)
-    if not ok:
-        return {"ok": False, "reason": "limit", "usage": ust,
-                "answer": f"이번 주 Nick 질문 한도({ust['limit']}회)에 도달했습니다. "
-                          "관심지역 추적·동네 리포트·시그널은 계속 이용할 수 있습니다."}
-    messages = data.get("messages") or []
-    if not isinstance(messages, list) or not messages:
-        return {"ok": False, "reason": "empty"}
-    messages = messages[-12:]                              # 최근 12턴만(비용·컨텍스트 방어)
-    model = advisor.OPUS if _is_opus_user(request) else advisor.SONNET
-    system = _nick_system(uid)
-    global _ADVISOR_UID
-    _ADVISOR_UID = uid
-    try:
-        res = advisor.run_advisor(messages, _advisor_tool, model=model, system=system)
-    finally:
-        _ADVISOR_UID = None
-    if not res.get("answer"):
-        return {"ok": False, "reason": "failed",
-                "answer": "지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다."}
-    db.usage_inc(uid, "nick")
-    _nick_remember(uid, messages, res.get("answer"))
-    ust = _usage_status(uid, "nick", unlimited=unlimited)
-    return {"ok": True, "answer": res["answer"], "used": res.get("used", []),
-            "기준일": str(_kb().last_date.date()), "usage": ust}
-
-
-@app.post("/api/advisor/stream")
-def advisor_stream_api(request: Request, data: dict = Body(...)):
-    """자문 챗봇 스트리밍(SSE) — 답변 델타·tool 상태를 순차 전송. 로그인 필요."""
-    from fastapi.responses import StreamingResponse
-    from realty_signal import advisor
-    config.load_env()
-    uid = _uid(request)
-    asof = str(_kb().last_date.date())
-    opus = _is_opus_user(request)
-    unlimited = opus or _is_admin(request)
-    messages = (data.get("messages") or [])[-12:]
-    system = _nick_system(uid)
-    answer_buf: list[str] = []
-
-    def _one(ev: dict) -> str:
-        return f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
-
-    def gen():
-        if not uid:
-            yield _one({"type": "error", "message": "login_required"}); return
-        if not advisor.available():
-            yield _one({"type": "error", "message": "no_ai"}); return
-        if not messages:
-            yield _one({"type": "error", "message": "empty"}); return
-        ok, ust = _usage_allow(uid, "nick", unlimited=unlimited)
-        if not ok:
-            yield _one({"type": "error", "message": "limit", "usage": ust}); return
-        model = advisor.OPUS if opus else advisor.SONNET
-        global _ADVISOR_UID
-        _ADVISOR_UID = uid
-        try:
-            for ev in advisor.run_advisor_stream(messages, _advisor_tool, model=model, system=system):
-                if ev.get("type") == "delta" and ev.get("text"):
-                    answer_buf.append(ev["text"])
-                if ev.get("type") == "done":
-                    db.usage_inc(uid, "nick")
-                    _nick_remember(uid, messages, "".join(answer_buf) or None)
-                    ev["기준일"] = asof
-                    ev["usage"] = _usage_status(uid, "nick", unlimited=unlimited)
-                yield _one(ev)
-        except Exception:  # noqa: BLE001
-            yield _one({"type": "error", "message": "failed"})
-        finally:
-            _ADVISOR_UID = None
-
-    return StreamingResponse(gen(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-
-_SEOUL_AGG = {"강남11개구", "강북14개구"}
-
-
-def _region_group(region: str, code: str | None) -> str:
-    """시/도 그룹 (필터용)."""
-    if region in _SEOUL_AGG or (code and code.startswith("11")):
-        return "서울"
-    if code and code.startswith("41"):
-        return "경기"
-    if code and code.startswith("28"):
-        return "인천"
-    return "지방·광역"
-
-
-@app.get("/api/signals")
-def signals(only: str | None = None):
-    df = _signals_df()
-    if only:
-        keep = {s.strip().upper() for s in only.split(",")}
-        df = df[df["signal"].isin(keep)]
-    # pandas to_json 이 NaN → null 로 안전 변환 (float NaN 직렬화 오류 회피)
-    recs = json.loads(df.to_json(orient="records", force_ascii=False))
-    codes = _kb().codes
-    for r in recs:
-        r["group"] = _region_group(r["region"], codes.get(r["region"]))
-    return recs
-
-
 def _signal_map() -> dict:
-    df = _signals_df()
-    return dict(zip(df["region"], df["signal"]))
+    return md.signal_map()
 
 
 @app.get("/api/auction/buy-regions")
@@ -2737,47 +2257,6 @@ def _build_listings(want: set[str]) -> list[dict]:
     return out
 
 
-@app.get("/api/timing")
-def timing_api(region: str | None = None):
-    """지역 타이밍 점수(0~100) — 근거·신뢰도·기준일."""
-    if not region or not region.strip():
-        return JSONResponse({"error": "region required"}, status_code=400)
-    return _region_timing_row(region.strip())
-
-
-@app.get("/api/strength")
-def strength_api(region: str | None = None):
-    """시장강도 프록시 (거래량비+급매). region 없으면 상위 점수순."""
-    from realty_signal.ingest import pipeline
-
-    data = pipeline.load_market_strength()
-    regions = data.get("regions") or {}
-    if not regions:
-        try:
-            data = pipeline.build_market_strength(_signal_map())
-            regions = data.get("regions") or {}
-        except Exception:  # noqa: BLE001
-            regions = {}
-    if region and region.strip():
-        r = region.strip()
-        hit = regions.get(r) or next((v for k, v in regions.items() if r in k), None)
-        if not hit:
-            ent = pipeline.region_entity(r, signal=_signal_map().get(r))
-            return ent.to_dict()
-        return {"region": r, **hit, "asof": data.get("asof"), "source": data.get("source")}
-    top = sorted(regions.items(), key=lambda kv: kv[1].get("시장강도") or 0, reverse=True)[:30]
-    return {"asof": data.get("asof"), "source": data.get("source"),
-            "regions": [{"region": k, **v} for k, v in top]}
-
-
-@app.get("/api/pipeline/health")
-def pipeline_health():
-    """캐시 파이프라인 상태 (ok/partial/stale/missing)."""
-    from realty_signal.ingest import pipeline
-    return pipeline.cache_health()
-
-
-@app.get("/api/listings/all")
 def listings_all(request: Request, types: str = "경매,급매,청약"):
     """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환). 유형 교차 정렬."""
     from realty_signal.brain import ranking as eng_rank
@@ -2801,6 +2280,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
         },
         "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")},
     }
+
 
 
 @app.get("/api/quicksale")
@@ -2838,50 +2318,3 @@ def quicksale_refresh(data: dict = Body(default={})):
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 
 
-@app.get("/api/regime")
-def regime():
-    """수도권 급지역전 국면(유동성 신호등). regions 상세는 제외하고 요약만."""
-    r = dict(_regime())
-    r.pop("regions", None)
-    return r
-
-
-@app.get("/api/macro")
-def macro():
-    """거시지표: 전국 아파트 주택구매력지수 + 주택담보대출금리 (월간)."""
-    return store.load_macro()
-
-
-@app.get("/api/signal-history/{region}")
-def signal_hist(region: str):
-    """지역의 과거 STRONG_BUY/BUY 구간 (백테스트)."""
-    from realty_signal.signals.engine import signal_history
-    return {"intervals": signal_history(_kb(), region, _signal_config())}
-
-
-@app.get("/api/series/{region}")
-def series(region: str):
-    kb = _kb()
-    if region not in kb.regions:
-        raise HTTPException(404, f"unknown region: {region}")
-    out = {"region": region, "metrics": {}}
-    for m in kb.metrics:
-        s = kb.series(region, m)
-        out["metrics"][m] = {
-            "label": _METRIC_LABEL.get(m, m),
-            "dates": [str(d.date()) for d in s.index],
-            "values": [round(float(v), 3) for v in s.values],
-        }
-    # 누적 매매가격지수(KB 증감률 누적, 시작=100) — 시그널 검증용
-    from realty_signal.signals.engine import price_index_from
-    pidx = price_index_from(kb.series(region, "sale_change"))
-    if not pidx.empty:
-        out["metrics"]["price_index"] = {
-            "label": "매매가격지수",
-            "dates": [str(d.date()) for d in pidx.index],
-            "values": [round(float(v), 1) for v in pidx.values],
-        }
-    vol = store.load_volumes().get(region)  # 월별 거래량(시군구)
-    if vol:
-        out["volume"] = vol
-    return out
