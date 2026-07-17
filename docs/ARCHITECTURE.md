@@ -285,7 +285,9 @@ Observe → Evaluate → Calibrate → Explain
   - `routes/complex.py` · `redev.py` · `strategy.py` · `geo.py` (핸들러는 api 헬퍼 thin-wrap)
   - `routes/brain.py` — `/api/brain/*`
 - **서비스:** `market_data.py`(KB/시그널 캐시) · `complex_signal.py`(단지 시그널)
-- **인증:** 쿠키 `rsm_session`, `/api/*` 게이트 (`routes/deps.py`)
+- **인증:** 쿠키 `rsm_session`, `/api/*` 게이트 (`routes/deps.py`). 가입 시 ToS 동의·`/legal/*`·비밀번호 재설정(`/api/auth/forgot-password`)
+- **쓰기 권한:** 경매 CRUD·급매/재건축 갱신·KB refresh·단지백테스트 = `deps.require_admin` (`ADMIN_EMAILS`)
+- **주간 digest:** CLI + 서버 `_auto_refresh_loop` 7일마다 (`last_digest_run`)
 - **캐시 무효화:** `market_data.clear_caches()` (calibration apply · `/api/refresh`)
 
 ### 8.2 프론트

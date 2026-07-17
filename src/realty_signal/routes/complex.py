@@ -49,6 +49,9 @@ def complex_backtest_api():
 
 @router.post("/api/complex-backtest/run")
 def complex_backtest_run(request: Request):
+    from realty_signal.routes import deps
+    if err := deps.require_admin(request):
+        return err
     return _api().complex_backtest_run(request)
 
 

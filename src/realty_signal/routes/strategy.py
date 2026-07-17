@@ -42,5 +42,8 @@ def quicksale():
 
 
 @router.post("/api/quicksale/refresh")
-def quicksale_refresh(data: dict = Body(default={})):
+def quicksale_refresh(request: Request, data: dict = Body(default={})):
+    from realty_signal.routes import deps
+    if err := deps.require_admin(request):
+        return err
     return _api().quicksale_refresh(data)

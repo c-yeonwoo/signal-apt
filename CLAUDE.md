@@ -31,7 +31,8 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
 - 매수우위/전세수급은 KB 광역 단위만 → 시군구는 모멘텀+입주물량 기반.
 - 입주물량(`kb_supply`): aptMovinCnt, 공급압력=향후/과거. >1.3 공급과잉, 하락동반 시 SELL_RISK.
 - 변화감지(`signals/history`): snapshot.json 비교, 매주 launchd(토 09:00) `watch --notify`.
-- 주간 이메일: `signal digest --send` (SMTP_HOST/SMTP_FROM). 관심지역 ★ 유저 대상.
+- 주간 이메일: `signal digest --send` (SMTP_HOST/SMTP_FROM). 서버 `_auto_refresh_loop` 도 7일마다 시도(SMTP 없으면 dry-run). 관심지역 ★ 유저 대상.
+- 쓰기 API(경매 CRUD·급매/재건축 갱신·KB refresh·단지백테스트)는 `ADMIN_EMAILS` 만. 가입 시 ToS 동의 필수.
 - Nick 프로필 주입: advisor `build_system(profile, favorites)`. 소프트 한도: Nick 주 15회·리포트 주 3회
   (`NICK_WEEKLY_LIMIT`/`REPORT_WEEKLY_LIMIT`). Opus 화이트리스트·관리자는 무제한.
 - 동네 리포트 v2: 열면 주간 스냅샷 저장 → 지난 주차 대비 diff · 관심지역 2동네 비교.

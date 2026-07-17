@@ -39,7 +39,9 @@ def _file_mtime(p) -> int | None:
 
 
 @router.post("/api/refresh")
-def refresh():
+def refresh(request: Request):
+    if err := deps.require_admin(request):
+        return err
     from realty_signal import api as app_api
     return app_api._do_refresh()
 
