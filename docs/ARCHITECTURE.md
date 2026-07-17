@@ -211,7 +211,39 @@ SQLite `events` — whitelist:
 
 원칙: 확신형 예측·매수 지시 금지 → **조건부·확률·근거**.
 
-### 6.5 진화 루프 (로드맵)
+### 6.5 Outcome 라벨링 (Phase 2)
+
+**파일:** `brain/outcomes.py`
+
+| KV | 내용 |
+|----|------|
+| `outcome_snapshots` | 주간 region feature |
+| `outcome_labels` | asof → 4/12/26주 후 `up_5pct` / `flat` / `down_5pct` |
+
+```bash
+signal outcomes-label    # KB long + snapshots → 라벨 갱신
+signal calibrate [--save]  # CalibrationProposal 생성
+```
+
+| API (admin) | 설명 |
+|-------------|------|
+| `POST /api/brain/outcomes/label` | 라벨 배치 실행 |
+| `GET /api/brain/outcomes/labels` | 분포·샘플 |
+| `GET /api/brain/calibration` | 제안 조회 |
+| `POST /api/brain/calibration/run` | 제안 재생성 |
+| `POST /api/brain/calibration/apply` | **수동** config 적용 |
+| `GET /api/brain/config` | active + history |
+
+### 6.6 SignalConfig 버전 (Phase 2)
+
+**파일:** `brain/config_store.py`, `brain/calibrate.py`
+
+- Active: `db.kv signal_config_active` `{version, params, applied_ts}`
+- History: `signal_config_history` (최근 20)
+- Proposal: `signal_config_proposal` (자동 적용 **금지**)
+- `/api/meta` → `signal_config_version` 노출
+
+### 6.7 진화 루프 (로드맵)
 
 ```
 Observe → Evaluate → Calibrate → Explain
@@ -293,7 +325,7 @@ signal serve             # FastAPI + SPA
 |-------|------|------|
 | **0** | 스냅샷 통합, events 확장, asof/confidence | ✅ |
 | **1** | Timing v1, get_timing, listings meta, Alert v1 | ✅ |
-| **2** | Outcome 라벨링, CalibrationProposal, config versioning | 🔲 |
+| **2** | Outcome 라벨링, CalibrationProposal, config versioning | ✅ |
 | **3** | Entity schema, ingest pipeline, 시장강도 프록시 | 🔲 |
 | **4** | Nick memory, ML 랭킹, (선택) React | 🔲 |
 
@@ -312,7 +344,11 @@ src/realty_signal/
 ├── brain/
 │   ├── snapshots.py       # 시그널 스냅샷 통합
 │   ├── alerts.py          # Alert Engine v1
-│   └── outcomes.py        # Outcome feature 적재
+│   ├── outcomes.py        # Outcome feature + labels
+│   ├── config_store.py    # SignalConfig versioning
+│   └── calibrate.py       # CalibrationProposal
+├── routes/
+│   └── brain.py           # /api/brain/* (Phase 2 분리)
 ├── signals/
 │   ├── engine.py          # SignalConfig · evaluate · backtest
 │   ├── timing.py          # Timing Engine v1

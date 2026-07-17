@@ -172,6 +172,47 @@ def serve(
     uvicorn.run("realty_signal.api:app", host=host, port=port, log_level="warning")
 
 
+@app.command("outcomes-label")
+def outcomes_label_cmd():
+    """outcome 스냅샷 → N주 후 KB 가격 라벨 (Phase 2)."""
+    from realty_signal.brain import outcomes
+    if not store.CACHE_FILE.exists():
+        console.print("[yellow]캐시 없음 — signal fetch 먼저[/yellow]")
+        raise typer.Exit(1)
+    kb = store.load()
+    r = outcomes.label_from_kb(kb)
+    console.print(f"[green]라벨 {r['labeled']}건[/green] (snapshots {r['snapshots']})")
+    s = outcomes.label_summary()
+    console.print(f"[dim]시그널별: {list(s.get('by_signal', {}).keys())}[/dim]")
+
+
+@app.command()
+def calibrate(
+    save: bool = typer.Option(False, help="제안을 kv에 저장"),
+):
+    """백테스트 기반 SignalConfig 보정 제안 (자동 적용 안 함)."""
+    from realty_signal.brain import calibrate as cal
+    if not store.CACHE_FILE.exists():
+        console.print("[yellow]캐시 없음 — signal fetch 먼저[/yellow]")
+        raise typer.Exit(1)
+    kb = store.load()
+    prop = cal.build_proposal(kb)
+    if save:
+        cal.save_proposal(prop)
+        console.print("[green]제안 저장됨[/green]")
+    table = Table(title=f"CalibrationProposal ({prop['generated_at']})")
+    table.add_column("param")
+    table.add_column("변경")
+    table.add_column("근거")
+    for s in prop.get("suggestions") or []:
+        table.add_row(s["param"], f"{s['from']}→{s['to']}", s.get("reason", ""))
+    if prop.get("suggestions"):
+        console.print(table)
+    else:
+        console.print("[dim]개선 제안 없음 (baseline 유지)[/dim]")
+    console.print(f"[dim]{prop.get('disclaimer', '')}[/dim]")
+
+
 @app.command()
 def backup():
     """app.db 를 S3 호환 스토리지로 백업 (env 설정 시). 수동/cron 실행용."""

@@ -230,6 +230,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="realty-signal-map", lifespan=lifespan)
 
+from realty_signal.routes.brain import router as brain_router  # noqa: E402
+
+app.include_router(brain_router)
+
+
+def _signal_config() -> SignalConfig:
+    from realty_signal.brain.config_store import active_config
+    return active_config()
+
+
+def _clear_signal_caches() -> None:
+    _kb.cache_clear()
+    _signals_df.cache_clear()
+    _regime.cache_clear()
+    _backtest.cache_clear()
+
 
 @app.middleware("http")
 async def _auth_gate(request: Request, call_next):
@@ -420,15 +436,6 @@ def alerts(request: Request):
     return payload
 
 
-@app.get("/api/brain/outcomes")
-def brain_outcomes(request: Request, limit: int = 12):
-    """주간 outcome feature 스냅샷 목록(관리·디버그)."""
-    if not _is_admin(request):
-        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
-    from realty_signal.brain import outcomes
-    return {"ok": True, "snapshots": outcomes.list_snapshots(limit=min(limit, 52))}
-
-
 @app.post("/api/alerts/seen")
 def alerts_seen(request: Request):
     """알림 확인 처리 — 현재 데이터 기준일을 '마지막 확인'으로 기록."""
@@ -552,7 +559,7 @@ def _regime():
 
 @lru_cache(maxsize=1)
 def _signals_df():
-    return evaluate(_kb(), SignalConfig(), store.load_supply(), store.load_macro(),
+    return evaluate(_kb(), _signal_config(), store.load_supply(), store.load_macro(),
                     store.load_volumes(), _regime())
 
 
@@ -581,7 +588,7 @@ def refresh():
 @lru_cache(maxsize=1)
 def _backtest():
     from realty_signal.signals.engine import backtest_summary
-    return backtest_summary(_kb(), SignalConfig())
+    return backtest_summary(_kb(), _signal_config())
 
 
 @app.get("/api/backtest")
@@ -593,7 +600,9 @@ def backtest():
 @app.get("/api/meta")
 def meta():
     kb = _kb()
-    c = SignalConfig()
+    c = _signal_config()
+    from realty_signal.brain.config_store import active_meta
+    cfg_meta = active_meta()
     # 전세수급지수 구간(색·설명) — 차트 배경 밴드용
     jeonse_zones = [
         {"from": 0, "to": c.jeonse_oversupply, "label": "공급우위", "color": "#3b82f6",
@@ -611,6 +620,7 @@ def meta():
         "regions": kb.regions,
         "metrics": [{"key": k, "label": _METRIC_LABEL.get(k, k)} for k in kb.metrics],
         "last_date": str(kb.last_date.date()),
+        "signal_config_version": cfg_meta.get("version", "v1"),
         "zones": {
             "jeonse_supply": jeonse_zones,
             "buyer_demand_buy": c.demand_buy,        # 매수세우위 매수신호선
@@ -2701,7 +2711,7 @@ def macro():
 def signal_hist(region: str):
     """지역의 과거 STRONG_BUY/BUY 구간 (백테스트)."""
     from realty_signal.signals.engine import signal_history
-    return {"intervals": signal_history(_kb(), region, SignalConfig())}
+    return {"intervals": signal_history(_kb(), region, _signal_config())}
 
 
 @app.get("/api/series/{region}")

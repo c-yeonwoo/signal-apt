@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from realty_signal import db
-from realty_signal.brain import alerts, outcomes
+from realty_signal.brain import alerts, calibrate, config_store, outcomes
 
 
 def test_alert_merge_prefs():
@@ -46,6 +46,33 @@ def test_evaluate_payload():
     assert payload["digest"][0]["region"] == "강남구"
 
 
+def test_config_store_apply(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB", tmp_path / "c.db")
+    db._migrated[0] = False
+    applied = config_store.apply_config("v2-test", {"demand_buy": 18}, note="test")
+    assert applied["version"] == "v2-test"
+    assert config_store.active_config().demand_buy == 18
+    assert config_store.list_history()[0]["version"] == "v2-test"
+
+
+def test_calibrate_proposal_structure():
+    from realty_signal.ingest.kb_weekly import KBWeekly
+    import pandas as pd
+
+    dates = pd.date_range("2020-01-01", periods=80, freq="W")
+    rows = []
+    for d in dates:
+        for region in ("강남구",):
+            for metric, val in (("sale_change", 0.1), ("jeonse_supply", 150.0),
+                                ("buyer_superiority", 55.0), ("buyer_demand", 8.0)):
+                rows.append({"date": d, "region": region, "metric": metric, "value": val})
+    kb = KBWeekly(long=pd.DataFrame(rows), codes={"강남구": "11680"})
+    prop = calibrate.build_proposal(kb)
+    assert "suggestions" in prop
+    assert "baseline_hits" in prop
+    assert prop.get("disclaimer")
+
+
 def test_outcome_snapshot(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "o.db")
     db._migrated[0] = False
@@ -53,5 +80,5 @@ def test_outcome_snapshot(tmp_path, monkeypatch):
         {"region": "강남구", "signal": "BUY", "전세수급": 150},
     ])
     assert r["regions"] == 1
-    snaps = outcomes.list_snapshots()
-    assert snaps[0]["asof"] == "2026-07-14"
+    assert outcomes.list_snapshots()[0]["asof"] == "2026-07-14"
+

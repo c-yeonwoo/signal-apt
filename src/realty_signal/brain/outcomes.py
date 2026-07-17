@@ -9,10 +9,16 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import pandas as pd
+
 from realty_signal import db
+from realty_signal.ingest.kb_weekly import KBWeekly
+from realty_signal.signals.engine import price_index_from
 
 KV_KEY = "outcome_snapshots"
+LABELS_KEY = "outcome_labels"
 MAX_WEEKS = 52
+LABEL_HORIZONS = (4, 12, 26)
 
 
 def append_region_snapshot(asof: str, rows: list[dict], *, source: str = "kb_weekly") -> dict:
@@ -43,3 +49,69 @@ def list_snapshots(limit: int = 12) -> list[dict]:
     log: list = db.kv_get(KV_KEY) or []
     return [{"asof": e.get("asof"), "regions": len((e.get("regions") or {})), "source": e.get("source")}
             for e in log[:limit]]
+
+
+def _price_label(pct: float) -> str:
+    if pct >= 5.0:
+        return "up_5pct"
+    if pct <= -5.0:
+        return "down_5pct"
+    return "flat"
+
+
+def label_from_kb(kb: KBWeekly, *, horizons: tuple[int, ...] = LABEL_HORIZONS) -> dict:
+    """outcome 스냅샷 asof → N주 후 KB 매매가격지수 변화 라벨."""
+    snaps: list = db.kv_get(KV_KEY) or []
+    labeled: list[dict] = []
+    for snap in snaps:
+        asof_s = snap.get("asof")
+        if not asof_s:
+            continue
+        try:
+            asof = pd.Timestamp(asof_s)
+        except Exception:  # noqa: BLE001
+            continue
+        for region, feat in (snap.get("regions") or {}).items():
+            sale = kb.series(region, "sale_change")
+            if sale.empty:
+                continue
+            idx = price_index_from(sale)
+            i0 = idx.asof(asof)
+            if pd.isna(i0) or not i0:
+                continue
+            row: dict[str, Any] = {
+                "asof": asof_s,
+                "region": region,
+                "signal": feat.get("signal"),
+                "horizons": {},
+            }
+            for w in horizons:
+                target = asof + pd.Timedelta(weeks=w)
+                if target > idx.index.max():
+                    continue
+                i1 = idx.asof(target)
+                if pd.isna(i1) or not i1:
+                    continue
+                pct = round((i1 / i0 - 1) * 100, 2)
+                row["horizons"][str(w)] = {"pct": pct, "label": _price_label(pct)}
+            if row["horizons"]:
+                labeled.append(row)
+    db.kv_set(LABELS_KEY, labeled)
+    return {"labeled": len(labeled), "horizons": list(horizons), "snapshots": len(snaps)}
+
+
+def label_summary() -> dict:
+    """시그널별·horizon별 라벨 분포."""
+    rows: list = db.kv_get(LABELS_KEY) or []
+    agg: dict[str, dict[str, dict[str, int]]] = {}
+    for row in rows:
+        sig = row.get("signal") or "UNKNOWN"
+        for w, h in (row.get("horizons") or {}).items():
+            lbl = h.get("label") or "flat"
+            agg.setdefault(sig, {}).setdefault(w, {})
+            agg[sig][w][lbl] = agg[sig][w].get(lbl, 0) + 1
+    return {"total": len(rows), "by_signal": agg}
+
+
+def list_labels(limit: int = 50) -> list[dict]:
+    return (db.kv_get(LABELS_KEY) or [])[:limit]
