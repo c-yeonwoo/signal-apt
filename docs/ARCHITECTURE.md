@@ -279,11 +279,14 @@ Observe → Evaluate → Calibrate → Explain
 
 ### 8.1 백엔드
 
-- **앱:** `api.py` 오케스트레이터 + 도메인 router
+- **앱:** `api.py` 오케스트레이터(헬퍼·lifespan) + 도메인 router — `/api/*` 등록은 router만
   - `routes/auth.py` — 인증·프로필·즐겨찾기·usage·events
   - `routes/alerts.py` — Alert Engine
   - `routes/advisor.py` — Nick · memory
   - `routes/market.py` — refresh/meta/signals/timing/strength/series…
+  - `routes/auction.py` — 경매 매물·입찰 산정
+  - `routes/personal.py` — myfeed·동네·체크리스트·대출
+  - `routes/explore.py` — 단지·재건축·청약·급매·뉴스 등 (thin-wrap)
   - `routes/brain.py` — `/api/brain/*`
 - **서비스:** `services/market_data.py` — KB·시그널·국면·백테스트 `@lru_cache` 공유
 - **인증:** 쿠키 `rsm_session`, `/api/*` 게이트 (`routes/deps.py`)
@@ -395,6 +398,7 @@ src/realty_signal/
 ├── routes/
 │   ├── deps.py            # auth/usage 공용
 │   ├── auth.py · alerts.py · advisor.py · market.py
+│   ├── auction.py · personal.py · explore.py
 │   └── brain.py           # /api/brain/*
 ├── signals/
 │   ├── engine.py          # SignalConfig · evaluate · backtest
