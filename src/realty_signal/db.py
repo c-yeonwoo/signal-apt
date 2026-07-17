@@ -217,6 +217,16 @@ def user_by_email(email: str):
     return {"id": row[0], "email": row[1], "pwhash": row[2]} if row else None
 
 
+def user_set_pwhash(uid: int, pwhash: str) -> bool:
+    """비밀번호 해시 갱신. 대상 없으면 False."""
+    c = conn()
+    cur = c.execute("UPDATE users SET pwhash=? WHERE id=?", (pwhash, uid))
+    c.commit()
+    n = cur.rowcount
+    c.close()
+    return n > 0
+
+
 def session_create(token: str, uid: int) -> None:
     c = conn()
     c.execute("INSERT OR REPLACE INTO sessions(token,uid,ts) VALUES(?,?,?)", (token, uid, int(time.time())))

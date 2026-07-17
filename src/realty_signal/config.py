@@ -27,6 +27,11 @@ def public_data_key() -> str | None:
     return os.environ.get("PUBLIC_DATA_KEY")
 
 
+def app_base_url() -> str:
+    """비밀번호 재설정·메일 링크용 공개 URL. 미설정 시 Railway 기본."""
+    return (os.environ.get("APP_BASE_URL") or "https://signal-apt.up.railway.app").rstrip("/")
+
+
 def opus_whitelist() -> set[str]:
     """Opus 4.8 프리미엄 모델을 쓸 계정 이메일(소문자) 집합. 그 외는 기본(저가) 모델."""
     raw = os.environ.get("AI_OPUS_WHITELIST", "")

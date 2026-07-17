@@ -1,8 +1,10 @@
-"""재건축 · 정비사업."""
+"""재건축 · 정비사업. warm 은 admin only."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
+
+from realty_signal.routes import deps
 
 router = APIRouter(tags=["redev"])
 
@@ -23,7 +25,9 @@ def redev_candidates(region: str):
 
 
 @router.post("/api/redev/warm")
-def redev_warm(data: dict = Body(default={})):
+def redev_warm(request: Request, data: dict = Body(default={})):
+    if err := deps.require_admin(request):
+        return err
     return _api().redev_warm(data)
 
 

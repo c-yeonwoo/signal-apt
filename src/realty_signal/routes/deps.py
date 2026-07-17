@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from realty_signal import auth, config, db
 
@@ -20,6 +21,13 @@ def is_opus_user(request: Request) -> bool:
 def is_admin(request: Request) -> bool:
     u = auth.current_user(request.cookies.get(auth.COOKIE))
     return bool(u) and (u.get("email") or "").lower() in config.admin_whitelist()
+
+
+def require_admin(request: Request) -> JSONResponse | None:
+    """관리자 아니면 403 응답. 핸들러에서 `if err: return err`."""
+    if not is_admin(request):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+    return None
 
 
 def fav_context(uid_: int) -> dict:

@@ -90,11 +90,15 @@ def _snapshot_signals(asof: str) -> list[dict]:
     return changes
 
 
+_DIGEST_EVERY_DAYS = 7  # 관심지역 주간 이메일 — 서버 루프에서 주 1회
+
+
 async def _auto_refresh_loop():
     """데이터 신선도 자동 유지 — 마지막 수집 후 7일 경과 시 재수집(매일 점검).
 
     KB 주간 데이터는 측정일이 발표보다 ~1주 지연 → '데이터 날짜'가 아닌 '마지막 수집 시각'
     기준으로 주 1회만 받아, 매 기동 재수집을 방지하면서 새 주차 발표를 빠르게 반영.
+    주간 digest도 동일 루프에서 7일마다 시도(SMTP 없으면 dry-run 카운트만).
     """
     import asyncio
     import time
@@ -108,6 +112,18 @@ async def _auto_refresh_loop():
                 log.warning("자동 갱신 완료")
         except Exception as e:  # 갱신 실패해도 루프 유지(다음 점검에 재시도)
             log.error("자동 갱신 실패: %s", e)
+        try:
+            from realty_signal import digest as dig
+            last_d = db.kv_get("last_digest_run")
+            d_age = (time.time() - last_d) / 86400 if last_d else 999
+            if d_age >= _DIGEST_EVERY_DAYS:
+                send = dig.smtp_configured()
+                log.warning("주간 digest 실행 (send=%s)", send)
+                stats = await asyncio.to_thread(lambda: dig.run_digest(send=send, quiet=True))
+                db.kv_set("last_digest_run", time.time())
+                log.warning("digest 완료: %s", stats)
+        except Exception as e:
+            log.error("digest 실패: %s", e)
         try:  # 회원·리포트 보존 — S3 백업(env 설정 시). 매일 1회.
             from realty_signal import backup
             if backup.enabled():
@@ -330,6 +346,18 @@ def _signals_df():
 @app.get("/", response_class=HTMLResponse)
 def index():
     return (WEB_DIR / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/legal/terms", response_class=HTMLResponse)
+def legal_terms():
+    from realty_signal.legal import TERMS_HTML
+    return TERMS_HTML
+
+
+@app.get("/legal/privacy", response_class=HTMLResponse)
+def legal_privacy():
+    from realty_signal.legal import PRIVACY_HTML
+    return PRIVACY_HTML
 
 
 @app.get("/sudo_gu.geojson")

@@ -17,7 +17,10 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/api/auth/signup")
 def auth_signup(data: dict = Body(...)):
-    token, err = auth.signup(data.get("email", ""), data.get("pw", ""))
+    token, err = auth.signup(
+        data.get("email", ""), data.get("pw", ""),
+        accept_tos=bool(data.get("accept_tos")),
+    )
     if err:
         return JSONResponse({"ok": False, "error": err}, status_code=400)
     r = JSONResponse({"ok": True})
@@ -41,6 +44,40 @@ def auth_logout(request: Request):
     r = JSONResponse({"ok": True})
     r.delete_cookie(auth.COOKIE)
     return r
+
+
+@router.post("/api/auth/forgot-password")
+def auth_forgot_password(data: dict = Body(...)):
+    """비밀번호 재설정 메일 요청. SMTP 없으면 토큰을 응답에 포함(개발·드라이런)."""
+    from realty_signal import digest
+    config.load_env()
+    token, msg = auth.request_password_reset(data.get("email", ""))
+    out: dict = {"ok": True, "message": msg}
+    if not token:
+        return out
+    base = config.app_base_url()
+    link = f"{base}/?reset={token}"
+    body = (
+        "Signal APT 비밀번호 재설정\n\n"
+        f"아래 링크를 1시간 이내에 열어 새 비밀번호를 설정하세요.\n{link}\n\n"
+        "요청하지 않았다면 이 메일을 무시하세요.\n"
+    )
+    if digest.smtp_configured():
+        try:
+            digest.send_email(data.get("email", "").strip().lower(), "[Signal APT] 비밀번호 재설정", body)
+        except Exception:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": "메일 발송에 실패했습니다."}, status_code=502)
+    else:
+        out["dev_reset_link"] = link  # SMTP 미설정 시에만(로컬/스테이징)
+    return out
+
+
+@router.post("/api/auth/reset-password")
+def auth_reset_password(data: dict = Body(...)):
+    err = auth.reset_password(data.get("token", ""), data.get("pw", ""))
+    if err:
+        return JSONResponse({"ok": False, "error": err}, status_code=400)
+    return {"ok": True, "message": "비밀번호가 변경되었습니다. 로그인해 주세요."}
 
 
 @router.get("/api/auth/me")
