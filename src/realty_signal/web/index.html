@@ -4459,7 +4459,8 @@ async function startApp(needOnboard){
     <span style="font-weight:800">🦊 Nick <span style="font-weight:400;font-size:11px;color:var(--dim)">부동산 자문</span></span>
     <span id="advAsof" style="font-size:11px;color:var(--dim)"></span>
     <span id="advUsage" style="font-size:11px;color:var(--dim)"></span>
-    <span onclick="advToggle()" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:18px;line-height:1">✕</span>
+    <span onclick="advClearMemory()" title="대화 기억 초기화" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:11px;padding:2px 6px">기억초기화</span>
+    <span onclick="advToggle()" style="cursor:pointer;color:var(--dim);font-size:18px;line-height:1;margin-left:4px">✕</span>
   </div>
   <div id="advBody" style="flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6"></div>
   <div style="padding:8px 12px 4px;border-top:1px solid var(--line)">
@@ -4489,6 +4490,11 @@ function advToggle(){
   const open=p.style.display==='none'||!p.style.display;
   p.style.display=open?'flex':'none'; f.style.display=open?'none':'block';
   if(open){ if(!_advMsgs.length) advRender(); _advLoadUsage(); document.getElementById('advInput').focus(); }
+}
+async function advClearMemory(){
+  if(!confirm('Nick이 기억한 최근 관심지역·질문을 지울까요?')) return;
+  try{ await fetch('/api/advisor/memory',{method:'DELETE'}); toast('대화 기억을 초기화했습니다.'); }
+  catch(e){ toast('초기화 실패'); }
 }
 function advKey(e){
   if(e.key!=='Enter') return;

@@ -710,8 +710,22 @@ def _adv_region_row(r: dict) -> dict:
     return out
 
 
+_ADVISOR_UID: int | None = None  # tool 실행 중 현재 유저 (get_user_context)
+
+
 def _advisor_tool(name: str, args: dict) -> dict:
     """자문 에이전트 tool 실행 — 기존 데이터 함수로 위임(server-side)."""
+    if name == "get_user_context":
+        from realty_signal.brain import memory as nick_mem
+        uid = _ADVISOR_UID
+        if not uid:
+            return {"error": "login_required"}
+        fav = _fav_context(uid)
+        return {
+            "favorites": fav,
+            "memory": nick_mem.to_public(nick_mem.load(uid)),
+            "profile_keys": list((db.profile_get(uid) or {}).keys()),
+        }
     if name == "list_signal_regions":
         rows = signals()
         want = (args.get("signal") or "").upper()
@@ -913,6 +927,48 @@ def admin_policy_delete(request: Request, pid: int):
     return {"ok": True}
 
 
+def _nick_system(uid: int | None) -> str:
+    from realty_signal import advisor
+    from realty_signal.brain import memory as nick_mem
+    profile = db.profile_get(uid) if uid else {}
+    fav = _fav_context(uid) if uid else {}
+    mem = nick_mem.load(uid) if uid else None
+    return advisor.build_system(profile, fav, memory=mem)
+
+
+def _nick_remember(uid: int, messages: list, answer: str | None = None) -> None:
+    from realty_signal.brain import memory as nick_mem
+    try:
+        known = list(_kb().regions) if store.CACHE_FILE.exists() else []
+    except Exception:  # noqa: BLE001
+        known = []
+    try:
+        nick_mem.update_from_messages(uid, messages, known_regions=known, answer=answer)
+    except Exception as e:  # noqa: BLE001
+        log.warning("nick memory skip: %s", e)
+
+
+@app.get("/api/advisor/memory")
+def advisor_memory_get(request: Request):
+    """Nick episodic memory 조회."""
+    from realty_signal.brain import memory as nick_mem
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    return {"ok": True, "memory": nick_mem.to_public(nick_mem.load(uid))}
+
+
+@app.delete("/api/advisor/memory")
+def advisor_memory_clear(request: Request):
+    """Nick 대화 기억 초기화."""
+    from realty_signal.brain import memory as nick_mem
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    nick_mem.clear(uid)
+    return {"ok": True}
+
+
 @app.post("/api/advisor")
 def advisor_api(request: Request, data: dict = Body(...)):
     """근거기반 부동산 자문 챗봇 — Claude tool-use 로 우리 데이터를 조회해 답변. 로그인 필요."""
@@ -935,12 +991,18 @@ def advisor_api(request: Request, data: dict = Body(...)):
         return {"ok": False, "reason": "empty"}
     messages = messages[-12:]                              # 최근 12턴만(비용·컨텍스트 방어)
     model = advisor.OPUS if _is_opus_user(request) else advisor.SONNET
-    system = advisor.build_system(db.profile_get(uid), _fav_context(uid))
-    res = advisor.run_advisor(messages, _advisor_tool, model=model, system=system)
+    system = _nick_system(uid)
+    global _ADVISOR_UID
+    _ADVISOR_UID = uid
+    try:
+        res = advisor.run_advisor(messages, _advisor_tool, model=model, system=system)
+    finally:
+        _ADVISOR_UID = None
     if not res.get("answer"):
         return {"ok": False, "reason": "failed",
                 "answer": "지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다."}
     db.usage_inc(uid, "nick")
+    _nick_remember(uid, messages, res.get("answer"))
     ust = _usage_status(uid, "nick", unlimited=unlimited)
     return {"ok": True, "answer": res["answer"], "used": res.get("used", []),
             "기준일": str(_kb().last_date.date()), "usage": ust}
@@ -957,9 +1019,8 @@ def advisor_stream_api(request: Request, data: dict = Body(...)):
     opus = _is_opus_user(request)
     unlimited = opus or _is_admin(request)
     messages = (data.get("messages") or [])[-12:]
-    profile = db.profile_get(uid) if uid else {}
-    favorites = _fav_context(uid) if uid else {}
-    system = advisor.build_system(profile, favorites)
+    system = _nick_system(uid)
+    answer_buf: list[str] = []
 
     def _one(ev: dict) -> str:
         return f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
@@ -975,15 +1036,22 @@ def advisor_stream_api(request: Request, data: dict = Body(...)):
         if not ok:
             yield _one({"type": "error", "message": "limit", "usage": ust}); return
         model = advisor.OPUS if opus else advisor.SONNET
+        global _ADVISOR_UID
+        _ADVISOR_UID = uid
         try:
             for ev in advisor.run_advisor_stream(messages, _advisor_tool, model=model, system=system):
+                if ev.get("type") == "delta" and ev.get("text"):
+                    answer_buf.append(ev["text"])
                 if ev.get("type") == "done":
                     db.usage_inc(uid, "nick")
+                    _nick_remember(uid, messages, "".join(answer_buf) or None)
                     ev["기준일"] = asof
                     ev["usage"] = _usage_status(uid, "nick", unlimited=unlimited)
                 yield _one(ev)
         except Exception:  # noqa: BLE001
             yield _one({"type": "error", "message": "failed"})
+        finally:
+            _ADVISOR_UID = None
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -2712,9 +2780,14 @@ def pipeline_health():
 @app.get("/api/listings/all")
 def listings_all(request: Request, types: str = "경매,급매,청약"):
     """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환). 유형 교차 정렬."""
+    from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
 
     out = _build_listings(set(t for t in types.split(",") if t))
+    uid = _uid(request)
+    scores = eng_rank.engagement_scores(uid=uid)
+    if scores:
+        out = eng_rank.apply_engagement_bonus(out, scores)
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
     asof = _timing_asof()
     return {
@@ -2724,6 +2797,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "source": "kb_weekly",
             "timing_version": TIMING_VERSION,
             "data_age_days": round(_data_age_days() or 0, 1),
+            "engagement_boost": bool(scores),
         },
         "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")},
     }

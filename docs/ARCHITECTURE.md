@@ -1,7 +1,7 @@
 # Signal APT — Architecture (Engine v1)
 
 > KB 주간 시계열 기반 아파트 매수·매도 **타이밍** 의사결정 엔진.  
-> 최종 갱신: 2026-07 · **Timing v1** · **Brain Phase 0–3** (Phase 4 로드맵)
+> 최종 갱신: 2026-07 · **Timing v1** · **Brain Phase 0–4**
 
 브랜드 한 줄: **「근거가 증명되는 매수 타이밍」** — [DESIGN.md](../DESIGN.md) 톤·UI 토큰은 별도.
 
@@ -259,7 +259,7 @@ Observe → Evaluate → Calibrate → Explain
 | Observe | ✅ events · outcome_snapshots · nbhd_snap | listing-level outcome |
 | Evaluate | ✅ backtest · outcome_labels | 단지 시그널 outcome |
 | Calibrate | ✅ CalibrationProposal + 수동 apply | 자동 적용 금지 유지 |
-| Explain | ✅ Nick get_timing / get_backtest | Nick episodic memory (Phase 4) |
+| Explain | ✅ Nick get_timing / get_backtest / memory | — |
 
 ---
 
@@ -339,7 +339,19 @@ signal serve               # FastAPI + SPA
 | **1** | Timing v1, get_timing, listings meta, Alert v1 | ✅ |
 | **2** | Outcome 라벨링, CalibrationProposal, config versioning | ✅ |
 | **3** | Entity schema, ingest pipeline, 시장강도 프록시 | ✅ |
-| **4** | Nick memory, ML 랭킹, (선택) React | 🔲 |
+| **4** | Nick episodic memory, engagement 랭킹 보조 | ✅ (React·본격 ML 보류) |
+
+### Phase 4 요약
+
+| 모듈 | 역할 |
+|------|------|
+| `brain/memory.py` | 대화에서 지역·단지·질문 요약 추출 → `nick_memory:{uid}` |
+| `brain/ranking.py` | `listing_*` 이벤트 빈도 → 타이밍점수 소폭 가점 (≤+8) |
+| `GET/DELETE /api/advisor/memory` | 기억 조회·초기화 |
+| Nick `get_user_context` | favorites + memory 조회 |
+| `listings/all` meta | `engagement_boost` |
+
+React SPA 전환·학습형 ML 랭커는 의도적으로 보류 (ROI·복잡도).
 
 ### Phase 3 요약
 
@@ -370,7 +382,9 @@ src/realty_signal/
 │   ├── alerts.py          # Alert Engine v1
 │   ├── outcomes.py        # Outcome feature + labels
 │   ├── config_store.py    # SignalConfig versioning
-│   └── calibrate.py       # CalibrationProposal
+│   ├── calibrate.py       # CalibrationProposal
+│   ├── memory.py          # Nick episodic memory (Phase 4)
+│   └── ranking.py         # engagement 랭킹 보조 (Phase 4)
 ├── entities.py            # Provenance · Region/Listing Entity (Phase 3)
 ├── routes/
 │   └── brain.py           # /api/brain/* (Phase 2 분리)

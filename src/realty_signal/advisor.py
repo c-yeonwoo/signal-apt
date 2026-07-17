@@ -28,6 +28,7 @@ SYSTEM = (
     "7. 아래에 '사용자 프로필'이 주어지면 예산·거주지·관심지역을 우선 고려한다. 프로필에 없는 사실은 지어내지 말고, 예산 밖 후보를 말할 때는 예산 초과임을 명시한다.\n"
     "8. 지역 시그널(KB 주간 룰)과 단지 시그널(실거래·전세가율·공시)은 계층이 다르다. 단지 전세가율·갭·평단가는 get_complex 결과만 인용하고, 필드가 없거나 '데이터없음필드'면 추정하지 않는다. 지역 BUY를 단지 BUY로 바꿔 말하지 말 것.\n"
     "9. '지금 타이밍?'·'언제 사?' 류는 get_timing 으로 타이밍점수(0~100)·근거·confidence·asof 를 조회해 조건부로 답한다. 확신형 매수 지시 금지.\n"
+    "10. '최근 대화 기억'이 있으면 관심지역·단지·직전 질문을 참고하되, 이번 메시지와 충돌하면 이번 메시지를 우선한다. 기억을 사실처럼 단정하지 말 것.\n"
 )
 
 
@@ -43,8 +44,14 @@ def _fmt_manwon(v) -> str | None:
     return f"{int(n):,}만"
 
 
-def build_system(profile: dict | None = None, favorites: dict | None = None) -> str:
-    """SYSTEM + 사용자 프로필/관심목록 컨텍스트. 비어 있으면 SYSTEM만."""
+def build_system(
+    profile: dict | None = None,
+    favorites: dict | None = None,
+    memory: dict | None = None,
+) -> str:
+    """SYSTEM + 프로필/관심목록 + (선택) episodic memory."""
+    from realty_signal.brain import memory as mem_mod
+
     bits = []
     p = profile or {}
     if p.get("가용자본"):
@@ -67,9 +74,13 @@ def build_system(profile: dict | None = None, favorites: dict | None = None) -> 
         bits.append("관심지역 " + ", ".join(regs[:12]))
     if cxs:
         bits.append("관심단지 " + ", ".join(cxs[:12]))
-    if not bits:
-        return SYSTEM
-    return SYSTEM + "\n사용자 프로필(답변 시 참고):\n- " + "\n- ".join(bits) + "\n"
+    base = SYSTEM
+    if bits:
+        base += "\n사용자 프로필(답변 시 참고):\n- " + "\n- ".join(bits) + "\n"
+    mem_block = mem_mod.format_for_system(memory)
+    if mem_block:
+        base += mem_block
+    return base
 
 
 # Anthropic tool 스키마 — 각 tool 은 api.py 의 내부 데이터 함수에 매핑된다(server-side 실행).
@@ -120,6 +131,11 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {
             "region": {"type": "string", "description": "지역명(생략 시 상위 강도 지역)"},
         }},
+    },
+    {
+        "name": "get_user_context",
+        "description": "사용자 관심지역·관심단지·최근 Nick 대화 기억(지역/단지/질문 요약). '내가 관심 있던 곳'·이어가기 질문에 사용.",
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "get_regime",
