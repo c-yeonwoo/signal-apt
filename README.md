@@ -25,6 +25,8 @@ KB 주간 시계열 기반 **아파트 매수·매도 시그널** 분석 엔진.
 
 ## 설치 & 실행
 
+> 아키텍처·엔진 버전: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (Timing v1 · Brain Phase 0–1)
+
 > ⚠️ **Python 3.12 권장.** 3.14 에서는 pandas/pyarrow C 확장이 datetime 추론 시
 > 세그폴트(exit 139). `python3.12 -m venv .venv` 로 생성할 것.
 

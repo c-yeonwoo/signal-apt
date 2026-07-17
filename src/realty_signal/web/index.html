@@ -1879,7 +1879,8 @@ async function loadAllListings(){
   document.getElementById('laStatus').textContent='불러오는 중…';
   document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">최초 1회는 데이터 수집으로 수십초 걸릴 수 있어요</span></div>';
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent(types))).json();
-    _laData=d.listings||[]; document.getElementById('laStatus').textContent=`${_laData.length}건 · 기준 ${d.asof}`; }
+    _laData=d.listings||[]; const meta=d.meta||{};
+    document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${meta.data_age_days!=null?` · ${meta.data_age_days}일 전 수집`:''}`; }
   catch(e){ _laData=[]; document.getElementById('laStatus').textContent='불러오기 실패'; }
   initLaPriceFilter();
   renderAllListings();
@@ -1921,7 +1922,9 @@ function renderAllListings(){
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
         : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
       return `<div class="kv"><span>유형 ${x['유형']}</span><span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
-        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">기회도 근거: ${x['기회도근거']}</div>`:''}<div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
+        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">타이밍 근거: ${x['기회도근거']}</div>`:''}
+        ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">데이터 신뢰도 ${Math.round(x.confidence*100)}% — 추가 확인 권장</div>`:''}
+        <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
@@ -2003,6 +2006,8 @@ async function selectMsRow(mapId, i){
     if(det&&det.classList.contains('ms-detail')){
       det.innerHTML=st.opt.detail(st.items[i]); det.style.display='block';
       row.classList.add('sel'); row.scrollIntoView({block:'nearest',behavior:'smooth'});
+      const it=st.items[i];
+      if(it&&typeof track==='function') track('listing_detail_open',{kind:it['유형'],region:it['지역'],name:it['단지명']});
     }
   }
   await _focusPinOnly(mapId, i);
@@ -4262,23 +4267,50 @@ function renderAlerts(d){
   const lbl={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도'};
   const col=s=>SIGCOLOR[s]||'#94a3b8';
   let html='';
+  if(d.timing && d.timing.length){
+    html += `<div style="font-weight:700;font-size:13px;margin-bottom:8px">고타이밍 매물 <span style="color:var(--dim);font-weight:400">${d.timing.length}건</span></div>`
+      + d.timing.slice(0,8).map(t=>`<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;cursor:pointer" onclick="document.getElementById('alertsDlg').close();switchTab('all');">
+        <b>${t.name||'–'}</b> <span style="color:var(--dim)">${t.region||''} · ${t.type||''}</span>
+        <span style="float:right;color:var(--accent);font-weight:700">${t.score??'–'}</span>
+        ${t.reason?`<div style="color:var(--dim);font-size:11px;margin-top:3px">${t.reason}</div>`:''}</div>`).join('');
+  }
+  if(d.nbhd && d.nbhd.length){
+    html += `<div style="font-weight:700;font-size:13px;margin:${html?16:0}px 0 8px${html?';padding-top:12px;border-top:1px solid var(--line)':''}">동네 변화</div>`
+      + d.nbhd.map(n=>`<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:12px;cursor:pointer" onclick="document.getElementById('alertsDlg').close();openNbhd('${n.region}')">
+        <b>${n.region}</b> <span style="color:var(--dim)">${n.summary||''}</span></div>`).join('');
+  }
   if(d.changes && d.changes.length){
-    html += `<div style="font-weight:700;font-size:13px;margin-bottom:8px">최근 변동 <span style="color:var(--dim);font-weight:400">${d.changes.length}건</span></div>`
+    html += `<div style="font-weight:700;font-size:13px;margin:${html?16:0}px 0 8px${html?';padding-top:12px;border-top:1px solid var(--line)':''}">시그널 승급 <span style="color:var(--dim);font-weight:400">${d.changes.length}건</span></div>`
       + d.changes.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
         <b style="min-width:62px">${c.region}</b>
         <span style="color:${col(c.from)};font-size:12px">${lbl[c.from]||c.from}</span><span style="color:var(--dim)">→</span>
         <span style="color:${col(c.to)};font-weight:700">${lbl[c.to]||c.to}</span>
         <span style="margin-left:auto;color:var(--dim);font-size:11px">${c.date}</span></div>`).join('');
-  } else {
-    html += `<div style="color:var(--dim);font-size:13px;padding:4px 0 10px">아직 변동 알림이 없습니다.<br><span style="font-size:12px">시그널은 KB 주간 데이터 갱신 시마다 직전과 비교됩니다.</span></div>`;
+  } else if(!html){
+    html += `<div style="color:var(--dim);font-size:13px;padding:4px 0 10px">아직 알림이 없습니다.<br><span style="font-size:12px">★ 즐겨찾기 지역·동네 리포트 열람 후 변동·고타이밍 매물이 여기 모입니다.</span></div>`;
   }
   if(d.digest && d.digest.length){
     html += `<div style="font-weight:700;font-size:13px;margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--line)">내 즐겨찾기 현재 시그널</div>`
       + d.digest.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer" onclick="document.getElementById('alertsDlg').close();switchTab('signal');selectRegion('${g.region}')"><b style="min-width:62px">${g.region}</b>${g.signal?badge(g.signal):'<span style="color:var(--dim)">–</span>'}</div>`).join('');
-  } else {
+  } else if(!d.changes?.length && !d.timing?.length){
     html += `<div style="color:var(--dim);font-size:12px;margin-top:14px">시그널 탭에서 지역을 ★ 즐겨찾기하면 변동을 추적합니다.</div>`;
   }
+  const p=d.prefs||{};
+  html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--dim)">
+    <div style="font-weight:700;color:var(--txt);margin-bottom:6px;font-size:12px">알림 규칙</div>
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apSig" ${p.signal_upgrade!==false?'checked':''}> 시그널 승급</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apTim" ${p.high_timing!==false?'checked':''}> 고타이밍 매물 (≥${p.timing_min??70}점)</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apNbhd" ${p.nbhd_change!==false?'checked':''}> 동네 리포트 변화</label>
+    <span class="btn" style="padding:4px 10px;font-size:11px;margin-top:6px;display:inline-block" onclick="saveAlertPrefs()">저장</span></div>`;
   document.getElementById('alertsBody').innerHTML=html;
+}
+async function saveAlertPrefs(){
+  const prefs={signal_upgrade:!!document.getElementById('apSig')?.checked,
+    high_timing:!!document.getElementById('apTim')?.checked, nbhd_change:!!document.getElementById('apNbhd')?.checked,
+    timing_min:(_alerts.prefs&&_alerts.prefs.timing_min)||70};
+  try{ await fetch('/api/alerts/prefs',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({prefs})});
+    toast('알림 규칙을 저장했습니다.'); await loadAlerts(); renderAlerts(_alerts);
+  }catch(e){ toast('저장 실패'); }
 }
 async function openAlerts(){
   await loadAlerts();

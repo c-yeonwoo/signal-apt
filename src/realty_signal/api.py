@@ -98,11 +98,13 @@ def _snapshot_signals(asof: str) -> list[dict]:
 
     변동 로그(signal_changes)는 전역(비개인화). /api/alerts 에서 사용자 즐겨찾기로 필터.
     """
+    from realty_signal.brain import snapshots as snap
+
     try:
         cur = _signal_map()
     except Exception:
         return []
-    prev = db.kv_get("signal_snapshot") or {}
+    prev = snap.load().get("signals") or {}
     changes = []
     if prev:  # 최초 1회는 스냅샷만 저장(가짜 변동 방지)
         for region, sig in cur.items():
@@ -112,7 +114,13 @@ def _snapshot_signals(asof: str) -> list[dict]:
     if changes:
         log_ = db.kv_get("signal_changes") or []
         db.kv_set("signal_changes", (changes + log_)[:300])  # 최신순, 최대 300건
-    db.kv_set("signal_snapshot", cur)
+    snap.save(cur, asof)
+    try:
+        from realty_signal.brain import outcomes
+        recs = json.loads(_signals_df().to_json(orient="records", force_ascii=False))
+        outcomes.append_region_snapshot(asof, recs)
+    except Exception as e:  # noqa: BLE001
+        log.warning("outcome snapshot skip: %s", e)
     return changes
 
 
@@ -357,19 +365,68 @@ def favorites_del(request: Request, kind: str, key: str):
     return {"ok": True}
 
 
-# ---------- 알림 (즐겨찾기 지역 시그널 변동) ----------
+# ---------- 알림 (Alert Engine v1) ----------
+def _user_nbhd_diffs(uid: int, regions: set[str]) -> dict[str, list]:
+    out: dict[str, list] = {}
+    for region in regions:
+        weeks = db.nbhd_snap_weeks(uid, region, 2)
+        if len(weeks) < 2:
+            continue
+        curr = db.nbhd_snap_get(uid, region, weeks[0])
+        prev = db.nbhd_snap_get(uid, region, weeks[1])
+        if curr and prev:
+            out[region] = _nbhd_diff(curr, prev)
+    return out
+
+
+@app.get("/api/alerts/prefs")
+def alerts_prefs_get(request: Request):
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    from realty_signal.brain.alerts import merge_prefs
+    return {"ok": True, "prefs": merge_prefs(db.alert_prefs_get(uid))}
+
+
+@app.put("/api/alerts/prefs")
+def alerts_prefs_put(request: Request, data: dict = Body(...)):
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    prefs = data.get("prefs") if isinstance(data.get("prefs"), dict) else data
+    return {"ok": True, "prefs": db.alert_prefs_set(uid, prefs)}
+
+
 @app.get("/api/alerts")
 def alerts(request: Request):
-    """내 즐겨찾기 지역의 시그널 변동 + 현재 상태 다이제스트. unread=마지막 확인 이후 변동 수."""
+    """Alert Engine v1 — 시그널 변동·고타이밍 매물·동네 diff."""
+    from realty_signal.brain import alerts as alert_engine
+
     uid = _uid(request)
-    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"}
+    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
     log_ = db.kv_get("signal_changes") or []
-    mine = [c for c in log_ if c["region"] in favs][:50]
-    seen = db.kv_get(f"alerts_seen:{uid}") or ""
-    unread = sum(1 for c in mine if c["date"] > seen)
-    cur = _signal_map()
-    digest = [{"region": r, "signal": cur.get(r, "")} for r in sorted(favs)]
-    return {"changes": mine, "unread": unread, "digest": digest}
+    seen = db.kv_get(f"alerts_seen:{uid}") or "" if uid else ""
+    prefs = db.alert_prefs_get(uid) if uid else {}
+    listings = _build_listings({"경매", "급매"}) if favs and prefs.get("high_timing", True) else []
+    nbhd_diffs = _user_nbhd_diffs(uid, favs) if uid and favs else {}
+    payload = alert_engine.evaluate(
+        favs, prefs,
+        signal_changes=log_,
+        signal_map=_signal_map(),
+        listings=listings,
+        nbhd_diffs=nbhd_diffs,
+        seen_before=seen,
+    )
+    return payload
+
+
+@app.get("/api/brain/outcomes")
+def brain_outcomes(request: Request, limit: int = 12):
+    """주간 outcome feature 스냅샷 목록(관리·디버그)."""
+    if not _is_admin(request):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+    from realty_signal.brain import outcomes
+    return {"ok": True, "snapshots": outcomes.list_snapshots(limit=min(limit, 52))}
 
 
 @app.post("/api/alerts/seen")
@@ -436,7 +493,7 @@ def myfeed(request: Request):
 
 @app.post("/api/events")
 def track_event(request: Request, data: dict = Body(...)):
-    """퍼널 이벤트 최소셋. name: signup|profile_complete|fav_add|report_open|nick_ask|nbhd_open."""
+    """퍼널 이벤트 최소셋. name: signup|profile_complete|fav_add|report_open|nick_ask|nbhd_open|listing_detail_open|listing_click|timing_card_expand."""
     uid = _uid(request)
     if not uid:
         return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
@@ -673,6 +730,24 @@ def _advisor_tool(name: str, args: dict) -> dict:
         bt = _backtest()
         return {"by_signal": bt.get("by_signal"), "설명": bt.get("설명"),
                 "data_age_days": round(_data_age_days() or 0, 1)}
+    if name == "get_timing":
+        layer = (args.get("layer") or "region").strip()
+        region = (args.get("region") or "").strip()
+        if layer == "region":
+            if not region:
+                return {"error": "region 이 필요합니다."}
+            return _region_timing_row(region)
+        if layer == "listing":
+            kind = args.get("kind") or "급매"
+            items = _build_listings({kind})
+            if region:
+                items = [x for x in items if region in (x.get("지역") or "")]
+            items = sorted(items, key=lambda x: x.get("타이밍점수") or 0, reverse=True)[:8]
+            return {"layer": "listing", "asof": _timing_asof(),
+                    "listings": [{"단지명": x.get("단지명"), "지역": x.get("지역"), "유형": x.get("유형"),
+                                  "타이밍점수": x.get("타이밍점수"), "타이밍근거": x.get("타이밍근거"),
+                                  "confidence": x.get("confidence")} for x in items]}
+        return {"error": f"unknown layer '{layer}'"}
     if name == "get_regime":
         rg = _regime() or {}
         return {k: rg.get(k) for k in ("phase", "beta", "gap", "color", "desc") if k in rg}
@@ -2460,44 +2535,46 @@ def _radar_scan(regions: list[str]) -> list[dict]:
 
 
 _SIG_BONUS = {"STRONG_BUY": 25, "BUY": 15, "WATCH": 5, "NEUTRAL": 0, "SELL_RISK": -20}
-_GRADE_BONUS = {"A": 8, "B": 4, "C": 0, "D": -4}   # 상급지=환금성·안정 가점
+_GRADE_BONUS = {"A": 8, "B": 4, "C": 0, "D": -4}   # region_timing·listing_timing 내부와 동기
+
+
+def _timing_asof() -> str:
+    return str(_kb().last_date.date())
+
+
+def _region_timing_row(region: str) -> dict:
+    """지역 타이밍 — signals row + (선택) 백테스트 상승 확률."""
+    from realty_signal.signals.timing import region_timing
+
+    rows = signals()
+    hit = next((r for r in rows if r.get("region") == region), None) \
+        or next((r for r in rows if region and region in (r.get("region") or "")), None)
+    if not hit:
+        return {"error": f"'{region}' 지역 데이터를 찾지 못했습니다."}
+    bt_up = None
+    try:
+        by_sig = {r["signal"]: r for r in (_backtest().get("by_signal") or []) if r.get("signal")}
+        sig = hit.get("signal")
+        if sig and sig in by_sig:
+            bt_up = by_sig[sig].get("적중률")
+    except Exception:  # noqa: BLE001
+        pass
+    tr = region_timing(
+        hit.get("signal"),
+        asof=_timing_asof(),
+        jeonse_supply=hit.get("전세수급"),
+        sale_momentum=hit.get("매매모멘텀"),
+        backtest_up_pct=float(bt_up) if bt_up is not None else None,
+    )
+    return {**tr.to_dict(), "region": region, "signal": hit.get("signal")}
 
 
 def _opportunity(kind: str, m: dict, signal: str | None, grade: str | None):
-    """기회도 0~100 (v2) = 유형 고유 할인/기대(0~60) + 시그널 강도 + 급지(환금성). (score, 근거)."""
-    why = []
-    if kind == "급매":
-        g = m.get("급매갭")
-        if g is None:
-            base = 0; why.append("급매갭 –")
-        elif g <= -35:                     # 비현실적 할인 = 미끼·허위·특수물건 의심 → 상위 노출 억제
-            base = 15; why.append(f"급매갭 {g}%(⚠️비현실적·확인필요)")
-        elif g < 0:
-            base = min(60, round(-g * 2)); why.append(f"급매갭 {g}%")        # -30%→60
-        else:                              # 호가 ≥ 시세 → 급매 아님
-            base = 0; why.append(f"급매갭 {g}%(시세 이상)")
-    elif kind == "경매":
-        r = m.get("시세차익률")
-        base = 0 if r is None else max(0, min(60, round(r * 1.8)))        # 33%→60
-        why.append(f"시세차익 {r}%" if r is not None else "시세차익 –")
-    elif kind == "청약":
-        st, dd = m.get("상태"), m.get("Dday")
-        base = 45 if st == "접수중" else 35 if st == "접수예정" else 20
-        if dd is not None and 0 <= dd <= 14:
-            base += (15 - dd)                                            # 임박(2주내) 가점
-        why.append(f"청약 {st}" + (f" D-{dd}" if dd is not None and dd >= 0 else ""))
-    elif kind == "재건축":
-        p = m.get("잠재력")
-        base = 0 if p is None else round(p * 0.55)                       # 잠재력 100→55
-        why.append(f"재건축 잠재력 {p}" if p is not None else "재건축 잠재력 –")
-    else:
-        base = 0
-    sb, gb = _SIG_BONUS.get(signal or "", 0), _GRADE_BONUS.get(grade or "", 0)
-    if signal:
-        why.append(f"{signal}({sb:+d})")
-    if grade:
-        why.append(f"{grade}급지({gb:+d})")
-    return max(0, min(100, base + sb + gb)), " · ".join(why)
+    """기회도 0~100 — listing_timing 래퍼 (하위 호환)."""
+    from realty_signal.signals.timing import listing_timing
+
+    tr = listing_timing(kind, m, signal, grade, asof=_timing_asof())
+    return tr.score, tr.reasons_text
 
 
 def _build_listings(want: set[str]) -> list[dict]:
@@ -2506,10 +2583,14 @@ def _build_listings(want: set[str]) -> list[dict]:
     out = []
 
     def add(kind, name, region, signal, mlabel, mval, munit, raw, lat, lng, ref, total=None):
-        score, why = _opportunity(kind, raw, signal, grade.get(region))
-        out.append({"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
-                    "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
-                    "기회도": score, "기회도근거": why, "총액": total, "lat": lat, "lng": lng, "ref": ref})
+        from realty_signal.signals.timing import listing_timing
+
+        tr = listing_timing(kind, raw, signal, grade.get(region), asof=_timing_asof())
+        row = {"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
+               "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
+               "총액": total, "lat": lat, "lng": lng, "ref": ref}
+        row.update(tr.to_dict())
+        out.append(row)
 
     if "경매" in want:
         for r in auction.enrich(auction.load(), _signal_map(), {}):
@@ -2539,13 +2620,32 @@ def _build_listings(want: set[str]) -> list[dict]:
     return out
 
 
+@app.get("/api/timing")
+def timing_api(region: str | None = None):
+    """지역 타이밍 점수(0~100) — 근거·신뢰도·기준일."""
+    if not region or not region.strip():
+        return JSONResponse({"error": "region required"}, status_code=400)
+    return _region_timing_row(region.strip())
+
+
 @app.get("/api/listings/all")
 def listings_all(request: Request, types: str = "경매,급매,청약"):
-    """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 기회도(시그널·급지 가중). 유형 교차 정렬."""
+    """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환). 유형 교차 정렬."""
+    from realty_signal.signals.timing import VERSION as TIMING_VERSION
+
     out = _build_listings(set(t for t in types.split(",") if t))
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
-    return {"listings": out, "asof": str(_kb().last_date.date()),
-            "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")}}
+    asof = _timing_asof()
+    return {
+        "listings": out,
+        "asof": asof,
+        "meta": {
+            "source": "kb_weekly",
+            "timing_version": TIMING_VERSION,
+            "data_age_days": round(_data_age_days() or 0, 1),
+        },
+        "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")},
+    }
 
 
 @app.get("/api/quicksale")

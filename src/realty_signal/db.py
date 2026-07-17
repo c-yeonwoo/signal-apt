@@ -321,6 +321,7 @@ def users_with_region_favs() -> list[dict]:
 # ---------- funnel events ----------
 _ALLOWED_EVENTS = frozenset({
     "signup", "profile_complete", "fav_add", "report_open", "nick_ask", "nbhd_open",
+    "listing_detail_open", "listing_click", "timing_card_expand",
 })
 
 
@@ -417,7 +418,19 @@ def nbhd_snap_weeks(uid: int, region: str, limit: int = 8) -> list[str]:
     return [w for (w,) in rows]
 
 
-# ---------- kv (범용 JSON 캐시 — 비개인화 계산결과 영구 저장) ----------
+# ---------- alert prefs (kv) ----------
+def alert_prefs_get(uid: int) -> dict:
+    v = kv_get(f"alert_prefs:{uid}")
+    return v if isinstance(v, dict) else {}
+
+
+def alert_prefs_set(uid: int, prefs: dict) -> dict:
+    from realty_signal.brain.alerts import merge_prefs
+    clean = merge_prefs(prefs)
+    kv_set(f"alert_prefs:{uid}", clean)
+    return clean
+
+
 def kv_get(k: str, max_age: int | None = None):
     """캐시 값(JSON 역직렬화). 없거나 max_age(초) 초과 시 None."""
     c = conn()

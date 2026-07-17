@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from realty_signal import db
-from realty_signal.signals import history
+from realty_signal.brain import snapshots
 
 
 def build_user_digest(
@@ -101,7 +101,7 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
     if as_of is None:
         as_of = str(store.load().last_date.date())
     if changes is None:
-        changes = history.diff(history.load_snapshot(), signal_df)
+        changes = snapshots.diff(snapshots.load(), signal_df)
     if isinstance(signal_df, pd.DataFrame):
         signal_map = dict(zip(signal_df["region"], signal_df["signal"]))
     else:

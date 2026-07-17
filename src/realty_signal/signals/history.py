@@ -13,13 +13,15 @@ SNAPSHOT_FILE = Path("data/cache/snapshot.json")
 _RANK = {"SELL_RISK": 0, "NEUTRAL": 1, "WATCH": 2, "BUY": 3, "STRONG_BUY": 4}
 
 
-def load_snapshot(path: Path = SNAPSHOT_FILE) -> dict:
+def load_snapshot(path: Path | None = None) -> dict:
+    path = path or SNAPSHOT_FILE
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_snapshot(df: pd.DataFrame, as_of: str, path: Path = SNAPSHOT_FILE) -> None:
+def save_snapshot(df: pd.DataFrame, as_of: str, path: Path | None = None) -> None:
+    path = path or SNAPSHOT_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     snap = {"as_of": as_of, "signals": dict(zip(df["region"], df["signal"]))}
     path.write_text(json.dumps(snap, ensure_ascii=False, indent=2), encoding="utf-8")

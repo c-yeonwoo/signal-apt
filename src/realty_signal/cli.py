@@ -18,8 +18,8 @@ from rich.console import Console
 from rich.table import Table
 
 from realty_signal import store
+from realty_signal.brain import snapshots
 from realty_signal.ingest import kb_weekly
-from realty_signal.signals import history
 from realty_signal.signals.engine import SignalConfig, evaluate
 
 app = typer.Typer(add_completion=False, help="KB 주간 시계열 아파트 시그널 분석")
@@ -76,15 +76,15 @@ def watch(
     kb = store.fetch()
     df = evaluate(kb, SignalConfig(), store.load_supply())
     as_of = str(kb.last_date.date())
-    prev = history.load_snapshot()
-    changes = history.diff(prev, df)
+    prev = snapshots.load()
+    changes = snapshots.diff(prev, df)
 
     if prev.get("as_of") == as_of and not changes:
         if not quiet:
             console.print(f"[dim]변화 없음 (데이터 {as_of}, 이전과 동일)[/dim]")
         return
     if not changes:
-        history.save_snapshot(df, as_of)
+        snapshots.save(dict(zip(df["region"], df["signal"])), as_of, df)
         if not quiet:
             console.print(f"[dim]등급 변화 없음 (데이터 {as_of})[/dim]")
         return
@@ -101,7 +101,7 @@ def watch(
     if notify:
         top = ", ".join(f"{c['region']} {c['old']}→{c['new']}" for c in changes[:3])
         _macos_notify(f"부동산 시그널 변화 {len(changes)}건 ({as_of})", top)
-    history.save_snapshot(df, as_of)
+    snapshots.save(dict(zip(df["region"], df["signal"])), as_of, df)
     _warm_favorites_quiet(quiet)
 
 

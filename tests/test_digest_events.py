@@ -10,10 +10,12 @@ def test_event_log_whitelist(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "t.db")
     db._migrated[0] = False
     assert db.event_log(1, "signup", {}) is True
+    assert db.event_log(1, "listing_detail_open", {"kind": "급매"}) is True
     assert db.event_log(1, "hack_me", {}) is False
     assert db.event_log(None, "signup", {}) is False
     counts = {r["name"]: r["count"] for r in db.event_counts(30)}
     assert counts.get("signup") == 1
+    assert counts.get("listing_detail_open") == 1
 
 
 def test_build_user_digest_with_changes():

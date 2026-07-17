@@ -27,6 +27,7 @@ SYSTEM = (
     "6. 정책·규제·개발계획(대출규제·DSR·신도시·GTX·재건축 규제 등) 질문은 get_policy 로 지식베이스를 조회해 답하고, 결과의 출처(source)와 기준일(eff_date)을 함께 밝히며 '정책은 이후 변경됐을 수 있으니 최신 공고 확인'을 덧붙인다. 조회 결과가 없으면 모른다고 말한다(정책을 지어내지 말 것).\n"
     "7. 아래에 '사용자 프로필'이 주어지면 예산·거주지·관심지역을 우선 고려한다. 프로필에 없는 사실은 지어내지 말고, 예산 밖 후보를 말할 때는 예산 초과임을 명시한다.\n"
     "8. 지역 시그널(KB 주간 룰)과 단지 시그널(실거래·전세가율·공시)은 계층이 다르다. 단지 전세가율·갭·평단가는 get_complex 결과만 인용하고, 필드가 없거나 '데이터없음필드'면 추정하지 않는다. 지역 BUY를 단지 BUY로 바꿔 말하지 말 것.\n"
+    "9. '지금 타이밍?'·'언제 사?' 류는 get_timing 으로 타이밍점수(0~100)·근거·confidence·asof 를 조회해 조건부로 답한다. 확신형 매수 지시 금지.\n"
 )
 
 
@@ -101,6 +102,17 @@ TOOLS = [
         "name": "get_backtest",
         "description": "시그널 엔진의 과거 적중률(매수/매도 시그널이 이후 실제 가격 방향과 맞은 비율). 방향성·예측을 확률로 말할 때 근거로 사용.",
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_timing",
+        "description": "지역·매물 타이밍 점수(0~100)와 근거·신뢰도(confidence)·기준일(asof). '지금 타이밍?'·'이 동네/매물 괜찮아?' 에 사용.",
+        "input_schema": {"type": "object", "properties": {
+            "layer": {"type": "string", "enum": ["region", "listing"],
+                      "description": "region=지역 KB 시그널, listing=경매·급매 등 매물"},
+            "region": {"type": "string", "description": "지역명(필수)"},
+            "kind": {"type": "string", "enum": ["경매", "급매", "청약", "재건축"],
+                     "description": "layer=listing 일 때 유형(기본 급매)"},
+        }, "required": ["region"]},
     },
     {
         "name": "get_regime",
