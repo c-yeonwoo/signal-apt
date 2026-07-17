@@ -5,41 +5,38 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
-from realty_signal import auth, config, db, store
+from realty_signal import store
 from realty_signal.brain import calibrate, config_store, outcomes
+from realty_signal.routes import deps
+from realty_signal.services import market_data as md
 
 router = APIRouter(prefix="/api/brain", tags=["brain"])
 
 
-def _is_admin(request: Request) -> bool:
-    u = auth.current_user(request.cookies.get(auth.COOKIE))
-    return bool(u) and (u.get("email") or "").lower() in config.admin_whitelist()
-
-
 @router.get("/outcomes")
 def brain_outcomes(request: Request, limit: int = 12):
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     return {"ok": True, "snapshots": outcomes.list_snapshots(limit=min(limit, 52))}
 
 
 @router.get("/outcomes/labels")
 def brain_outcome_labels(request: Request, limit: int = 50):
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     return {"ok": True, "summary": outcomes.label_summary(), "sample": outcomes.list_labels(min(limit, 100))}
 
 
 @router.post("/outcomes/label")
 def brain_outcome_label_run(request: Request):
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     return {"ok": True, **outcomes.label_from_kb(store.load())}
 
 
 @router.get("/config")
 def brain_config_get(request: Request):
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     meta = config_store.active_meta()
     return {"ok": True, "active": meta, "history": config_store.list_history(5)}
@@ -47,7 +44,7 @@ def brain_config_get(request: Request):
 
 @router.get("/calibration")
 def brain_calibration_get(request: Request):
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     prop = calibrate.load_proposal()
     if not prop:
@@ -57,7 +54,7 @@ def brain_calibration_get(request: Request):
 
 @router.post("/calibration/run")
 def brain_calibration_run(request: Request):
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     prop = calibrate.build_proposal(store.load())
     calibrate.save_proposal(prop)
@@ -67,7 +64,7 @@ def brain_calibration_run(request: Request):
 @router.post("/calibration/apply")
 def brain_calibration_apply(request: Request, data: dict = Body(...)):
     """제안 또는 body.params 를 새 config 버전으로 적용 (수동 승인)."""
-    if not _is_admin(request):
+    if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     version = (data.get("version") or "").strip()
     params = data.get("params")
@@ -86,9 +83,10 @@ def brain_calibration_apply(request: Request, data: dict = Body(...)):
         params = base
         note = note or s.get("reason", "")
     applied = config_store.apply_config(version, params, note=note)
+    md.clear_caches()
     try:
         from realty_signal import api
-        api._clear_signal_caches()
+        api._presale.cache_clear()
     except Exception:  # noqa: BLE001
         pass
     return {"ok": True, "active": applied}
