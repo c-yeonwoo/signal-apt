@@ -321,7 +321,7 @@ def users_with_region_favs() -> list[dict]:
 # ---------- funnel events ----------
 _ALLOWED_EVENTS = frozenset({
     "signup", "profile_complete", "fav_add", "report_open", "nick_ask", "nbhd_open",
-    "listing_detail_open", "listing_click", "timing_card_expand",
+    "listing_detail_open", "listing_click", "timing_card_expand", "alert_feedback",
 })
 
 

@@ -61,3 +61,32 @@ def alerts_seen(request: Request):
         last = ""
     db.kv_set(f"alerts_seen:{deps.uid(request)}", last)
     return {"ok": True}
+
+
+@router.get("/api/alerts/track-record")
+def alerts_track_record(request: Request):
+    """알림 성적표 요약(Phase 5) — 로그인 유저에게 hit-rate 만 노출, 상세는 최근 5건."""
+    if not deps.uid(request):
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    tr = dict(md.alert_track_record())
+    tr["recent"] = (tr.get("recent") or [])[:5]
+    return {"ok": True, "track_record": tr}
+
+
+@router.post("/api/alerts/feedback")
+def alerts_feedback(request: Request, data: dict = Body(...)):
+    """알림 유용성 👍/👎 (Phase 5, 선택 기능) — event_log(alert_feedback) 적재."""
+    from realty_signal.brain.alert_track import FEEDBACK_KINDS
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    kind = (data.get("kind") or "").strip()
+    if kind not in FEEDBACK_KINDS:
+        return JSONResponse({"ok": False, "error": "invalid kind"}, status_code=400)
+    props = {"kind": kind, "useful": bool(data.get("useful"))}
+    region = (data.get("region") or "").strip()
+    if region:
+        props["region"] = region
+    logged = db.event_log(uid, "alert_feedback", props)
+    return {"ok": True, "logged": logged}
