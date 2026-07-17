@@ -1,7 +1,7 @@
 # Signal APT — Architecture (Engine v1)
 
 > KB 주간 시계열 기반 아파트 매수·매도 **타이밍** 의사결정 엔진.  
-> 최종 갱신: 2026-07 · **Timing v1** · **Brain Phase 0–2 완료** (Phase 3+ 로드맵)
+> 최종 갱신: 2026-07 · **Timing v1** · **Brain Phase 0–3** (Phase 4 로드맵)
 
 브랜드 한 줄: **「근거가 증명되는 매수 타이밍」** — [DESIGN.md](../DESIGN.md) 톤·UI 토큰은 별도.
 
@@ -301,6 +301,7 @@ signal watch [--notify]    # 스냅샷 diff + macOS 알림
 signal digest [--send]     # 주간 이메일
 signal outcomes-label      # outcome → N주 후 가격 라벨
 signal calibrate [--save]  # CalibrationProposal (자동 적용 없음)
+signal strength [--rebuild] # 시장강도 프록시 TOP
 signal serve               # FastAPI + SPA
 ```
 
@@ -325,7 +326,7 @@ signal serve               # FastAPI + SPA
 |------|------|------|
 | A | KB DataHub, 국토부, VWorld | ✅ |
 | B | baroezip 급매, ODcloud 청약 | ✅ (주기적 갱신) |
-| C | 시장강도(부동산지인/아실) | ❌ — 거래량+급매 프록시 |
+| C | 시장강도(부동산지인/아실) | ✅ 프록시 — `signals/strength.py` (거래량비+급매) |
 | C | 경매 자동수집 | ❌ — 수동/CSV |
 
 ---
@@ -337,8 +338,20 @@ signal serve               # FastAPI + SPA
 | **0** | 스냅샷 통합, events 확장, asof/confidence | ✅ |
 | **1** | Timing v1, get_timing, listings meta, Alert v1 | ✅ |
 | **2** | Outcome 라벨링, CalibrationProposal, config versioning | ✅ |
-| **3** | Entity schema, ingest pipeline, 시장강도 프록시 | 🔲 |
+| **3** | Entity schema, ingest pipeline, 시장강도 프록시 | ✅ |
 | **4** | Nick memory, ML 랭킹, (선택) React | 🔲 |
+
+### Phase 3 요약
+
+| 모듈 | 역할 |
+|------|------|
+| `entities.py` | `Provenance` · `RegionEntity` · `ListingEntity` 계약 |
+| `ingest/pipeline.py` | `cache_health` · `build_market_strength` · `region_entity` |
+| `signals/strength.py` | 시장강도 0–100 (거래량비+급매+시그널 소폭) |
+| `GET /api/strength` | 지역/TOP 강도 |
+| `GET /api/pipeline/health` | ok/partial/stale/missing |
+| Nick `get_strength` | 유동성·거래 활발도 질문 |
+| CLI `signal strength [--rebuild]` | TOP 요약 |
 
 ---
 
@@ -358,14 +371,18 @@ src/realty_signal/
 │   ├── outcomes.py        # Outcome feature + labels
 │   ├── config_store.py    # SignalConfig versioning
 │   └── calibrate.py       # CalibrationProposal
+├── entities.py            # Provenance · Region/Listing Entity (Phase 3)
 ├── routes/
 │   └── brain.py           # /api/brain/* (Phase 2 분리)
 ├── signals/
 │   ├── engine.py          # SignalConfig · evaluate · backtest
 │   ├── timing.py          # Timing Engine v1
+│   ├── strength.py        # 시장강도 프록시 (Phase 3)
 │   ├── history.py         # snapshot.json I/O
 │   ├── regime.py · cycle.py
-├── ingest/                # 14+ 수집 모듈
+├── ingest/
+│   ├── pipeline.py        # cache health · strength 파생
+│   └── …                  # 17 수집 모듈
 └── web/index.html         # SPA
 ```
 

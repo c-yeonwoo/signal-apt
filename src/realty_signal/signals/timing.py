@@ -124,9 +124,10 @@ def region_timing(
     jeonse_supply: float | None = None,
     sale_momentum: str | None = None,
     backtest_up_pct: float | None = None,
+    market_strength: int | None = None,
     source: str = "kb_weekly",
 ) -> TimingResult:
-    """지역(KB 주간) 타이밍 — 시그널 강도 + (선택) 백테스트 상승 확률."""
+    """지역(KB 주간) 타이밍 — 시그널 강도 + (선택) 백테스트·시장강도."""
     why: list[str] = []
     base = _SIG_SCORE.get(signal or "", 45)
     why.append(f"지역시그널 {signal or '–'}")
@@ -141,6 +142,11 @@ def region_timing(
         why.append(f"12주 적중률 {backtest_up_pct:.0f}%")
         base = _clamp(round(base * 0.7 + backtest_up_pct * 0.3))
         conf = min(0.9, conf + 0.04)
+    if market_strength is not None:
+        why.append(f"시장강도 {market_strength}")
+        # 시장강도는 ±8점 보정 (과적합 방지)
+        base = _clamp(round(base + (market_strength - 50) * 0.16))
+        conf = min(0.92, conf + 0.03)
     return TimingResult(
         score=_clamp(base), reasons=why, confidence=conf,
         source=source, asof=asof, layer="region",

@@ -115,6 +115,13 @@ TOOLS = [
         }, "required": ["region"]},
     },
     {
+        "name": "get_strength",
+        "description": "시장강도 프록시(0~100)·라벨·거래량비·급매건수. 부동산지인/아실 대체. '거래 활발해?'·'유동성?' 류에 사용.",
+        "input_schema": {"type": "object", "properties": {
+            "region": {"type": "string", "description": "지역명(생략 시 상위 강도 지역)"},
+        }},
+    },
+    {
         "name": "get_regime",
         "description": "현재 수도권 경기 국면(벌집순환/급지역전 등)과 β·급지갭 등 거시 상태를 반환.",
         "input_schema": {"type": "object", "properties": {}},

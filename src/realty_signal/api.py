@@ -121,6 +121,11 @@ def _snapshot_signals(asof: str) -> list[dict]:
         outcomes.append_region_snapshot(asof, recs)
     except Exception as e:  # noqa: BLE001
         log.warning("outcome snapshot skip: %s", e)
+    try:
+        from realty_signal.ingest import pipeline
+        pipeline.build_market_strength(cur)
+    except Exception as e:  # noqa: BLE001
+        log.warning("market strength rebuild skip: %s", e)
     return changes
 
 
@@ -659,8 +664,15 @@ def freshness():
          "cycle": "연 1회 · 90일 캐시", "note": "국토부 공시가격(VWorld). 실거래/공시 배수로 저평가·보유세 근거."},
         {"key": "news", "label": "부동산 뉴스", "ts": db.kv_ts("news_fetched"),
          "cycle": "조회 시 갱신", "note": "네이버 뉴스에서 부동산 관련 기사를 수집·요약."},
+        {"key": "volume", "label": "국토부 거래량", "ts": _file_mtime(store.VOLUME_FILE),
+         "cycle": "signal volumes 시", "note": "시군구 월별 거래건수·거래량비. 시장강도 프록시 입력."},
+        {"key": "strength", "label": "시장강도 프록시", "ts": _file_mtime(store.CACHE_DIR / "market_strength.json"),
+         "cycle": "KB 갱신 시 자동", "note": "거래량비+급매 밀도 프록시(부동산지인/아실 대체)."},
     ]
-    return {"기준일": last_date, "now": int(__import__("time").time()), "sources": sources}
+    from realty_signal.ingest import pipeline
+    health = pipeline.cache_health()
+    return {"기준일": last_date, "now": int(__import__("time").time()),
+            "sources": sources, "pipeline": health}
 
 
 _ADV_RANK = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4}
@@ -758,6 +770,8 @@ def _advisor_tool(name: str, args: dict) -> dict:
                                   "타이밍점수": x.get("타이밍점수"), "타이밍근거": x.get("타이밍근거"),
                                   "confidence": x.get("confidence")} for x in items]}
         return {"error": f"unknown layer '{layer}'"}
+    if name == "get_strength":
+        return strength_api(region=(args.get("region") or "").strip() or None)
     if name == "get_regime":
         rg = _regime() or {}
         return {k: rg.get(k) for k in ("phase", "beta", "gap", "color", "desc") if k in rg}
@@ -2359,6 +2373,16 @@ def neighborhood(request: Request, region: str):
         "통근": commute or {}, "통근기준": "구 중심 → 업무지구 대중교통(ODsay·참고용)",
         "기준일": asof, "week": week,
     }
+    try:
+        from realty_signal.ingest import pipeline
+        ent = pipeline.region_entity(region, signal=sigrow.get("signal"))
+        out["시장강도"] = ent.market_strength
+        out["시장강도라벨"] = ent.market_strength_label
+        out["급매건수"] = ent.quicksale_count
+        if ent.provenance:
+            out["provenance"] = ent.provenance.to_dict()
+    except Exception:  # noqa: BLE001
+        pass
     # 로그인 시: 이번 주 스냅샷 저장 + 지난 스냅샷 diff + 관심단지 공시 샘플·체크리스트
     uid = _uid(request)
     if uid:
@@ -2553,7 +2577,8 @@ def _timing_asof() -> str:
 
 
 def _region_timing_row(region: str) -> dict:
-    """지역 타이밍 — signals row + (선택) 백테스트 상승 확률."""
+    """지역 타이밍 — signals row + (선택) 백테스트·시장강도."""
+    from realty_signal.ingest import pipeline
     from realty_signal.signals.timing import region_timing
 
     rows = signals()
@@ -2569,14 +2594,28 @@ def _region_timing_row(region: str) -> dict:
             bt_up = by_sig[sig].get("적중률")
     except Exception:  # noqa: BLE001
         pass
+    strength = (pipeline.load_market_strength().get("regions") or {}).get(hit.get("region") or region)
+    if not strength:
+        ent = pipeline.region_entity(hit.get("region") or region, signal=hit.get("signal"))
+        strength = {
+            "시장강도": ent.market_strength, "시장강도라벨": ent.market_strength_label,
+            "거래량비": ent.volume_ratio, "급매건수": ent.quicksale_count,
+        }
     tr = region_timing(
         hit.get("signal"),
         asof=_timing_asof(),
         jeonse_supply=hit.get("전세수급"),
         sale_momentum=hit.get("매매모멘텀"),
         backtest_up_pct=float(bt_up) if bt_up is not None else None,
+        market_strength=strength.get("시장강도") if strength else None,
     )
-    return {**tr.to_dict(), "region": region, "signal": hit.get("signal")}
+    out = {**tr.to_dict(), "region": hit.get("region") or region, "signal": hit.get("signal")}
+    if strength:
+        out["시장강도"] = strength.get("시장강도")
+        out["시장강도라벨"] = strength.get("시장강도라벨")
+        out["거래량비"] = strength.get("거래량비")
+        out["급매건수"] = strength.get("급매건수")
+    return out
 
 
 def _opportunity(kind: str, m: dict, signal: str | None, grade: str | None):
@@ -2636,6 +2675,38 @@ def timing_api(region: str | None = None):
     if not region or not region.strip():
         return JSONResponse({"error": "region required"}, status_code=400)
     return _region_timing_row(region.strip())
+
+
+@app.get("/api/strength")
+def strength_api(region: str | None = None):
+    """시장강도 프록시 (거래량비+급매). region 없으면 상위 점수순."""
+    from realty_signal.ingest import pipeline
+
+    data = pipeline.load_market_strength()
+    regions = data.get("regions") or {}
+    if not regions:
+        try:
+            data = pipeline.build_market_strength(_signal_map())
+            regions = data.get("regions") or {}
+        except Exception:  # noqa: BLE001
+            regions = {}
+    if region and region.strip():
+        r = region.strip()
+        hit = regions.get(r) or next((v for k, v in regions.items() if r in k), None)
+        if not hit:
+            ent = pipeline.region_entity(r, signal=_signal_map().get(r))
+            return ent.to_dict()
+        return {"region": r, **hit, "asof": data.get("asof"), "source": data.get("source")}
+    top = sorted(regions.items(), key=lambda kv: kv[1].get("시장강도") or 0, reverse=True)[:30]
+    return {"asof": data.get("asof"), "source": data.get("source"),
+            "regions": [{"region": k, **v} for k, v in top]}
+
+
+@app.get("/api/pipeline/health")
+def pipeline_health():
+    """캐시 파이프라인 상태 (ok/partial/stale/missing)."""
+    from realty_signal.ingest import pipeline
+    return pipeline.cache_health()
 
 
 @app.get("/api/listings/all")

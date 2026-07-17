@@ -172,6 +172,36 @@ def serve(
     uvicorn.run("realty_signal.api:app", host=host, port=port, log_level="warning")
 
 
+@app.command()
+def strength(
+    rebuild: bool = typer.Option(False, "--rebuild", help="캐시 재계산"),
+):
+    """시장강도 프록시 요약 (거래량비+급매)."""
+    from realty_signal.ingest import pipeline
+    if rebuild or not pipeline.STRENGTH_FILE.exists():
+        if not store.CACHE_FILE.exists():
+            console.print("[yellow]캐시 없음 — signal fetch 먼저[/yellow]")
+            raise typer.Exit(1)
+        df = evaluate(store.load(), SignalConfig(), store.load_supply())
+        data = pipeline.build_market_strength(dict(zip(df["region"], df["signal"])))
+        console.print(f"[green]재계산[/green] {data.get('count')}지역 → {pipeline.STRENGTH_FILE}")
+    else:
+        data = pipeline.load_market_strength()
+    health = pipeline.cache_health()
+    console.print(f"[dim]pipeline status: {health['status']}[/dim]")
+    rows = sorted((data.get("regions") or {}).items(),
+                  key=lambda kv: kv[1].get("시장강도") or 0, reverse=True)[:15]
+    table = Table(title="시장강도 TOP")
+    table.add_column("지역")
+    table.add_column("강도")
+    table.add_column("라벨")
+    table.add_column("거래량비")
+    for region, v in rows:
+        table.add_row(region, str(v.get("시장강도")), v.get("시장강도라벨") or "",
+                      str(v.get("거래량비") if v.get("거래량비") is not None else "–"))
+    console.print(table)
+
+
 @app.command("outcomes-label")
 def outcomes_label_cmd():
     """outcome 스냅샷 → N주 후 KB 가격 라벨 (Phase 2)."""
