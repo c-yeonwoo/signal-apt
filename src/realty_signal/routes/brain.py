@@ -6,11 +6,19 @@ from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from realty_signal import store
-from realty_signal.brain import calibrate, config_store, outcomes
+from realty_signal.brain import alert_track, calibrate, config_store, outcomes
 from realty_signal.routes import deps
 from realty_signal.services import market_data as md
 
 router = APIRouter(prefix="/api/brain", tags=["brain"])
+
+
+@router.get("/alerts/track-record")
+def brain_alert_track_record(request: Request):
+    """알림 성적표 전체 상세(Phase 5) — 관리자용, 피드백 집계 포함."""
+    if not deps.is_admin(request):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+    return {"ok": True, "track_record": md.alert_track_record(), "feedback": alert_track.feedback_summary()}
 
 
 @router.get("/outcomes")

@@ -53,6 +53,16 @@ def backtest():
     return backtest_summary(kb(), signal_config())
 
 
+@lru_cache(maxsize=1)
+def alert_track_record():
+    """signal_changes 알림 로그를 이후 12주 가격으로 채점한 성적표 (Phase 5)."""
+    from realty_signal import db
+    from realty_signal.brain import alert_track
+
+    changes = db.kv_get("signal_changes") or []
+    return alert_track.track_record(kb(), changes)
+
+
 def signal_map() -> dict:
     df = signals_df()
     return dict(zip(df["region"], df["signal"]))
@@ -73,3 +83,4 @@ def clear_caches() -> None:
     regime.cache_clear()
     backtest.cache_clear()
     codes_nospace.cache_clear()
+    alert_track_record.cache_clear()
