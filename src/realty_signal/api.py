@@ -197,12 +197,18 @@ from realty_signal.routes.auth import router as auth_router  # noqa: E402
 from realty_signal.routes.alerts import router as alerts_router  # noqa: E402
 from realty_signal.routes.advisor import router as advisor_router  # noqa: E402
 from realty_signal.routes.market import router as market_router  # noqa: E402
+from realty_signal.routes.auction import router as auction_router  # noqa: E402
+from realty_signal.routes.personal import router as personal_router  # noqa: E402
+from realty_signal.routes.explore import router as explore_router  # noqa: E402
 from realty_signal.routes.brain import router as brain_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(alerts_router)
 app.include_router(advisor_router)
 app.include_router(market_router)
+app.include_router(auction_router)
+app.include_router(personal_router)
+app.include_router(explore_router)
 app.include_router(brain_router)
 
 
@@ -237,7 +243,6 @@ def _user_nbhd_diffs(uid: int, regions: set[str]) -> dict[str, list]:
     return out
 
 
-@app.get("/api/myfeed")
 def myfeed(request: Request):
     """내 관심 피드 — 즐겨찾기 지역·단지의 활동(급매·청약·최근 실거래) 개인화 집계. 로그인 필요."""
     uid = _uid(request)
@@ -286,6 +291,7 @@ def myfeed(request: Request):
                       "근거부족": cs.get("근거부족") or [],
                       "데이터없음": d is None})
     return {"ok": True, "empty": False, "items": items, "기준일": str(_kb().last_date.date())}
+
 
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -351,10 +357,10 @@ def _regulation_of(region: str) -> list[str]:
     return _REGULATION.get(r) or next((v for k, v in _REGULATION.items() if k in r or r in k), [])
 
 
-@app.get("/api/regulation")
 def regulation_api():
     """규제지역 지정 현황(참고용). 프론트 지도 오버레이·챗봇 공용 정본."""
     return {"asof": _REGULATION_ASOF, "map": _REGULATION}
+
 
 
 def _adv_region_row(r: dict) -> dict:
@@ -555,7 +561,6 @@ def _seed_policies() -> None:
         pass
 
 
-@app.get("/api/admin/policy")
 def admin_policy_list(request: Request):
     if not _is_admin(request):
         return JSONResponse({"error": "admin_only"}, status_code=403)
@@ -563,7 +568,7 @@ def admin_policy_list(request: Request):
     return {"policies": db.policy_all()}
 
 
-@app.post("/api/admin/policy")
+
 def admin_policy_add(request: Request, data: dict = Body(...)):
     if not _is_admin(request):
         return JSONResponse({"error": "admin_only"}, status_code=403)
@@ -577,12 +582,13 @@ def admin_policy_add(request: Request, data: dict = Body(...)):
     return {"ok": True, "id": pid}
 
 
-@app.delete("/api/admin/policy/{pid}")
+
 def admin_policy_delete(request: Request, pid: int):
     if not _is_admin(request):
         return JSONResponse({"error": "admin_only"}, status_code=403)
     db.policy_delete(pid)
     return {"ok": True}
+
 
 
 def _nick_system(uid: int | None) -> str:
@@ -610,88 +616,10 @@ def _signal_map() -> dict:
     return md.signal_map()
 
 
-@app.get("/api/auction/buy-regions")
-def buy_regions():
-    """STRONG_BUY/BUY 시그널 지역 — 매물 탐색 가이드."""
-    df = _signals_df()
-    hot = df[df["signal"].isin(["STRONG_BUY", "BUY"])]
-    return [{"region": r["region"], "signal": r["signal"]} for _, r in hot.iterrows()]
-
-
-def _overrides(target_margin, loan_ratio, loan_rate, hold_months):
-    return {"목표시세차익률": target_margin, "대출비율": loan_ratio,
-            "대출금리": loan_rate, "보유개월": hold_months}
-
-
-@app.get("/api/auction/listings")
-def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익률"],
-                     loan_ratio: float | None = None, loan_rate: float | None = None,
-                     hold_months: int | None = None):
-    """매물 + 권장입찰가/시세차익률 + 우선순위(높은순)."""
-    ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
-    return {
-        "params": {"target_margin": target_margin},
-        "listings": auction.enrich(auction.load(), _signal_map(), ov),
-    }
-
-
-@app.get("/api/auction/calc/{listing_id}")
-def auction_calc(listing_id: str, target_margin: float = auction.DEFAULTS["목표시세차익률"],
-                 loan_ratio: float | None = None, loan_rate: float | None = None,
-                 hold_months: int | None = None):
-    """단일 매물의 비용분해 + 낙찰가율 민감도 표 + 권장 입찰가."""
-    lst = next((x for x in auction.load() if x.id == listing_id), None)
-    if lst is None:
-        raise HTTPException(404, "listing not found")
-    p = auction._p(_overrides(target_margin, loan_ratio, loan_rate, hold_months))
-    return {
-        "listing": asdict_listing(lst),
-        "recommend": auction.recommend(lst, p),
-        "table": auction.table(lst, p),
-    }
-
-
-@app.post("/api/auction/listings")
-def auction_add(data: dict = Body(...)):
-    return asdict_listing(auction.add(data))
-
-
-@app.post("/api/auction/parse")
-def auction_parse(request: Request, data: dict = Body(...)):
-    """법원경매 물건 텍스트 붙여넣기 → Claude 파싱 → 구조화 필드(프론트 폼 프리필). 크롤 없음."""
-    from realty_signal import ai_report
-    config.load_env()
-    if not ai_report.available():
-        return {"ok": False, "reason": "no_ai"}
-    model = ai_report.OPUS if _is_opus_user(request) else ai_report.SONNET
-    parsed = ai_report.parse_auction(data.get("text", ""), model=model)
-    return {"ok": bool(parsed), "parsed": parsed or {}}
-
-
-@app.delete("/api/auction/listings/{listing_id}")
-def auction_delete(listing_id: str):
-    auction.remove(listing_id)
-    return {"ok": True}
-
-
-@app.post("/api/auction/refresh-market")
-def auction_refresh_market():
-    """등록 매물의 최근 실거래가를 국토부에서 조회해 갱신."""
-    config.load_env()
-    key = config.public_data_key()
-    codes = json.loads(store.CODES_FILE.read_text(encoding="utf-8")) if store.CODES_FILE.exists() else {}
-    return {"updated": auction.update_market(codes, key)}
-
-
-@app.post("/api/auction/import")
-async def auction_import(request: Request):
-    text = (await request.body()).decode("utf-8")
-    return {"added": auction.import_csv(text)}
-
-
-def asdict_listing(lst):
-    from dataclasses import asdict
-    return asdict(lst)
+def signals(only: str | None = None):
+    """시그널 레코드 리스트 — Nick·동네 리포트·advisor tool 공용 (라우트는 market router)."""
+    from realty_signal.routes.market import signals as _market_signals
+    return _market_signals(only)
 
 
 @lru_cache(maxsize=256)
@@ -705,13 +633,12 @@ def _region_grades(region: str):
     return region_grades(code[:5], config.public_data_key())
 
 
-@app.get("/api/complex-grades/{region}")
 def complex_grades(region: str):
     """지역 내 단지단위 급지 랭킹 — 저평가 탭 드릴다운용."""
     return {"region": region, "complexes": _region_grades(region)}
 
 
-@app.get("/api/undervalued")
+
 def undervalued():
     """수도권 시군구 저평가 랭킹 (입지 대비 가격). 시그널 등급 병합."""
     df = store.load_localities()
@@ -722,6 +649,7 @@ def undervalued():
     for r in recs:
         r["시그널"] = sig.get(r["region"], "")
     return {"ready": True, "listings": recs}
+
 
 
 _SIDO = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주", "30": "대전",
@@ -793,7 +721,6 @@ def _presale():
     return out
 
 
-@app.get("/api/presale")
 def presale_list(request: Request):
     """청약 단지(청약홈) — 지역 시그널 결합 + 거주지 당해 판정. 당해→임박→BUY+ 정렬."""
     sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "": 5}
@@ -813,7 +740,7 @@ def presale_list(request: Request):
     return sorted(items, key=key)
 
 
-@app.get("/api/presale/{manage_no}/types")
+
 def presale_types(manage_no: str):
     """단지 평형별 분양가·특별공급 + 주변시세(지역평단가) 대비 메리트."""
     from realty_signal.ingest import applyhome
@@ -829,6 +756,7 @@ def presale_types(manage_no: str):
         else:
             t["메리트"] = None
     return {"관리번호": manage_no, "지역평단가": 지역평단가, "types": types}
+
 
 
 _BROKER_RATE = 0.005   # 중개보수(근사)
@@ -871,7 +799,6 @@ def _max_purchase(capital: float, ltv: float, income: float | None, rate: float,
                "DSR제약": bool(income and loan < round(ltv * P))}
 
 
-@app.get("/api/conclusion")
 def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
                income: float | None = None, rate: float = 0.04, years: int = 30):
     """가용자본 → (LTV+DSR+취득세 반영) 매수가능가 → BUY+ × 저평가 × 단지급지 종합 추천.
@@ -947,10 +874,10 @@ def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
             "income": income, "detail": budget_detail, "cards": cards}
 
 
+
 _GRADE_ORDER = {"A": 4, "B": 3, "C": 2, "D": 1}
 
 
-@app.get("/api/tradeup")
 def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
             extra_cash: float = 0, ltv: float = 0.7, income: float | None = None,
             rate: float = 0.04, years: int = 30, pyeong: float = 25.7):
@@ -1035,6 +962,7 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
     }
 
 
+
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
 _QUICKSALE_SCAN_VER = 3   # 스캔 로직 버전 — 올리면 배포 후 부팅 시 자동 재스캔(3=BUY+∪관심지역 커버리지 확대)
 
@@ -1066,7 +994,6 @@ def _redev_zones():
     return zones
 
 
-@app.get("/api/redev/zones")
 def redev_zones(type: str | None = None, q: str | None = None):
     """정비구역 목록. type=재건축/재개발/..., q=위치·구역명 검색."""
     zones = _redev_zones()
@@ -1077,6 +1004,7 @@ def redev_zones(type: str | None = None, q: str | None = None):
     from collections import Counter
     return {"total": len(zones), "by_type": dict(Counter(z["구분"] for z in _redev_zones())),
             "zones": zones[:500]}
+
 
 
 @lru_cache(maxsize=64)
@@ -1096,7 +1024,6 @@ def _redev_candidates(region: str):
     return cands
 
 
-@app.get("/api/redev/candidates/{region}")
 def redev_candidates(region: str):
     """지역 내 재건축 잠재력 단지 랭킹 (구축, 연식·용적률·세대수·시세 기반)."""
     sig = _signal_map()
@@ -1105,12 +1032,12 @@ def redev_candidates(region: str):
             "cached": db_has_redev_cache(region), "candidates": cands}
 
 
+
 def db_has_redev_cache(region: str) -> bool:
     from realty_signal import db
     return db.kv_get(f"redev_cand:{region}", max_age=30 * 86400) is not None
 
 
-@app.post("/api/redev/warm")
 def redev_warm(data: dict = Body(default={})):
     """비개인화 재건축 데이터 사전 계산 — 지정 지역(없으면 BUY+ 지역)을 DB에 적재.
 
@@ -1135,6 +1062,7 @@ def redev_warm(data: dict = Body(default={})):
     return {"warmed": done, "already_cached": skipped, "total": len(regions)}
 
 
+
 @lru_cache(maxsize=1)
 def _redev_progress():
     """정비사업 추진경과(≈3만행) — SQLite(db.redev_progress) 우선, 없으면 수집·적재."""
@@ -1150,7 +1078,6 @@ def _redev_progress():
     return rows
 
 
-@app.get("/api/redev/stages")
 def redev_stages(region: str | None = None):
     """정비사업 단계 현황 — 시군구별 현 단계 분포 + 단계 평균 소요기간."""
     from realty_signal.ingest import redev as rd
@@ -1161,7 +1088,7 @@ def redev_stages(region: str | None = None):
     return {"region": region or "서울 전체", **rd.stage_summary(_redev_progress(), sgg5)}
 
 
-@app.post("/api/geocode")
+
 def geocode_ep(data: dict = Body(...)):
     """단지명/주소 목록 → 좌표 (SQLite 캐시 우선, 미스 일부만 OSM 조회).
 
@@ -1173,14 +1100,14 @@ def geocode_ep(data: dict = Body(...)):
     return geocode.geocode_batch(queries, max_miss=max_miss)
 
 
-@app.get("/api/mapconfig")
+
 def mapconfig():
     """지도 타일 설정 — VWorld 키 있으면 한글 타일 URL, 없으면 null(프론트 CartoDB 폴백)."""
     k = config.vworld_key()
     return {"vworld": k or None}
 
 
-@app.get("/api/transit")
+
 def transit_ep(sx: float, sy: float, ex: float, ey: float):
     """두 좌표 간 대중교통 최단경로(분·환승·요금). 좌표 라운딩 키로 kv 캐시(30일)."""
     from realty_signal import db
@@ -1196,12 +1123,13 @@ def transit_ep(sx: float, sy: float, ex: float, ey: float):
     return out
 
 
-@app.get("/api/redev/value-calc")
+
 def redev_value_calc(current_price: float, pyeong: float, presale_pyeong_price: float,
                      contribution: float, hold_months: int = 60):
     """재건축 가치 계산 — 현재가·평형·예상분양평단가·분담금 → ROI."""
     from realty_signal.ingest import redev as rd
     return rd.value_calc(current_price, pyeong, presale_pyeong_price, contribution, hold_months)
+
 
 
 @lru_cache(maxsize=1)
@@ -1229,7 +1157,6 @@ def _region_centroid(region: str, code: str) -> tuple[float, float] | None:
     return c
 
 
-@app.get("/api/news")
 def news(topic: str | None = None):
     """부동산 뉴스 KB — 최신순. 1시간 초과 시 네이버 뉴스에서 갱신·누적."""
     from realty_signal import db
@@ -1248,7 +1175,7 @@ def news(topic: str | None = None):
             "available": bool(items) or bool(config.naver_search()[0])}
 
 
-@app.get("/api/news/summary")
+
 def news_summary(topic: str | None = None, days: int = 30):
     """테마별 뉴스 요약. 로컬 dev → 목업(LLM 미호출), prod → Claude + 캐시 TTL 1일."""
     import os as _os
@@ -1277,14 +1204,14 @@ def news_summary(topic: str | None = None, days: int = 30):
     return out
 
 
-@app.get("/api/cycle")
+
 def cycle(region: str = "서울"):
     """부동산 경기 사이클 국면(벌집순환 4국면) + 근거. 광역(기본 서울) 주간 시리즈 기반."""
     from realty_signal.signals import cycle as cyc
     return cyc.current_phase(_kb(), region) or {"phase": None}
 
 
-@app.get("/api/cycle/history")
+
 def cycle_history(region: str = "서울"):
     """지역 시기별 경기 국면 타임라인 — 시그널 차트 오버레이용 밴드."""
     from realty_signal.signals import cycle as cyc
@@ -1293,7 +1220,7 @@ def cycle_history(region: str = "서울"):
     return {"region": r, "bands": cyc.cycle_history(kb, r)}
 
 
-@app.get("/api/complex-search")
+
 def complex_search(q: str):
     """단지명 통합검색 — 카카오 로컬로 위치 해석 → {단지명, region} 후보. deep-dive 진입용."""
     import json as _json
@@ -1329,7 +1256,7 @@ def complex_search(q: str):
     return {"results": out}
 
 
-@app.get("/api/addr-search")
+
 def addr_search(q: str):
     """거주지 검색 — 도로명/지번/단지 키워드 → {name, address, sigungu}. 카카오 로컬 키워드."""
     import json as _json
@@ -1361,6 +1288,7 @@ def addr_search(q: str):
         if len(out) >= 8:
             break
     return {"results": out}
+
 
 
 _COMPLEX_TTL = 14 * 86400   # 실거래 신고지연(~1개월) 감안, 2주면 신선도 충분
@@ -1477,7 +1405,6 @@ def _gongsi_for(region: str, name: str) -> dict | None:
     return match
 
 
-@app.get("/api/complex/{region}/{name}")
 def complex_detail(region: str, name: str):
     """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널 + 공시가격. DB 캐시(14일)."""
     from realty_signal import db
@@ -1518,6 +1445,7 @@ def complex_detail(region: str, name: str):
     data["region"] = region
     db.kv_set(ckey, data)
     return deco(data)
+
 
 
 def _complex_backtest(sample: int = 30, months: int = 36) -> dict:
@@ -1575,7 +1503,6 @@ def _complex_backtest(sample: int = 30, months: int = 36) -> dict:
     return out
 
 
-@app.get("/api/complex-backtest")
 def complex_backtest_api():
     """단지 시그널(가격추세 성분) 검증 성적표. 캐시(30일) — 없으면 미계산 안내."""
     from realty_signal import db
@@ -1583,12 +1510,13 @@ def complex_backtest_api():
     return {**cached, "cached": True} if cached is not None else {"ready": False}
 
 
-@app.post("/api/complex-backtest/run")
+
 def complex_backtest_run(request: Request):
     """단지 백테스트 계산·캐시(수 분 소요, 관리자용). 로그인 필요."""
     if not _uid(request):
         return {"ready": False, "error": "로그인 필요"}
     return _complex_backtest()
+
 
 
 def warm_favorite_complexes() -> dict:
@@ -1692,7 +1620,6 @@ def _recommend_rule(criteria: list, ranked: list) -> str:
     return msg
 
 
-@app.post("/api/compare-recommend")
 def compare_recommend_api(request: Request, data: dict = Body(...)):
     """비교 단지(2+) + 중시가치(복수) → 종합점수 순위 + 추천 단지·해설(Claude, 없으면 규칙기반)."""
     from realty_signal import ai_report
@@ -1721,7 +1648,7 @@ def compare_recommend_api(request: Request, data: dict = Body(...)):
     return out
 
 
-@app.post("/api/compare-insight")
+
 def compare_insight_api(request: Request, data: dict = Body(...)):
     """비교 단지 + 가치기준 → 한줄 해설(Claude, 없으면 규칙기반)."""
     from realty_signal import ai_report
@@ -1745,7 +1672,7 @@ def compare_insight_api(request: Request, data: dict = Body(...)):
     return out
 
 
-@app.get("/api/imjang/{region}/{name}")
+
 def imjang_report(region: str, name: str):
     """단지 임장 리포트 — 유튜브·블로그 수집 → (키 있으면) Claude 종합. 링크 폴백. 캐시 30일."""
     from realty_signal import db
@@ -1765,7 +1692,7 @@ def imjang_report(region: str, name: str):
     return data
 
 
-@app.get("/api/agents/{region}/{name}")
+
 def agents_nearby(region: str, name: str):
     """단지 근처 공인중개사 — 카카오 로컬. 단지 좌표(지오코딩→지역중심 폴백) 반경 검색. 캐시 7일."""
     from realty_signal import db
@@ -1792,6 +1719,7 @@ def agents_nearby(region: str, name: str):
     out = {"available": True, "agents": lst, "coord": coords}
     db.kv_set(ckey, out)
     return out
+
 
 
 _NBHD_CATS = [("SW8", "지하철역"), ("SC4", "학교"), ("MT1", "대형마트"), ("HP8", "병원")]
@@ -1883,7 +1811,6 @@ def _nbhd_week() -> str:
         return _dt.date.today().strftime("%G-W%V")
 
 
-@app.get("/api/neighborhood/{region}")
 def neighborhood(request: Request, region: str):
     """동네 딥다이브 — 보유 데이터 재조립 + 생활인프라. 로그인 시 주간 스냅샷 저장·지난 대비 diff."""
     sigrow = next((r for r in signals() if r.get("region") == region), None) \
@@ -1988,7 +1915,7 @@ def neighborhood(request: Request, region: str):
     return out
 
 
-@app.get("/api/neighborhood-compare")
+
 def neighborhood_compare(request: Request, a: str, b: str):
     """두 동네 핵심 지표 나란히 비교(관심 후보 좁힐 때)."""
     if not a or not b or a == b:
@@ -2013,7 +1940,7 @@ def neighborhood_compare(request: Request, a: str, b: str):
             "rows": rows, "기준일": da.get("기준일")}
 
 
-@app.post("/api/checklist/{region}")
+
 def save_checklist(request: Request, region: str, data: dict = Body(...)):
     """임장 체크리스트 저장(지역 단위). {checks: {id: bool}}."""
     uid = _uid(request)
@@ -2027,7 +1954,7 @@ def save_checklist(request: Request, region: str, data: dict = Body(...)):
     return {"ok": True, "checks": clean}
 
 
-@app.get("/api/loan-scenarios")
+
 def loan_scenarios(request: Request, capital: float | None = None, income: float | None = None,
                    rate: float = 0.04, years: int = 30, price: float | None = None):
     """LTV 60/70/80 시나리오. capital 생략 시 프로필 가용자본."""
@@ -2057,7 +1984,7 @@ def loan_scenarios(request: Request, capital: float | None = None, income: float
     return out
 
 
-@app.get("/api/complex/{region}/{name}/building")
+
 def complex_building(region: str, name: str):
     """단지 건축물대장(용적률·세대·연식) — 펼칠 때 온디맨드."""
     from realty_signal import personal_layer as pl
@@ -2079,6 +2006,7 @@ def complex_building(region: str, name: str):
         if c:
             out[region] = [c[0], c[1]]
     return {"centroids": out}
+
 
 
 @lru_cache(maxsize=1)
@@ -2283,12 +2211,12 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
 
 
 
-@app.get("/api/quicksale")
 def quicksale():
     """급매 레이더 결과 (캐시). 개인용 — baroezip 공개 API 기반."""
     if QUICKSALE_FILE.exists():
         return json.loads(QUICKSALE_FILE.read_text(encoding="utf-8"))
     return {"ready": False, "listings": [], "regions": []}
+
 
 
 def _scan_regions() -> list[str]:
@@ -2307,7 +2235,6 @@ def _scan_regions() -> list[str]:
     return out
 
 
-@app.post("/api/quicksale/refresh")
 def quicksale_refresh(data: dict = Body(default={})):
     """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
     regions = data.get("regions") or _scan_regions()
@@ -2316,5 +2243,6 @@ def quicksale_refresh(data: dict = Body(default={})):
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
     QUICKSALE_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
+
 
 
