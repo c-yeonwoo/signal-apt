@@ -8,7 +8,7 @@ import os
 import secrets
 import time
 
-from realty_signal import db
+from realty_signal import config, db
 
 _ITER = 200_000
 COOKIE = "rsm_session"
@@ -31,17 +31,33 @@ def verify_pw(pw: str, stored: str) -> bool:
         return False
 
 
-def signup(email: str, pw: str, *, accept_tos: bool = False) -> tuple[str | None, str | None]:
-    """(token, error). 성공 시 token, 실패 시 error 메시지. 이용약관 동의 필수."""
+def signup(
+    email: str,
+    pw: str,
+    *,
+    accept_tos: bool = False,
+    invite_code: str | None = None,
+) -> tuple[str | None, str | None]:
+    """(token, error). 성공 시 token, 실패 시 error 메시지.
+
+    이용약관 동의 + 수강생 cohort 게이트(초대 코드·ALLOWLIST) 필수.
+    """
     email = (email or "").strip().lower()
     if not accept_tos:
         return None, "이용약관 및 개인정보 처리방침에 동의해 주세요."
     if "@" not in email or len(pw or "") < 6:
         return None, "이메일 형식·비밀번호(6자+)를 확인하세요."
+    gate_err = config.check_cohort_access(email, invite_code)
+    if gate_err:
+        return None, gate_err
     uid = db.user_create(email, hash_pw(pw))
     if uid is None:
         return None, "이미 가입된 이메일입니다."
-    db.profile_set(uid, {"tos_accepted_at": int(time.time()), "tos_version": "2026-07"})
+    meta: dict = {"tos_accepted_at": int(time.time()), "tos_version": "2026-07", "cohort": "student"}
+    code = (invite_code or "").strip().lower()
+    if code:
+        meta["invite_code"] = code
+    db.profile_set(uid, meta)
     return _new_session(uid), None
 
 

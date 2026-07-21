@@ -45,6 +45,52 @@ def admin_whitelist() -> set[str]:
     return ids or opus_whitelist()
 
 
+def student_allowlist() -> set[str]:
+    """수강생 이메일 화이트리스트(소문자). 있으면 초대 코드 없이도 가입 가능."""
+    raw = os.environ.get("STUDENT_ALLOWLIST", "")
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
+def invite_codes() -> set[str]:
+    """수강생 초대 코드(소문자). 콤마 구분. 예: INVITE_CODES=cohort2026a,spring26."""
+    raw = os.environ.get("INVITE_CODES", "")
+    return {c.strip().lower() for c in raw.split(",") if c.strip()}
+
+
+def signup_open() -> bool:
+    """긴급 공개 가입. SIGNUP_OPEN=1 이면 cohort 게이트 우회(비권장)."""
+    return (os.environ.get("SIGNUP_OPEN") or "").strip().lower() in {"1", "true", "yes"}
+
+
+def check_cohort_access(email: str, invite_code: str | None = None) -> str | None:
+    """가입 허용이면 None, 거부면 사용자용 에러 메시지.
+
+    - SIGNUP_OPEN=1 → 항상 허용
+    - STUDENT_ALLOWLIST / INVITE_CODES 중 하나라도 설정 → 이메일 또는 코드 매칭 필수
+    - 둘 다 비어 있고 prod → 차단(누수 방지)
+    - 둘 다 비어 있고 로컬 → 허용(개발 편의)
+    """
+    if signup_open():
+        return None
+    email = (email or "").strip().lower()
+    code = (invite_code or "").strip().lower()
+    allow = student_allowlist()
+    codes = invite_codes()
+    if not allow and not codes:
+        if is_prod():
+            return "현재 수강생 초대 가입만 받습니다. 안내받은 초대 코드를 확인해 주세요."
+        return None
+    if email and email in allow:
+        return None
+    if codes:
+        if not code:
+            return "수강생 초대 코드를 입력해 주세요."
+        if code not in codes:
+            return "초대 코드가 올바르지 않습니다."
+        return None
+    return "수강생 등록 이메일이 아닙니다. 초대를 확인해 주세요."
+
+
 def odsay_key() -> str | None:
     return os.environ.get("ODSAY_KEY")
 
