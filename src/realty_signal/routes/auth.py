@@ -18,8 +18,10 @@ router = APIRouter(tags=["auth"])
 @router.post("/api/auth/signup")
 def auth_signup(data: dict = Body(...)):
     token, err = auth.signup(
-        data.get("email", ""), data.get("pw", ""),
+        data.get("email", ""),
+        data.get("pw", ""),
         accept_tos=bool(data.get("accept_tos")),
+        invite_code=data.get("invite_code") or data.get("invite"),
     )
     if err:
         return JSONResponse({"ok": False, "error": err}, status_code=400)
