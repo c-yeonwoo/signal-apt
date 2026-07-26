@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from realty_signal import auction, auth, config, db, store
+from realty_signal import auction, auth, buying_power, config, db, store
 from realty_signal.signals.engine import SignalConfig
 
 log = logging.getLogger("realty_signal")
@@ -658,15 +658,29 @@ def signals(only: str | None = None):
     return _market_signals(only)
 
 
+_GRADES_TTL = 7 * 86400   # 국토부 실거래 6개월치 — 주 1회면 충분
+
+
 @lru_cache(maxsize=256)
 def _region_grades(region: str):
-    """시군구 단지별 급지 랭킹 (국토부 실거래 평단가 순위). 캐시."""
+    """시군구 단지별 급지 랭킹 (국토부 실거래 평단가 순위).
+
+    프로세스 lru + DB 7일 캐시. 콜드 상태에서 지역당 6회 API 호출이라
+    재시작마다 다시 긁으면 대시보드가 수십 초 멈춘다.
+    """
     from realty_signal.ingest.complex_grade import region_grades
     code = _code_of(region)
     if not (code and code.isdigit() and code[2:5] != "000"):
         return []  # 시군구 단위만 (광역/시도는 단지 랭킹 부적합)
+    ckey = f"region_grades:{code[:5]}"
+    cached = db.kv_get(ckey, max_age=_GRADES_TTL)
+    if cached is not None:
+        return cached
     config.load_env()
-    return region_grades(code[:5], config.public_data_key())
+    out = region_grades(code[:5], config.public_data_key())
+    if out:
+        db.kv_set(ckey, out)
+    return out
 
 
 def complex_grades(region: str):
@@ -795,44 +809,82 @@ def presale_types(manage_no: str):
 
 
 
-_BROKER_RATE = 0.005   # 중개보수(근사)
+def _max_purchase(capital: float, ltv: float, income: float | None, rate: float,
+                  years: int = 30, **profile_kw):
+    """자기자본으로 살 수 있는 최대 매수가(만원) + 비용분해.
 
-
-def _acq_tax_rate(price_manwon: float) -> float:
-    """주택 취득세율(+지방교육세·농특세 근사). 만원 기준. 6억↓ 1.1% / 6~9억 선형 / 9억↑ 3.3%."""
-    억 = price_manwon / 10000
-    base = 0.01 if 억 <= 6 else (억 * 2 / 3 - 3) / 100 if 억 <= 9 else 0.03
-    return base + 0.002
-
-
-def _max_purchase(capital: float, ltv: float, income: float | None, rate: float, years: int = 30):
-    """자기자본으로 살 수 있는 최대 매수가(만원) + 그 가격의 비용분해.
-
-    LTV 한도와 DSR(소득) 한도 중 작은 쪽으로 대출이 제한되고,
-    자기자본 = (매수가 − 대출) + 취득세 + 중개비 를 만족하는 최대가를 이분탐색.
+    실제 계산은 `buying_power`(주택수·생애최초 취득세, 기대출 차감 DSR, 스트레스 가산,
+    중개보수 구간요율, 이사·수리 현금)에 위임한다. 결론·갈아타기·확정서가 같은 엔진을 쓴다.
     """
-    dsr_cap = float("inf")
-    if income and income > 0:
-        n, mr = years * 12, rate / 12
-        ann_per_principal = (mr / (1 - (1 + mr) ** -n)) * 12 if mr else 1 / years
-        dsr_cap = income * 0.40 / ann_per_principal  # DSR 40% 대출한도(만원)
+    p = buying_power.Params(capital=capital, income=income, rate=rate, years=years,
+                            ltv=ltv, **profile_kw)
+    return buying_power.max_purchase(p)
 
-    def need(P):  # 그 가격을 사는 데 필요한 자기자본
-        loan = min(ltv * P, dsr_cap)
-        return P - loan + (_acq_tax_rate(P) + _BROKER_RATE) * P
 
-    lo, hi = 0.0, 5_000_000.0  # 0~500억
-    for _ in range(48):
-        mid = (lo + hi) / 2
-        if need(mid) <= capital:
-            lo = mid
+def buying_power_statement(request: Request, **override):
+    """매수력 확정서 — 프로필 기본값 + 화면 입력 override."""
+    profile = db.profile_get(_uid(request)) or {}
+    p = buying_power.params_from_profile(profile, **override)
+    if p.capital <= 0:
+        return {"ready": False, "reason": "no_capital",
+                "message": "가용자본을 입력하면 매수력을 확정할 수 있어요."}
+    out = buying_power.statement(p)
+    out["ready"] = True
+    out["확정"] = (profile.get("매수력") or {}).get("최대매수가")
+    return out
+
+
+def buying_power_confirm(request: Request, data: dict):
+    """확정서를 프로필에 저장 — 이후 추천·숏리스트·브리핑이 이 숫자를 기준으로 움직인다."""
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    profile = db.profile_get(uid) or {}
+    p = buying_power.params_from_profile(profile, **{
+        k: data.get(k) for k in ("capital", "income", "existing_debt_annual", "homes",
+                                 "first_time", "regulated", "ltv", "rate", "years")
+    })
+    if p.capital <= 0:
+        return JSONResponse({"ok": False, "error": "가용자본을 입력해 주세요."}, status_code=400)
+    from datetime import date
+    st = buying_power.statement(p)
+    st["확정일"] = date.today().isoformat()
+    profile["매수력"] = st
+    if p.capital:
+        profile["가용자본"] = round(p.capital)
+    if p.income:
+        profile["연소득"] = round(p.income)
+    profile["기대출연원리금"] = round(p.existing_debt_annual or 0)
+    profile["주택수"] = int(p.homes or 0)
+    profile["생애최초"] = 1 if p.first_time else 0
+    db.profile_set(uid, profile)
+    return {"ok": True, "매수력": st}
+
+
+def shortlist(request: Request, limit: int = 3, budget: float | None = None):
+    """이번 주 볼 단지 3곳 — 확정 매수력 × 라이프스타일 적합도."""
+    from realty_signal.services import shortlist as sl
+
+    uid = _uid(request)
+    profile = dict(db.profile_get(uid) or {})
+    if uid:
+        profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+    if budget is None:
+        confirmed = (profile.get("매수력") or {}).get("최대매수가")
+        if confirmed:
+            budget = float(confirmed)
         else:
-            hi = mid
-    P = round(lo)
-    loan = round(min(ltv * P, dsr_cap))
-    return P, {"대출": loan, "취득세": round(_acq_tax_rate(P) * P),
-               "중개비": round(_BROKER_RATE * P), "자기자본": round(capital),
-               "DSR제약": bool(income and loan < round(ltv * P))}
+            p = buying_power.params_from_profile(profile)
+            if p.capital <= 0:
+                return {"ready": False, "reason": "no_budget",
+                        "message": "가용자본을 입력하고 매수력을 확정하면 후보를 좁혀 드려요."}
+            budget = float(buying_power.max_purchase(p)[0])
+    if not budget:
+        return {"ready": False, "reason": "no_budget",
+                "message": "매수력을 먼저 확정해 주세요."}
+    out = sl.build(profile, budget, limit=max(1, min(10, limit)))
+    out["확정예산"] = bool((profile.get("매수력") or {}).get("최대매수가"))
+    return out
 
 
 def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,

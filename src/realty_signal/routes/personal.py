@@ -36,3 +36,27 @@ def loan_scenarios(request: Request, capital: float | None = None, income: float
                    rate: float = 0.04, years: int = 30, price: float | None = None):
     from realty_signal import api as app_api
     return app_api.loan_scenarios(request, capital, income, rate, years, price)
+
+
+@router.get("/api/buying-power")
+def buying_power_get(request: Request, capital: float | None = None, income: float | None = None,
+                     existing_debt_annual: float | None = None, homes: int | None = None,
+                     first_time: bool | None = None, regulated: bool | None = None,
+                     ltv: float | None = None, rate: float | None = None,
+                     years: int | None = None):
+    from realty_signal import api as app_api
+    return app_api.buying_power_statement(
+        request, capital=capital, income=income, existing_debt_annual=existing_debt_annual,
+        homes=homes, first_time=first_time, regulated=regulated, ltv=ltv, rate=rate, years=years)
+
+
+@router.post("/api/buying-power/confirm")
+def buying_power_confirm(request: Request, data: dict = Body(default={})):
+    from realty_signal import api as app_api
+    return app_api.buying_power_confirm(request, data)
+
+
+@router.get("/api/shortlist")
+def shortlist(request: Request, limit: int = 3, budget: float | None = None):
+    from realty_signal import api as app_api
+    return app_api.shortlist(request, limit, budget)
