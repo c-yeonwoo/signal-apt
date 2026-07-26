@@ -4,11 +4,13 @@
 
 - 기대출 연원리금을 DSR 한도에서 차감
 - 스트레스 DSR(가산금리)로 한도 산출, 월 상환액은 실제 금리로 표시
-- 주택수·규제지역·생애최초에 따른 LTV 상한 / 취득세 차등
+- 지역(규제·수도권)·주택수·생애최초에 따른 LTV 상한 / 취득세 차등
+- 수도권·규제지역 주택가격별 대출 절대한도(15억↓ 6억 / 15~25억 4억 / 25억↑ 2억)
 - 중개보수 구간 요율
 - 계약금·이사·수리를 포함한 초기 필요현금
 - 소득 대비 월 상환 부담을 넘지 않는 '안정 매수가'
 
+대출 규제 테이블은 `regulation` 모듈에 분리했다(기준일·근거를 한 곳에서 관리).
 모든 임계값·요율은 DEFAULTS / 테이블 상수에 모아 둔다(하드코딩 금지).
 세율은 실무 근사이며 최종 확인은 이용자 책임.
 """
@@ -17,10 +19,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
+from realty_signal import regulation as reg
+
 DEFAULTS = {
     "금리": 0.04,            # 연 이자율
     "만기": 30,              # 년
-    "스트레스가산": 0.015,    # 스트레스 DSR 가산금리(한도 산출용)
     "DSR한도": 0.40,         # 연소득 대비 총 원리금
     "이사비": 200,           # 만원
     "수리비": 0,             # 만원
@@ -29,14 +32,6 @@ DEFAULTS = {
     "생애최초감면상한가": 120_000,  # 만원 = 12억 이하일 때만 감면
     "탐색상한": 5_000_000,    # 만원 = 500억 (이분탐색 상한)
 }
-
-# (주택수, 규제지역) → LTV 상한. 주택수 2 = 다주택.
-LTV_CAP = {
-    (0, False): 0.70, (0, True): 0.50,
-    (1, False): 0.60, (1, True): 0.30,
-    (2, False): 0.40, (2, True): 0.00,
-}
-LTV_CAP_FIRST_TIME = 0.80   # 생애최초(무주택)
 
 # 매매 중개보수 상한 — (가격상한 만원, 요율, 금액한도 만원)
 BROKER_BRACKETS = [
@@ -61,22 +56,53 @@ class Params:
     existing_debt_annual: float = 0.0   # 기대출 연 원리금
     homes: int = 0                      # 보유 주택수 (0 무주택 / 1 / 2+ 다주택)
     first_time: bool = False            # 생애최초 주택구입
-    regulated: bool = False             # 규제(조정대상)지역
+    region: str | None = None           # 매수 예정 지역 — 있으면 규제·수도권을 자동 판정
+    regulated: bool = False             # 규제(조정대상·투기과열)지역
+    metro: bool = False                 # 수도권 — 절대한도·스트레스 3.0%p 적용 범위
+    dispose: bool = True                # 1주택자의 6개월 내 처분·전입 약정 여부
     big_area: bool = False              # 전용 85㎡ 초과
     ltv: float | None = None            # 희망 LTV. None이면 제도 상한 그대로
     rate: float = DEFAULTS["금리"]
     years: int = DEFAULTS["만기"]
-    stress_bp: float = DEFAULTS["스트레스가산"]
+    rate_type: str = reg.DEFAULT_RATE_TYPE   # 변동·혼합·주기·고정 (스트레스 적용비율)
+    stress_bp: float | None = None      # 직접 지정 시 규제 기준 대신 이 값을 쓴다
     moving_cost: float = DEFAULTS["이사비"]
     repair_cost: float = DEFAULTS["수리비"]
     dsr_limit: float = DEFAULTS["DSR한도"]
+    sido: str | None = None             # 지역명이 애매할 때(중구·강서구) 시도 힌트
     extras: dict = field(default_factory=dict)
 
-    def ltv_cap(self) -> float:
+    def __post_init__(self):
+        if self.region:
+            c = reg.classify(self.region, self.sido)
+            self.regulated = c["규제지역"]
+            self.metro = c["수도권"]
+        elif self.regulated:
+            self.metro = True
+
+    def tier(self, price: float = float("inf")) -> str:
+        """차주 자격 구분 — 서민·실수요자 우대는 가격·소득에 걸린다."""
+        return reg.tier(self.homes, first_time=self.first_time, dispose=self.dispose,
+                        income=self.income, price=price)
+
+    def ltv_cap(self, price: float = float("inf")) -> float:
         """제도 상한과 희망 LTV 중 작은 쪽."""
-        homes = max(0, min(2, int(self.homes or 0)))
-        cap = LTV_CAP_FIRST_TIME if (self.first_time and homes == 0) else LTV_CAP[(homes, bool(self.regulated))]
+        cap = reg.ltv_of(self.tier(price), self.regulated)
         return min(cap, self.ltv) if self.ltv is not None else cap
+
+    def loan_cap(self, price: float) -> float:
+        """수도권·규제지역 주택가격별 절대한도(만원)."""
+        return reg.loan_cap(price, metro=self.metro, regulated=self.regulated)
+
+    def stress(self) -> float:
+        if self.stress_bp is not None:
+            return max(0.0, float(self.stress_bp))
+        return reg.stress_rate(metro=self.metro, regulated=self.regulated,
+                               rate_type=self.rate_type)
+
+    def term(self) -> int:
+        """실제 적용 만기 — 수도권·규제지역은 30년으로 잘린다."""
+        return reg.max_years(self.years, metro=self.metro, regulated=self.regulated)
 
 
 def broker_fee(price: float) -> float:
@@ -127,8 +153,25 @@ def dsr_loan_cap(p: Params) -> float:
     available = p.income * p.dsr_limit - max(0.0, p.existing_debt_annual or 0.0)
     if available <= 0:
         return 0.0
-    stressed = p.rate + max(0.0, p.stress_bp)
-    return available / (monthly_payment(1.0, stressed, p.years) * 12)
+    stressed = p.rate + p.stress()
+    return available / (monthly_payment(1.0, stressed, p.term()) * 12)
+
+
+def loan_for(price: float, p: Params) -> dict:
+    """그 가격에 실제로 나오는 대출액 — LTV·DSR·절대한도 중 가장 낮은 것."""
+    tier = p.tier(price)
+    ltv = p.ltv_cap(price)
+    by_ltv = ltv * price
+    by_dsr = dsr_loan_cap(p)
+    by_cap = p.loan_cap(price)
+    loan = max(0.0, min(by_ltv, by_dsr, by_cap))
+    binding = "LTV"
+    if by_dsr <= by_ltv and by_dsr <= by_cap:
+        binding = "DSR"
+    elif by_cap < by_ltv:
+        binding = "한도"
+    return {"대출": loan, "자격": tier, "LTV상한": ltv, "제약": binding,
+            "LTV기준": by_ltv, "DSR기준": by_dsr, "절대한도": by_cap}
 
 
 def cash_needed(price: float, p: Params, loan: float) -> dict:
@@ -147,10 +190,10 @@ def cash_needed(price: float, p: Params, loan: float) -> dict:
 
 def for_price(price: float, p: Params) -> dict:
     """특정 가격을 살 때의 대출·월상환·필요현금. 예산 초과 여부 포함."""
-    cap = dsr_loan_cap(p)
-    loan = min(p.ltv_cap() * price, cap)
+    lim = loan_for(price, p)
+    loan = lim["대출"]
     cash = cash_needed(price, p, loan)
-    m = monthly_payment(loan, p.rate, p.years)
+    m = monthly_payment(loan, p.rate, p.term())
     out = {
         "매수가": round(price),
         "대출": round(loan),
@@ -159,6 +202,8 @@ def for_price(price: float, p: Params) -> dict:
         "필요현금": round(cash["합계"]),
         "부족": round(max(0.0, cash["합계"] - p.capital)),
         "가능": cash["합계"] <= p.capital + 1,
+        "제약": lim["제약"],
+        "자격": lim["자격"],
         "비용": {k: round(v) for k, v in cash.items()},
     }
     if p.income:
@@ -181,22 +226,20 @@ def _max_price_where(p: Params, ok) -> float:
 
 
 def max_purchase(p: Params) -> tuple[float, dict]:
-    """자기자본으로 살 수 있는 최대 매수가(만원) + 비용 분해."""
-    cap = dsr_loan_cap(p)
-    ltv = p.ltv_cap()
+    """자기자본으로 살 수 있는 최대 매수가(만원) + 비용 분해.
 
+    LTV·절대한도가 가격 구간마다 달라져 필요현금이 계단식으로 뛰지만, 가격이 오를수록
+    필요현금은 단조 증가하므로 이분탐색이 성립한다.
+    """
     def affordable(price: float) -> bool:
-        loan = min(ltv * price, cap)
-        return cash_needed(price, p, loan)["합계"] <= p.capital
+        return cash_needed(price, p, loan_for(price, p)["대출"])["합계"] <= p.capital
 
     price = round(_max_price_where(p, affordable))
-    loan = round(min(ltv * price, cap))
+    lim = loan_for(price, p)
+    loan = round(lim["대출"])
     cash = cash_needed(price, p, loan)
-    constraint = "자본"
-    if price > 0 and cap < ltv * price:
-        constraint = "DSR"
-    elif price > 0 and loan >= ltv * price - 1:
-        constraint = "LTV" if loan > 0 else "자본"
+    # 최대가에서는 현금이 항상 소진되므로, 남은 정보는 '대출을 무엇이 막았나'다.
+    constraint = lim["제약"] if (price > 0 and loan > 0) else "자본"
     detail = {
         "대출": loan,
         "취득세": round(cash["취득세"]),
@@ -204,8 +247,11 @@ def max_purchase(p: Params) -> tuple[float, dict]:
         "이사비": round(cash["이사비"]),
         "수리비": round(cash["수리비"]),
         "자기자본": round(p.capital),
-        "월상환": round(monthly_payment(loan, p.rate, p.years)),
+        "월상환": round(monthly_payment(loan, p.rate, p.term())),
         "실효LTV": round(loan / price, 3) if price else 0.0,
+        "자격": lim["자격"],
+        "LTV상한": lim["LTV상한"],
+        "절대한도": None if lim["절대한도"] == float("inf") else round(lim["절대한도"]),
         "제약": constraint,
         "DSR제약": constraint == "DSR",
     }
@@ -217,19 +263,39 @@ def safe_purchase(p: Params) -> dict | None:
     if not p.income or p.income <= 0:
         return None
     ceiling = p.income / 12 * DEFAULTS["안전상환비율"]
-    cap = dsr_loan_cap(p)
-    ltv = p.ltv_cap()
 
     def ok(price: float) -> bool:
-        loan = min(ltv * price, cap)
+        loan = loan_for(price, p)["대출"]
         if cash_needed(price, p, loan)["합계"] > p.capital:
             return False
-        return monthly_payment(loan, p.rate, p.years) <= ceiling
+        return monthly_payment(loan, p.rate, p.term()) <= ceiling
 
     price = round(_max_price_where(p, ok))
     if price <= 0:
         return None
     return for_price(price, p)
+
+
+def notes(p: Params, price: float) -> list[str]:
+    """규제 때문에 숫자가 이렇게 나온 이유 — 확정서에 그대로 붙는다."""
+    out = []
+    tier = p.tier(price)
+    if p.regulated:
+        out.append(f"규제지역이라 {reg.TIER_LABEL[tier]} LTV {int(reg.ltv_of(tier, True) * 100)}%가 적용돼요.")
+    if tier == "1주택_유지":
+        out.append("규제지역에서 기존 주택을 안 팔면 주담대가 아예 안 나와요(6개월 처분·전입 약정 필요)."
+                   if p.regulated else "기존 주택을 유지하면 LTV가 60%로 내려가요.")
+    cap = p.loan_cap(price)
+    if cap != float("inf"):
+        out.append(f"수도권·규제지역 절대한도 — 시가 {price / 10_000:.1f}억이면 대출은 최대 {cap / 10_000:.0f}억이에요.")
+    if p.metro or p.regulated:
+        out.append(f"DSR 심사금리는 스트레스 {p.stress() * 100:.2f}%p를 더한 "
+                   f"{(p.rate + p.stress()) * 100:.2f}% ({p.rate_type}형 기준), 만기는 최장 {p.term()}년이에요.")
+        out.append(f"주담대를 받으면 {reg.MOVE_IN_MONTHS}개월 안에 전입해야 해요.")
+    if p.first_time:
+        out.append(reg.POLICY_LOAN_NOTE)
+    out.append(reg.DISCLAIMER)
+    return out
 
 
 def statement(p: Params) -> dict:
@@ -246,18 +312,35 @@ def statement(p: Params) -> dict:
         "필요현금": round(cash_needed(price, p, detail["대출"])["합계"]),
         "안정매수가": safe["매수가"] if safe else None,
         "안정월상환": safe["월상환"] if safe else None,
-        "LTV상한": p.ltv_cap(),
+        "LTV상한": detail["LTV상한"],
+        "규제": {
+            "기준일": reg.AS_OF,
+            "지역": p.region,
+            "규제지역": bool(p.regulated),
+            "수도권": bool(p.metro),
+            "자격": detail["자격"],
+            "자격설명": reg.TIER_LABEL[detail["자격"]],
+            "절대한도": detail["절대한도"],
+            "스트레스금리": round(p.stress(), 4),
+            "심사금리": round(p.rate + p.stress(), 4),
+            "적용만기": p.term(),
+        },
+        "안내": notes(p, price),
         "가정": {
             "자기자본": round(p.capital),
             "연소득": round(p.income) if p.income else None,
             "기대출연원리금": round(p.existing_debt_annual or 0),
             "주택수": int(p.homes or 0),
             "생애최초": bool(p.first_time),
+            "지역": p.region,
             "규제지역": bool(p.regulated),
+            "수도권": bool(p.metro),
+            "처분약정": bool(p.dispose),
             "희망LTV": p.ltv,
             "금리": p.rate,
+            "금리유형": p.rate_type,
             "만기": p.years,
-            "스트레스가산": p.stress_bp,
+            "스트레스가산": round(p.stress(), 4),
             "DSR한도": p.dsr_limit,
         },
     }
@@ -309,14 +392,25 @@ def params_from_profile(profile: dict | None, **override) -> Params:
         "existing_debt_annual": float(pick("기대출연원리금", "기대출연원리금", 0) or 0),
         "homes": int(pick("주택수", "주택수", 0) or 0),
         "first_time": bool(pick("생애최초", "생애최초", False)),
+        "region": pick("매수지역", "지역"),
         "regulated": bool(conf.get("규제지역")),
+        "dispose": bool(conf.get("처분약정", True)),
         "ltv": conf.get("희망LTV"),
         "rate": conf.get("금리") or DEFAULTS["금리"],
+        "rate_type": conf.get("금리유형") or reg.DEFAULT_RATE_TYPE,
         "years": int(conf.get("만기") or DEFAULTS["만기"]),
     }
     base.update({k: v for k, v in override.items() if v is not None})
     valid = set(Params.__dataclass_fields__)
     return Params(**{k: v for k, v in base.items() if k in valid})
+
+
+def params_for_region(p: Params, region: str | None, sido: str | None = None) -> Params:
+    """같은 재무조건을 다른 지역 규제로 다시 본다 — 숏리스트 후보별 자금 계산용."""
+    if not region:
+        return p
+    from dataclasses import replace
+    return replace(p, region=region, sido=sido)
 
 
 def as_dict(p: Params) -> dict:

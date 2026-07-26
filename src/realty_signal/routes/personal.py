@@ -41,13 +41,15 @@ def loan_scenarios(request: Request, capital: float | None = None, income: float
 @router.get("/api/buying-power")
 def buying_power_get(request: Request, capital: float | None = None, income: float | None = None,
                      existing_debt_annual: float | None = None, homes: int | None = None,
-                     first_time: bool | None = None, regulated: bool | None = None,
+                     first_time: bool | None = None, region: str | None = None,
+                     regulated: bool | None = None, dispose: bool | None = None,
                      ltv: float | None = None, rate: float | None = None,
-                     years: int | None = None):
+                     rate_type: str | None = None, years: int | None = None):
     from realty_signal import api as app_api
     return app_api.buying_power_statement(
         request, capital=capital, income=income, existing_debt_annual=existing_debt_annual,
-        homes=homes, first_time=first_time, regulated=regulated, ltv=ltv, rate=rate, years=years)
+        homes=homes, first_time=first_time, region=region, regulated=regulated,
+        dispose=dispose, ltv=ltv, rate=rate, rate_type=rate_type, years=years)
 
 
 @router.post("/api/buying-power/confirm")
