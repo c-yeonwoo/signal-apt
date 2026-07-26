@@ -123,28 +123,126 @@ def _diff_signals(cur: dict, prev: dict) -> list[dict]:
     return out
 
 
-def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
-          visited: dict | None = None, auctions: list[dict] | None = None) -> str:
-    urgent = next((a for a in (auctions or []) if a["D"] <= 1), None)
-    if urgent:      # 기일은 미룰 수 없다 — 무조건 먼저
-        if urgent["kind"] == "bid":
-            return f"{urgent['단지']} 입찰가 확정·보증금 준비 ({urgent['날짜']})"
-        return f"{urgent['단지']} {urgent['단계']} — {urgent['할일']}"
-    if diff["new"]:
-        c = diff["new"][0]
-        return f"{c['단지']}({c['region']}) 실거래·평면 확인"
-    ups = [s for s in sigs if s["up"]]
-    if ups:
-        return f"{ups[0]['region']} 동네 리포트 다시 보기"
+def _act(key: str, title: str, why: str, tab: str, cta: str, *, urgent: bool = False) -> dict:
+    return {"key": key, "title": title, "why": why, "tab": tab, "cta": cta, "urgent": urgent}
+
+
+def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
+            visited: dict | None = None, auctions: list[dict] | None = None,
+            *, profile: dict | None = None, confirmed: bool = True,
+            budget: float = 0) -> list[dict]:
+    """다음에 할 일 — 우선순위 순. 텔레그램 '오늘 할 일'과 홈 카드가 같은 판단을 쓴다.
+
+    두 화면이 각자 판단하면 앱이 서로 다른 말을 하게 된다. 순서는 **되돌릴 수 없는 것**부터다:
+    입찰기일 > 돈(예산·확정) > 이번 주 바뀐 것 > 후보 좁히기 > 설정 보완.
+    """
+    p = profile or {}
+    out: list[dict] = []
+
+    for a in (auctions or []):
+        if a["D"] > 1:
+            continue
+        when = "오늘" if a["D"] == 0 else f"D-{a['D']}"
+        if a["kind"] == "bid":
+            out.append(_act("auction_bid", f"{a['단지']} 입찰가 확정·보증금 준비",
+                            f"입찰기일 {when}({a['날짜']}) — 미루면 끝입니다", "auction",
+                            "입찰가 산정표 열기", urgent=True))
+        else:
+            out.append(_act("auction_step", f"{a['단지']} {a['단계']}",
+                            f"{when} — {a['할일']}", "auction", "낙찰 후 플랜 열기", urgent=True))
+
+    if not budget:
+        out.append(_act("no_budget", "가용자본 입력하기",
+                        "예산을 모르면 추천도 후보도 만들 수 없습니다", "mypage", "마이페이지 →"))
+    elif not confirmed:
+        out.append(_act("confirm_power", "매수력 확정하기",
+                        "확정해 두면 후보·급매·브리핑이 모두 같은 예산을 씁니다",
+                        "dashboard", "매수력 카드에서 확정 →"))
+
+    for s in [x for x in sigs if x["up"]][:2]:
+        out.append(_act("signal_up", f"{s['region']} 동네 리포트 다시 보기",
+                        f"이번 주 {SIG_LABEL.get(s['from'], s['from'])} → "
+                        f"{SIG_LABEL.get(s['to'], s['to'])}로 올라섰습니다", "signal", "동네 리포트 →"))
+    for s in [x for x in sigs if not x["up"]][:1]:
+        out.append(_act("signal_down", f"{s['region']} 후보 재검토",
+                        f"이번 주 {SIG_LABEL.get(s['from'], s['from'])} → "
+                        f"{SIG_LABEL.get(s['to'], s['to'])}로 내려갔습니다", "signal", "시그널 보기 →"))
+
+    for c in (diff.get("new") or [])[:2]:
+        out.append(_act("new_candidate", f"{c['단지']}({c['region']}) 실거래·평면 확인",
+                        "이번 주 새로 후보에 들어온 단지입니다", "dashboard", "단지 상세 →"))
+
     if qs:
-        return f"{qs[0].get('지역')} 급매 {len(qs)}건 확인"
+        out.append(_act("quicksale", f"{qs[0].get('지역')} 급매 {len(qs)}건 확인",
+                        "예산 안에 들어오는 시세 이하 매물입니다", "quicksale", "급매 레이더 →"))
+
     if cands:
         seen = visited or {}
         todo = [c for c in cands if f"{c['region']}|{c['단지']}" not in seen]
         if todo:
-            return f"{todo[0]['단지']} 임장 잡기 (앱에서 코스 생성)"
-        return "임장 기록 비교해서 후보 1곳으로 좁히기"
-    return "마이페이지에 직장 주소를 넣어 통근 필터 켜기"
+            out.append(_act("imjang", f"{todo[0]['단지']} 임장 잡기",
+                            "현장에서만 알 수 있는 것들이 있습니다 — 코스를 짜 드립니다",
+                            "dashboard", "임장 코스 짜기 →"))
+        else:
+            out.append(_act("imjang_compare", "임장 기록 비교해서 1곳으로 좁히기",
+                            "후보를 다 봤습니다 — 점수를 나란히 놓고 고를 차례입니다",
+                            "dashboard", "임장 기록 →"))
+    elif not p.get("_favs"):
+        # ★가 있는데 후보만 없는 경우는 예산 문제라 위에서 이미 말했다 — 두 번 시키지 않는다
+        out.append(_act("no_favorite", "관심 지역 ★ 추가하기",
+                        "★가 있어야 주간 변화와 후보 추천이 내 것으로 좁혀집니다",
+                        "signal", "시장·지역 →"))
+
+    if not p.get("직장"):
+        out.append(_act("no_job", "직장 주소 넣기",
+                        "통근 시간 필터가 꺼져 있어 후보가 넓게 잡힙니다", "mypage", "마이페이지 →"))
+    return out
+
+
+def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
+          visited: dict | None = None, auctions: list[dict] | None = None,
+          profile: dict | None = None, budget: float = 0) -> str:
+    """텔레그램 한 줄 — 액션 목록의 첫 항목. 판단은 `actions()` 한 곳에서만 한다."""
+    acts = actions(diff, sigs, qs, cands, visited, auctions, profile=profile, budget=budget)
+    return acts[0]["title"] if acts else "마이페이지에 직장 주소를 넣어 통근 필터 켜기"
+
+
+def plan(uid: int) -> dict:
+    """홈 '다음 할 일'. 브리핑과 같은 `actions()` 를 쓰되, 변화 기준은 **이번 주 KB 갱신**이다.
+
+    브리핑은 '어제 대비'라 매일 기준점이 움직이지만 홈은 주간 화면이다. 두 화면이
+    같은 스냅샷을 공유하면 브리핑이 발송될 때마다 홈의 '이번 주 변화'가 사라진다.
+    """
+    from realty_signal import weekly
+    from realty_signal.services import shortlist as sl
+
+    profile = dict(db.profile_get(uid) or {})
+    profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+    confirmed = bool((profile.get("매수력") or {}).get("최대매수가"))
+    budget = (profile.get("매수력") or {}).get("최대매수가")
+    if not budget:
+        p = buying_power.params_from_profile(profile)
+        budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
+
+    cands: list[dict] = []
+    qs: list[dict] = []
+    watch = set(profile["_favs"])
+    if budget:
+        try:
+            cands = (sl.build(profile, float(budget), limit=3) or {}).get("candidates") or []
+        except Exception as e:  # noqa: BLE001 — 후보가 없어도 나머지 할 일은 나와야 한다
+            log.warning("액션플랜 숏리스트 실패 uid=%s: %s", uid, e)
+        watch |= {c["region"] for c in cands}
+        qs = _quicksales(watch, float(budget))
+
+    wk = weekly.for_user(watch)
+    prev = db.kv_get(SNAP_KEY.format(uid=uid)) or {}
+    diff = _diff_candidates(cands, prev.get("candidates") or {}) if prev else {"new": [], "dropped": [], "moved": []}
+    acts = actions(diff, wk["mine"], qs, cands, db.imjang_latest(uid), _auction_alerts(),
+                   profile=profile, confirmed=confirmed, budget=float(budget or 0))
+    return {"actions": acts, "budget": round(float(budget)) if budget else 0,
+            "confirmed": confirmed, "candidates": len(cands), "watching": sorted(watch),
+            "as_of": wk.get("as_of")}
 
 
 def build(uid: int, *, force: bool = False) -> dict:
@@ -264,7 +362,7 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
         L.append("※ 직장 주소가 없어 통근 필터가 꺼져 있습니다. 마이페이지에서 넣어 주세요.")
         L.append("")
 
-    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited, auctions)}")
+    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited, auctions, profile, data.get('budget') or 0)}")
     L.append(f"{config.app_base_url()}/#dashboard")
     L.append("")
     L.append("끄기: /stop")

@@ -83,8 +83,9 @@ def watch(
         if not quiet:
             console.print(f"[dim]변화 없음 (데이터 {as_of}, 이전과 동일)[/dim]")
         return
+    cur = dict(zip(df["region"], df["signal"]))
     if not changes:
-        snapshots.save(dict(zip(df["region"], df["signal"])), as_of, df)
+        snapshots.advance(cur, as_of, df)
         if not quiet:
             console.print(f"[dim]등급 변화 없음 (데이터 {as_of})[/dim]")
         return
@@ -101,7 +102,7 @@ def watch(
     if notify:
         top = ", ".join(f"{c['region']} {c['old']}→{c['new']}" for c in changes[:3])
         _macos_notify(f"부동산 시그널 변화 {len(changes)}건 ({as_of})", top)
-    snapshots.save(dict(zip(df["region"], df["signal"])), as_of, df)
+    snapshots.advance(cur, as_of, df)   # 스냅샷을 당길 땐 알림 로그도 같이 — 서버만 쓰면 주가 통째로 빈다
     _warm_favorites_quiet(quiet)
 
 

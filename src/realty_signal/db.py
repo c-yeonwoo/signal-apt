@@ -714,13 +714,13 @@ def news_since(topic: str | None, days: int = 30, limit: int = 40) -> list[dict]
     since = int(time.time()) - days * 86400
     c = conn()
     if topic and topic != "전체":
-        cur = c.execute("SELECT title,descr,source,topic,pubdate FROM news WHERE topic=? AND ts>=? "
-                        "ORDER BY ts DESC LIMIT ?", (topic, since, limit))
+        cur = c.execute("SELECT title,descr,source,topic,pubdate,link FROM news WHERE topic=? AND ts>=? "
+                        "ORDER BY pubdate DESC, ts DESC LIMIT ?", (topic, since, limit))
     else:
-        cur = c.execute("SELECT title,descr,source,topic,pubdate FROM news WHERE ts>=? "
-                        "ORDER BY ts DESC LIMIT ?", (since, limit))
-    rows = [{"title": t, "descr": d, "source": s, "topic": tp, "pubdate": pd}
-            for t, d, s, tp, pd in cur]
+        cur = c.execute("SELECT title,descr,source,topic,pubdate,link FROM news WHERE ts>=? "
+                        "ORDER BY pubdate DESC, ts DESC LIMIT ?", (since, limit))
+    rows = [{"title": t, "descr": d, "source": s, "topic": tp, "pubdate": pd, "link": ln}
+            for t, d, s, tp, pd, ln in cur]
     c.close()
     return rows
 
