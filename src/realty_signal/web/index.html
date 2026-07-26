@@ -34,6 +34,14 @@
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
   .page-head { font-size:20px; font-weight:600; letter-spacing:-0.02em; margin:0 0 6px; color:var(--txt); }
   .page-sub { color:var(--dim); font-size:13px; margin:0 0 18px; line-height:1.5; max-width:36em; }
+  .dash-layout { display:grid; grid-template-columns:1fr 1fr; gap:20px 28px; align-items:start; }
+  .dash-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .dash-col-label { font-size:11px; font-weight:600; color:var(--dim); letter-spacing:.04em;
+    text-transform:uppercase; margin:0 0 2px; }
+  .la-toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .la-more { display:none; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;
+    padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+  .la-more.open { display:flex; }
   /* 가격대 듀얼 레인지 — 트랙 투명, 썸만 조작 */
   #laPriceFilter input[type=range]{ height:22px; }
   #laPriceFilter input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); border:2px solid #fff; box-shadow:0 1px 3px rgba(2,32,71,.35); cursor:pointer; pointer-events:auto; margin-top:0; }
@@ -289,6 +297,7 @@
     .ms-list { width:100% !important; min-width:0; max-width:none; max-height:48vh; }
     .ms-map { min-height:380px; margin-left:0; }
     .ms-gutter { display:none; }
+    .dash-layout { grid-template-columns:1fr; gap:16px; }
     /* 저평가: 좁은 화면에서는 지도 위 · 그래프 아래 */
     .uvsplit { flex-direction:column; height:auto; }
     .uvsplit > .uv-col { flex:0 0 auto; height:340px; }
@@ -322,7 +331,7 @@
   </div>
   <div class="right">
     <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">가이드</button>
-    <button class="navlink" id="alertBtn" onclick="openAlerts()" style="position:relative" title="즐겨찾기 지역 시그널 변동 알림">🔔<span id="alertBadge" style="display:none;position:absolute;top:-3px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
+    <button class="navlink" id="alertBtn" onclick="openAlerts()" style="position:relative" title="관심지역 시그널 변동">알림<span id="alertBadge" style="display:none;position:absolute;top:-3px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
     <span class="date" id="date" onclick="openSources()" style="cursor:pointer" title="데이터 신선도 — 소스별 최종 갱신 보기"><span id="dateTxt"></span> <span style="font-size:10px;color:var(--dim)">ⓘ</span></span>
     <div style="position:relative">
       <button class="navlink" id="acctBtn" onclick="toggleAcctMenu(event)"><span id="myPageLabel">계정</span> ▾</button>
@@ -345,9 +354,9 @@
 </div>
 
 <!-- 대시보드 홈 -->
-<div id="view-dashboard" style="display:none;padding:22px 20px;max-width:1080px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto">
-  <div id="dashHello" style="font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px"></div>
-  <div id="dashSub" style="color:var(--dim);font-size:13px;margin-bottom:18px">이번 주 ★ 변화 · BUY+ 예산 적합 · 동네 추적.</div>
+<div id="view-dashboard" style="display:none;padding:24px 28px 48px;max-width:1440px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto;box-sizing:border-box;width:100%">
+  <div id="dashHello" style="font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-bottom:6px"></div>
+  <div id="dashSub" class="page-sub" style="margin-bottom:20px">나와 시장을 한눈에</div>
   <div id="dashBody"></div>
 </div>
 
@@ -410,12 +419,16 @@
 
 <!-- 통합 매물(전체) 탭 -->
 <div id="view-all" style="display:none">
-  <div style="padding:16px 20px 0">
+  <div style="padding:20px 20px 0">
     <h2 class="page-head">매물</h2>
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+    <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+      <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
+      <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
+    </div>
+    <div id="laMoreFilters" class="la-more">
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
-      <span class="chip" id="laBuyChip" onclick="toggleLaBuyOnly()" title="매수·적극매수 시그널 지역 매물만" style="font-size:12px;white-space:nowrap">매수신호만</span>
+      <span class="chip" id="laBuyChip" onclick="toggleLaBuyOnly()" title="매수·적극매수 시그널 지역만" style="font-size:12px;white-space:nowrap">매수신호만</span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
         <select id="laSort" class="ctrl" onchange="onLaSort()" style="font-size:12px;padding:3px 6px">
           <option value="opp">기회도순</option>
@@ -423,17 +436,16 @@
           <option value="price_asc">가격 낮은순</option>
           <option value="price_desc">가격 높은순</option>
         </select></span>
-      <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
-    </div>
-    <div id="laPriceFilter" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px">
-      <span style="font-size:12px;color:var(--dim);white-space:nowrap">가격대 <b id="laPriceLabel" style="color:var(--txt)"></b></span>
-      <div style="position:relative;flex:1;min-width:220px;height:22px">
-        <div style="position:absolute;top:9px;left:0;right:0;height:4px;background:var(--line);border-radius:2px"></div>
-        <div id="laPriceFill" style="position:absolute;top:9px;height:4px;background:var(--accent);border-radius:2px"></div>
-        <input id="laPriceMin" type="range" min="0" max="100" value="0" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
-        <input id="laPriceMax" type="range" min="0" max="100" value="100" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+      <div id="laPriceFilter" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;flex:1;min-width:240px">
+        <span style="font-size:12px;color:var(--dim);white-space:nowrap">가격 <b id="laPriceLabel" style="color:var(--txt)"></b></span>
+        <div style="position:relative;flex:1;min-width:180px;height:22px">
+          <div style="position:absolute;top:9px;left:0;right:0;height:4px;background:var(--line);border-radius:2px"></div>
+          <div id="laPriceFill" style="position:absolute;top:9px;height:4px;background:var(--accent);border-radius:2px"></div>
+          <input id="laPriceMin" type="range" min="0" max="100" value="0" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+          <input id="laPriceMax" type="range" min="0" max="100" value="100" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+        </div>
+        <span id="laPriceNote" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
       </div>
-      <span id="laPriceNote" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
     </div>
   </div>
   <div style="padding:0 20px 16px">
@@ -509,19 +521,13 @@
 <!-- 저평가 탭 -->
 <div id="view-undervalued" style="display:none">
   <div class="sec">
-    <h2 class="page-head">저평가 지역 추천 — 같은 가격대에서 입지에 비해 싼 동네</h2>
-    <p style="color:var(--dim);font-size:13px;margin:-2px 0 0">
-      비슷한 <b>가격대(급지)</b>끼리 묶은 다음, 그 안에서 <b>입지에 비해 싼 곳</b>을 찾아줍니다.
-      입지는 <b>업무지구까지 걸리는 시간 · 학원 밀도 · 주거환경</b>을 점수로 매긴 값이에요.
-      <i>※ 시군구 단위라 같은 구 안의 신축·구축 차이는 반영되지 않습니다.</i></p>
-    <div style="margin-top:8px;padding:9px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;
-         font-size:12px;color:var(--dim);line-height:1.75">
-      <b style="color:var(--txt)">처음이라면 이 순서로 보세요</b> —
-      ① 지도에서 <b>내가 갈 수 있는 가격대(급지)</b>를 고르고 ②&nbsp;아래 목록에서 그 급지를 펼쳐
-      ③ <b>「입지 대비 싼 편」</b>으로 표시된 지역부터 봅니다. ④ 지역을 누르면 <b>동네 안 단지</b>까지 내려갈 수 있어요.
-    </div>
+    <h2 class="page-head">저평가 지역</h2>
+    <p class="page-sub">같은 가격대(급지) 안에서 입지 대비 싼 동네</p>
+    <details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">보는 방법</summary>
+      <div style="margin-top:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--dim);line-height:1.7">
+        급지 선택 → 「입지 대비 싼 편」지역부터 → 동네·단지로 드릴다운. 시군구 단위라 구 안 신축·구축 차이는 반영되지 않습니다.
+      </div></details>
   </div>
-  <div style="font-size:12px;color:var(--dim);margin:2px 2px 6px">왼쪽 지도에서 구를 클릭하거나 오른쪽 그래프의 점을 클릭하면 아래에 해설이 나옵니다.</div>
   <div class="uvsplit">
     <div class="uv-col" style="position:relative">
       <div id="uvMap" style="height:100%;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
@@ -547,9 +553,8 @@
   <div class="sec">
     <h3>청약·분양 단지 <span class="pill">청약홈</span>
       <button class="chip" id="gajeomBtn" onclick="openGajeom()" style="margin-left:8px;display:none;background:var(--accent);color:#fff;border-color:var(--accent)">내 청약 가점 <b id="gajeomBadge">–</b></button></h3>
-    <p style="color:var(--dim);font-size:12px;margin:-2px 0 8px">
-      최근~예정 청약. 접수중·임박(D-day) → BUY+ 순. 단지 클릭 시 평형별 분양가·특별공급·시세대비 메리트.
-      <label style="margin-left:8px"><input type="checkbox" id="psOpen" onchange="renderPresale()" checked> 접수중·예정만</label>
+    <p class="page-sub" style="margin-bottom:10px">접수중·임박 우선
+      <label style="margin-left:10px;font-size:12px"><input type="checkbox" id="psOpen" onchange="renderPresale()" checked> 접수중·예정만</label>
     </p>
     <div id="psMtFilter" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:-2px 0 10px"></div>
     <div id="psTeukgong" style="margin:-2px 0 10px;font-size:13px"></div>
@@ -562,9 +567,8 @@
 </div>
 
 <div id="view-quicksale" style="display:none">
-  <h2 class="page-head">급매 레이더 <span style="font-size:12px;color:var(--dim);font-weight:400">개인용 · 로컬 확인</span></h2>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 6px">시세(중위호가) 대비 싸게 나온 매물을 지역별로 모읍니다. 급매갭 = (호가−중위시세)/중위시세, 음수가 클수록 저가.</p>
-  <p style="color:#ea580c;font-size:11px;margin:0 0 12px">⚠ 출처는 네이버 부동산 매물(baroezip 공개 API 경유). 개인 참고용이며 재배포/상업이용 금지.</p>
+  <h2 class="page-head">급매</h2>
+  <p class="page-sub">시세 대비 저가 매물 · 개인 참고용</p>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
     <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
     <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
@@ -580,7 +584,7 @@
 </div>
 
 <div id="view-redev" style="display:none">
-  <h2 class="page-head">재건축 · 재개발</h2>
+  <h2 class="page-head">재건축</h2>
   <div class="tabs" style="margin-bottom:14px">
     <button class="tab on" data-rtab="screener" onclick="redevTab('screener')">잠재력 스크리너</button>
     <button class="tab" data-rtab="stages" onclick="redevTab('stages')">단계 현황</button>
@@ -1077,7 +1081,7 @@
 <div id="view-mymap" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
   <h2 class="page-head">내 시그널 맵</h2>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 10px">🏠 거주지 · 📍 관심지역 · 🏢 관심단지 + <b>단지 검색·비교·급지색</b>을 지도 위에서. 핀 색 = 시그널, <b>핀 두 개 클릭</b> → 거리·대중교통.</p>
+  <p class="page-sub">관심지역·단지 · 핀 두 개로 거리</p>
   <div id="mmSummary" style="display:none;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="position:relative;flex:1;min-width:220px;max-width:360px">
@@ -1106,7 +1110,7 @@
       <h3 style="margin:0;font-size:18px">단지 비교</h3>
       <button id="cmpRun" class="btn" style="background:var(--accent);color:#fff;font-weight:700;padding:6px 15px" onclick="runCompare()">비교하기</button>
     </div>
-    <p style="color:var(--dim);font-size:12px;margin:0 0 10px">위 <b>단지 검색</b>의 <b>＋비교</b> 또는 관심단지 핀에서 열을 추가하면 <b>'–'로 대기</b>합니다. 우측 <b>비교하기</b> 버튼을 누르면 그때 실거래를 불러와 채웁니다.</p>
+    <p class="page-sub" style="margin-bottom:10px">검색·관심단지에서 열 추가 후 비교하기</p>
     <div id="cmpCrit" style="display:none;margin:0 0 10px">
       <span style="font-size:12px;color:var(--dim);margin-right:6px">무엇을 중요하게 보시나요? <span style="color:var(--txt)">(복수 선택 → AI 추천)</span></span>
       <span id="cmpCritChips"></span>
@@ -1120,8 +1124,8 @@
 <!-- AI 리포트 (별도 페이지) -->
 <div id="view-report" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
-  <h2 class="page-head">AI 개인화 리포트</h2>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">내 프로필과 <b>관심 지역·단지(80%)</b> + <b>미처 발견 못한 신규 후보(20%)</b>를 섞어 나에게 맞는 매수 전략을 리포트로 만듭니다.</p>
+  <h2 class="page-head">AI 리포트</h2>
+  <p class="page-sub">관심·신규 후보를 섞은 매수 전략</p>
   <div id="aiReport" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:16px;line-height:1.7;font-size:14px;display:none"></div>
   <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
     <label>가용자본(자기자본)<br><input id="ccCapital" type="number" value="30000" style="width:120px"> <span style="color:var(--dim)">만원</span></label>
@@ -1142,8 +1146,8 @@
 
 <div id="view-tradeup" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
-  <h2 class="page-head">갈아타기 전략</h2>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">지금 집을 팔면 <b>어디까지 갈아탈 수 있는지</b>를 계산합니다. 순자산(시세−대출)에 추가 현금을 더한 자기자본으로 새 대출(LTV·DSR)을 얹어 <b>매수 가능 예산</b>을 구하고, 현재 <b>급지 대비 상급지</b> 후보를 시그널·저평가 순으로 보여줍니다.</p>
+  <h2 class="page-head">갈아타기</h2>
+  <p class="page-sub">지금 집을 팔면 어디까지 갈 수 있는지</p>
   <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px">
     <label>현재 거주지<br><input id="tuRegion" placeholder="예: 노원구" class="ctrl" style="width:130px"></label>
     <label>현재 시세<br><input id="tuValue" type="number" placeholder="90000" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
@@ -1170,7 +1174,7 @@
     <h3 style="margin:0;font-size:19px">알림 — 즐겨찾기 시그널 변동</h3>
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('alertsDlg').close()">✕</span>
   </div>
-  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">즐겨찾기(★)한 지역의 매수/매도 시그널이 바뀌면 여기에 쌓입니다.</p>
+  <p class="page-sub" style="margin-bottom:14px">관심지역 시그널 변화</p>
   <div id="alertsBody" style="max-height:60vh;overflow:auto"></div>
 </dialog>
 
@@ -1179,7 +1183,7 @@
     <h3 style="margin:0;font-size:19px">임장 코스</h3>
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('imjangDlg').close()">✕</span>
   </div>
-  <p style="color:var(--dim);font-size:12px;margin:0 0 12px">후보 3곳을 한 번에 도는 반나절 일정입니다. 현장에서 바로 체크하고 저장하세요.</p>
+  <p class="page-sub" style="margin-bottom:12px">후보 3곳 반나절 일정</p>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px">
     <label>날짜 <input type="date" id="imjDate" style="padding:4px 8px"></label>
     <label>출발 <input type="time" id="imjStart" value="10:00" style="padding:4px 8px"></label>
@@ -1194,7 +1198,7 @@
     <h3 style="margin:0;font-size:19px">시그널 성적표</h3>
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('scoreDlg').close()">✕</span>
   </div>
-  <p style="color:var(--dim);font-size:12px;margin:0 0 14px">과거 전 지역의 시그널 구간을 KB 누적 매매가격지수로 검증한 결과입니다. <b>매수=신호 이후 12주 상승</b>, <b>매도=이후 12주 하락</b>이면 적중. (감이 아니라 데이터로 증명)</p>
+  <p class="page-sub" style="margin-bottom:14px">신호 이후 12주 방향이 맞으면 적중</p>
   <div id="scoreBody"></div>
 </dialog>
 
@@ -1487,76 +1491,68 @@ function routeFromHash(){
   if(_ROUTES.includes(h)){ switchTab(h); return true; }
   return false;
 }
-// ===== 대시보드 홈 — 국면·관심지역·오늘의 기회 요약 =====
-const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;${extra}">${inner}</div>`;
-const _dashH=t=>`<div style="font-size:13px;font-weight:700;color:var(--dim);margin-bottom:10px;letter-spacing:.02em">${t}</div>`;
+// ===== 대시보드 홈 — 좌:나 / 우:시장 =====
+const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;${extra}">${inner}</div>`;
+const _dashH=t=>`<div style="font-size:12px;font-weight:600;color:var(--dim);margin-bottom:12px;letter-spacing:.01em">${t}</div>`;
 async function loadDashboard(){
   const body=document.getElementById('dashBody'); if(!body) return;
   const nm=(_userEmail||'').split('@')[0]||'회원';
   document.getElementById('dashHello').textContent=`${nm}님, 이번 주`;
   const sub=document.getElementById('dashSub');
-  if(sub) sub.textContent='관심 동네와 예산 안 기회를 먼저 봅니다.';
-  // 관심 동네 — 상위 3, 나머지 접기
+  if(sub) sub.textContent='나와 시장을 한눈에';
   const favR=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
   const favRows=favR.map(r=>(allSignals||[]).find(s=>s.region===r)).filter(Boolean);
-  let favH=_dashH('관심 동네 <span style="font-weight:400">· ★ 추적</span>');
+  let favH=_dashH('관심 동네');
   if(favRows.length){
-    const top=favRows.slice(0,3), rest=favRows.slice(3);
-    const card=r=>`<div onclick="openNbhd('${r.region}')" style="flex:1;min-width:140px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><b>${r.region}</b>${badge(r.signal)}</div>
-      <div style="font-size:11px;color:var(--dim)">전세 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}${r['공급압력']!=null?` · 입주 ${r['공급압력']}x`:''}</div>
-      <div style="margin-top:8px;font-size:11px;color:var(--accent)">동네 리포트 →</div></div>`;
-    favH+=`<div style="display:flex;gap:10px;flex-wrap:wrap">${top.map(card).join('')}</div>`;
+    const top=favRows.slice(0,5), rest=favRows.slice(5);
+    favH+=top.map(r=>`<div onclick="openNbhd('${r.region}')" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer">
+      <b style="font-weight:600;min-width:72px">${r.region}</b>${badge(r.signal)}</div>`).join('');
     if(rest.length){
-      favH+=`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지 관심지역 ${rest.length}곳</summary>
-        <div style="margin-top:6px">${rest.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openNbhd('${r.region}')">
-          <b style="min-width:74px">${r.region}</b>${badge(r.signal)}
-          <span style="margin-left:auto;color:var(--accent);font-size:12px">리포트</span></div>`).join('')}</div></details>`;
+      favH+=`<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지 ${rest.length}곳</summary>
+        <div>${rest.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openNbhd('${r.region}')">
+          <b style="min-width:72px;font-weight:600">${r.region}</b>${badge(r.signal)}</div>`).join('')}</div></details>`;
     }
   } else {
-    favH+=`<div style="color:var(--dim);font-size:13px;padding:6px 0">아직 ★가 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 관심 지역을 추가 →</span></div>`;
+    favH+=`<div style="color:var(--dim);font-size:13px;padding:4px 0">아직 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 추가</span></div>`;
   }
-  // 경기 국면 (보조)
-  let regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">불러오는 중…</div>';
+  let regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
   try{ const rg=await (await fetch('/api/regime')).json();
-    if(rg&&rg.phase){ const C={green:'#22c55e',yellow:'#ca8a04',orange:'#ea580c',red:'#ef4444'}[rg.color]||'#94a3b8';
+    if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
       regimeH=_dashH('수도권 경기 국면')
-        +`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:22px;font-weight:800;color:${C}">${rg.phase}</span>`
-        +`<span style="color:var(--dim);font-size:13px">β ${rg.beta} · 급지갭 ${rg.gap}</span></div>`
-        +(rg.desc?`<div style="color:var(--dim);font-size:12.5px;margin-top:8px;line-height:1.55">${rg.desc}</div>`:''); }
-    else regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">국면 데이터가 아직 없습니다.</div>';
-  }catch(e){ regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">국면 데이터를 불러오지 못했습니다.</div>'; }
-  const go=(t,label,desc)=>`<div onclick="switchTab('${t}')" style="flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line)'">
-    <div style="font-weight:700">${label}</div><div style="color:var(--dim);font-size:12px;margin-top:3px">${desc}</div></div>`;
-  const nickCard=`<div onclick="askNick('지금 내 관심지역과 예산 기준으로 매수 타이밍을 근거와 함께 알려줘.')" style="flex:1;min-width:150px;background:var(--accent-weak);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer">
-    <div style="font-weight:700">닉에게 물어보기</div><div style="color:var(--dim);font-size:12px;margin-top:3px">시그널·적중 근거 AI 자문</div></div>`;
-  const journeyH=_dashH('타이밍 데스크')+`<div style="font-size:12.5px;color:var(--dim);line-height:1.55;margin-bottom:10px">BUY+ 지역 → 동네 리포트 → ★ 추적 → 주간 알림</div>`
-    +`<div style="display:flex;gap:10px;flex-wrap:wrap">
-    ${go('signal','시장·지역','BUY+ · 저평가 · 동네 리포트')}
-    ${go('about','시그널 성적표','과거 구간 검증·적중률')}
-    ${nickCard}</div>`;
-  const shortcutsH=_dashH('심화 · 매물')+`<div style="display:flex;gap:10px;flex-wrap:wrap">
-    ${go('all','매물 전체','관심 동네 기회 좁히기')}
-    ${go('report','AI 리포트','내 조건 맞춤 매수전략')}
-    ${go('mymap','내 시그널맵','즐겨찾기 지도')}
-    ${go('tradeup','갈아타기','상급지 시뮬레이션')}</div>`;
-  // 이번 주 화면: 무엇이 바뀌었나 → 그래서 뭘 하나 → 내 여력 → 후보 → 맥락 → 심화
-  body.innerHTML=
-    '<div id="dashWeeklyWrap"></div>'
-    +'<div id="dashPlanWrap"></div>'
-    +'<div id="dashPowerWrap"></div>'
-    +'<div id="dashShortlistWrap"></div>'
-    +_dashCard(_dashH('예산 안 BUY+ 지역 <span style="font-weight:400">· 시군구</span>')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
-    +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-       ${_dashCard(favH)}${_dashCard(regimeH)}</div>`
-    +'<div id="dashFeedWrap"></div>'
-    +'<div id="dashIssuesWrap"></div>'
-    +_dashCard(journeyH,'margin-bottom:14px')
-    +_dashCard(shortcutsH);
-  _loadWeekly();
-  _loadPlan();
+        +`<div style="font-size:22px;font-weight:600;color:${C};letter-spacing:-0.02em">${rg.phase}</div>`
+        +`<div style="color:var(--dim);font-size:12px;margin-top:6px">β ${rg.beta} · 급지갭 ${rg.gap}</div>`
+        +(rg.desc?`<div style="color:var(--dim);font-size:12.5px;margin-top:8px;line-height:1.5">${rg.desc}</div>`:''); }
+    else regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
+  }catch(e){ regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
+  const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
+  const moreLinks=`<div style="display:flex;flex-wrap:wrap;gap:6px 0;padding:2px 0">
+    ${link('signal','시장·지역')}${link('all','매물')}${link('report','AI 리포트')}
+    ${link('mymap','내 맵')}${link('about','성적표')}
+    <span onclick="askNick('지금 내 관심지역과 예산 기준으로 매수 타이밍을 근거와 함께 알려줘.')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500">닉에게</span>
+  </div>`;
+  // 좌: 나와 관련 · 우: 시장 전체
+  body.innerHTML=`<div class="dash-layout">
+    <div class="dash-col dash-col-me">
+      <div class="dash-col-label">나</div>
+      <div id="dashPowerWrap"></div>
+      <div id="dashPlanWrap"></div>
+      <div id="dashShortlistWrap"></div>
+      ${_dashCard(favH)}
+      ${_dashCard(_dashH('예산 안 BUY+')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
+      <div id="dashFeedWrap"></div>
+    </div>
+    <div class="dash-col dash-col-market">
+      <div class="dash-col-label">시장</div>
+      <div id="dashWeeklyWrap"></div>
+      ${_dashCard(regimeH)}
+      <div id="dashIssuesWrap"></div>
+      ${_dashCard(_dashH('바로가기')+moreLinks)}
+    </div>
+  </div>`;
   _loadBuyingPower();
+  _loadPlan();
   _loadShortlist();
+  _loadWeekly();
   _loadDashBudget();
   _loadDashFeed();
   _loadIssues();
@@ -1597,12 +1593,12 @@ function _myWeeklyBlock(mine, myMovers){
 }
 async function _loadWeekly(){
   const wrap=document.getElementById('dashWeeklyWrap'); if(!wrap) return;
-  wrap.innerHTML=_dashCard(_dashH('이번 주 변화')+'<div style="color:var(--dim);font-size:13px">지난주와 비교하는 중…</div>','margin-bottom:14px');
+  wrap.innerHTML=_dashCard(_dashH('이번 주 변화')+'<div style="color:var(--dim);font-size:13px">지난주와 비교하는 중…</div>');
   let d; try{ d=await (await fetch('/api/weekly-change')).json(); }
-  catch(e){ wrap.innerHTML=_dashCard(_dashH('이번 주 변화')+'<div style="color:#dc2626;font-size:13px">변화를 불러오지 못했습니다.</div>','margin-bottom:14px'); return; }
-  const head=`이번 주 변화 <span style="font-weight:400">· ${d.prev||'–'} → ${d.as_of||'–'} KB 갱신 기준</span>`;
+  catch(e){ wrap.innerHTML=_dashCard(_dashH('이번 주 변화')+'<div style="color:#dc2626;font-size:13px">변화를 불러오지 못했습니다.</div>'); return; }
+  const head=`이번 주 변화`;
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH(head)+`<div style="font-size:13px;color:var(--dim);line-height:1.6">${d.blocked_reason||'비교할 지난주 데이터가 없습니다.'}</div>`,'margin-bottom:14px');
+    wrap.innerHTML=_dashCard(_dashH(head)+`<div style="font-size:13px;color:var(--dim);line-height:1.6">${d.blocked_reason||'지난주 비교 데이터 없음'}</div>`);
     return;
   }
   const mine=d.mine||[], rest=d.rest||[], movers=d.movers||[], t=d.totals||{};
@@ -1635,7 +1631,7 @@ async function _loadWeekly(){
     h+=`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">등급은 그대로, 지표가 크게 움직인 곳 ${movers.length}건</summary>
       <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px">${movers.slice(0,10).map(_moverRow).join('')}</div></details>`;
   }
-  wrap.innerHTML=_dashCard(h,'margin-bottom:14px;border-left:3px solid var(--accent)');
+  wrap.innerHTML=_dashCard(h);
 }
 // ===== 다음 할 일 — 텔레그램 브리핑과 같은 판단(briefing.actions) =====
 function _planGo(key, tab){
@@ -1658,8 +1654,8 @@ async function _loadPlan(){
       <div style="font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.5">${a.why}</div></div>
     <span class="btn" style="padding:5px 12px;white-space:nowrap;align-self:center"
       onclick="_planGo('${a.key}','${a.tab}')">${a.cta}</span></div>`;
-  wrap.innerHTML=_dashCard(_dashH('다음 할 일 <span style="font-weight:400">· 되돌릴 수 없는 것부터</span>')
-    +acts.map(row).join(''),'margin-bottom:14px');
+  wrap.innerHTML=_dashCard(_dashH('다음 할 일')
+    +acts.slice(0,3).map(row).join(''));
 }
 // ===== 이번 주 부동산 이슈 =====
 // 뉴스 탭을 없앤 이유가 그대로 규칙: 창을 7일로 고정하고 항목마다 언제 기사인지 붙인다.
@@ -1676,7 +1672,7 @@ async function _loadIssues(){
   let d; try{ d=await (await fetch('/api/weekly-issues')).json(); }catch(e){ wrap.innerHTML=''; return; }
   const head=`이번 주 부동산 이슈 <span style="font-weight:400">· 최근 ${d.days||7}일</span>`;
   if(!(d.items||[]).length){
-    wrap.innerHTML=_dashCard(_dashH(head)+`<div style="font-size:13px;color:var(--dim)">${d.blocked_reason||'수집된 기사가 없습니다.'}</div>`,'margin-bottom:14px');
+    wrap.innerHTML=_dashCard(_dashH(head)+`<div style="font-size:13px;color:var(--dim)">${d.blocked_reason||'수집된 기사가 없습니다.'}</div>`);
     return;
   }
   const tc={정책:'var(--accent)',금리:'#dc2626',청약:'#16a34a',재건축:'#d97706',시장:'#7c3aed'};
@@ -1692,60 +1688,48 @@ async function _loadIssues(){
       <span class="pill" style="font-size:10px;font-weight:700;color:${c};background:${c}12;border-color:${c}44;flex:0 0 auto">${n.topic||'시장'}</span>
       <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.title}</span>
       <span style="font-size:11px;color:var(--dim);white-space:nowrap">${n.source||''} · ${_ago(n.pubdate)}</span></a>`;}).join('');
-  wrap.innerHTML=_dashCard(h,'margin-bottom:14px');
+  wrap.innerHTML=_dashCard(h);
 }
 // ===== 매수력 확정서 — 최대매수가·대출·월상환·필요현금을 하나로 =====
 let _bp=null;
 // 규제 배지 — 지역이 곧 LTV·절대한도·심사금리라서 숫자보다 먼저 보여준다
 function _bpRegBadge(r){
   if(!r) return '';
-  const pill=(t,c)=>`<span style="display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;background:${c};color:#fff;margin-right:4px">${t}</span>`;
+  const pill=(t,c)=>`<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:${c};border:1px solid ${c}33;background:${c}10;margin-right:6px">${t}</span>`;
   const bits=[];
   if(r['지역가정']) bits.push(pill('지역미정·규제가정','#b45309'));
-  else if(r['규제지역']) bits.push(pill('규제지역','#dc2626'));
-  else if(r['수도권']) bits.push(pill('수도권','#ea580c'));
-  else bits.push(pill('비규제','#16a34a'));
-  bits.push(`<span style="font-size:11px">${r['지역']||'지역을 정하면 더 정확해요'} · ${r['자격설명']}`
-    +(r['절대한도']?` · 대출한도 ${_eok(r['절대한도'])}`:'')
-    +` · 심사금리 ${(r['심사금리']*100).toFixed(2)}% · 만기 ${r['적용만기']}년</span>`);
-  return `<div style="margin-bottom:6px">${bits.join('')}</div>`;
+  else if(r['규제지역']) bits.push(pill('규제지역','#b91c1c'));
+  else if(r['수도권']) bits.push(pill('수도권','#c2410c'));
+  else bits.push(pill('비규제','#15803d'));
+  bits.push(`<span style="font-size:11px;color:var(--dim)">${r['지역']||'지역 미정'} · ${r['자격설명']}`
+    +(r['절대한도']?` · 한도 ${_eok(r['절대한도'])}`:'')+`</span>`);
+  return `<div>${bits.join('')}</div>`;
 }
 async function _loadBuyingPower(){
   const wrap=document.getElementById('dashPowerWrap'); if(!wrap) return;
   let d; try{ d=await (await fetch('/api/buying-power')).json(); }catch(e){ wrap.innerHTML=''; return; }
   _bp=d;
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH('매수력 확정')
-      +`<div style="font-size:13px;line-height:1.6">${d.message||'가용자본을 입력하면 매수력을 확정할 수 있어요.'}
-        <div style="margin-top:10px"><span class="btn primary" onclick="openBuyingPower()">매수력 계산하기 →</span></div></div>`,
-      'margin-bottom:14px;border-left:3px solid var(--accent)');
+    wrap.innerHTML=_dashCard(_dashH('내 매수력')
+      +`<div style="font-size:15px;line-height:1.55;color:var(--dim)">${d.message||'가용자본을 입력하면 매수 상한을 정할 수 있어요.'}
+        <div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">매수력 계산</span></div></div>`);
     return;
   }
   const confirmed=!!d['확정'];
-  const c=d['비용']||{}, g=d['가정']||{};
-  const line=`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-      <span style="font-size:26px;font-weight:800;color:var(--accent)">${_eok(d['최대매수가'])}</span>
-      <span style="font-size:13px;color:var(--dim)">까지 · 대출 <b style="color:var(--txt)">${_eok(d['대출'])}</b>(실효 ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%) · 월 <b style="color:var(--txt)">${(d['월상환']||0).toLocaleString()}만</b>${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</span></div>`;
-  const cash=`<div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6">
-      필요현금 <b style="color:var(--txt)">${_eok(d['필요현금'])}</b> <span style="font-size:11px">(자기자본 ${_eok(g['자기자본'])})</span>
-      <br><span style="font-size:11px">이 중 집값 외 비용 ${((c['취득세']||0)+(c['중개비']||0)+(c['이사비']||0)+(c['수리비']||0)).toLocaleString()}만 — 취득세 ${(c['취득세']||0).toLocaleString()} · 중개 ${(c['중개비']||0).toLocaleString()} · 이사 ${(c['이사비']||0).toLocaleString()}</span>
-      <br><span style="font-size:11px">한도 제약: <b style="color:${d['제약']==='DSR'||d['제약']==='한도'?'#ea580c':'var(--txt)'}">${d['제약']}</b> · ${g['주택수']===0?'무주택':(g['주택수']===1?'1주택':'다주택')}${g['생애최초']?' · 생애최초':''} · 금리 ${(g['금리']*100).toFixed(1)}%(스트레스 +${(g['스트레스가산']*100).toFixed(2)}%p) · ${g['만기']}년</span></div>
-      ${_bpRegBadge(d['규제'])}`;
-  const safe=d['안정매수가']?`<div style="font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--dim)">
-      월 상환을 소득의 30% 이내로 두면 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만) — 무리 없는 선</div>`:'';
+  const g=d['가정']||{};
   const stale=confirmed && Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01);
+  const tag=(confirmed && !stale) ? '확정' : (stale ? '재확정 필요' : '미확정');
+  const tagCol=(confirmed && !stale) ? 'var(--dim)' : '#b45309';
+  const line=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+      <span style="font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">${_eok(d['최대매수가'])}</span>
+      <span style="font-size:12px;color:${tagCol}">${tag}</span></div>
+    <div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])} · 월 ${(d['월상환']||0).toLocaleString()}만 · 필요현금 ${_eok(d['필요현금'])}
+      ${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
+    <div style="margin-top:8px">${_bpRegBadge(d['규제'])}</div>`;
   const cta=(confirmed && !stale)
-    ? `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="btn" style="padding:5px 12px" onclick="openBuyingPower()">조건 바꾸기</span>
-        <span style="font-size:11px;color:var(--dim)">확정됨 — 추천·후보·알림이 이 기준으로 움직입니다</span></div>`
-    : `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="btn primary" style="padding:6px 14px" onclick="openBuyingPower()">${stale?'다시 확정하기 →':'이 매수력으로 확정 →'}</span>
-        <span style="font-size:11px;color:var(--dim)">${stale?`조건이 바뀌었어요 (확정값 ${_eok(d['확정'])})`:'확정 전이라 추천이 잠정치입니다'}</span></div>`;
-  const tag=(confirmed && !stale) ? '<span style="font-weight:400">· 확정</span>'
-    : (stale ? '<span style="font-weight:400;color:#ea580c">· 재확정 필요</span>'
-             : '<span style="font-weight:400;color:#ea580c">· 미확정</span>');
-  wrap.innerHTML=_dashCard(_dashH('내 매수력 '+tag)
-    +line+cash+safe+cta, 'margin-bottom:14px;border-left:3px solid var(--accent)');
+    ? `<div style="margin-top:14px"><span class="btn" style="padding:6px 14px" onclick="openBuyingPower()">조건 바꾸기</span></div>`
+    : `<div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">${stale?'다시 확정':'매수력 확정'}</span></div>`;
+  wrap.innerHTML=_dashCard(_dashH('내 매수력')+line+cta);
 }
 function openBuyingPower(){
   const p=_profile||{}, g=(_bp&&_bp['가정'])||{};
@@ -1815,41 +1799,35 @@ async function bpConfirm(){
 // ===== 이번 주 볼 단지 3곳 — 매수력 × 라이프스타일 적합도 =====
 async function _loadShortlist(){
   const wrap=document.getElementById('dashShortlistWrap'); if(!wrap) return;
-  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>','margin-bottom:14px');
+  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>');
   let d; try{ d=await (await fetch('/api/shortlist')).json(); }catch(e){ wrap.innerHTML=''; return; }
   if(!d.ready){
     wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')
       +`<div style="color:var(--dim);font-size:13px;line-height:1.6">${d.message||'예산 안에서 볼 만한 단지를 찾지 못했습니다.'}
         ${d['탈락']?`<div style="margin-top:6px;font-size:12px">${_slRejectLine(d)}</div>`:''}
-        <div style="margin-top:8px"><span class="btn" style="padding:5px 12px" onclick="switchTab('signal')">시장·지역에서 ★ 추가 →</span></div></div>`,
-      'margin-bottom:14px');
+        <div style="margin-top:8px"><span class="btn" style="padding:5px 12px" onclick="switchTab('signal')">시장·지역에서 ★ 추가 →</span></div></div>`);
     return;
   }
   const cards=d.candidates.map((c,i)=>{
     const z=c['자금']||{};
-    return `<div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-top:${i?10:0}px;background:var(--panel)">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:800;color:var(--accent)">${i+1}</span>
-        <b style="font-size:15px">${c['단지']}</b>${badge(c['시그널'])}
-        <span style="margin-left:auto;font-size:13px"><b>${_eok(c['예상가'])}</b> <span style="color:var(--dim);font-size:11px">${c['평단가']}만/평 · 적합 ${c['점수']}</span></span>
+    return `<div style="padding:${i?16:0}px 0 0;margin-top:${i?14:0}px;border-top:${i?'1px solid var(--line)':'none'}">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--dim)">${i+1}</span>
+        <b style="font-size:15px;font-weight:600">${c['단지']}</b>${badge(c['시그널'])}
+        <span style="margin-left:auto;font-size:15px;font-weight:600">${_eok(c['예상가'])}</span>
       </div>
       <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.5">${c['근거']}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:4px">필요현금 ${_eok(z['필요현금'])} · 대출 ${_eok(z['대출'])} · 월 ${(z['월상환']||0).toLocaleString()}만${z['부족']?` · <span style="color:#ea580c">${_eok(z['부족'])} 부족</span>`:''}${c['규제지역']?` · <span style="color:#dc2626">규제지역</span>(${z['제약']} 제약)`:''}</div>
-      <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">
-        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${c['단지'].replace(/'/g,'')}','${c['region']}')">단지 상세</span>
-        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openNbhd('${c['region']}')">동네 리포트</span>
-        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="askNick('${c['region']} ${c['단지'].replace(/'/g,'')} 지금 사도 될까? 실거래·단지시그널·내 예산 기준으로 근거와 함께 알려줘.')">닉에게</span>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">현금 ${_eok(z['필요현금'])} · 월 ${(z['월상환']||0).toLocaleString()}만</div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <span class="btn" style="padding:5px 12px;font-size:12px" onclick="openComplex('${c['단지'].replace(/'/g,'')}','${c['region']}')">단지</span>
+        <span class="btn" style="padding:5px 12px;font-size:12px" onclick="openNbhd('${c['region']}')">동네</span>
       </div></div>`;
   }).join('');
-  const sub=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} · ${d.pyeong}평 기준 · ${d['지역'].length}개 지역 ${d['검토']}개 단지에서 추림${d['확정예산']?'':' <span style="color:#ea580c">(매수력 미확정 — 잠정)</span>'}</div>`;
-  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지 <span style="font-weight:400">· 적합도순</span>')+sub+cards
-    +`<div style="margin-top:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="btn primary" style="padding:6px 14px" onclick="openImjang()">이 ${d.candidates.length}곳 임장 코스 짜기 →</span>
-        <span style="font-size:11px;color:var(--dim)">토요일 반나절 일정으로 묶어 드립니다</span></div>`
-    +`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지는 왜 뺐나</summary>
-      <div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.6">${_slRejectLine(d)}
-      <br><span style="font-size:11px">가중치 ${Object.entries(d['가중치']).map(([k,v])=>`${k} ${Math.round(v*100)}%`).join(' · ')}${d['직장']?'':' · 직장 주소를 넣으면 통근이 반영됩니다'}</span></div></details>`,
-    'margin-bottom:14px;border-left:3px solid var(--sig-buy)');
+  const sub=`<div style="font-size:12px;color:var(--dim);margin-bottom:4px">${d.pyeong}평 · 예산 ${_eok(d.budget)}${d['확정예산']?'':' · 잠정'}</div>`;
+  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+sub+cards
+    +`<div style="margin-top:16px"><span class="btn primary" style="padding:7px 16px" onclick="openImjang()">임장 코스</span></div>`
+    +`<details style="margin-top:12px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">탈락 사유</summary>
+      <div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.6">${_slRejectLine(d)}</div></details>`);
 }
 // ===== 임장 코스 — 후보 3곳을 시각이 박힌 반나절 일정으로 =====
 let _imj=null, _imjMarks={};
@@ -2018,7 +1996,7 @@ async function _loadDashFeed(){
       <b>${it.name}</b><span style="color:var(--dim);font-size:11px">${it.region}</span> ${cs}
       <span style="margin-left:auto;color:var(--dim);font-size:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end">${bits.join(' · ')}${spark}</span></div>`;
   }).join('');
-  wrap.innerHTML=_dashCard(_dashH('내 관심 피드 <span style="font-weight:400">· 지역·단지 소식</span>')+rows, 'margin-bottom:14px');
+  wrap.innerHTML=_dashCard(_dashH('내 관심 피드')+rows);
 }
 // ===== 갈아타기 전략 (현 자산 매도 → 상급지 착지) =====
 let _tuData=null;
@@ -2396,6 +2374,12 @@ let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원
 let _laSort='opp', _laBuyOnly=false;          // 정렬 기준 + 매수신호(BUY+)만 필터
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
 function toggleLaBuyOnly(){ _laBuyOnly=!_laBuyOnly; document.getElementById('laBuyChip').classList.toggle('on', _laBuyOnly); renderAllListings(); }
+function toggleLaMore(){
+  const box=document.getElementById('laMoreFilters'), btn=document.getElementById('laMoreBtn');
+  if(!box) return;
+  const open=box.classList.toggle('open');
+  if(btn){ btn.classList.toggle('on', open); btn.textContent=open?'필터 닫기':'필터'; }
+}
 function _laInitSel(){ if(_laSel) return; _laSel=new Set(['경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
 function initLaPriceFilter(){
   const box=document.getElementById('laPriceFilter');
@@ -2473,16 +2457,17 @@ function renderAllListings(){
   });
   document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호·가격대 완화 / 급매는 급매 탭에서 스캔)';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
+  const rowBadge=x=>x['시그널']?badge(x['시그널']):typeBadge(x['유형']);
   mapSplit('laList','laMap',rows,{
-    summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
+    summary:x=>({nm:`${x['단지명']||'–'} ${rowBadge(x)}`,
       right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
+      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${x['유형']} · ${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''}`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
         : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
       return `<div class="kv"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
-        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">타이밍 근거: ${x['기회도근거']}</div>`:''}
-        ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">데이터 신뢰도 ${Math.round(x.confidence*100)}% — 추가 확인 권장</div>`:''}
+        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
+        ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">신뢰도 ${Math.round(x.confidence*100)}%</div>`:''}
         <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
