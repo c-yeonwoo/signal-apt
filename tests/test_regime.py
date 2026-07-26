@@ -57,5 +57,21 @@ def test_endgame_evidence_lists_low_tier_drivers():
         assert ev["drivers"][0]["막차"] is True
 
 
+def test_normal_phase_has_no_evidence():
+    # 상급지가 훨씬 더 오르면 β>0 — evidence 비움(Nick 오해 방지)
+    prices = [
+        ("가평군", 800), ("연천군", 900), ("포천시", 1000), ("동두천시", 1100),
+        ("구리시", 2000), ("하남시", 2200), ("광명시", 2400), ("과천시", 2600),
+        ("강남구", 5000), ("서초구", 4800), ("송파구", 4500), ("용산구", 4300),
+        ("성동구", 4000), ("마포구", 3800), ("영등포구", 3600), ("양천구", 3400),
+    ]
+    rises = {r: (0.1 if p < 3000 else 2.5) for r, p in prices}
+    codes = {r: ("41000" if r.endswith(("군", "시")) else "11000") for r, _ in prices}
+    out = compute_regime(_FakeKB(rises), _loc(prices), codes, window=8)
+    assert out["beta"] >= 0
+    assert out["phase"] in ("상급지 주도", "광역 확산")
+    assert out["evidence"] == {}
+
+
 def test_regime_empty_without_localities():
     assert compute_regime(_FakeKB({}), pd.DataFrame(), {}) == {}
