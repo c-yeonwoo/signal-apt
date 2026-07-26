@@ -195,7 +195,7 @@
   .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
   .ms-map { flex:1; position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(37,99,235,0.06); }
   .ms-viewport-hint { font-size:11px; color:var(--dim); padding:8px 13px; border-bottom:1px solid var(--line); background:#f8fafc; }
-  .ms-map-cta { position:absolute; z-index:800; left:50%; top:12px; transform:translateX(-50%); pointer-events:none; }
+  .ms-map-cta { position:absolute; z-index:1100; left:50%; top:12px; transform:translateX(-50%); pointer-events:none; }
   .ms-map-cta button { pointer-events:auto; background:var(--accent); color:#fff; border:none; border-radius:999px;
     padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(37,99,235,.35); white-space:nowrap; }
   .ms-map-cta button:hover { filter:brightness(1.06); }
@@ -1471,10 +1471,11 @@ function _bpRegBadge(r){
   if(!r) return '';
   const pill=(t,c)=>`<span style="display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;background:${c};color:#fff;margin-right:4px">${t}</span>`;
   const bits=[];
-  if(r['규제지역']) bits.push(pill('규제지역','#dc2626'));
+  if(r['지역가정']) bits.push(pill('지역미정·규제가정','#b45309'));
+  else if(r['규제지역']) bits.push(pill('규제지역','#dc2626'));
   else if(r['수도권']) bits.push(pill('수도권','#ea580c'));
   else bits.push(pill('비규제','#16a34a'));
-  bits.push(`<span style="font-size:11px">${r['지역']||'지역 미지정'} · ${r['자격설명']}`
+  bits.push(`<span style="font-size:11px">${r['지역']||'지역을 정하면 더 정확해요'} · ${r['자격설명']}`
     +(r['절대한도']?` · 대출한도 ${_eok(r['절대한도'])}`:'')
     +` · 심사금리 ${(r['심사금리']*100).toFixed(2)}% · 만기 ${r['적용만기']}년</span>`);
   return `<div style="margin-bottom:6px">${bits.join('')}</div>`;
@@ -1494,7 +1495,7 @@ async function _loadBuyingPower(){
   const c=d['비용']||{}, g=d['가정']||{};
   const line=`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
       <span style="font-size:26px;font-weight:800;color:var(--accent)">${_eok(d['최대매수가'])}</span>
-      <span style="font-size:13px;color:var(--dim)">까지 · 대출 <b style="color:var(--txt)">${_eok(d['대출'])}</b>(LTV ${Math.round((d['실효LTV']||0)*100)}%) · 월 <b style="color:var(--txt)">${(d['월상환']||0).toLocaleString()}만</b>${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</span></div>`;
+      <span style="font-size:13px;color:var(--dim)">까지 · 대출 <b style="color:var(--txt)">${_eok(d['대출'])}</b>(실효 ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%) · 월 <b style="color:var(--txt)">${(d['월상환']||0).toLocaleString()}만</b>${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</span></div>`;
   const cash=`<div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6">
       필요현금 <b style="color:var(--txt)">${_eok(d['필요현금'])}</b> <span style="font-size:11px">(자기자본 ${_eok(g['자기자본'])})</span>
       <br><span style="font-size:11px">이 중 집값 외 비용 ${((c['취득세']||0)+(c['중개비']||0)+(c['이사비']||0)+(c['수리비']||0)).toLocaleString()}만 — 취득세 ${(c['취득세']||0).toLocaleString()} · 중개 ${(c['중개비']||0).toLocaleString()} · 이사 ${(c['이사비']||0).toLocaleString()}</span>
@@ -2326,7 +2327,7 @@ function ensureMapCta(mapId){
   const mapEl=document.getElementById(mapId); if(!mapEl) return null;
   const el=document.createElement('div'); el.className='ms-map-cta'; el.style.display='none';
   el.innerHTML='<button type="button">이 지역 매물 다시 찾기</button>';
-  el.querySelector('button').onclick=()=>applyViewportFilter(mapId);
+  el.querySelector('button').onclick=()=>applyViewportFilter(mapId,{lock:true});
   mapEl.appendChild(el); st._ctaEl=el; return el;
 }
 function showMapCta(mapId){ const el=ensureMapCta(mapId); if(el) el.style.display='block'; }
@@ -2366,16 +2367,26 @@ function renderMsList(mapId, indices){
     listEl.appendChild(row); listEl.appendChild(det);
   });
 }
-function applyViewportFilter(mapId){
+function applyViewportFilter(mapId, opts){
   const st=_ms[mapId]; if(!st||!st.map||!st.items) return;
+  opts=opts||{};
   st._vpApplying=true;
+  if(opts.lock) st._vpLocked=true;   // CTA 클릭 시에만 잠금 — 이후 fitBounds 로 화면이 되돌아가지 않음
   const prevSel=st.sel;
   const b=st.map.getBounds(), indices=[];
   (st.items||[]).forEach((it,i)=>{ const c=st.coords&&st.coords[i];
     if(c&&b.contains(L.latLng(c[0],c[1]))) indices.push(i); });
   st.viewIndices=indices; st.lastBoundsKey=_boundsKey(b);
+  // 리스트와 핀을 같은 범위로 — 화면 밖 핀을 지우지 않으면 "갱신 안 됨"처럼 보인다
+  Object.keys(st.markers||{}).forEach(k=>{
+    const i=+k, mk=st.markers[i]; if(!mk) return;
+    const on=indices.includes(i);
+    if(on && !st.map.hasLayer(mk)) mk.addTo(st.map);
+    if(!on && st.map.hasLayer(mk)) st.map.removeLayer(mk);
+  });
   renderMsList(mapId, indices); hideMapCta(mapId); st._vpApplying=false;
   if(prevSel!=null&&indices.includes(prevSel)) selectMsRow(mapId, prevSel);
+  else st.sel=null;
 }
 async function selectMsRow(mapId, i){
   const st=_ms[mapId]; if(!st||!st.listId) return;
@@ -2400,7 +2411,9 @@ async function selectMsRow(mapId, i){
 }
 async function mapSplit(listId, mapId, items, opt){
   const st=initMap(mapId);
-  st.listId=listId; st.items=items; st.opt=opt;
+  const keepView=!!st._vpLocked;   // 필터·데이터 재로드 시에도 사용자가 옮겨 둔 화면 유지
+  st.listId=listId; st.items=items; st.opt=opt; st._mapSplitGen=(st._mapSplitGen||0)+1;
+  const gen=st._mapSplitGen;
   bindMapViewport(mapId, listId);
   const coords={}, need=[], fb=new Set(); opt._fb=fb;
   items.forEach((it,i)=>{ const c=opt.coord&&opt.coord(it); if(c&&c[0]) coords[i]=c;
@@ -2410,6 +2423,7 @@ async function mapSplit(listId, mapId, items, opt){
     const miss=[...new Set(need.map(n=>opt.regionOf(items[n.i])).filter(Boolean))];
     if(miss.length){
       try{ const cr=await (await fetch('/api/region-centroids?regions='+encodeURIComponent(miss.join(',')))).json();
+        if(gen!==_ms[mapId]._mapSplitGen) return;   // 더 새 로드가 있으면 폐기
         const ctr=cr.centroids||{};
         need.forEach(n=>{ const c=ctr[opt.regionOf(items[n.i])]; if(!c) return;
           const i=n.i, ang=i*2.39996, rad=0.0013*(1+(i%6));   // 황금각 나선 지터(~±400m, 겹침 방지)
@@ -2417,17 +2431,20 @@ async function mapSplit(listId, mapId, items, opt){
       }catch(e){}
     }
   }
-  plotPins(mapId, items, coords, opt);   // 즉시 표시 (실좌표 + 폴백핀)
+  if(gen!==_ms[mapId]._mapSplitGen) return;
+  plotPins(mapId, items, coords, opt, {keepView});   // 즉시 표시 (실좌표 + 폴백핀)
+  applyViewportFilter(mapId);
   // 2) 단지 정밀 지오코딩 — 백그라운드. 성공한 단지만 폴백→실좌표로 업그레이드.
+  //    fitBounds 로 화면을 되돌리면 '이 지역 매물 다시 찾기'가 무효화되므로 keepView 고정.
   if(need.length){
     const qs=[...new Set(need.map(n=>n.q))];
     try{ const r=await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:qs,max_miss:25})})).json();
+      if(gen!==_ms[mapId]._mapSplitGen) return;
       let changed=false;
       need.forEach(n=>{ if(r.coords[n.q]){ coords[n.i]=r.coords[n.q]; fb.delete(n.i); changed=true; } });
-      if(changed) plotPins(mapId, items, coords, opt);
+      if(changed){ plotPins(mapId, items, coords, opt, {keepView:true}); applyViewportFilter(mapId); }
     }catch(e){}
   }
-  applyViewportFilter(mapId);
 }
 // 공용 지도 타일 — VWorld 키 있으면 한글, 없으면 CartoDB voyager(전 지도 통일)
 let _mapCfg=null;
@@ -2506,21 +2523,27 @@ function initMap(mapId){
     st=_ms[mapId]={map,markers:{},sel:null}; }
   return st;
 }
-function plotPins(mapId, items, coords, opt){
+function plotPins(mapId, items, coords, opt, opts){
   const st=initMap(mapId);
+  opts=opts||{};
   st.items=items; st.opt=opt; st.coords=coords;   // 클릭 시 on-demand 지오코딩용
   Object.values(st.markers).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
   const fb=opt._fb||new Set();
+  const viewSet=st._vpLocked&&st.viewIndices? new Set(st.viewIndices): null;
   items.forEach((it,i)=>{ const c=coords[i]; if(!c) return;
     const color=(opt.color&&opt.color(it))||'var(--accent)';
     const isfb=fb.has(i);
     const icon=L.divIcon({className:'',html:`<div class="mpin${isfb?' fb':''}" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
     const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사 (지역 중심)</span>`:'');
-    const mk=L.marker(c,{icon}).addTo(st.map).bindPopup(lbl);
+    const mk=L.marker(c,{icon}).bindPopup(lbl);
     mk.on('click', e=>{ L.DomEvent.stopPropagation(e); selectMsRow(mapId, i); });
-    st.markers[i]=mk; });
-  const ms=Object.values(st.markers);
-  if(ms.length){ st._suppressCtaUntil=Date.now()+900;
+    st.markers[i]=mk;
+    // 뷰포트 잠금 중이면 화면 안 핀만 올린다 (다시 찾기 결과 유지)
+    if(!viewSet || viewSet.has(i)) mk.addTo(st.map);
+  });
+  const ms=Object.values(st.markers).filter(mk=>st.map.hasLayer(mk));
+  const skipFit=opts.keepView || st._vpLocked;
+  if(ms.length && !skipFit){ st._suppressCtaUntil=Date.now()+900;
     const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
   setTimeout(()=>st.map.invalidateSize(),150);
 }
@@ -2531,7 +2554,7 @@ async function _focusPinOnly(mapId,i){
     const q=st.opt.geoq(st.items[i]);
     if(q){ try{ const r=await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({queries:[q],max_miss:1})})).json();
-      if(r.coords && r.coords[q]){ st.coords[i]=r.coords[q]; plotPins(mapId, st.items, st.coords, st.opt); }
+      if(r.coords && r.coords[q]){ st.coords[i]=r.coords[q]; plotPins(mapId, st.items, st.coords, st.opt, {keepView:true}); }
     }catch(e){} }
   }
   const st2=_ms[mapId], mk=st2.markers[i];

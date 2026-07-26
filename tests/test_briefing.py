@@ -147,8 +147,12 @@ def test_post_win_step_appears(uid, monkeypatch, tmp_path):
 
 
 def test_run_sends_and_moves_snapshot(uid, monkeypatch):
+    from datetime import date
+
     from realty_signal import telegram
 
+    # 월요일이면 변화 없어도 주간 발송이라 skip 검증이 깨진다 — 화요일로 고정
+    monkeypatch.setattr(briefing, "today_kst", lambda: date(2026, 7, 28))
     db.profile_set(uid, {**db.profile_get(uid), "telegram": {"chat_id": 55}})
     sent = []
     monkeypatch.setattr(telegram, "send_message", lambda cid, txt: sent.append((cid, txt)) or True)
