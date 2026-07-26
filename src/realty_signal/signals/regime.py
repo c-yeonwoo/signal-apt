@@ -68,12 +68,44 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
     for r in rows:
         r["막차"] = bool(r["급지"] in ("C", "D") and r["rise"] >= thr and beta < 0)
 
+    lo_avg = round(sum(lo) / len(lo), 2) if lo else None
+    hi_avg = round(sum(hi) / len(hi), 2) if hi else None
+    evidence = _evidence(rows, window, lo_avg, hi_avg)
+
     return {
         "phase": phase, "color": color, "endgame": endgame,
         "beta": round(beta, 2), "gap": round(gap, 2), "window": window,
         "desc": _desc(phase, beta, gap),
+        "evidence": evidence,
         "regions": {r["region"]: {"급지": r["급지"], "평단가": round(r["price"]),
                                   "rise": r["rise"], "막차": r["막차"]} for r in rows},
+    }
+
+
+def _evidence(rows: list, window: int, lo_avg: float | None, hi_avg: float | None) -> dict:
+    """끝물 판단 근거 — 하급지 주도 지역·상승폭 + 상급지 참고."""
+    drivers = sorted(
+        (r for r in rows if r["급지"] in ("C", "D")),
+        key=lambda r: (-int(r["막차"]), -r["rise"]),
+    )[:5]
+    anchors = sorted(
+        (r for r in rows if r["급지"] in ("A", "B")),
+        key=lambda r: -r["price"],
+    )[:3]
+    return {
+        "window": window,
+        "하급지평균": lo_avg,
+        "상급지평균": hi_avg,
+        "drivers": [
+            {"region": r["region"], "급지": r["급지"], "rise": r["rise"],
+             "평단가": round(r["price"]), "막차": r["막차"]}
+            for r in drivers
+        ],
+        "상급지참고": [
+            {"region": r["region"], "급지": r["급지"], "rise": r["rise"],
+             "평단가": round(r["price"])}
+            for r in anchors
+        ],
     }
 
 

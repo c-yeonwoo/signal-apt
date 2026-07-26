@@ -515,7 +515,10 @@ def _advisor_tool(name: str, args: dict) -> dict:
         return strength_api(region=(args.get("region") or "").strip() or None)
     if name == "get_regime":
         rg = _regime() or {}
-        return {k: rg.get(k) for k in ("phase", "beta", "gap", "color", "desc") if k in rg}
+        out = {k: rg.get(k) for k in ("phase", "beta", "gap", "color", "desc", "endgame") if k in rg}
+        if rg.get("evidence"):
+            out["evidence"] = rg["evidence"]
+        return out
     if name == "get_news":
         try:
             return news_summary(topic=args.get("topic"))
