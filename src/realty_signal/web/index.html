@@ -4,21 +4,23 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Signal APT</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Crect width='72' height='72' rx='18' fill='%232563eb'/%3E%3Crect x='16' y='42' width='11' height='18' rx='2' fill='white'/%3E%3Crect x='30' y='30' width='11' height='30' rx='2' fill='white'/%3E%3Crect x='44' y='20' width='11' height='40' rx='2' fill='white'/%3E%3Cpolyline points='11,46 30,36 46,26 60,14' fill='none' stroke='%2322c55e' stroke-width='4'/%3E%3Ccircle cx='60' cy='14' r='6' fill='%2322c55e'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Crect width='72' height='72' rx='18' fill='%231d4ed8'/%3E%3Crect x='16' y='42' width='11' height='18' rx='2' fill='white'/%3E%3Crect x='30' y='30' width='11' height='30' rx='2' fill='white'/%3E%3Crect x='44' y='20' width='11' height='40' rx='2' fill='white'/%3E%3Cpolyline points='11,46 30,36 46,26 60,14' fill='none' stroke='%2316a34a' stroke-width='4'/%3E%3Ccircle cx='60' cy='14' r='6' fill='%2316a34a'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
-    /* 표면·텍스트 */
-    --bg:#f8fafc; --panel:#ffffff; --line:#e2e8f0; --txt:#1e293b; --dim:#64748b;
-    /* 브랜드 — 로열블루 #2563eb (로고와 통일) */
-    --accent:#2563eb; --accent-ink:#ffffff; --accent-weak:rgba(37,99,235,.10); --ring:rgba(37,99,235,.22);
+    /* 표면·텍스트 — 차분한 잉크 톤 */
+    --bg:#f4f5f7; --panel:#ffffff; --line:#e6e8ec; --txt:#111827; --dim:#6b7280;
+    /* 브랜드 — 딥 블루 */
+    --accent:#1d4ed8; --accent-ink:#ffffff; --accent-weak:rgba(29,78,216,.08); --ring:rgba(29,78,216,.18);
     /* 시그널·의미 색 (단일 소스) */
-    --sig-strong:#22c55e; --sig-buy:#16a34a; --sig-watch:#d97706; --sig-neutral:#94a3b8; --sig-sell:#dc2626;
-    --quick:#ea580c; --success:#16a34a; --danger:#dc2626; --warn:#d97706;
+    --sig-strong:#15803d; --sig-buy:#166534; --sig-watch:#b45309; --sig-neutral:#6b7280; --sig-sell:#b91c1c;
+    --quick:#c2410c; --success:#15803d; --danger:#b91c1c; --warn:#b45309;
     /* 라운드·그림자 (스케일) */
-    --r-sm:8px; --r-md:12px; --r-lg:16px; --shadow:0 8px 24px rgba(2,32,71,.09);
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --shadow:0 1px 2px rgba(17,24,39,.04), 0 10px 28px rgba(17,24,39,.06);
+    --space:8px;
   }
   * { box-sizing:border-box; }
   /* 통일 컨트롤: 셀렉트·인풋·필터바 */
@@ -30,7 +32,8 @@
   .bigsearch { padding:12px 15px !important; border-radius:14px !important; font-size:14px; background:#fff;
     box-shadow:0 1px 2px rgba(2,32,71,.04); }
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
-  .page-head { font-size:22px; font-weight:800; margin:0 0 4px; }
+  .page-head { font-size:20px; font-weight:600; letter-spacing:-0.02em; margin:0 0 6px; color:var(--txt); }
+  .page-sub { color:var(--dim); font-size:13px; margin:0 0 18px; line-height:1.5; max-width:36em; }
   /* 가격대 듀얼 레인지 — 트랙 투명, 썸만 조작 */
   #laPriceFilter input[type=range]{ height:22px; }
   #laPriceFilter input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); border:2px solid #fff; box-shadow:0 1px 3px rgba(2,32,71,.35); cursor:pointer; pointer-events:auto; margin-top:0; }
@@ -48,11 +51,11 @@
   .mtabs .subtab:last-child { border-right:none; }
   .mtabs .subtab small { font-size:10px; font-weight:500; color:var(--dim); }
   .mtabs .subtab:hover { background:var(--accent-weak); }
-  .mtabs .subtab.on { background:var(--accent); color:#fff; }
-  .mtabs .subtab.on small { color:rgba(255,255,255,.85); }
+  .mtabs .subtab.on { background:var(--accent-weak); color:var(--accent); }
+  .mtabs .subtab.on small { color:var(--dim); }
   .mtabs .subtab.more { color:var(--dim); font-weight:600; background:var(--bg); }
   .mtabs .subtab.more.open { color:var(--txt); background:var(--accent-weak); }
-  .mtabs .subtab.more.on { background:var(--accent); color:#fff; }
+  .mtabs .subtab.more.on { background:var(--accent-weak); color:var(--accent); }
   .mtabs .subtab.more small { font-weight:500; }
   .mtabs .submore { display:flex; gap:0; border-left:1px dashed var(--line); }
   .mtabs .submore .subtab { font-size:14px; padding:9px 16px; font-weight:600; }
@@ -71,16 +74,17 @@
     background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; margin-bottom:14px; }
   .filterbar label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:7px; white-space:nowrap; }
   .filterbar .status { color:var(--dim); font-size:12.5px; margin-left:auto; }
-  body { margin:0; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
-         background:var(--bg); color:var(--txt); }
-  header { padding:15px 24px; border-bottom:1px solid var(--line); display:flex;
-           align-items:center; gap:14px; flex-wrap:wrap; min-height:64px; box-sizing:border-box;
-           background:var(--panel); box-shadow:0 3px 10px rgba(2,32,71,.10); position:relative; z-index:600; }
-  header h1 { font-size:18px; margin:0; white-space:nowrap; }
-  .tabs { display:flex; gap:5px; }
-  .tab { padding:9px 17px; border:1px solid var(--line); border-radius:9px; background:var(--panel);
-         color:var(--dim); cursor:pointer; font-size:14px; font-weight:600; }
-  .tab.on { color:#fff; background:var(--accent); border-color:var(--accent); }
+  body { margin:0; font:15px/1.6 "Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+         background:var(--bg); color:var(--txt); -webkit-font-smoothing:antialiased; }
+  header { padding:14px 28px; border-bottom:1px solid var(--line); display:flex;
+           align-items:center; gap:16px; flex-wrap:wrap; min-height:60px; box-sizing:border-box;
+           background:var(--panel); position:relative; z-index:600; }
+  header h1 { font-size:17px; margin:0; white-space:nowrap; font-weight:600; letter-spacing:-0.02em; }
+  .tabs { display:flex; gap:2px; }
+  .tab { padding:8px 14px; border:none; border-radius:8px; background:transparent;
+         color:var(--dim); cursor:pointer; font-size:13.5px; font-weight:500; }
+  .tab:hover { color:var(--txt); background:rgba(17,24,39,.04); }
+  .tab.on { color:var(--accent); background:var(--accent-weak); font-weight:600; }
   .date { color:var(--dim); font-size:12px; white-space:nowrap; }
   #refresh { padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
              background:#eef2f7; color:var(--accent); cursor:pointer; font-size:13px; white-space:nowrap; }
@@ -105,10 +109,13 @@
   .row:hover, .row.sel { background:#eef2f7; }
   .row .nm { font-weight:600; }
   .row .mn { width:100%; color:var(--dim); font-size:11px; }
-  .badge { font-size:11px; padding:2px 7px; border-radius:5px; font-weight:700; white-space:nowrap; }
-  .STRONG_BUY{background:#22c55e;color:#fff;} .BUY{background:#22c55e33;color:#16a34a;}
-  .WATCH{background:#ca8a0433;color:#d97706;} .NEUTRAL{background:#33415533;color:#94a3b8;}
-  .SELL_RISK{background:#ef444433;color:#dc2626;}
+  .badge { font-size:11px; padding:3px 8px; border-radius:6px; font-weight:600; white-space:nowrap;
+           border:1px solid transparent; letter-spacing:-0.01em; }
+  .STRONG_BUY{background:rgba(21,128,61,.10);color:#15803d;border-color:rgba(21,128,61,.22);}
+  .BUY{background:rgba(22,101,52,.08);color:#166534;border-color:rgba(22,101,52,.18);}
+  .WATCH{background:rgba(180,83,9,.08);color:#b45309;border-color:rgba(180,83,9,.18);}
+  .NEUTRAL{background:rgba(107,114,128,.08);color:#6b7280;border-color:rgba(107,114,128,.16);}
+  .SELL_RISK{background:rgba(185,28,28,.08);color:#b91c1c;border-color:rgba(185,28,28,.18);}
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
   #chart { flex:1; min-height:0; }
   .acard { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; cursor:pointer;
@@ -206,13 +213,13 @@
   /* 닉 챗봇 — 패널·입력창 크기 조절 핸들 */
   #advPanel::-webkit-resizer, #advInput::-webkit-resizer {
     background:linear-gradient(135deg,transparent 55%,var(--line) 55%); }
-  .ms-row { padding:10px 13px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .1s; }
-  .ms-row:hover { background:#eef2f7; }
-  .ms-row.sel { background:#eff6ff; box-shadow:inset 3px 0 0 var(--accent); }
-  .ms-row .r1 { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
-  .ms-row .nm { font-weight:700; font-size:13.5px; }
-  .ms-row .sub { color:var(--dim); font-size:11.5px; margin-top:2px; }
-  .ms-detail { padding:10px 13px 12px; background:#f1f5f9; border-bottom:1px solid var(--line); font-size:12px; line-height:1.6; }
+  .ms-row { padding:14px 16px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .12s; }
+  .ms-row:hover { background:rgba(17,24,39,.03); }
+  .ms-row.sel { background:var(--accent-weak); box-shadow:inset 2px 0 0 var(--accent); }
+  .ms-row .r1 { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .ms-row .nm { font-weight:600; font-size:14px; letter-spacing:-0.01em; }
+  .ms-row .sub { color:var(--dim); font-size:12px; margin-top:4px; line-height:1.45; }
+  .ms-detail { padding:12px 16px 14px; background:#fafafa; border-bottom:1px solid var(--line); font-size:12.5px; line-height:1.65; }
   .ms-detail .kv { display:flex; flex-wrap:wrap; gap:5px 14px; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#ffffff; color:#1e293b; box-shadow:0 4px 18px rgba(0,0,0,.5); }
   .leaflet-popup-content { font-size:12px; line-height:1.4; }
@@ -328,7 +335,7 @@
 
 <!-- 대시보드 홈 -->
 <div id="view-dashboard" style="display:none;padding:22px 20px;max-width:1080px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto">
-  <div id="dashHello" style="font-size:20px;font-weight:800;margin-bottom:2px"></div>
+  <div id="dashHello" style="font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px"></div>
   <div id="dashSub" style="color:var(--dim);font-size:13px;margin-bottom:18px">이번 주 ★ 변화 · BUY+ 예산 적합 · 동네 추적.</div>
   <div id="dashBody"></div>
 </div>
@@ -393,9 +400,8 @@
 <!-- 통합 매물(전체) 탭 -->
 <div id="view-all" style="display:none">
   <div style="padding:16px 20px 0">
-    <h2 class="page-head">통합 매물 — 기회도순</h2>
-    <p style="color:var(--dim);font-size:12px;margin:0 0 10px">경매·급매·청약을 한 곳에서. <b>기회도</b>(유형 교차 정규화)로 정렬. 유형·급지·매수신호로 좁혀보세요.</p>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+    <h2 class="page-head">매물</h2>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span class="chip" id="laBuyChip" onclick="toggleLaBuyOnly()" title="매수·적극매수 시그널 지역 매물만" style="font-size:12px;white-space:nowrap">매수신호만</span>
@@ -1288,7 +1294,8 @@ window.addEventListener('resize', () => {
   if(typeof uvChart!=='undefined' && uvChart) uvChart.resize();
   Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(e){} });
 });
-const badge = s => `<span class="badge ${s}">${s}</span>`;
+const SIG_KO={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도'};
+const badge = s => `<span class="badge ${s}">${SIG_KO[s]||s}</span>`;
 const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
 // 단지단위 급지(지역 내 평단가 순위) 1=최상급~5=하급
 function gradeBadge(g, top){
@@ -1447,9 +1454,9 @@ const _dashH=t=>`<div style="font-size:13px;font-weight:700;color:var(--dim);mar
 async function loadDashboard(){
   const body=document.getElementById('dashBody'); if(!body) return;
   const nm=(_userEmail||'').split('@')[0]||'회원';
-  document.getElementById('dashHello').textContent=`${nm}님, 이번 주 매수 타이밍`;
+  document.getElementById('dashHello').textContent=`${nm}님, 이번 주`;
   const sub=document.getElementById('dashSub');
-  if(sub) sub.textContent='★ 시그널 변화 · 예산 안 BUY+ · 관심 동네를 먼저 봅니다.';
+  if(sub) sub.textContent='관심 동네와 예산 안 기회를 먼저 봅니다.';
   // 관심 동네 — 상위 3, 나머지 접기
   const favR=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
   const favRows=favR.map(r=>(allSignals||[]).find(s=>s.region===r)).filter(Boolean);
@@ -2268,7 +2275,7 @@ function renderQuicksale(){
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
 const _LA_TYPES=['경매','급매','청약','재건축'];
-const _LA_COLOR={경매:'#8b5cf6', 급매:'#ea580c', 청약:'#0891b2', 재건축:'#16a34a'};
+const _LA_COLOR={경매:'#4f46e5', 급매:'#c2410c', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 let _laSort='opp', _laBuyOnly=false;          // 정렬 기준 + 매수신호(BUY+)만 필터
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
@@ -2278,18 +2285,20 @@ function initLaPriceFilter(){
   const box=document.getElementById('laPriceFilter');
   const priced=_laData.map(x=>x['총액']).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
   if(priced.length<2){ box.style.display='none'; _laPrice=null; return; }
-  const lo=priced[0];
+  const CAP=150000;                                              // 기본 상한 15억(만원)
   const p95=priced[Math.min(priced.length-1, Math.floor(priced.length*0.95))];
-  const hi=Math.max(p95, lo+10000);                              // 이상치 클램프(95%) — 슬라이더 밀도 확보
-  const step=Math.max(1000, Math.round((hi-lo)/100/1000)*1000);  // ~100틱, 1000만원 단위
-  _laPrice={lo,hi,min:lo,max:hi};
+  const lo=0;
+  const hi=Math.max(p95, CAP, 10000);                            // 트랙은 데이터·15억 중 큰 쪽
+  const step=Math.max(1000, Math.round(hi/100/1000)*1000);       // ~100틱, 1000만원 단위
+  const defMax=Math.min(CAP, hi);
+  _laPrice={lo,hi,min:lo,max:defMax};
   const mn=document.getElementById('laPriceMin'), mx=document.getElementById('laPriceMax');
   [mn,mx].forEach(r=>{ r.min=lo; r.max=hi; r.step=step; });
-  mn.value=lo; mx.value=hi;
+  mn.value=lo; mx.value=defMax;
   box.style.display='flex';
-  const nNull=_laData.length-priced.length, nAbove=priced.filter(v=>v>hi).length;
+  const nNull=_laData.length-priced.length;
   document.getElementById('laPriceNote').textContent =
-    [nNull?`가격 미상 ${nNull}건 항상 표시`:'', nAbove?`상한 끝=${(hi/10000).toFixed(0)}억 초과 포함`:''].filter(Boolean).join(' · ');
+    nNull?`미상 ${nNull}건 포함`:'';
   drawLaPrice();
 }
 function onLaPrice(){
@@ -2347,7 +2356,7 @@ function renderAllListings(){
     return opp(b)-opp(a);   // opp 기본
   });
   document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호·가격대 완화 / 급매는 급매 탭에서 스캔)';
-  const typeBadge=t=>`<span class="pill" style="background:${_LA_COLOR[t]};color:#fff;border-color:${_LA_COLOR[t]};font-size:10px">${t}</span>`;
+  const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
       right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
@@ -5248,11 +5257,11 @@ async function startApp(needOnboard){
 </footer>
 
 <!-- AI 자문 챗봇 (근거기반 tool-use) -->
-<button id="advFab" onclick="advToggle()" title="닉 — 우리 데이터 근거로 답하는 부동산 자문"
-  style="position:fixed;right:22px;bottom:22px;z-index:1350;background:var(--accent);color:#fff;border:none;border-radius:26px;padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 6px 20px rgba(37,99,235,.4);cursor:pointer">🦊 닉</button>
-<div id="advPanel" style="display:none;position:fixed;right:22px;bottom:22px;z-index:1400;width:390px;min-width:300px;max-width:calc(100vw - 16px);height:600px;min-height:360px;max-height:calc(100vh - 24px);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(2,32,71,.28);flex-direction:column;overflow:auto;resize:both">
-  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--accent-weak);flex:0 0 auto;cursor:default">
-    <span style="font-weight:800">🦊 닉 <span style="font-weight:400;font-size:11px;color:var(--dim)">부동산 자문</span></span>
+<button id="advFab" onclick="advToggle()" title="닉 — 데이터 근거 부동산 자문"
+  style="position:fixed;right:22px;bottom:22px;z-index:1350;background:var(--txt);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-size:13px;font-weight:600;letter-spacing:0.02em;box-shadow:var(--shadow);cursor:pointer">닉</button>
+<div id="advPanel" style="display:none;position:fixed;right:22px;bottom:22px;z-index:1400;width:390px;min-width:300px;max-width:calc(100vw - 16px);height:600px;min-height:360px;max-height:calc(100vh - 24px);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);flex-direction:column;overflow:auto;resize:both">
+  <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex:0 0 auto;cursor:default">
+    <span style="font-weight:600;letter-spacing:-0.01em">닉 <span style="font-weight:400;font-size:12px;color:var(--dim)">부동산 자문</span></span>
     <span id="advAsof" style="font-size:11px;color:var(--dim)"></span>
     <span id="advUsage" style="font-size:11px;color:var(--dim)"></span>
     <span onclick="advClearMemory()" title="대화 기억 초기화" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:11px;padding:2px 6px">기억초기화</span>
@@ -5313,10 +5322,10 @@ function advRender(){
     const bits=[];
     if(p['가용자본']) bits.push('예산');
     if(p['거주지']) bits.push(p['거주지']);
-    const hint=bits.length?`프로필(${bits.join('·')})을 참고해 답합니다. `:'가용자본을 프로필에 넣으면 예산에 맞춰 답합니다. ';
-    b.innerHTML=`<div style="color:var(--dim)">안녕하세요, <b>닉</b>이에요. ${hint}수집된 <b>시그널·실거래·급매·경매·청약·재건축·공시·뉴스</b> 데이터를 근거로 답합니다. 무엇이든 물어보세요.</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
-      ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','내 예산으로 볼만한 지역 알려줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)">${q}</span>`).join('')}</div>`;
+    const hint=bits.length?`프로필(${bits.join('·')})을 참고합니다.`:'예산은 프로필에 넣으면 반영됩니다.';
+    b.innerHTML=`<div style="color:var(--dim);line-height:1.55;margin-bottom:4px"><b style="color:var(--txt)">닉</b> · ${hint}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','내 예산으로 볼만한 지역 알려줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">${q}</span>`).join('')}</div>`;
     return;
   }
   const TOOLKR={list_signal_regions:'지역 시그널',get_region_signal:'지역 분석',get_complex:'단지 실거래',get_backtest:'적중률',get_regime:'경기 국면',get_news:'뉴스',get_freshness:'신선도',get_policy:'정책',get_regulation:'규제지역',get_presale:'청약',get_redev:'재건축',get_listings:'매물'};
