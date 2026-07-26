@@ -414,25 +414,23 @@ def _backtest():
 
 _ADV_RANK = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4}
 
-# 규제지역(국토부 지정, 참고용·시군구 근사) — 프론트 지도 오버레이와 공용 정본. 지정/해제는 수시 변경.
-_REGULATION_ASOF = "2025 기준(참고용·국토부 확인)"
-_REGULATION = {
-    "강남구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
-    "서초구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
-    "송파구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
-    "용산구": ["투기과열지구", "조정대상지역", "토지거래허가구역"],
-    "양천구": ["토지거래허가구역"], "영등포구": ["토지거래허가구역"], "성동구": ["토지거래허가구역"],
-}
+# 규제지역 정본은 `regulation` 모듈(기준일·근거 포함). 여기서는 지도·자문용으로 펼치기만 한다.
+from realty_signal import regulation as _reg  # noqa: E402
+
+_REGULATION_ASOF = f"{_reg.AS_OF} 기준 (국토부 지정 · 시군구 근사)"
 
 
-def _regulation_of(region: str) -> list[str]:
-    r = (region or "").strip()
-    return _REGULATION.get(r) or next((v for k, v in _REGULATION.items() if k in r or r in k), [])
+def _regulation_of(region: str, sido: str | None = None) -> list[str]:
+    return _reg.designations(region, sido or _sido_of(region))
 
 
 def regulation_api():
-    """규제지역 지정 현황(참고용). 프론트 지도 오버레이·챗봇 공용 정본."""
-    return {"asof": _REGULATION_ASOF, "map": _REGULATION}
+    """규제지역 지정 현황. 프론트 지도 오버레이·챗봇 공용 정본."""
+    return {
+        "asof": _REGULATION_ASOF,
+        "map": {r: list(_reg.DESIGNATION_TAGS) for r in _reg.regulated_regions()},
+        "notes": _reg.PARTIAL_NOTE,
+    }
 
 
 
@@ -440,9 +438,9 @@ def _adv_region_row(r: dict) -> dict:
     """자문 tool 용 지역 시그널 축약(+규제지역)."""
     out = {k: r.get(k) for k in ("region", "signal", "급지", "전세수급", "매수우위지수",
            "매매모멘텀", "공급압력", "저평가도", "수급출처", "근거", "해설") if r.get(k) is not None}
-    reg = _regulation_of(r.get("region") or "")
-    if reg:
-        out["규제지역"] = reg
+    tags = _regulation_of(r.get("region") or "")
+    if tags:
+        out["규제지역"] = tags
         out["규제기준"] = _REGULATION_ASOF
     return out
 
@@ -536,9 +534,13 @@ def _advisor_tool(name: str, args: dict) -> dict:
     if name == "get_regulation":
         region = (args.get("region") or "").strip()
         if region:
-            reg = _regulation_of(region)
-            return {"region": region, "규제지역": reg or "지정 없음(참고용)", "기준": _REGULATION_ASOF}
-        return {"규제지역_전체": _REGULATION, "기준": _REGULATION_ASOF}
+            tags = _regulation_of(region)
+            c = _reg.classify(region, _sido_of(region))
+            return {"region": region, "규제지역": tags or "지정 없음(참고용)",
+                    "수도권": c["수도권"], "LTV": _reg.LTV[c["규제지역"]],
+                    "대출한도": "15억↓ 6억 / 15~25억 4억 / 25억↑ 2억" if c["수도권"] else "제한 없음",
+                    "기준": _REGULATION_ASOF}
+        return {**regulation_api(), "기준": _REGULATION_ASOF}
     if name == "get_presale":
         region = (args.get("region") or "").strip()
         try:
@@ -858,9 +860,33 @@ def _max_purchase(capital: float, ltv: float, income: float | None, rate: float,
     return buying_power.max_purchase(p)
 
 
+def _sido_of(region: str | None) -> str | None:
+    """지역명 → 시도. 동명이구(중구·강서구)의 규제지역 오판을 막는다."""
+    if not region:
+        return None
+    from realty_signal import regulation as reg
+    return reg.sido_hint(region) or _SIDO.get((_code_of(region) or "")[:2])
+
+
+def _default_region(request: Request, profile: dict) -> str | None:
+    """매수 예정 지역 기본값 — 지난 확정 시 지역 > ★관심지역 첫 번째."""
+    saved = ((profile.get("매수력") or {}).get("가정") or {}).get("지역")
+    if saved:
+        return saved
+    uid = _uid(request)
+    if uid:
+        favs = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+        if favs:
+            return favs[0]
+    return None
+
+
 def buying_power_statement(request: Request, **override):
     """매수력 확정서 — 프로필 기본값 + 화면 입력 override."""
     profile = db.profile_get(_uid(request)) or {}
+    if not override.get("region"):
+        override["region"] = _default_region(request, profile)
+    override.setdefault("sido", _sido_of(override.get("region")))
     p = buying_power.params_from_profile(profile, **override)
     if p.capital <= 0:
         return {"ready": False, "reason": "no_capital",
@@ -877,10 +903,13 @@ def buying_power_confirm(request: Request, data: dict):
     if not uid:
         return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
     profile = db.profile_get(uid) or {}
-    p = buying_power.params_from_profile(profile, **{
-        k: data.get(k) for k in ("capital", "income", "existing_debt_annual", "homes",
-                                 "first_time", "regulated", "ltv", "rate", "years")
-    })
+    kw = {k: data.get(k) for k in ("capital", "income", "existing_debt_annual", "homes",
+                                   "first_time", "region", "regulated", "dispose",
+                                   "ltv", "rate", "rate_type", "years")}
+    if not kw.get("region"):
+        kw["region"] = _default_region(request, profile)
+    kw["sido"] = _sido_of(kw.get("region"))
+    p = buying_power.params_from_profile(profile, **kw)
     if p.capital <= 0:
         return JSONResponse({"ok": False, "error": "가용자본을 입력해 주세요."}, status_code=400)
     from datetime import date
@@ -894,6 +923,8 @@ def buying_power_confirm(request: Request, data: dict):
     profile["기대출연원리금"] = round(p.existing_debt_annual or 0)
     profile["주택수"] = int(p.homes or 0)
     profile["생애최초"] = 1 if p.first_time else 0
+    if p.region:
+        profile["매수지역"] = p.region
     db.profile_set(uid, profile)
     return {"ok": True, "매수력": st}
 

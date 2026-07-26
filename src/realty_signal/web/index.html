@@ -954,13 +954,18 @@
     <label>기대출 연원리금(만원)<br><input id="bp_debt" type="number" min="0" class="ctrl" style="width:100%" placeholder="0" oninput="bpPreview()"></label>
     <label>주택 보유<br><select id="bp_homes" class="ctrl" style="width:100%" onchange="bpPreview()">
       <option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
+    <label>매수 예정 지역<br><input id="bp_region" list="bp_regions" class="ctrl" style="width:100%" placeholder="예: 강남구 / 성남시 분당구" oninput="bpPreview()">
+      <datalist id="bp_regions"></datalist></label>
+    <label>금리유형<br><select id="bp_ratetype" class="ctrl" style="width:100%" onchange="bpPreview()">
+      <option value="혼합">혼합형 (5년 고정 후 변동)</option><option value="주기">주기형 (5년 주기)</option>
+      <option value="변동">변동형</option><option value="고정">순수 고정</option></select></label>
     <label>희망 LTV(%)<br><input id="bp_ltv" type="number" min="0" max="100" class="ctrl" style="width:100%" placeholder="제도 상한" oninput="bpPreview()"></label>
     <label>금리(%) · 만기(년)<br><span style="display:flex;gap:6px">
       <input id="bp_rate" type="number" step="0.1" value="4" class="ctrl" style="width:50%" oninput="bpPreview()">
       <input id="bp_years" type="number" value="30" class="ctrl" style="width:50%" oninput="bpPreview()"></span></label>
-    <label style="grid-column:1/-1;font-size:12px;color:var(--dim);display:flex;gap:16px;align-items:center">
-      <span><input type="checkbox" id="bp_first" onchange="bpPreview()" style="vertical-align:middle"> 생애최초 (LTV 80%·취득세 감면)</span>
-      <span><input type="checkbox" id="bp_reg" onchange="bpPreview()" style="vertical-align:middle"> 규제지역</span></label>
+    <label style="grid-column:1/-1;font-size:12px;color:var(--dim);display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <span><input type="checkbox" id="bp_first" onchange="bpPreview()" style="vertical-align:middle"> 생애최초 (규제지역 LTV 70%·비규제 80%·취득세 감면)</span>
+      <span id="bp_disposeWrap" style="display:none"><input type="checkbox" id="bp_dispose" checked onchange="bpPreview()" style="vertical-align:middle"> 6개월 내 기존 주택 처분·전입 약정</span></label>
   </div>
   <div id="bpPreview" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px;font-size:13px;color:var(--dim)">가용자본을 입력하세요.</div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
@@ -1461,6 +1466,19 @@ async function loadDashboard(){
 }
 // ===== 매수력 확정서 — 최대매수가·대출·월상환·필요현금을 하나로 =====
 let _bp=null;
+// 규제 배지 — 지역이 곧 LTV·절대한도·심사금리라서 숫자보다 먼저 보여준다
+function _bpRegBadge(r){
+  if(!r) return '';
+  const pill=(t,c)=>`<span style="display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;background:${c};color:#fff;margin-right:4px">${t}</span>`;
+  const bits=[];
+  if(r['규제지역']) bits.push(pill('규제지역','#dc2626'));
+  else if(r['수도권']) bits.push(pill('수도권','#ea580c'));
+  else bits.push(pill('비규제','#16a34a'));
+  bits.push(`<span style="font-size:11px">${r['지역']||'지역 미지정'} · ${r['자격설명']}`
+    +(r['절대한도']?` · 대출한도 ${_eok(r['절대한도'])}`:'')
+    +` · 심사금리 ${(r['심사금리']*100).toFixed(2)}% · 만기 ${r['적용만기']}년</span>`);
+  return `<div style="margin-bottom:6px">${bits.join('')}</div>`;
+}
 async function _loadBuyingPower(){
   const wrap=document.getElementById('dashPowerWrap'); if(!wrap) return;
   let d; try{ d=await (await fetch('/api/buying-power')).json(); }catch(e){ wrap.innerHTML=''; return; }
@@ -1480,7 +1498,8 @@ async function _loadBuyingPower(){
   const cash=`<div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6">
       필요현금 <b style="color:var(--txt)">${_eok(d['필요현금'])}</b> <span style="font-size:11px">(자기자본 ${_eok(g['자기자본'])})</span>
       <br><span style="font-size:11px">이 중 집값 외 비용 ${((c['취득세']||0)+(c['중개비']||0)+(c['이사비']||0)+(c['수리비']||0)).toLocaleString()}만 — 취득세 ${(c['취득세']||0).toLocaleString()} · 중개 ${(c['중개비']||0).toLocaleString()} · 이사 ${(c['이사비']||0).toLocaleString()}</span>
-      <br><span style="font-size:11px">한도 제약: <b style="color:${d['제약']==='DSR'?'#ea580c':'var(--txt)'}">${d['제약']}</b> · ${g['주택수']===0?'무주택':(g['주택수']===1?'1주택':'다주택')}${g['생애최초']?' · 생애최초':''}${g['규제지역']?' · 규제지역':''} · 금리 ${(g['금리']*100).toFixed(1)}%(스트레스 +${(g['스트레스가산']*100).toFixed(1)}%p) · ${g['만기']}년</span></div>`;
+      <br><span style="font-size:11px">한도 제약: <b style="color:${d['제약']==='DSR'||d['제약']==='한도'?'#ea580c':'var(--txt)'}">${d['제약']}</b> · ${g['주택수']===0?'무주택':(g['주택수']===1?'1주택':'다주택')}${g['생애최초']?' · 생애최초':''} · 금리 ${(g['금리']*100).toFixed(1)}%(스트레스 +${(g['스트레스가산']*100).toFixed(2)}%p) · ${g['만기']}년</span></div>
+      ${_bpRegBadge(d['규제'])}`;
   const safe=d['안정매수가']?`<div style="font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--dim)">
       월 상환을 소득의 30% 이내로 두면 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만) — 무리 없는 선</div>`:'';
   const stale=confirmed && Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01);
@@ -1505,18 +1524,27 @@ function openBuyingPower(){
   set('bp_debt', g['기대출연원리금']??p['기대출연원리금']??'');
   document.getElementById('bp_homes').value=String(g['주택수']??p['주택수']??0);
   document.getElementById('bp_first').checked=!!(g['생애최초']??p['생애최초']);
-  document.getElementById('bp_reg').checked=!!g['규제지역'];
+  document.getElementById('bp_dispose').checked=g['처분약정']!==false;
+  set('bp_region', g['지역']||p['매수지역']||'');
+  set('bp_ratetype', g['금리유형']||'혼합');
   set('bp_rate', g['금리']?(g['금리']*100).toFixed(1):'4');
   set('bp_years', g['만기']||30);
+  const dl=document.getElementById('bp_regions');
+  if(dl && !dl.children.length && window.allSignals)
+    dl.innerHTML=(allSignals||[]).map(s=>`<option value="${s.region}">`).join('');
   document.getElementById('bpDlg').showModal();
   bpPreview();
 }
 function _bpParams(){
   const n=id=>{const v=document.getElementById(id).value; return v===''?null:+v;};
+  const homes=+document.getElementById('bp_homes').value;
+  document.getElementById('bp_disposeWrap').style.display = homes===1?'':'none';
   return {capital:n('bp_capital'), income:n('bp_income'), existing_debt_annual:n('bp_debt')||0,
-    homes:+document.getElementById('bp_homes').value,
+    homes,
     first_time:document.getElementById('bp_first').checked,
-    regulated:document.getElementById('bp_reg').checked,
+    region:document.getElementById('bp_region').value.trim()||null,
+    dispose:document.getElementById('bp_dispose').checked,
+    rate_type:document.getElementById('bp_ratetype').value,
     ltv:n('bp_ltv')!=null?n('bp_ltv')/100:null,
     rate:(n('bp_rate')??4)/100, years:n('bp_years')||30};
 }
@@ -1532,9 +1560,11 @@ function bpPreview(){
       if(!d.ready){ el.textContent=d.message||'계산할 수 없습니다.'; return; }
       const c=d['비용']||{};
       el.innerHTML=`<div style="color:var(--txt);font-size:15px;font-weight:700;margin-bottom:6px">${_eok(d['최대매수가'])}까지 · 월 ${(d['월상환']||0).toLocaleString()}만</div>
+        ${_bpRegBadge(d['규제'])}
         대출 ${_eok(d['대출'])} (LTV ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%)${d['DSR']!=null?` · DSR ${d['DSR']}%`:''} · 제약 ${d['제약']}<br>
         필요현금 ${_eok(d['필요현금'])} — 취득세 ${(c['취득세']||0).toLocaleString()}만 · 중개 ${(c['중개비']||0).toLocaleString()}만 · 이사 ${(c['이사비']||0).toLocaleString()}만
-        ${d['안정매수가']?`<br>소득 30% 기준 안정선 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만)`:''}`;
+        ${d['안정매수가']?`<br>소득 30% 기준 안정선 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만)`:''}
+        ${(d['안내']||[]).length?`<ul style="margin:8px 0 0;padding-left:16px;font-size:11px;line-height:1.7">${d['안내'].map(n=>`<li>${n}</li>`).join('')}</ul>`:''}`;
     }catch(e){ el.textContent='계산에 실패했습니다.'; }
   }, 250);
 }
@@ -1573,7 +1603,7 @@ async function _loadShortlist(){
         <span style="margin-left:auto;font-size:13px"><b>${_eok(c['예상가'])}</b> <span style="color:var(--dim);font-size:11px">${c['평단가']}만/평 · 적합 ${c['점수']}</span></span>
       </div>
       <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.5">${c['근거']}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:4px">필요현금 ${_eok(z['필요현금'])} · 대출 ${_eok(z['대출'])} · 월 ${(z['월상환']||0).toLocaleString()}만${z['부족']?` · <span style="color:#ea580c">${_eok(z['부족'])} 부족</span>`:''}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">필요현금 ${_eok(z['필요현금'])} · 대출 ${_eok(z['대출'])} · 월 ${(z['월상환']||0).toLocaleString()}만${z['부족']?` · <span style="color:#ea580c">${_eok(z['부족'])} 부족</span>`:''}${c['규제지역']?` · <span style="color:#dc2626">규제지역</span>(${z['제약']} 제약)`:''}</div>
       <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">
         <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${c['단지'].replace(/'/g,'')}','${c['region']}')">단지 상세</span>
         <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openNbhd('${c['region']}')">동네 리포트</span>
@@ -2408,27 +2438,39 @@ function _mapTile(){
 }
 // ===== 지도 오버레이(급지색 · 규제지역) — 모든 지도 공용, 배타적 선택 =====
 // 규제지역: 국토부 지정(참고용, 시군구 근사). 토허제는 실제 동/구역 단위 — 여기선 구 단위 표기.
-let _REGULATION = { asof:'2025 기준(참고용·국토부 확인)', map:{
-  '강남구':['투기과열지구','조정대상지역','토지거래허가구역'],
-  '서초구':['투기과열지구','조정대상지역','토지거래허가구역'],
-  '송파구':['투기과열지구','조정대상지역','토지거래허가구역'],
-  '용산구':['투기과열지구','조정대상지역','토지거래허가구역'],
-  '양천구':['토지거래허가구역'], '영등포구':['토지거래허가구역'], '성동구':['토지거래허가구역'],
-}};
+// 폴백: 서울 25개 구 + 경기 15곳(10·15 대책 12곳 + 2026.7.1 동탄·기흥·구리) 삼중 규제.
+let _REGULATION = (()=>{ const T=['투기과열지구','조정대상지역','토지거래허가구역'], m={};
+  ['종로구','중구','용산구','성동구','광진구','동대문구','중랑구','성북구','강북구','도봉구','노원구','은평구',
+   '서대문구','마포구','양천구','강서구','구로구','금천구','영등포구','동작구','관악구','서초구','강남구','송파구','강동구',
+   '과천시','광명시','하남시','의왕시','구리시','수원시 장안구','수원시 팔달구','수원시 영통구',
+   '성남시 수정구','성남시 중원구','성남시 분당구','안양시 동안구','용인시 수지구','용인시 기흥구','화성시 동탄구']
+    .forEach(r=>m[r]=T);
+  return { asof:'2026-07-01 기준 (국토부 지정 · 시군구 근사)', map:m, notes:{'화성시':'동탄구만 규제 (2026.7.1~)'} };
+})();
+// 경계 데이터는 '성남시분당구'처럼 공백이 없어 정규화 키로 찾는다. 서울 중구/인천 중구는 sido 로 가른다.
+function _regTags(name, sido){
+  const key=_onorm(name);
+  if(key==='중구' && sido && sido!=='11') return null;
+  const m=_REGULATION.map||{};
+  for(const k in m) if(_onorm(k)===key) return m[k];
+  return null;
+}
 const _REG_COLOR={투기과열지구:'#dc2626', 조정대상지역:'#ea580c', 토지거래허가구역:'#7c3aed'};
 function _regPrimary(t){ for(const k of ['투기과열지구','조정대상지역','토지거래허가구역']) if(t.includes(k)) return k; return null; }
 const _onorm=s=>(s||'').replace(/\s/g,'');
 function _gradeLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s['급지']) m[_onorm(s.region)]=s['급지']; }); return m; }
 async function _ensureGeo(){ if(!_uvGeo){ try{ _uvGeo=await (await fetch('/sudo_gu.geojson')).json(); }catch(e){} } return _uvGeo; }
-function _choStyle(mode, name, gl){
+function _choStyle(mode, name, gl, sido){
   if(mode==='grade'){ const g=gl[_onorm(name)], gd=g&&_REGION_GRADE[g];
     return {color:'#fff',weight:1,fillColor:gd?gd.col:'#e2e8f0',fillOpacity:gd?0.5:0.12}; }
-  const t=_REGULATION.map[name], c=t?_REG_COLOR[_regPrimary(t)]:null;
-  return {color:'#fff',weight:1,fillColor:c||'#e2e8f0',fillOpacity:c?0.5:0.08};
+  const t=_regTags(name,sido), c=t?_REG_COLOR[_regPrimary(t)]:null;
+  const note=(_REGULATION.notes||{})[name];
+  return {color:'#fff',weight:1,fillColor:c||(note?'#fbbf24':'#e2e8f0'),fillOpacity:c?0.5:(note?0.35:0.08)};
 }
-function _choTip(mode, name, gl){
+function _choTip(mode, name, gl, sido){
   if(mode==='grade'){ const g=gl[_onorm(name)]; return name+(g&&_REGION_GRADE[g]?' · '+_REGION_GRADE[g].label:''); }
-  const t=_REGULATION.map[name]; return name+(t?' · '+t.join(', '):' · 규제 없음');
+  const t=_regTags(name,sido), note=(_REGULATION.notes||{})[name];
+  return name+(t?' · '+t.join(', '):(note?' · '+note:' · 규제 없음'));
 }
 async function setOverlay(map, mode, onClick){
   if(!map) return;
@@ -2438,8 +2480,8 @@ async function setOverlay(map, mode, onClick){
   await _ensureGeo(); if(!_uvGeo) return;
   const gl=_gradeLut();
   map._ovLayer=L.geoJSON(_uvGeo,{ pane:'tilePane',
-    style:f=>_choStyle(mode,f.properties.name,gl),
-    onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl),{sticky:true});
+    style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido),
+    onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido),{sticky:true});
       if(onClick) l.on('click',()=>onClick(f.properties.name)); }
   }).addTo(map);
 }

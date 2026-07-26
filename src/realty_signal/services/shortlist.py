@@ -196,7 +196,11 @@ def build(profile: dict, budget: float, *, limit: int = 3,
     scored.sort(key=lambda c: (c["점수"], c["예상가"]), reverse=True)
     top = _diversify(scored, limit)
     for c in top:
-        c["자금"] = buying_power.for_price(c["예상가"], params)
+        # 규제지역이면 LTV·절대한도·스트레스금리가 달라진다 — 후보 지역 기준으로 다시 본다.
+        rp = buying_power.params_for_region(params, c["region"],
+                                            app_api._sido_of(c["region"]))
+        c["자금"] = buying_power.for_price(c["예상가"], rp)
+        c["규제지역"] = bool(rp.regulated)
         c["근거"] = _reason(c)
 
     return {

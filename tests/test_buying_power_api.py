@@ -69,6 +69,40 @@ def test_confirmed_assumptions_survive_reload(client):
     assert d["확정"] == d["최대매수가"]
 
 
+def test_region_query_applies_current_regulation(client):
+    seoul = client.get("/api/buying-power",
+                       params={"capital": 80000, "income": 15000, "first_time": True,
+                               "region": "강남구"}).json()
+    assert seoul["규제"]["규제지역"] is True
+    assert seoul["규제"]["절대한도"] == 60_000        # 시가 15억 이하 → 6억
+    assert seoul["규제"]["적용만기"] == 30
+    assert seoul["LTV상한"] == 0.70
+    local = client.get("/api/buying-power",
+                       params={"capital": 80000, "income": 15000, "first_time": True,
+                               "region": "해운대구"}).json()
+    assert local["규제"]["규제지역"] is False
+    assert local["LTV상한"] == 0.80
+    assert local["최대매수가"] > seoul["최대매수가"]
+
+
+def test_confirm_remembers_region(client):
+    client.post("/api/buying-power/confirm",
+                json={"capital": 50000, "income": 9000, "region": "성남시 분당구"})
+    d = client.get("/api/buying-power").json()
+    assert d["가정"]["지역"] == "성남시 분당구"
+    assert d["규제"]["규제지역"] is True
+    assert d["확정"] == d["최대매수가"]
+
+
+def test_regulation_api_lists_current_designations(client):
+    d = client.get("/api/regulation").json()
+    assert d["asof"].startswith("2026-07-01")
+    assert len(d["map"]) == 40                       # 서울 25 + 경기 15
+    assert "투기과열지구" in d["map"]["강남구"]
+    assert "화성시 동탄구" in d["map"]
+    assert "화성시" in d["notes"]
+
+
 def test_confirm_rejects_zero_capital(client):
     r = client.post("/api/buying-power/confirm", json={"capital": 0})
     assert r.status_code == 400
