@@ -70,7 +70,8 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
 
     lo_avg = round(sum(lo) / len(lo), 2) if lo else None
     hi_avg = round(sum(hi) / len(hi), 2) if hi else None
-    evidence = _evidence(rows, window, lo_avg, hi_avg)
+    # 끝물·주의(β<0)일 때만 — Nick이 정상 국면에서 drivers를 끝물로 오해하지 않게
+    evidence = _evidence(rows, window, lo_avg, hi_avg) if beta < 0 else {}
 
     return {
         "phase": phase, "color": color, "endgame": endgame,
@@ -88,6 +89,7 @@ def _evidence(rows: list, window: int, lo_avg: float | None, hi_avg: float | Non
         (r for r in rows if r["급지"] in ("C", "D")),
         key=lambda r: (-int(r["막차"]), -r["rise"]),
     )[:5]
+    # 상급지 기준점 = 평단가 최상위(진짜 A급). rise 대비는 drivers와 나란히 보면 됨.
     anchors = sorted(
         (r for r in rows if r["급지"] in ("A", "B")),
         key=lambda r: -r["price"],
