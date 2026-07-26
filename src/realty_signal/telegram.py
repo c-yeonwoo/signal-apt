@@ -142,7 +142,7 @@ def poll_updates(limit: int = 50) -> dict:
         _attach(int(uid), chat_id, msg)
         db.kv_set(f"tg_link:{code}", None)
         stats["linked"] += 1
-        send_message(chat_id, "연결됐습니다. 이제 매일 아침 Nick이 후보 변화만 골라 보내드릴게요.\n"
+        send_message(chat_id, "연결됐습니다. 이제 매일 아침 닉이 후보 변화만 골라 보내드릴게요.\n"
                               "끄려면 /stop 을 보내세요.")
     return stats
 

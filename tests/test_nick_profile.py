@@ -7,7 +7,7 @@ from realty_signal import advisor, db
 
 def test_build_system_empty():
     s = advisor.build_system({}, {})
-    assert "Nick" in s
+    assert "닉" in s
     assert "사용자 프로필(답변 시 참고)" not in s
 
 
