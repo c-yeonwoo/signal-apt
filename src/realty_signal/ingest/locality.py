@@ -214,19 +214,25 @@ def _interpret_locality(r: dict) -> str:
     if strong[1] >= 60 and weak[1] <= 40:
         lead += f" (단, {weak[0]}은(는) 약함)"
 
+    # 가격 위치는 '적정가의 36%' 같은 비율 대신 방향을 말로 먼저 준다.
+    # 처음 보는 사람에게 "저평가 −47%" 류의 이중부정은 읽히지 않는다.
     uv = r["저평가도"]
-    ratio = round(r["price"] / r["적정가"] * 100) if r["적정가"] else 100
-    if uv >= 25:
-        tail = f"입지 대비 평단가가 적정가의 {ratio}% 수준으로 **크게 저평가** — 가성비 후보"
+    if uv >= 100:
+        tail = "입지 점수만으로는 설명이 안 될 만큼 쌉니다 — 개발제한·수요 부족 같은 다른 이유가 있는지 꼭 확인하세요"
+    elif uv >= 25:
+        tail = "**입지에 비해 많이 싼 편** — 같은 조건이면 가성비 후보입니다"
     elif uv >= 8:
-        tail = f"입지 대비 {ratio}% 수준으로 다소 저평가된 편"
+        tail = "입지에 비해 조금 싼 편입니다"
+    elif uv <= -100:
+        tail = ("교통·학군·환경만으로는 설명이 안 되는 가격대입니다 — "
+                "브랜드·재건축 기대 같은 프리미엄이 크게 붙은 곳이에요")
     elif uv <= -25:
-        tail = f"입지 대비 평단가가 적정가의 {ratio}% 수준으로 **고평가** — 프리미엄이 충분히 반영됨"
+        tail = "**입지에 비해 많이 비싼 편** — 프리미엄이 이미 가격에 들어가 있습니다"
     elif uv <= -8:
-        tail = f"입지 대비 {ratio}% 수준으로 다소 고평가된 편"
+        tail = "입지에 비해 조금 비싼 편입니다"
     else:
-        tail = "입지에 가격이 대체로 부합(적정)"
-    return f"{lead}. {tail}입니다."
+        tail = "입지에 걸맞은 시세입니다"
+    return f"{lead}. {tail}."
 
 
 def build_localities(codes: dict, ym_list: list[str], limit: int | None = None) -> list[dict]:
