@@ -66,17 +66,7 @@ def _snapshot_signals(asof: str) -> list[dict]:
         cur = _signal_map()
     except Exception:
         return []
-    prev = snap.load().get("signals") or {}
-    changes = []
-    if prev:  # 최초 1회는 스냅샷만 저장(가짜 변동 방지)
-        for region, sig in cur.items():
-            old = prev.get(region)
-            if old and old != sig:
-                changes.append({"region": region, "from": old, "to": sig, "date": asof})
-    if changes:
-        log_ = db.kv_get("signal_changes") or []
-        db.kv_set("signal_changes", (changes + log_)[:300])  # 최신순, 최대 300건
-    snap.save(cur, asof)
+    changes = snap.advance(cur, asof)
     try:
         from realty_signal.brain import outcomes
         recs = json.loads(_signals_df().to_json(orient="records", force_ascii=False))
@@ -259,6 +249,7 @@ from realty_signal.routes.redev import router as redev_router  # noqa: E402
 from realty_signal.routes.strategy import router as strategy_router  # noqa: E402
 from realty_signal.routes.geo import router as geo_router  # noqa: E402
 from realty_signal.routes.brain import router as brain_router  # noqa: E402
+from realty_signal.routes.home import router as home_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(alerts_router)
@@ -271,6 +262,7 @@ app.include_router(redev_router)
 app.include_router(strategy_router)
 app.include_router(geo_router)
 app.include_router(brain_router)
+app.include_router(home_router)
 
 
 def _signal_config() -> SignalConfig:
