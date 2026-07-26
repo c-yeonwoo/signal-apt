@@ -51,6 +51,12 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
  발송 성공 후에만 이동(실패 시 변화 유실 방지). 중복 방지는 `briefing_run:{날짜}`.
  연결은 웹훅 없이 getUpdates 폴링 — 앱에서 일회용 코드 발급 → `t.me/<bot>?start=<code>` → `/start` 매칭.
  `TELEGRAM_BOT_TOKEN`·`BRIEFING_HOUR`(KST, 기본 8). 서버 `_briefing_loop` 가 15분마다 폴링·발송 점검.
+- 임장 코스(`services/imjang.py`): 후보 3곳 → 도착·출발 시각이 박힌 반나절 일정.
+ 순서는 거주지 중심에서 최근접 이웃, 구간 소요는 ODsay 30일 캐시(1.2km 미만은 도보 환산).
+ 이미 다녀온 단지는 뒤로. 체크리스트 10항목은 **현장에서만 아는 것**만
+ (지역 단위 `personal_layer.IMJANG_CHECKS` 와 역할이 다름). 좋음2·보통1·나쁨0 → 100점 환산.
+ 방문 기록은 `imjang_visit` 테이블(uid·region·cx·visited 유니크 = 같은 날 재저장은 덮어쓰기).
+ `/api/imjang/{course,visits,visit}`. 브리핑 '오늘 할 일'이 미방문 후보를 먼저 가리킨다.
 - 폐기(개인용): 정책 KB 자동 소싱 · Toss 페이월 — 당분간 미추진.
 
 ## KB 데이터허브 API (자동 수집)

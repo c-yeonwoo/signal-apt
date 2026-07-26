@@ -898,6 +898,70 @@ def buying_power_confirm(request: Request, data: dict):
     return {"ok": True, "매수력": st}
 
 
+def imjang_course(request: Request, on: str | None = None, start: str = "10:00",
+                  stop_min: int = 50, limit: int = 3):
+    """후보 3곳 → 시각이 박힌 반나절 코스. 이미 다녀온 단지는 순서를 뒤로 민다."""
+    from realty_signal.services import imjang as ij
+
+    uid = _uid(request)
+    sl = shortlist(request, limit=limit)
+    if not sl.get("ready"):
+        return {"ready": False, "reason": sl.get("reason") or "no_candidates",
+                "message": sl.get("message") or "후보가 있어야 코스를 짤 수 있어요."}
+    profile = db.profile_get(uid) or {} if uid else {}
+    home = None
+    if profile.get("거주지"):     # 집에서 출발하는 순서여야 동선이 되돌지 않는다
+        home = _region_centroid(profile["거주지"], _code_of(profile["거주지"]))
+    visited = db.imjang_latest(uid) if uid else {}
+    out = ij.build_course(sl["candidates"], start=start, stop_min=max(20, min(180, stop_min)),
+                          home=home, visited=visited, on=on)
+    out["집기준"] = bool(home)
+    return out
+
+
+def imjang_visits(request: Request, limit: int = 50):
+    from realty_signal.services import imjang as ij
+
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    rows = db.imjang_list(uid, limit=max(1, min(200, limit)))
+    for r in rows:
+        r["약점"] = ij.weak_points(r["checks"])
+    return {"ok": True, "visits": rows, "checks": ij.CHECKS}
+
+
+def imjang_visit_save(request: Request, data: dict):
+    """방문 1건 저장 — 같은 단지·같은 날짜는 덮어쓴다."""
+    from realty_signal.services import imjang as ij
+
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    region = (data.get("region") or "").strip()
+    cx = (data.get("단지") or data.get("complex") or "").strip()
+    if not region or not cx:
+        return JSONResponse({"ok": False, "error": "지역과 단지가 필요합니다."}, status_code=400)
+    from datetime import date as _date
+    visited = (data.get("방문일") or "").strip() or _date.today().isoformat()
+    checks = ij.clean_checks(data.get("checks"))
+    verdict = (data.get("verdict") or "").strip()
+    if verdict and verdict not in ij.VERDICTS:
+        verdict = ""
+    sc = ij.score(checks)
+    vid = db.imjang_save(uid, region, cx, visited, checks=checks,
+                         memo=(data.get("memo") or "")[:2000], verdict=verdict,
+                         score=(sc or {}).get("점수"))
+    return {"ok": True, "id": vid, "점수": sc, "약점": ij.weak_points(checks)}
+
+
+def imjang_visit_delete(request: Request, visit_id: int):
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    return {"ok": db.imjang_delete(uid, visit_id)}
+
+
 def telegram_status(request: Request):
     """봇 사용 가능 여부 + 내 연결 상태."""
     from realty_signal import telegram as tg
