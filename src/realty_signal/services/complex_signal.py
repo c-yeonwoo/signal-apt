@@ -11,18 +11,47 @@ _CX_SIG_GRADE = [(75, "STRONG_BUY"), (62, "BUY"), (50, "WATCH"), (40, "NEUTRAL")
 
 
 @lru_cache(maxsize=1)
-def uv_map() -> dict:
-    """시군구 → 저평가도 (localities 캐시)."""
+def locality_map() -> dict:
+    """시군구 → localities 행(평단가·적정가·저평가도)."""
     import json
     df = store.load_localities()
     if df.empty:
         return {}
-    return {r["region"]: r.get("저평가도")
+    return {r["region"]: r
             for r in json.loads(df.to_json(orient="records", force_ascii=False))}
+
+
+@lru_cache(maxsize=1)
+def uv_map() -> dict:
+    """시군구 → 저평가도 (localities 캐시)."""
+    return {r: (v or {}).get("저평가도") for r, v in locality_map().items()}
 
 
 def clear_uv_cache() -> None:
     uv_map.cache_clear()
+    locality_map.cache_clear()
+
+
+def region_price_context(region: str, complex_ppy: float | None) -> dict:
+    """단지 평단가 vs 시군구 중위 평단가 — UI용 라벨."""
+    loc = locality_map().get(region) or {}
+    rp = loc.get("price")
+    out: dict = {
+        "지역평단가": rp,
+        "지역저평가도": loc.get("저평가도"),
+        "지역적정가": loc.get("적정가"),
+    }
+    if not (complex_ppy and rp):
+        return out
+    pct = round((complex_ppy / rp - 1) * 100, 1)
+    out["지역대비pct"] = pct
+    if pct <= -10:
+        out["지역대비라벨"] = "지역보다 저렴"
+    elif pct >= 10:
+        out["지역대비라벨"] = "지역보다 비쌈"
+    else:
+        out["지역대비라벨"] = "지역 중위 수준"
+    return out
 
 
 def main_flat_metrics(data: dict) -> dict:

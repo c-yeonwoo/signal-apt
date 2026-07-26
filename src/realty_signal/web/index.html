@@ -191,9 +191,13 @@
   /* 경매 */
   #view-auction, #view-undervalued, #view-presale, #view-quicksale, #view-redev, #view-mymap, #view-report { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
-  .mapsplit { display:flex; gap:12px; height:calc(100vh - 178px); min-height:420px; }
-  .ms-list { width:46%; min-width:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; }
-  .ms-map { flex:1; position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(37,99,235,0.06); }
+  .mapsplit { display:flex; gap:0; height:calc(100vh - 178px); min-height:420px; }
+  .ms-list { width:46%; min-width:280px; max-width:75%; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; flex:0 0 auto; }
+  .ms-map { flex:1 1 auto; min-width:220px; position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); box-shadow:inset 0 0 0 1px rgba(37,99,235,0.06); margin-left:6px; }
+  .ms-gutter { flex:0 0 8px; cursor:col-resize; position:relative; z-index:5; touch-action:none; user-select:none; }
+  .ms-gutter::after { content:''; position:absolute; left:2px; top:18%; bottom:18%; width:4px; border-radius:3px; background:var(--line); transition:background .12s; }
+  .ms-gutter:hover::after, .ms-gutter.dragging::after { background:var(--accent); }
+  body.ms-resizing { cursor:col-resize; user-select:none; }
   .ms-viewport-hint { font-size:11px; color:var(--dim); padding:8px 13px; border-bottom:1px solid var(--line); background:#f8fafc; }
   .ms-map-cta { position:absolute; z-index:1100; left:50%; top:12px; transform:translateX(-50%); pointer-events:none; }
   .ms-map-cta button { pointer-events:auto; background:var(--accent); color:#fff; border:none; border-radius:999px;
@@ -267,8 +271,9 @@
     .main { min-height:64vh; }
     /* 좌우 분할 → 목록 위 + 지도 아래로 스택 */
     .mapsplit { flex-direction:column; height:auto; min-height:0; }
-    .ms-list { width:100%; min-width:0; max-height:48vh; }
-    .ms-map { min-height:380px; }
+    .ms-list { width:100% !important; min-width:0; max-width:none; max-height:48vh; }
+    .ms-map { min-height:380px; margin-left:0; }
+    .ms-gutter { display:none; }
     /* 2열 폼 → 1열 */
     .grid2 { grid-template-columns:1fr; }
   }
@@ -1235,7 +1240,46 @@ function fitHeaderHeight(){
   if(h) document.documentElement.style.setProperty('--hh', h+'px');
 }
 fitHeaderHeight();
-window.addEventListener('load', ()=>{ fitHeaderHeight(); chart.resize(); if(cycleMini) cycleMini.resize(); });
+function initMapSplitGutters(){
+  document.querySelectorAll('.mapsplit').forEach(split=>{
+    if(split.dataset.guttered) return;
+    const list=split.querySelector('.ms-list'), map=split.querySelector('.ms-map');
+    if(!list||!map) return;
+    split.dataset.guttered='1';
+    const g=document.createElement('div');
+    g.className='ms-gutter'; g.title='좌우 드래그로 지도 너비 조절';
+    split.insertBefore(g, map);
+    const key='msListW:'+(map.id||list.id||'x');
+    try{ const w=localStorage.getItem(key); if(w){ list.style.width=w; } }catch(e){}
+    const startDrag=ev=>{
+      if(window.matchMedia('(max-width:760px)').matches) return;
+      ev.preventDefault();
+      const startX=ev.clientX??(ev.touches&&ev.touches[0].clientX);
+      const startW=list.getBoundingClientRect().width;
+      g.classList.add('dragging'); document.body.classList.add('ms-resizing');
+      const move=e=>{
+        const x=e.clientX??(e.touches&&e.touches[0].clientX);
+        if(x==null) return;
+        const splitW=split.getBoundingClientRect().width;
+        const nw=Math.max(280, Math.min(splitW-240, startW+(x-startX)));
+        list.style.width=nw+'px';
+        Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(err){} });
+      };
+      const up=()=>{
+        g.classList.remove('dragging'); document.body.classList.remove('ms-resizing');
+        document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up);
+        document.removeEventListener('touchmove',move); document.removeEventListener('touchend',up);
+        try{ localStorage.setItem(key, list.style.width); }catch(err){}
+        Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(err){} });
+      };
+      document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
+      document.addEventListener('touchmove',move,{passive:false}); document.addEventListener('touchend',up);
+    };
+    g.addEventListener('mousedown', startDrag);
+    g.addEventListener('touchstart', startDrag, {passive:false});
+  });
+}
+window.addEventListener('load', ()=>{ fitHeaderHeight(); chart.resize(); if(cycleMini) cycleMini.resize(); initMapSplitGutters(); });
 window.addEventListener('resize', () => {
   fitHeaderHeight();
   chart.resize();
@@ -2307,11 +2351,11 @@ function renderAllListings(){
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${x['단지명']||'–'} ${typeBadge(x['유형'])} ${x['시그널']?badge(x['시그널']):''}`,
       right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b> · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
+      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''} · <span title="${(x['기회도근거']||'').replace(/"/g,'')}">기회도 <b style="color:var(--accent)">${x['기회도']??'–'}</b></span>`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
         : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
-      return `<div class="kv"><span>유형 ${x['유형']}</span><span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
+      return `<div class="kv"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">타이밍 근거: ${x['기회도근거']}</div>`:''}
         ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">데이터 신뢰도 ${Math.round(x.confidence*100)}% — 추가 확인 권장</div>`:''}
         <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
@@ -2319,7 +2363,7 @@ function renderAllListings(){
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
     color:x=>_LA_COLOR[x['유형']]||'#94a3b8',
-    label:x=>`<b>${x['단지명']}</b> ${x['유형']}<br>${x['지역']||''} · ${x['지표라벨']} ${x['지표값']??''}${x['지표단위']||''}`,
+    label:x=>`<b>${x['단지명']}</b> ${x['유형']}<br>${x['지역']||''}${x['평형']!=null?' · '+x['평형']+'평':''}${x['총액']?' · '+_eok(x['총액']):''} · ${x['지표라벨']} ${x['지표값']??''}${x['지표단위']||''}`,
   });
 }
 // ===== 재사용 좌우 분할 지도 컴포넌트 (Leaflet + CartoDB dark) =====
@@ -3924,9 +3968,17 @@ async function openComplex(name, region){
     <td style="padding:8px 6px;text-align:right;font-weight:700;color:${p['전세가율']>=70?'#16a34a':'var(--txt)'}">${p['전세가율']!=null?p['전세가율']+'%':'–'}</td>
     <td style="padding:8px 6px;text-align:right">${p['갭']!=null?_eok(p['갭']):'–'}</td></tr>`).join('');
   const nQ=name.replace(/'/g,"\\'"), rQ=region.replace(/'/g,"\\'");
+  const vsPct=d['지역대비pct'], vsLbl=d['지역대비라벨']||'';
+  const vsCol=vsPct==null?'var(--dim)':(vsPct<=-10?'#15803d':vsPct>=10?'#b45309':'var(--txt)');
+  const vsLine=d['지역평단가']?`<div style="font-size:12px;margin-top:4px;color:${vsCol}">
+      ${region} 중위 ${(d['지역평단가']||0).toLocaleString()}만/평 대비
+      <b>${vsPct>0?'+':''}${vsPct??'–'}%</b>${vsLbl?` · ${vsLbl}`:''}
+      ${d['지역저평가도']!=null?`<span style="color:var(--dim)"> (지역 저평가도 ${d['지역저평가도']})</span>`:''}
+    </div>`:'';
   body.innerHTML=`${d['단지시그널']?_cxSigBanner(d['단지시그널']):''}<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
       <div><div style="font-size:12px;color:var(--dim)">최근 평단가</div>
-        <div style="font-size:24px;font-weight:800;line-height:1.1">${(d['최근평단가']||0).toLocaleString()}<span style="font-size:13px">만/평</span></div></div>
+        <div style="font-size:24px;font-weight:800;line-height:1.1">${(d['최근평단가']||0).toLocaleString()}<span style="font-size:13px">만/평</span></div>
+        ${vsLine}</div>
       <div style="text-align:right;font-size:12px;color:var(--dim)">${d['기간']||''} · ${d['총거래']}건<br>2년 추세 <b style="color:${d['추세pct']>=0?'#16a34a':'#dc2626'}">${d['추세pct']>0?'+':''}${d['추세pct']??'–'}%</b></div></div>
     <div style="margin-bottom:14px">${_spark(tr.map(x=>x['평단가']))}</div>
     ${d['공시가격']?`<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:14px;font-size:12px">
@@ -3977,23 +4029,42 @@ async function loadCxLoanScen(cx){
   const plist=cx['평형별']||[];
   const main=plist.length?plist.reduce((a,b)=>(a['매매건수']||0)>=(b['매매건수']||0)?a:b):{};
   const price=main['최근매매']||null;
+  const py=main['평형'];
   let q='/api/loan-scenarios';
   if(price) q+=`?price=${price}`;
   let d; try{ d=await (await fetch(q)).json(); }
   catch(e){ el.innerHTML=''; return; }
   if(!d.ok){ el.innerHTML=`<div style="font-size:12px;color:var(--dim)">대출 시나리오: 프로필에 가용자본을 넣으면 LTV 60/70/80을 비교합니다.</div>`; return; }
+  const target=price?`이 단지 주력 ${py??'–'}평(${_eok(price)})`:'이 단지';
+  const best=(d.목표대비||[]).find(x=>x['가능']);
+  const verdict=price
+    ? (best
+      ? `<span style="color:#15803d;font-weight:700">LTV ${best.ltv}%면 ${target}을 살 수 있습니다.</span>`
+      : `<span style="color:#b45309;font-weight:700">${target}은 아래 LTV로는 부족합니다. (매수가능가 &lt; 단지 가격)</span>`)
+    : '';
   const rows=(d.scenarios||[]).map(r=>{
     const ok=d.목표대비?d.목표대비.find(x=>x.ltv===r.ltv):null;
-    return `<tr style="border-top:1px solid var(--line)"><td style="padding:6px">${r.ltv}% <span style="color:var(--dim);font-size:11px">${r['라벨']||''}</span></td>
-      <td style="padding:6px;text-align:right;font-weight:700">${_eok(r['매수가능가'])}</td>
-      <td style="padding:6px;text-align:right;color:var(--dim)">${_eok(r['대출'])}</td>
-      <td style="padding:6px;text-align:right">${ok?(ok['가능']?'<span style="color:#15803d">가능</span>':`<span style="color:#b45309">${_eok(Math.abs(ok['여유']))} 부족</span>`):'–'}</td></tr>`;
+    const cell=ok
+      ? (ok['가능']
+        ? `<span style="color:#15803d;font-weight:700">살 수 있음</span><div style="font-size:10px;color:var(--dim)">${_eok(ok['여유'])} 여유</div>`
+        : `<span style="color:#b45309;font-weight:700">부족</span><div style="font-size:10px;color:var(--dim)">${_eok(Math.abs(ok['여유']))} 더 필요</div>`)
+      : '–';
+    return `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 6px">${r.ltv}% <span style="color:var(--dim);font-size:11px">${r['라벨']||''}</span></td>
+      <td style="padding:7px 6px;text-align:right"><b>${_eok(r['매수가능가'])}</b><div style="font-size:10px;color:var(--dim)">내 자본+대출 한도</div></td>
+      <td style="padding:7px 6px;text-align:right;color:var(--dim)">${_eok(r['대출'])}<div style="font-size:10px">그중 은행 대출</div></td>
+      <td style="padding:7px 6px;text-align:right">${cell}</td></tr>`;
   }).join('');
-  el.innerHTML=`<div style="font-size:12px;font-weight:700;margin-bottom:6px">내 LTV 시나리오${price?` · 주력 ${main['평형']||''}평 ${_eok(price)}`:''}</div>
+  el.innerHTML=`<div style="font-size:12px;font-weight:700;margin-bottom:4px">내 LTV 시나리오${price?` · ${target}`:''}</div>
+    ${verdict?`<div style="font-size:12px;margin-bottom:8px;line-height:1.45">${verdict}</div>`:''}
+    <div style="font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.45">
+      <b>최대매수가</b>=프로필 가용자본으로 그 LTV에서 살 수 있는 집값 상한 ·
+      <b>대출</b>=그중 은행에서 빌리는 금액 ·
+      <b>판정</b>=이 단지 주력 평형 최근매매가와 비교(살 수 있음/부족)
+    </div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="color:var(--dim)"><th style="text-align:left;padding:4px">LTV</th><th style="text-align:right;padding:4px">매수가능</th><th style="text-align:right;padding:4px">대출</th><th style="text-align:right;padding:4px">목표</th></tr></thead>
+      <thead><tr style="color:var(--dim)"><th style="text-align:left;padding:4px">LTV</th><th style="text-align:right;padding:4px">최대매수가</th><th style="text-align:right;padding:4px">대출</th><th style="text-align:right;padding:4px">이 단지</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    <div style="font-size:10px;color:var(--dim);margin-top:4px">금리 ${(d.rate*100).toFixed(2)}% · 자본 ${_eok(d.capital)}${d.income?` · 소득 ${_eok(d.income)}`:''}</div>`;
+    <div style="font-size:10px;color:var(--dim);margin-top:6px">금리 ${(d.rate*100).toFixed(2)}% · 내 자본 ${_eok(d.capital)}${d.income?` · 소득 ${_eok(d.income)}`:''} · 주력 평형=거래 건수 최다 타입</div>`;
 }
 async function loadImjang(name, region){
   const el=document.getElementById('cxImjang'); if(!el) return;
