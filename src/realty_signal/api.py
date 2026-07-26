@@ -1623,12 +1623,13 @@ def _gongsi_for(region: str, name: str) -> dict | None:
 
 
 def complex_detail(region: str, name: str):
-    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널 + 공시가격. DB 캐시(14일)."""
+    """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널 + 공시가격. DB 캐시(7일)."""
     from realty_signal import db
+    from realty_signal.services.complex_signal import region_price_context
     grade = (_regime().get("regions", {}).get(region) or {}).get("급지")
     signal = _signal_map().get(region)
 
-    def deco(d):   # 급지·시그널·공시가격·단지시그널은 응답 시점에 부착(각자 캐시)
+    def deco(d):   # 급지·시그널·공시가격·단지시그널·지역대비는 응답 시점에 부착(각자 캐시)
         out = {**d, "급지": grade, "시그널": signal}
         ratio = None
         try:                                                     # 공시가격 먼저 → 단지시그널 가격 성분에 사용
@@ -1641,6 +1642,7 @@ def complex_detail(region: str, name: str):
                     out["공시대비"] = ratio
         except Exception as e:  # noqa: BLE001
             log.warning("공시가격 조회 실패 %s/%s: %s", region, name, e)
+        out.update(region_price_context(region, out.get("최근평단가")))
         if not d.get("지원안함") and (d.get("총거래") or d.get("매매추이")):
             out["단지시그널"] = _complex_signal(region, out, signal, ratio)
         return out
@@ -2359,8 +2361,27 @@ def _opportunity(kind: str, m: dict, signal: str | None, grade: str | None):
     return tr.score, tr.reasons_text
 
 
+def _listing_pyeong(kind: str, raw: dict | None, ref: dict | None) -> float | None:
+    """유형별 평형(평) — 급매는 평, 경매는 전용㎡→평. 청약·재건축은 보통 없음."""
+    raw, ref = raw or {}, ref or {}
+    py = raw.get("평형") if raw.get("평형") is not None else ref.get("평형")
+    if py is not None:
+        try:
+            return round(float(py), 1)
+        except (TypeError, ValueError):
+            pass
+    if kind == "경매":
+        try:
+            m2 = float(raw.get("전용면적") or 0)
+        except (TypeError, ValueError):
+            m2 = 0
+        if m2 > 0:
+            return round(m2 / 3.3058, 1)
+    return None
+
+
 def _build_listings(want: set[str]) -> list[dict]:
-    """통합 매물 정규화(공통 스키마 + 기회도 + 총액). 유형 필터(want)만 수집."""
+    """통합 매물 정규화(공통 스키마 + 기회도 + 총액 + 평형). 유형 필터(want)만 수집."""
     grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
     out = []
 
@@ -2370,7 +2391,8 @@ def _build_listings(want: set[str]) -> list[dict]:
         tr = listing_timing(kind, raw, signal, grade.get(region), asof=_timing_asof())
         row = {"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
                "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
-               "총액": total, "lat": lat, "lng": lng, "ref": ref}
+               "총액": total, "평형": _listing_pyeong(kind, raw, ref),
+               "lat": lat, "lng": lng, "ref": ref}
         row.update(tr.to_dict())
         out.append(row)
 

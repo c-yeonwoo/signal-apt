@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from realty_signal.services.complex_signal import complex_signal, main_flat_metrics
+from realty_signal.services.complex_signal import (
+    complex_signal,
+    main_flat_metrics,
+    region_price_context,
+)
 
 
 def test_main_flat_metrics_picks_busiest_pyeong():
@@ -50,3 +54,26 @@ def test_complex_signal_reduces_comp_weight_without_jeonse(monkeypatch):
     assert "주의" in no_j
     assert with_j["분해"]["단지"] >= no_j["분해"]["단지"]
     assert with_j["점수"] >= no_j["점수"]
+
+
+def test_region_price_context_labels(monkeypatch):
+    monkeypatch.setattr(
+        "realty_signal.services.complex_signal.locality_map",
+        lambda: {"노원구": {"price": 3000, "저평가도": 12.5, "적정가": 3400}},
+    )
+    cheap = region_price_context("노원구", 2500)
+    assert cheap["지역대비pct"] == -16.7
+    assert cheap["지역대비라벨"] == "지역보다 저렴"
+    dear = region_price_context("노원구", 3600)
+    assert dear["지역대비pct"] == 20.0
+    assert dear["지역대비라벨"] == "지역보다 비쌈"
+    mid = region_price_context("노원구", 3050)
+    assert mid["지역대비라벨"] == "지역 중위 수준"
+
+
+def test_listing_pyeong_from_auction_and_quicksale():
+    from realty_signal.api import _listing_pyeong
+
+    assert _listing_pyeong("경매", {"전용면적": 84.9}, {}) == 25.7
+    assert _listing_pyeong("급매", {"평형": 34}, {}) == 34.0
+    assert _listing_pyeong("청약", {}, {}) is None
