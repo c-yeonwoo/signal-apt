@@ -200,7 +200,7 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             visited: dict | None = None, auctions: list[dict] | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
-    L = [f"🦊 Nick 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
+    L = [f"🦊 닉 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
     L.append(f"예산 {_eok(data.get('budget'))} · {data.get('pyeong')}평 기준")
     L.append("")
 

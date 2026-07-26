@@ -48,7 +48,7 @@ def advisor_api(request: Request, data: dict = Body(...)):
     ok, ust = deps.usage_allow(uid, "nick", unlimited=unlimited)
     if not ok:
         return {"ok": False, "reason": "limit", "usage": ust,
-                "answer": f"이번 주 Nick 질문 한도({ust['limit']}회)에 도달했습니다. "
+                "answer": f"이번 주 닉 질문 한도({ust['limit']}회)에 도달했습니다. "
                           "관심지역 추적·동네 리포트·시그널은 계속 이용할 수 있습니다."}
     messages = data.get("messages") or []
     if not isinstance(messages, list) or not messages:
