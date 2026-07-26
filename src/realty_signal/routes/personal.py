@@ -62,6 +62,31 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     return app_api.shortlist(request, limit, budget)
 
 
+@router.get("/api/imjang/course")
+def imjang_course(request: Request, on: str | None = None, start: str = "10:00",
+                  stop_min: int = 50, limit: int = 3):
+    from realty_signal import api as app_api
+    return app_api.imjang_course(request, on=on, start=start, stop_min=stop_min, limit=limit)
+
+
+@router.get("/api/imjang/visits")
+def imjang_visits(request: Request, limit: int = 50):
+    from realty_signal import api as app_api
+    return app_api.imjang_visits(request, limit)
+
+
+@router.post("/api/imjang/visit")
+def imjang_visit_save(request: Request, data: dict = Body(default={})):
+    from realty_signal import api as app_api
+    return app_api.imjang_visit_save(request, data)
+
+
+@router.delete("/api/imjang/visit/{visit_id}")
+def imjang_visit_delete(request: Request, visit_id: int):
+    from realty_signal import api as app_api
+    return app_api.imjang_visit_delete(request, visit_id)
+
+
 @router.get("/api/telegram/status")
 def telegram_status(request: Request):
     from realty_signal import api as app_api

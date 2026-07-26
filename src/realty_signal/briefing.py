@@ -85,7 +85,8 @@ def _diff_signals(cur: dict, prev: dict) -> list[dict]:
     return out
 
 
-def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict]) -> str:
+def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
+          visited: dict | None = None) -> str:
     if diff["new"]:
         c = diff["new"][0]
         return f"{c['단지']}({c['region']}) 실거래·평면 확인"
@@ -95,7 +96,11 @@ def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict]) -> st
     if qs:
         return f"{qs[0].get('지역')} 급매 {len(qs)}건 확인"
     if cands:
-        return f"{cands[0]['단지']} 임장 일정 잡기"
+        seen = visited or {}
+        todo = [c for c in cands if f"{c['region']}|{c['단지']}" not in seen]
+        if todo:
+            return f"{todo[0]['단지']} 임장 잡기 (앱에서 코스 생성)"
+        return "임장 기록 비교해서 후보 1곳으로 좁히기"
     return "마이페이지에 직장 주소를 넣어 통근 필터 켜기"
 
 
@@ -139,13 +144,15 @@ def build(uid: int, *, force: bool = False) -> dict:
     if not first and not news and not weekly and not force:
         return {"send": False, "reason": "no_news", "snapshot": snapshot}
 
-    text = _render(profile, data, diff, sigs, qs, qs_new, first=first)
+    text = _render(profile, data, diff, sigs, qs, qs_new, first=first,
+                   visited=db.imjang_latest(uid))
     return {"send": True, "text": text, "snapshot": snapshot, "news": news,
             "first": first, "candidates": cands}
 
 
 def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
-            qs: list[dict], qs_new: int, *, first: bool) -> str:
+            qs: list[dict], qs_new: int, *, first: bool,
+            visited: dict | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
     L = [f"🦊 Nick 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
@@ -200,7 +207,7 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
         L.append("※ 직장 주소가 없어 통근 필터가 꺼져 있습니다. 마이페이지에서 넣어 주세요.")
         L.append("")
 
-    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands)}")
+    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited)}")
     L.append(f"{config.app_base_url()}/#dashboard")
     L.append("")
     L.append("끄기: /stop")

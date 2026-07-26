@@ -1102,6 +1102,21 @@
   <div id="alertsBody" style="max-height:60vh;overflow:auto"></div>
 </dialog>
 
+<dialog id="imjangDlg" style="width:620px;max-width:96vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h3 style="margin:0;font-size:19px">임장 코스</h3>
+    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('imjangDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 12px">후보 3곳을 한 번에 도는 반나절 일정입니다. 현장에서 바로 체크하고 저장하세요.</p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px">
+    <label>날짜 <input type="date" id="imjDate" style="padding:4px 8px"></label>
+    <label>출발 <input type="time" id="imjStart" value="10:00" style="padding:4px 8px"></label>
+    <label>단지당 <input type="number" id="imjStay" value="50" min="20" max="180" step="10" style="width:62px;padding:4px 8px">분</label>
+    <span class="btn" style="padding:4px 11px" onclick="openImjang(true)">다시 짜기</span>
+  </div>
+  <div id="imjBody" style="max-height:64vh;overflow:auto"></div>
+</dialog>
+
 <dialog id="scoreDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
     <h3 style="margin:0;font-size:19px">시그널 성적표</h3>
@@ -1526,10 +1541,113 @@ async function _loadShortlist(){
   }).join('');
   const sub=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} · ${d.pyeong}평 기준 · ${d['지역'].length}개 지역 ${d['검토']}개 단지에서 추림${d['확정예산']?'':' <span style="color:#ea580c">(매수력 미확정 — 잠정)</span>'}</div>`;
   wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지 <span style="font-weight:400">· 적합도순</span>')+sub+cards
+    +`<div style="margin-top:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="btn primary" style="padding:6px 14px" onclick="openImjang()">이 ${d.candidates.length}곳 임장 코스 짜기 →</span>
+        <span style="font-size:11px;color:var(--dim)">토요일 반나절 일정으로 묶어 드립니다</span></div>`
     +`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지는 왜 뺐나</summary>
       <div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.6">${_slRejectLine(d)}
       <br><span style="font-size:11px">가중치 ${Object.entries(d['가중치']).map(([k,v])=>`${k} ${Math.round(v*100)}%`).join(' · ')}${d['직장']?'':' · 직장 주소를 넣으면 통근이 반영됩니다'}</span></div></details>`,
     'margin-bottom:14px;border-left:3px solid var(--sig-buy)');
+}
+// ===== 임장 코스 — 후보 3곳을 시각이 박힌 반나절 일정으로 =====
+let _imj=null, _imjMarks={};
+const _IMJ_GRADE=[{v:0,t:'나쁨',c:'#dc2626'},{v:1,t:'보통',c:'var(--dim)'},{v:2,t:'좋음',c:'#16a34a'}];
+async function openImjang(rebuild){
+  const dlg=document.getElementById('imjangDlg');
+  const body=document.getElementById('imjBody');
+  if(!rebuild && !dlg.open) dlg.showModal();
+  body.innerHTML='<div style="color:var(--dim);font-size:13px;padding:8px 0">동선을 짜는 중…</div>';
+  const q=new URLSearchParams();
+  const dt=document.getElementById('imjDate').value; if(dt) q.set('on',dt);
+  const st=document.getElementById('imjStart').value; if(st) q.set('start',st);
+  const sm=document.getElementById('imjStay').value; if(sm) q.set('stop_min',sm);
+  let d; try{ d=await (await fetch('/api/imjang/course?'+q)).json(); }catch(e){ body.innerHTML='<div style="color:var(--dim)">코스를 만들지 못했습니다.</div>'; return; }
+  _imj=d; _imjMarks={};
+  if(!d.ready){ body.innerHTML=`<div style="color:var(--dim);font-size:13px">${d.message||'후보가 있어야 코스를 짤 수 있어요.'}</div>`; return; }
+  if(!dt) document.getElementById('imjDate').value=d['날짜'];
+  _renderImjang();
+  _loadImjangVisits();
+}
+function _renderImjang(){
+  const d=_imj; if(!d) return;
+  const head=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px">
+    ${d['날짜']} · ${d['출발']} 출발 → ${d['종료']} 종료 <span style="color:var(--txt)">(총 ${Math.floor(d['총소요']/60)}시간 ${d['총소요']%60}분)</span>
+    · 이동 ${d['이동합']}분 · 단지당 ${d['체류']}분${d['집기준']?'':' · <span>거주지를 넣으면 집에서 출발하는 순서로 짭니다</span>'}</div>`;
+  const stops=d.stops.map((s,i)=>{
+    const move=s['이동']?`<div style="font-size:11px;color:var(--dim);margin:8px 0 8px 8px">↓ 이동 ${s['이동']}분</div>`:'';
+    const seen=s['방문일']?`<span style="font-size:11px;color:#16a34a">· ${s['방문일']} 방문함</span>`:'';
+    return move+`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);font-weight:700">${s['도착']}–${s['출발']}</span>
+        <b style="font-size:15px">${s['단지']}</b>
+        <span style="font-size:12px;color:var(--dim)">${s['region']}${s['급지']?` · 급지${s['급지']}`:''}</span>${seen}
+        <span style="margin-left:auto;font-size:13px"><b>${_eok(s['예상가'])}</b></span>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:5px">${s['근거']||''}</div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <a class="btn" style="padding:4px 11px;font-size:12px;text-decoration:none" href="${s['지도']}" target="_blank" rel="noopener">지도</a>
+        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${(s['단지']||'').replace(/'/g,'')}','${s['region']}')">단지 상세</span>
+        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="_imjToggle(${i})">현장 체크 ▾</span>
+      </div>
+      <div id="imjChk${i}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"></div>
+    </div>`;
+  }).join('');
+  const kit=`<div style="margin-top:12px;font-size:11px;color:var(--dim)">준비물 · ${d['준비물'].join(' / ')}</div>`;
+  document.getElementById('imjBody').innerHTML=head+stops+kit+'<div id="imjVisits" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)"></div>';
+}
+function _imjToggle(i){
+  const box=document.getElementById('imjChk'+i); if(!box) return;
+  if(box.style.display!=='none'){ box.style.display='none'; return; }
+  box.style.display='block';
+  if(!_imjMarks[i]) _imjMarks[i]={};
+  box.innerHTML=_imj.checks.map(c=>`<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600">${c.label}</div>
+        <div style="font-size:11px;color:var(--dim)">${c.hint}</div></div>
+      <div id="imjG${i}_${c.id}" style="display:flex;gap:3px;flex-shrink:0">
+        ${_IMJ_GRADE.map(g=>`<span class="btn" style="padding:3px 8px;font-size:11px" onclick="_imjMark(${i},'${c.id}',${g.v})">${g.t}</span>`).join('')}
+      </div></div>`).join('')
+    +`<textarea id="imjMemo${i}" placeholder="현장 메모 — 중개사가 한 말, 실제로 본 것" style="width:100%;margin-top:8px;padding:8px;min-height:60px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--txt);font-size:12px"></textarea>
+     <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+       <span style="font-size:11px;color:var(--dim)">판정</span>
+       ${['계속','보류','제외'].map(v=>`<span class="btn" id="imjV${i}_${v}" style="padding:4px 10px;font-size:11px" onclick="_imjVerdict(${i},'${v}')">${v}</span>`).join('')}
+       <span class="btn primary" style="padding:5px 13px;font-size:12px;margin-left:auto" onclick="imjSave(${i})">기록 저장</span>
+     </div>`;
+}
+function _imjMark(i,id,v){
+  _imjMarks[i]=_imjMarks[i]||{}; _imjMarks[i][id]=v;
+  const row=document.getElementById(`imjG${i}_${id}`); if(!row) return;
+  [...row.children].forEach((el,k)=>{ el.classList.toggle('primary', _IMJ_GRADE[k].v===v); });
+}
+function _imjVerdict(i,v){
+  _imjMarks[i]=_imjMarks[i]||{}; _imjMarks[i]._verdict=v;
+  ['계속','보류','제외'].forEach(x=>{ const el=document.getElementById(`imjV${i}_${x}`); if(el) el.classList.toggle('primary', x===v); });
+}
+async function imjSave(i){
+  const s=_imj.stops[i]; const m={..._imjMarks[i]}; const verdict=m._verdict||''; delete m._verdict;
+  const body={region:s['region'], 단지:s['단지'], 방문일:_imj['날짜'],
+    checks:m, verdict, memo:(document.getElementById('imjMemo'+i)||{}).value||''};
+  let r={}; try{ r=await (await fetch('/api/imjang/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json(); }catch(e){}
+  if(!r.ok){ toast(r.error||'저장에 실패했습니다.'); return; }
+  toast(r['점수']?`${s['단지']} 기록 저장 · ${r['점수']['점수']}점`:`${s['단지']} 기록 저장`);
+  _loadImjangVisits();
+}
+async function _loadImjangVisits(){
+  const box=document.getElementById('imjVisits'); if(!box) return;
+  let d={}; try{ d=await (await fetch('/api/imjang/visits?limit=20')).json(); }catch(e){ return; }
+  const vs=d.visits||[];
+  if(!vs.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim)">아직 임장 기록이 없습니다. 현장에서 체크하면 여기에 쌓입니다.</div>'; return; }
+  box.innerHTML=`<div style="font-weight:700;font-size:12px;margin-bottom:8px">내 임장 기록 <span style="color:var(--dim);font-weight:400">${vs.length}건</span></div>`
+    +vs.map(v=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px">
+        <b>${v['단지']}</b><span style="color:var(--dim)">${v.region} · ${v['방문일']}</span>
+        ${v.verdict?`<span style="font-size:11px;color:${v.verdict==='제외'?'#dc2626':(v.verdict==='계속'?'#16a34a':'var(--dim)')}">${v.verdict}</span>`:''}
+        ${v['약점']&&v['약점'].length?`<span style="font-size:11px;color:#ea580c">${v['약점'].join('·')} 약점</span>`:''}
+        <span style="margin-left:auto;font-weight:700">${v.score!=null?v.score+'점':'–'}</span>
+        <span class="btn" style="padding:2px 8px;font-size:11px" onclick="imjDelete(${v.id})">삭제</span></div>`).join('');
+}
+async function imjDelete(id){
+  try{ await fetch('/api/imjang/visit/'+id,{method:'DELETE'}); }catch(e){}
+  _loadImjangVisits();
 }
 function _slRejectLine(d){
   const r=d['탈락']||{};

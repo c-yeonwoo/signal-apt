@@ -48,6 +48,10 @@ CREATE INDEX IF NOT EXISTS ix_events_uid_ts ON events(uid, ts);
 CREATE TABLE IF NOT EXISTS nbhd_snap(uid INTEGER, region TEXT, week TEXT, data TEXT, ts INTEGER,
     PRIMARY KEY(uid, region, week));
 CREATE INDEX IF NOT EXISTS ix_nbhd_snap_uid_region ON nbhd_snap(uid, region, ts);
+CREATE TABLE IF NOT EXISTS imjang_visit(id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid INTEGER, region TEXT, cx TEXT, visited TEXT, checks TEXT, memo TEXT,
+    verdict TEXT, score INTEGER, ts INTEGER);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_imjang_uid_cx ON imjang_visit(uid, region, cx, visited);
 """
 
 _migrated = [False]
@@ -445,6 +449,61 @@ def nbhd_snap_weeks(uid: int, region: str, limit: int = 8) -> list[str]:
     ).fetchall()
     c.close()
     return [w for (w,) in rows]
+
+
+# ---------- 임장 방문 기록 ----------
+def imjang_save(uid: int, region: str, cx: str, visited: str, *, checks: dict,
+                memo: str = "", verdict: str = "", score: int | None = None) -> int:
+    """같은 단지·같은 날짜는 덮어쓴다(현장에서 여러 번 저장하는 흐름)."""
+    c = conn()
+    c.execute(
+        "INSERT INTO imjang_visit(uid,region,cx,visited,checks,memo,verdict,score,ts) "
+        "VALUES(?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(uid,region,cx,visited) DO UPDATE SET "
+        "checks=excluded.checks, memo=excluded.memo, verdict=excluded.verdict, "
+        "score=excluded.score, ts=excluded.ts",
+        (uid, region, cx, visited, json.dumps(checks or {}, ensure_ascii=False),
+         memo or "", verdict or "", score, int(time.time())),
+    )
+    c.commit()
+    row = c.execute(
+        "SELECT id FROM imjang_visit WHERE uid=? AND region=? AND cx=? AND visited=?",
+        (uid, region, cx, visited)).fetchone()
+    c.close()
+    return row[0] if row else 0
+
+
+def _imjang_row(r) -> dict:
+    return {"id": r[0], "region": r[1], "단지": r[2], "방문일": r[3],
+            "checks": json.loads(r[4] or "{}"), "memo": r[5], "verdict": r[6], "score": r[7]}
+
+
+def imjang_list(uid: int, limit: int = 50) -> list[dict]:
+    c = conn()
+    rows = c.execute(
+        "SELECT id,region,cx,visited,checks,memo,verdict,score FROM imjang_visit "
+        "WHERE uid=? ORDER BY visited DESC, ts DESC LIMIT ?", (uid, limit)).fetchall()
+    c.close()
+    return [_imjang_row(r) for r in rows]
+
+
+def imjang_latest(uid: int) -> dict:
+    """단지키(region|단지) → 최근 방문 요약. 코스에서 '이미 본 곳'을 뒤로 미는 데 쓴다."""
+    out = {}
+    for v in imjang_list(uid, limit=200):
+        key = f"{v['region']}|{v['단지']}"
+        if key not in out:
+            out[key] = {"방문일": v["방문일"], "score": v["score"], "verdict": v["verdict"]}
+    return out
+
+
+def imjang_delete(uid: int, visit_id: int) -> bool:
+    c = conn()
+    cur = c.execute("DELETE FROM imjang_visit WHERE uid=? AND id=?", (uid, visit_id))
+    c.commit()
+    n = cur.rowcount
+    c.close()
+    return n > 0
 
 
 # ---------- alert prefs (kv) ----------
