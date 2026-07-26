@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 
 log = logging.getLogger("realty_signal")
-MODEL = "claude-opus-4-8"
+MODEL = "claude-sonnet-4-6"   # 요약·종합 — Opus 불필요, 호출당 비용 ~40%
 _UA = {"User-Agent": "Mozilla/5.0"}
 
 

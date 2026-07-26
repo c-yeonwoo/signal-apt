@@ -1575,7 +1575,7 @@ def addr_search(q: str):
 
 
 
-_COMPLEX_TTL = 14 * 86400   # 실거래 신고지연(~1개월) 감안, 2주면 신선도 충분
+_COMPLEX_TTL = 7 * 86400   # 실거래 신고지연 감안, 1주면 신선도·호출비용 균형
 
 
 def _uv_map():
