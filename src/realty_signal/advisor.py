@@ -139,7 +139,7 @@ TOOLS = [
     },
     {
         "name": "get_regime",
-        "description": "현재 수도권 경기 국면(벌집순환/급지역전 등)과 β·급지갭 등 거시 상태를 반환.",
+        "description": "현재 수도권 경기 국면(벌집순환/급지역전 등)과 β·급지갭·끝물 근거(하급지 주도 지역·상승폭)를 반환.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
