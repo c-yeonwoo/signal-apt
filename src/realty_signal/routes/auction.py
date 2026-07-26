@@ -63,15 +63,83 @@ def auction_add(request: Request, data: dict = Body(...)):
 
 @router.post("/api/auction/parse")
 def auction_parse(request: Request, data: dict = Body(...)):
+    """규칙 파서 우선 — AI 키가 없어도 임포트가 되게. 부족할 때만 AI 로 넘긴다."""
     if err := deps.require_admin(request):
         return err
     from realty_signal import ai_report
     config.load_env()
+    text = data.get("text", "")
+    parsed = auction.parse_text(text)
+    conf = auction.parse_confidence(parsed)
+    if conf == "high":
+        return {"ok": True, "parsed": parsed, "source": "rule"}
     if not ai_report.available():
-        return {"ok": False, "reason": "no_ai"}
+        return {"ok": bool(parsed), "parsed": parsed, "source": "rule",
+                "reason": None if parsed else "no_ai"}
     model = ai_report.OPUS if deps.is_opus_user(request) else ai_report.SONNET
-    parsed = ai_report.parse_auction(data.get("text", ""), model=model)
-    return {"ok": bool(parsed), "parsed": parsed or {}}
+    ai = ai_report.parse_auction(text, model=model) or {}
+    merged = {**parsed, **{k: v for k, v in ai.items() if v not in (None, "", 0)}}
+    return {"ok": bool(merged), "parsed": merged, "source": "ai" if ai else "rule"}
+
+
+@router.get("/api/auction/rights/{listing_id}")
+def auction_rights_get(listing_id: str):
+    lst = auction.get(listing_id)
+    if lst is None:
+        raise HTTPException(404, "listing not found")
+    saved = lst.권리분석 or {}
+    return {"ok": True, "입력": saved.get("입력") or {"권리": [], "임차인": []},
+            "분석": saved.get("분석"), "인수보증금": lst.인수보증금}
+
+
+@router.post("/api/auction/rights/preview")
+def auction_rights_preview(request: Request, data: dict = Body(default={})):
+    """저장 없이 판정만 — 입력하면서 결과가 바로 보여야 끝까지 채운다."""
+    if err := deps.require_admin(request):
+        return err
+    from realty_signal import auction_rights as ar
+    return {"ok": True, "분석": ar.analyze(data.get("권리"), data.get("임차인"))}
+
+
+@router.post("/api/auction/rights/{listing_id}")
+def auction_rights_save(request: Request, listing_id: str, data: dict = Body(default={})):
+    """판정 결과의 인수합계를 매물에 반영 — 입찰가 산정표가 그만큼 내려간다."""
+    if err := deps.require_admin(request):
+        return err
+    from realty_signal import auction_rights as ar
+    if auction.get(listing_id) is None:
+        raise HTTPException(404, "listing not found")
+    result = ar.analyze(data.get("권리"), data.get("임차인"))
+    lst = auction.update(listing_id, {
+        "인수보증금": result["인수합계"],
+        "권리분석": {"입력": {"권리": data.get("권리") or [], "임차인": data.get("임차인") or []},
+                 "분석": result},
+    })
+    return {"ok": True, "분석": result, "listing": _asdict(lst)}
+
+
+@router.get("/api/auction/plan/{listing_id}")
+def auction_plan(listing_id: str, bid: float | None = None):
+    lst = auction.get(listing_id)
+    if lst is None:
+        raise HTTPException(404, "listing not found")
+    return {"ok": True, "plan": auction.plan(lst, bid), "단지명": lst.단지명,
+            "사건번호": lst.사건번호, "region": lst.region}
+
+
+@router.post("/api/auction/won/{listing_id}")
+def auction_won(request: Request, listing_id: str, data: dict = Body(default={})):
+    """낙찰 기록 — 이후 플랜·알림이 낙찰일 기준으로 움직인다."""
+    if err := deps.require_admin(request):
+        return err
+    if auction.get(listing_id) is None:
+        raise HTTPException(404, "listing not found")
+    from datetime import date
+    lst = auction.update(listing_id, {
+        "낙찰가": float(data.get("낙찰가") or 0) or None,
+        "낙찰일": (data.get("낙찰일") or date.today().isoformat())[:10],
+    })
+    return {"ok": True, "listing": _asdict(lst), "plan": auction.plan(lst)}
 
 
 @router.delete("/api/auction/listings/{listing_id}")

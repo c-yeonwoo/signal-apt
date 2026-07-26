@@ -698,10 +698,51 @@
     <div id="bid_out" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"></div>
   </div>
 
+  <div id="calcRights" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"></div>
+
   <div style="max-height:42vh;overflow:auto">
     <table id="calcTable"></table>
   </div>
   <div class="dlg-foot"><button class="btn" onclick="document.getElementById('calcDlg').close()">닫기</button></div>
+</dialog>
+
+<dialog id="rightsDlg" style="width:720px;max-width:96vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h3 id="rightsTitle" style="margin:0;font-size:18px">권리분석</h3>
+    <span class="btn" style="padding:2px 10px" onclick="document.getElementById('rightsDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 12px">등기부 권리와 임차인을 넣으면 인수/소멸을 판정하고, <b>인수금액을 입찰가 계산에 반영</b>합니다.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <b style="font-size:13px">등기부 권리</b>
+        <span class="btn" style="padding:2px 9px;font-size:11px" onclick="rxAddRight()">+ 추가</span>
+      </div>
+      <div id="rxRights"></div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <b style="font-size:13px">임차인</b>
+        <span class="btn" style="padding:2px 9px;font-size:11px" onclick="rxAddTenant()">+ 추가</span>
+      </div>
+      <div id="rxTenants"></div>
+    </div>
+  </div>
+  <div id="rxResult" style="margin-top:14px"></div>
+  <div class="dlg-foot" style="display:flex;gap:8px;align-items:center">
+    <button class="btn" onclick="rxPreview()">판정해 보기</button>
+    <button class="btn primary" onclick="rxSave()">매물에 반영</button>
+    <button class="btn" style="margin-left:auto" onclick="document.getElementById('rightsDlg').close()">닫기</button>
+  </div>
+</dialog>
+
+<dialog id="planDlg" style="width:640px;max-width:96vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h3 id="planTitle" style="margin:0;font-size:18px">낙찰 후 실행 플랜</h3>
+    <span class="btn" style="padding:2px 10px" onclick="document.getElementById('planDlg').close()">✕</span>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:0 0 12px">언제 얼마가 나가는지 — 잔금·명도·수리까지 날짜로.</p>
+  <div id="planBody" style="max-height:64vh;overflow:auto"></div>
 </dialog>
 
 <dialog id="loanDlg" style="width:520px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--txt)">
@@ -4197,7 +4238,118 @@ async function openCalc(id, name){
   document.getElementById('calcTable').innerHTML = h+'</tbody>';
   document.getElementById('bid_price').value = rec['입찰가'];  // 민감도 기본=권장입찰가
   recalcLoan();
+  const take=(d.listing||{})['인수보증금']||0;
+  const rx=document.getElementById('calcRights');
+  if(rx) rx.innerHTML=`<span class="btn" onclick="openRights('${id}','${(name||'').replace(/'/g,'')}')">권리분석${take?` · 인수 ${won(take)} 반영됨`:' 안 함'}</span>
+    <span class="btn" onclick="openPlan('${id}','${(name||'').replace(/'/g,'')}')">낙찰 후 플랜</span>
+    ${take?'':'<span style="font-size:11px;color:#ea580c">권리분석 전이라 인수금액 0으로 계산 중</span>'}`;
   document.getElementById('calcDlg').showModal();
+}
+
+// ===== 권리분석 — 말소기준 기준 인수/소멸 판정 → 인수금액을 입찰가에 반영 =====
+const _RX_KINDS=['근저당권','저당권','가압류','압류','담보가등기','경매개시결정','전세권','지상권','지역권','가등기','가처분','임차권등기','환매등기','유치권','법정지상권','예고등기'];
+let _rxId=null, _rxRights=[], _rxTenants=[];
+async function openRights(id,name){
+  _rxId=id;
+  document.getElementById('rightsTitle').textContent=`권리분석 — ${name}`;
+  document.getElementById('rxResult').innerHTML='';
+  let d={}; try{ d=await (await fetch(`/api/auction/rights/${id}`)).json(); }catch(e){}
+  const saved=(d['입력']||{});
+  _rxRights=(saved['권리']||[]).map(r=>({...r}));
+  _rxTenants=(saved['임차인']||[]).map(t=>({...t}));
+  if(!_rxRights.length) _rxRights=[{종류:'근저당권',일자:'',금액:'',권리자:''}];
+  _rxRender();
+  if(d['분석']) _rxShow(d['분석']);
+  document.getElementById('rightsDlg').showModal();
+}
+function rxAddRight(){ _rxRights.push({종류:'근저당권',일자:'',금액:'',권리자:''}); _rxRender(); }
+function rxAddTenant(){ _rxTenants.push({이름:'',전입일:'',확정일자:'',보증금:'',배당요구:false}); _rxRender(); }
+function rxDel(kind,i){ (kind==='r'?_rxRights:_rxTenants).splice(i,1); _rxRender(); }
+function _rxRender(){
+  const inp=(v,ph,on,type)=>`<input type="${type||'text'}" value="${v??''}" placeholder="${ph}" oninput="${on}" style="width:100%;padding:4px 6px;font-size:12px">`;
+  document.getElementById('rxRights').innerHTML=_rxRights.map((r,i)=>`
+    <div style="border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px">
+      <div style="display:flex;gap:5px;align-items:center">
+        <select onchange="_rxRights[${i}]['종류']=this.value" style="flex:1;padding:4px;font-size:12px">
+          ${_RX_KINDS.map(k=>`<option ${r['종류']===k?'selected':''}>${k}</option>`).join('')}</select>
+        <span class="btn" style="padding:1px 7px;font-size:11px" onclick="rxDel('r',${i})">✕</span>
+      </div>
+      <div style="display:flex;gap:5px;margin-top:5px">
+        ${inp(r['일자'],'설정일',`_rxRights[${i}]['일자']=this.value`,'date')}
+        ${inp(r['금액'],'채권액(만원)',`_rxRights[${i}]['금액']=this.value`,'number')}
+      </div></div>`).join('')||'<div style="font-size:11px;color:var(--dim)">권리를 추가하세요.</div>';
+  document.getElementById('rxTenants').innerHTML=_rxTenants.map((t,i)=>`
+    <div style="border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px">
+      <div style="display:flex;gap:5px;align-items:center">
+        ${inp(t['이름'],'임차인',`_rxTenants[${i}]['이름']=this.value`)}
+        <span class="btn" style="padding:1px 7px;font-size:11px" onclick="rxDel('t',${i})">✕</span>
+      </div>
+      <div style="display:flex;gap:5px;margin-top:5px">
+        ${inp(t['전입일'],'전입일',`_rxTenants[${i}]['전입일']=this.value`,'date')}
+        ${inp(t['확정일자'],'확정일자',`_rxTenants[${i}]['확정일자']=this.value`,'date')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:5px;align-items:center">
+        ${inp(t['보증금'],'보증금(만원)',`_rxTenants[${i}]['보증금']=this.value`,'number')}
+        <label style="font-size:11px;white-space:nowrap;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" ${t['배당요구']?'checked':''} onchange="_rxTenants[${i}]['배당요구']=this.checked">배당요구</label>
+      </div></div>`).join('')||'<div style="font-size:11px;color:var(--dim)">임차인이 없으면 비워 두세요.</div>';
+}
+function _rxBody(){ return {권리:_rxRights, 임차인:_rxTenants}; }
+async function rxPreview(){
+  let d={}; try{ d=await (await fetch('/api/auction/rights/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_rxBody())})).json(); }catch(e){}
+  if(d['분석']) _rxShow(d['분석']); else toast('판정에 실패했습니다.');
+}
+async function rxSave(){
+  let d={}; try{ d=await (await fetch(`/api/auction/rights/${_rxId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_rxBody())})).json(); }catch(e){}
+  if(!d.ok){ toast(d.error||'저장에 실패했습니다.'); return; }
+  _rxShow(d['분석']);
+  toast(`인수 ${won(d['분석']['인수합계'])} 반영 — 입찰가 산정표가 갱신됩니다.`);
+  loadAuction();
+}
+function _rxShow(a){
+  const tone={'안전':'#16a34a','주의':'#ea580c','위험':'#dc2626'}[a['등급']]||'var(--dim)';
+  const vcol=v=>({'인수':'#dc2626','소멸':'#16a34a','확인필요':'#ea580c'})[v]||'var(--dim)';
+  const rows=(a['권리']||[]).map(r=>`<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px">
+      <b style="min-width:88px">${r['종류']}</b><span style="color:var(--dim);min-width:82px">${r['일자']||'–'}</span>
+      <span style="color:${vcol(r['판정'])};font-weight:700;min-width:56px">${r['판정']}</span>
+      <span style="color:var(--dim);flex:1">${r['사유']}</span></div>`).join('');
+  const tens=(a['임차인']||[]).map(t=>`<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px">
+      <b style="min-width:88px">${t['이름']||'임차인'}</b><span style="color:var(--dim);min-width:82px">${t['전입일']||'–'}</span>
+      <span style="color:${vcol(t['판정'])};font-weight:700;min-width:56px">${t['판정']}</span>
+      <span style="color:var(--dim);flex:1">${t['사유']}</span></div>`).join('');
+  document.getElementById('rxResult').innerHTML=`
+    <div style="border:1px solid var(--line);border-left:3px solid ${tone};border-radius:10px;padding:11px 13px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <span style="font-weight:800;color:${tone}">${a['등급']}</span>
+        <span style="font-size:15px">인수합계 <b>${won(a['인수합계'])}</b></span>
+        <span style="font-size:12px;color:var(--dim)">${a['결론']}</span></div>
+      ${rows?`<div style="margin-top:9px">${rows}</div>`:''}
+      ${tens?`<div style="margin-top:9px">${tens}</div>`:''}
+      ${(a['위험']||[]).length?`<ul style="margin:9px 0 0;padding-left:18px;font-size:12px;color:#ea580c">${a['위험'].map(w=>`<li>${w}</li>`).join('')}</ul>`:''}
+      <div style="font-size:11px;color:var(--dim);margin-top:9px">${a['면책']}</div></div>`;
+}
+
+// ===== 낙찰 후 실행 플랜 =====
+async function openPlan(id,name){
+  const body=document.getElementById('planBody');
+  document.getElementById('planTitle').textContent=`낙찰 후 실행 플랜 — ${name}`;
+  body.innerHTML='<div style="color:var(--dim);font-size:13px">계산 중…</div>';
+  document.getElementById('planDlg').showModal();
+  let d={}; try{ d=await (await fetch(`/api/auction/plan/${id}`)).json(); }catch(e){}
+  const p=d.plan; if(!p){ body.innerHTML='<div style="color:var(--dim)">플랜을 만들지 못했습니다.</div>'; return; }
+  const sum=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    ${[['낙찰가',p['낙찰가']],['보증금(10%)',p['보증금']],['경락잔금대출',p['경락잔금대출']],['잔금',p['잔금']],['총 현금',p['총현금']]]
+      .map(([t,v])=>`<div class="scard" style="min-width:106px"><div style="color:var(--dim);font-size:11px">${t}</div>
+        <div style="font-size:16px;font-weight:700">${won(v)}</div></div>`).join('')}</div>
+    ${p['추정입찰가']?'<div style="font-size:11px;color:#ea580c;margin-bottom:10px">아직 낙찰 전이라 권장입찰가로 계산했습니다.</div>':''}`;
+  const steps=p.steps.map(s=>`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+      <div style="min-width:96px"><div style="font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);font-weight:700">D+${s['D']}</div>
+        <div style="font-size:11px;color:var(--dim)">${s['날짜']}</div></div>
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${s['단계']}</div>
+        <div style="font-size:11px;color:var(--dim)">${s['할일']}</div></div>
+      <div style="min-width:80px;text-align:right;font-size:13px;color:${s['금액']?'#dc2626':'var(--dim)'}">${s['금액']?won(Math.abs(s['금액'])):'–'}</div>
+    </div>`).join('');
+  body.innerHTML=sum+steps+`<div style="font-size:11px;color:var(--dim);margin-top:10px">일정은 민사집행법 통상 진행 기준의 추정입니다. 법원·사건마다 달라집니다.</div>`;
 }
 
 // ===== 인증 게이트 =====
