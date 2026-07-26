@@ -129,6 +129,30 @@ def digest_cmd(
     )
 
 
+@app.command("brief")
+def brief_cmd(
+    send: bool = typer.Option(False, help="TELEGRAM_BOT_TOKEN 설정 시 실제 발송"),
+    quiet: bool = typer.Option(False, help="dry-run 본문 출력 생략"),
+    force: bool = typer.Option(False, help="변화가 없어도 생성"),
+):
+    """텔레그램 연결 유저에게 Nick 데일리 브리핑 생성(·발송).
+
+    서버가 매일 자동 발송(BRIEFING_HOUR, 기본 KST 08시)하므로 보통은 확인용.
+    """
+    from realty_signal import briefing, config, telegram
+
+    config.load_env()
+    telegram.poll_updates()          # 대기 중인 연결 먼저 처리
+    if send and not telegram.available():
+        console.print("[yellow]TELEGRAM_BOT_TOKEN 미설정[/yellow] — dry-run으로 출력합니다.")
+        send = False
+    stats = briefing.run(send=send, quiet=quiet, force=force)
+    console.print(
+        f"[green]브리핑[/green] 대상 {stats['total']} · 발송 {stats['sent']} · "
+        f"변화없음 {stats['skipped']} · dry-run {stats['dry_run']} · 오류 {stats['errors']}"
+    )
+
+
 def _warm_favorites_quiet(quiet: bool) -> None:
     """관심단지 실거래 캐시 주간 워밍 — 사용자 콜드스타트 제거. best-effort."""
     try:
