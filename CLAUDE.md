@@ -21,6 +21,7 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
 .venv/bin/signal serve                # 대시보드 http://127.0.0.1:8765
 .venv/bin/signal watch [--notify]     # 지난주 대비 등급 변화 알림 + 스냅샷 갱신
 .venv/bin/signal digest [--send]      # 관심지역 주간 이메일 다이제스트(SMTP 없으면 dry-run)
+.venv/bin/signal brief [--send]       # 텔레그램 Nick 데일리 브리핑(토큰 없으면 dry-run)
 .venv/bin/signal report <kb.xlsx>     # 터미널 시그널 리포트
 .venv/bin/pytest -q                   # 테스트
 ```
@@ -45,6 +46,11 @@ KB 주간 시계열 기반 아파트 매수·매도 시그널 분석 서비스. 
  후보 지역 = ★ ∪ BUY+(시그널 강도→저평가도 순, 최대 5). 적합도 = 통근·예산·시그널·저평가·급지 가중합,
  지역당 최대 2곳. 탈락은 사유별로 집계해 함께 반환. `/api/shortlist`.
  `_region_grades` 는 kv 7일 캐시 + 병렬 조회(콜드 70초 → 2초).
+- 텔레그램 데일리 브리핑(`telegram.py`·`briefing.py`): 후보 3곳의 **어제 대비 변화만** 보낸다.
+ 변화 없는 날은 미발송, 월요일은 현황 확인용으로 1회. 기준점은 kv `briefing_snap:{uid}`,
+ 발송 성공 후에만 이동(실패 시 변화 유실 방지). 중복 방지는 `briefing_run:{날짜}`.
+ 연결은 웹훅 없이 getUpdates 폴링 — 앱에서 일회용 코드 발급 → `t.me/<bot>?start=<code>` → `/start` 매칭.
+ `TELEGRAM_BOT_TOKEN`·`BRIEFING_HOUR`(KST, 기본 8). 서버 `_briefing_loop` 가 15분마다 폴링·발송 점검.
 - 폐기(개인용): 정책 KB 자동 소싱 · Toss 페이월 — 당분간 미추진.
 
 ## KB 데이터허브 API (자동 수집)

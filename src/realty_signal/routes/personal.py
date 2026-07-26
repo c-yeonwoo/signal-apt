@@ -60,3 +60,33 @@ def buying_power_confirm(request: Request, data: dict = Body(default={})):
 def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     from realty_signal import api as app_api
     return app_api.shortlist(request, limit, budget)
+
+
+@router.get("/api/telegram/status")
+def telegram_status(request: Request):
+    from realty_signal import api as app_api
+    return app_api.telegram_status(request)
+
+
+@router.post("/api/telegram/link")
+def telegram_link(request: Request):
+    from realty_signal import api as app_api
+    return app_api.telegram_link(request)
+
+
+@router.post("/api/telegram/check")
+def telegram_check(request: Request):
+    from realty_signal import api as app_api
+    return app_api.telegram_check(request)
+
+
+@router.post("/api/telegram/unlink")
+def telegram_unlink(request: Request):
+    from realty_signal import api as app_api
+    return app_api.telegram_unlink(request)
+
+
+@router.post("/api/telegram/test")
+def telegram_test(request: Request):
+    from realty_signal import api as app_api
+    return app_api.telegram_test(request)

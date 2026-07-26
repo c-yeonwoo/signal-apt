@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -91,6 +92,40 @@ def _snapshot_signals(asof: str) -> list[dict]:
 
 
 _DIGEST_EVERY_DAYS = 7  # 관심지역 주간 이메일 — 서버 루프에서 주 1회
+_BRIEFING_TICK = 900    # 텔레그램 폴링·발송 점검 주기(초)
+
+
+def _briefing_hour() -> int:
+    """데일리 브리핑 발송 시각(KST). 기본 08시."""
+    try:
+        return max(0, min(23, int(os.environ.get("BRIEFING_HOUR", "8"))))
+    except ValueError:
+        return 8
+
+
+async def _briefing_loop():
+    """텔레그램 연결 폴링(항상) + 하루 1회 브리핑 발송(KST 지정 시각 이후).
+
+    웹훅을 쓰지 않으므로 연결 대기 중인 /start 를 이 루프가 걷어 간다.
+    발송 여부는 날짜 키로 관리해 재배포로 루프가 재시작돼도 중복 발송하지 않는다.
+    """
+    import asyncio
+
+    from realty_signal import briefing as br
+    from realty_signal import telegram as tg
+    while True:
+        try:
+            if tg.available():
+                await asyncio.to_thread(tg.poll_updates)
+                today = br.today_kst().isoformat()
+                if br.now_kst().hour >= _briefing_hour() \
+                        and db.kv_get(f"briefing_run:{today}") is None:
+                    stats = await asyncio.to_thread(lambda: br.run(send=True, quiet=True))
+                    db.kv_set(f"briefing_run:{today}", stats)
+                    log.warning("데일리 브리핑: %s", stats)
+        except Exception as e:  # noqa: BLE001
+            log.error("브리핑 루프 실패: %s", e)
+        await asyncio.sleep(_BRIEFING_TICK)
 
 
 async def _auto_refresh_loop():
@@ -205,8 +240,10 @@ async def _startup_bg():
 async def lifespan(app: FastAPI):
     import asyncio
     task = asyncio.create_task(_startup_bg())  # 수집·갱신은 백그라운드, 서버는 즉시 서빙
+    brief = asyncio.create_task(_briefing_loop())  # 텔레그램 폴링·데일리 브리핑
     yield
     task.cancel()
+    brief.cancel()
 
 
 app = FastAPI(title="realty-signal-map", lifespan=lifespan)
@@ -859,6 +896,70 @@ def buying_power_confirm(request: Request, data: dict):
     profile["생애최초"] = 1 if p.first_time else 0
     db.profile_set(uid, profile)
     return {"ok": True, "매수력": st}
+
+
+def telegram_status(request: Request):
+    """봇 사용 가능 여부 + 내 연결 상태."""
+    from realty_signal import telegram as tg
+
+    uid = _uid(request)
+    profile = db.profile_get(uid) or {} if uid else {}
+    link = (profile.get("telegram") or {})
+    return {"available": tg.available(), "linked": bool(link.get("chat_id")),
+            "username": link.get("username"),
+            "hour": _briefing_hour()}
+
+
+def telegram_link(request: Request):
+    """일회용 딥링크 발급. 유저가 봇에 /start <code> 를 보내면 폴링이 연결한다."""
+    from realty_signal import telegram as tg
+
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    if not tg.available():
+        return JSONResponse({"ok": False, "error": "봇이 아직 설정되지 않았습니다."}, status_code=503)
+    return {"ok": True, **tg.issue_link_code(uid)}
+
+
+def telegram_check(request: Request):
+    """연결 확인 — 대기 중인 /start 를 즉시 처리(스케줄러 폴링을 기다리지 않도록)."""
+    from realty_signal import telegram as tg
+
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    tg.poll_updates()
+    link = (db.profile_get(uid) or {}).get("telegram") or {}
+    return {"ok": True, "linked": bool(link.get("chat_id")), "username": link.get("username")}
+
+
+def telegram_unlink(request: Request):
+    from realty_signal import telegram as tg
+
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    return {"ok": True, "unlinked": tg.unlink(uid)}
+
+
+def telegram_test(request: Request):
+    """지금 브리핑 한 통 — 변화가 없어도 강제 발송해 연결·내용 확인."""
+    from realty_signal import briefing as br
+    from realty_signal import telegram as tg
+
+    uid = _uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    chat_id = tg.chat_id_of(db.profile_get(uid))
+    if not chat_id:
+        return JSONResponse({"ok": False, "error": "텔레그램을 먼저 연결해 주세요."}, status_code=400)
+    b = br.build(uid, force=True)
+    if not b.get("send"):
+        return {"ok": False, "reason": b.get("reason"),
+                "error": "매수력을 확정하면 브리핑을 만들 수 있어요."}
+    ok = tg.send_message(chat_id, b["text"])
+    return {"ok": ok, "preview": b["text"]}
 
 
 def shortlist(request: Request, limit: int = 3, budget: float | None = None):

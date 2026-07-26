@@ -311,6 +311,25 @@ def all_fav_regions() -> list[str]:
     return [k for (k,) in rows if k]
 
 
+def users_with_telegram() -> list[dict]:
+    """텔레그램을 연결한 유저 [{id,email,chat_id}]. 데일리 브리핑 대상."""
+    c = conn()
+    rows = c.execute(
+        "SELECT u.id, u.email, p.data FROM users u JOIN profile p ON p.uid=u.id "
+        "WHERE p.data LIKE '%telegram%'"
+    ).fetchall()
+    c.close()
+    out = []
+    for uid, email, data in rows:
+        try:
+            cid = (json.loads(data or "{}").get("telegram") or {}).get("chat_id")
+        except Exception:  # noqa: BLE001
+            cid = None
+        if cid:
+            out.append({"id": uid, "email": email, "chat_id": cid})
+    return out
+
+
 def users_with_region_favs() -> list[dict]:
     """관심지역(kind=region)이 1개 이상인 유저 목록. 주간 다이제스트용."""
     c = conn()
