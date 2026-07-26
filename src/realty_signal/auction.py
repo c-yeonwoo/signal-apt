@@ -64,8 +64,11 @@ class Listing:
     매도가: float = 0.0          # 단기매도 예상가(만원)
     미납관리비: float = 0.0
     수리비: float = 0.0
-    인수보증금: float = 0.0
+    인수보증금: float = 0.0      # 권리분석 인수합계가 들어온다(입찰가 계산에 반영)
     대리입찰비: float = 0.0
+    권리분석: dict = field(default_factory=dict)
+    낙찰가: float | None = None   # 낙찰 후 플랜 기준가
+    낙찰일: str = ""
     최근실거래가: float | None = None   # 국토부 동일단지 최근 매매(만원)
     최근전세가: float | None = None     # 국토부 동일단지 최근 전세(만원)
     건축년도: int | None = None         # 국토부 실거래 매칭 단지 건축년도
@@ -178,6 +181,140 @@ def add(data: dict) -> Listing:
 
 def remove(listing_id: str) -> None:
     save([x for x in load() if x.id != listing_id])
+
+
+def get(listing_id: str) -> Listing | None:
+    return next((x for x in load() if x.id == listing_id), None)
+
+
+def update(listing_id: str, patch: dict) -> Listing | None:
+    listings = load()
+    hit = next((x for x in listings if x.id == listing_id), None)
+    if hit is None:
+        return None
+    for k, v in patch.items():
+        if k in Listing.__dataclass_fields__ and k != "id":
+            setattr(hit, k, v)
+    save(listings)
+    return hit
+
+
+# --- 낙찰 후 실행 플랜 ---
+BOND_RATE = 0.10          # 입찰보증금 = 최저매각가의 10%
+_STEPS = [                # (D+일, 단계, 할 일)  민사집행법 통상 일정 기준
+    (0, "낙찰(최고가매수신고)", "보증금 영수증 보관. 매각물건명세서 다시 대조."),
+    (7, "매각허가결정", "이해관계인 이의·항고 여부 확인."),
+    (14, "매각허가결정 확정", "항고 없으면 확정. 경락잔금대출 신청 시작(승인 2~3주)."),
+    (44, "대금지급기한", "잔금 납부 = 소유권 취득. 같은 날 소유권이전·말소등기 촉탁."),
+    (45, "인도명령 신청", "대금납부 후 6개월 내 신청 가능. 점유자 특정해 바로 접수."),
+    (75, "명도 협의/집행", "협의 이사비 vs 강제집행 비용 비교. 협의가 대개 싸고 빠르다."),
+    (105, "수리·입주/임대", "명도 완료 후 수리. 임대면 이 시점부터 월세 발생."),
+]
+
+
+def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) -> dict:
+    """낙찰 후 일정·자금 계획 — 언제 얼마가 필요한지가 안 보이면 입찰을 못 한다."""
+    from datetime import date, timedelta
+
+    pp = _p(p)
+    bid = 낙찰가 or lst.낙찰가 or 0
+    if not bid:
+        rec = recommend(lst, pp)
+        bid = rec["입찰가"]
+        assumed = True
+    else:
+        assumed = False
+    base_day = _date_of(lst.낙찰일) or _date_of(lst.입찰기일) or date.today()
+
+    보증금 = round((lst.최저매각가 or lst.감정가 * _floor_rate(lst)) * BOND_RATE)
+    등기비 = round(bid * pp["취득세율"] + pp["법무비"] / 10000)
+    명도비 = round(lst.전용면적 * pp["㎡_평"] * pp["명도_평당"] / 10000)
+    대출 = round(bid * (lst.대출비율 if lst.대출비율 is not None else pp["대출비율"]))
+    잔금 = max(0, round(bid - 보증금 - 대출))
+    money = {0: -보증금, 44: -(잔금 + 등기비), 75: -(명도비 + lst.미납관리비),
+             105: -round(lst.수리비)}
+    steps = []
+    for d, title, todo in _STEPS:
+        amt = money.get(d)
+        steps.append({"D": d, "날짜": (base_day + timedelta(days=d)).isoformat(),
+                      "단계": title, "할일": todo,
+                      "금액": round(amt) if amt else None})
+    return {
+        "기준일": base_day.isoformat(), "낙찰가": round(bid), "추정입찰가": assumed,
+        "보증금": 보증금, "경락잔금대출": 대출, "잔금": 잔금,
+        "등기비": 등기비, "명도비": 명도비,
+        "총현금": round(보증금 + 잔금 + 등기비 + 명도비 + lst.미납관리비 + lst.수리비),
+        "steps": steps,
+    }
+
+
+def _date_of(s: str):
+    from datetime import date
+
+    t = (s or "").strip().replace(".", "-").replace("/", "-")[:10]
+    try:
+        y, m, d = (int(x) for x in t.split("-")[:3])
+        return date(y, m, d)
+    except (ValueError, TypeError):
+        return None
+
+
+# --- 붙여넣기 파서(규칙) — AI 키 없이도 임포트가 되게 ---
+_RE_CASE = re.compile(r"(20\d{2})\s*타\s*경\s*(\d+)")
+_RE_MONEY = re.compile(r"([\d,]{4,})\s*원")
+_RE_DATE = re.compile(r"(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})")
+_RE_AREA = re.compile(r"(?:전용|전용면적)?\s*([\d]{2,3}\.?\d*)\s*(?:㎡|m2|m²)")
+_RE_SGG = re.compile(r"[가-힣]{2,8}(?:시|군|구)")
+_SIDO = ("특별시", "광역시", "특별자치시", "특별자치도")
+_RE_APT = re.compile(r"([가-힣A-Za-z0-9()·\s]{2,20}?(?:아파트|마을|타운|캐슬|자이|힐스테이트|푸르지오|래미안|e편한세상|더샵|주공\s?\d*|한양수자인))")
+
+
+def _won_to_man(s: str) -> float:
+    return round(int(s.replace(",", "")) / 10000)
+
+
+def _sigungu(text: str) -> str:
+    """소재지 → 시군구. 시도(특별시·광역시·도)는 버리고, '성남시 분당구'처럼 시+구는 붙인다."""
+    toks = [t for t in _RE_SGG.findall(text) if not t.endswith(_SIDO)]
+    if not toks:
+        return ""
+    if len(toks) >= 2 and toks[0].endswith("시") and toks[1].endswith("구"):
+        return f"{toks[0]} {toks[1]}"
+    return toks[0]
+
+
+def parse_text(text: str) -> dict:
+    """법원경매 공고 텍스트 → Listing 필드. 못 뽑은 건 넣지 않는다(빈값 덮어쓰기 방지)."""
+    t = (text or "").replace("\u00a0", " ")
+    out: dict = {}
+    if m := _RE_CASE.search(t):
+        out["사건번호"] = f"{m.group(1)}타경{m.group(2)}"
+    if m := _RE_APT.search(t):
+        out["단지명"] = re.sub(r"\s+", " ", m.group(1)).strip()
+    if region := _sigungu(t):
+        out["region"] = region
+    for label, field_name in (("감정", "감정가"), ("최저", "최저매각가")):
+        if m := re.search(rf"{label}[^\n]{{0,12}}?([\d,]{{5,}})\s*원", t):
+            out[field_name] = _won_to_man(m.group(1))
+    if "감정가" not in out and (m := _RE_MONEY.search(t)):
+        out["감정가"] = _won_to_man(m.group(1))
+    if m := re.search(r"(?:입찰|매각)\s*기일[^\n]{0,20}?(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})", t):
+        out["입찰기일"] = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    elif m := _RE_DATE.search(t):
+        out["입찰기일"] = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    if m := _RE_AREA.search(t):
+        out["전용면적"] = float(m.group(1))
+    if m := re.search(r"유찰\s*(\d)\s*회", t):
+        out["유찰횟수"] = int(m.group(1))
+    elif t.count("유찰"):
+        out["유찰횟수"] = t.count("유찰")
+    return out
+
+
+def parse_confidence(parsed: dict) -> str:
+    """규칙 파서 결과가 쓸 만한지 — 부족하면 호출부가 AI 파서로 넘어간다."""
+    core = sum(1 for k in ("사건번호", "단지명", "감정가", "입찰기일") if parsed.get(k))
+    return {4: "high", 3: "high", 2: "medium"}.get(core, "low")
 
 
 def _norm(s: str) -> str:

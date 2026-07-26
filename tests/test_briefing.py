@@ -108,6 +108,44 @@ def test_signal_change_is_reported(uid, monkeypatch):
     assert "↑ 노원구: 관망 → 매수" in b["text"]
 
 
+def test_imminent_bid_leads_the_todo(uid, monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    from realty_signal import auction
+
+    monkeypatch.setattr(auction, "AUCTION_FILE", tmp_path / "auction.json")
+    day = (briefing.today_kst() + timedelta(days=1)).isoformat()
+    auction.add({"단지명": "상계주공7", "region": "노원구", "사건번호": "2024타경51234",
+                 "감정가": 85000, "최저매각가": 54400, "입찰기일": day})
+    b = briefing.build(uid, force=True)
+    assert "[경매]" in b["text"] and "D-1 입찰" in b["text"]
+    assert "상계주공7 입찰가 확정" in b["text"].split("오늘 할 일 → ")[1]
+
+
+def test_far_off_bid_is_not_shown(uid, monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    from realty_signal import auction
+
+    monkeypatch.setattr(auction, "AUCTION_FILE", tmp_path / "auction.json")
+    auction.add({"단지명": "먼단지", "region": "노원구",
+                 "입찰기일": (briefing.today_kst() + timedelta(days=30)).isoformat()})
+    assert "먼단지" not in briefing.build(uid, force=True)["text"]
+
+
+def test_post_win_step_appears(uid, monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    from realty_signal import auction
+
+    monkeypatch.setattr(auction, "AUCTION_FILE", tmp_path / "auction.json")
+    won = (briefing.today_kst() - timedelta(days=13)).isoformat()   # D+14 매각허가확정이 내일
+    auction.add({"단지명": "낙찰단지", "region": "노원구", "감정가": 85000,
+                 "최저매각가": 54400, "낙찰가": 60000, "낙찰일": won})
+    t = briefing.build(uid, force=True)["text"]
+    assert "낙찰단지" in t and "매각허가결정 확정" in t
+
+
 def test_run_sends_and_moves_snapshot(uid, monkeypatch):
     from realty_signal import telegram
 

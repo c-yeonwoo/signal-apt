@@ -58,6 +58,44 @@ def _quicksales(regions: set[str], budget: float) -> list[dict]:
     return out
 
 
+AUCTION_WINDOW = 7      # 입찰기일 며칠 전부터 브리핑에 올릴지
+ALERT_DDAYS = (7, 3, 1, 0)   # 이 날짜에만 '새 소식'으로 센다(매일 카운트되지 않게)
+
+
+def _auction_alerts() -> list[dict]:
+    """입찰기일이 임박한 매물 + 낙찰 후 다가온 단계. 등록 매물은 내가 고른 것이라 전부 본다."""
+    from realty_signal import auction
+
+    today = today_kst()
+    out = []
+    try:
+        listings = auction.load()
+    except Exception:  # noqa: BLE001
+        return []
+    for lst in listings:
+        d = auction._date_of(lst.입찰기일)
+        if d:
+            dday = (d - today).days
+            if 0 <= dday <= AUCTION_WINDOW:
+                out.append({"kind": "bid", "D": dday, "단지": lst.단지명,
+                            "region": lst.region, "사건": lst.사건번호,
+                            "최저": lst.최저매각가, "날짜": d.isoformat()})
+        if not lst.낙찰일:
+            continue
+        try:
+            for s in auction.plan(lst)["steps"]:
+                sd = date.fromisoformat(s["날짜"])
+                if 0 <= (sd - today).days <= AUCTION_WINDOW:
+                    out.append({"kind": "plan", "D": (sd - today).days, "단지": lst.단지명,
+                                "단계": s["단계"], "할일": s["할일"], "금액": s["금액"],
+                                "날짜": s["날짜"]})
+                    break
+        except Exception:  # noqa: BLE001
+            continue
+    out.sort(key=lambda a: a["D"])
+    return out
+
+
 def _diff_candidates(cur: list[dict], prev: dict) -> dict:
     """전일 스냅샷 대비 신규·이탈·가격변동."""
     cur_map = {_key(c): c for c in cur}
@@ -86,7 +124,12 @@ def _diff_signals(cur: dict, prev: dict) -> list[dict]:
 
 
 def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
-          visited: dict | None = None) -> str:
+          visited: dict | None = None, auctions: list[dict] | None = None) -> str:
+    urgent = next((a for a in (auctions or []) if a["D"] <= 1), None)
+    if urgent:      # 기일은 미룰 수 없다 — 무조건 먼저
+        if urgent["kind"] == "bid":
+            return f"{urgent['단지']} 입찰가 확정·보증금 준비 ({urgent['날짜']})"
+        return f"{urgent['단지']} {urgent['단계']} — {urgent['할일']}"
     if diff["new"]:
         c = diff["new"][0]
         return f"{c['단지']}({c['region']}) 실거래·평면 확인"
@@ -130,6 +173,7 @@ def build(uid: int, *, force: bool = False) -> dict:
     sigs = _diff_signals(cur_sigs, prev.get("signals") or {})
     qs = _quicksales(watch, float(budget))
     qs_new = len(qs) - int(prev.get("quicksale") or 0)
+    auctions = _auction_alerts()
 
     snapshot = {
         "date": today_kst().isoformat(),
@@ -139,20 +183,21 @@ def build(uid: int, *, force: bool = False) -> dict:
         "quicksale": len(qs),
     }
     news = len(diff["new"]) + len(diff["dropped"]) + len(diff["moved"]) + len(sigs) \
-        + (qs_new if qs_new > 0 else 0)
+        + (qs_new if qs_new > 0 else 0) \
+        + sum(1 for a in auctions if a["D"] in ALERT_DDAYS)
     weekly = today_kst().weekday() == 0
     if not first and not news and not weekly and not force:
         return {"send": False, "reason": "no_news", "snapshot": snapshot}
 
     text = _render(profile, data, diff, sigs, qs, qs_new, first=first,
-                   visited=db.imjang_latest(uid))
+                   visited=db.imjang_latest(uid), auctions=auctions)
     return {"send": True, "text": text, "snapshot": snapshot, "news": news,
             "first": first, "candidates": cands}
 
 
 def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             qs: list[dict], qs_new: int, *, first: bool,
-            visited: dict | None = None) -> str:
+            visited: dict | None = None, auctions: list[dict] | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
     L = [f"🦊 Nick 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
@@ -203,11 +248,23 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             L.append(f"· {m.get('단지명')} {py}{_eok(m.get('호가'))}{gap_s}")
         L.append("")
 
+    if auctions:
+        L.append("[경매]")
+        for a in auctions[:4]:
+            dd = "오늘" if a["D"] == 0 else f"D-{a['D']}"
+            if a["kind"] == "bid":
+                low = f" · 최저 {_eok(a['최저'])}" if a.get("최저") else ""
+                L.append(f"· {dd} 입찰 — {a['단지']}({a['region']}) {a.get('사건') or ''}{low}")
+            else:
+                amt = f" · {abs(a['금액']):,}만" if a.get("금액") else ""
+                L.append(f"· {dd} {a['단계']} — {a['단지']}{amt}: {a['할일']}")
+        L.append("")
+
     if not data.get("직장"):
         L.append("※ 직장 주소가 없어 통근 필터가 꺼져 있습니다. 마이페이지에서 넣어 주세요.")
         L.append("")
 
-    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited)}")
+    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited, auctions)}")
     L.append(f"{config.app_base_url()}/#dashboard")
     L.append("")
     L.append("끄기: /stop")
