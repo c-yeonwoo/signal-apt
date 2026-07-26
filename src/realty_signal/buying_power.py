@@ -77,7 +77,9 @@ class Params:
             c = reg.classify(self.region, self.sido)
             self.regulated = c["규제지역"]
             self.metro = c["수도권"]
-        elif self.regulated:
+        else:
+            # 지역 미지정 = 수도권 규제지역 가정. 낙관적 LTV 80%로 예산을 부풀리지 않는다.
+            self.regulated = True
             self.metro = True
 
     def tier(self, price: float = float("inf")) -> str:
@@ -280,6 +282,8 @@ def notes(p: Params, price: float) -> list[str]:
     """규제 때문에 숫자가 이렇게 나온 이유 — 확정서에 그대로 붙는다."""
     out = []
     tier = p.tier(price)
+    if not p.region:
+        out.append("매수 지역을 아직 안 정해서 수도권 규제지역(LTV·절대한도·스트레스)으로 보수 계산했어요. 지역을 넣으면 맞춰 드려요.")
     if p.regulated:
         out.append(f"규제지역이라 {reg.TIER_LABEL[tier]} LTV {int(reg.ltv_of(tier, True) * 100)}%가 적용돼요.")
     if tier == "1주택_유지":
@@ -316,6 +320,7 @@ def statement(p: Params) -> dict:
         "규제": {
             "기준일": reg.AS_OF,
             "지역": p.region,
+            "지역가정": p.region is None,   # True면 규제지역으로 보수 가정 중
             "규제지역": bool(p.regulated),
             "수도권": bool(p.metro),
             "자격": detail["자격"],

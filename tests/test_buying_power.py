@@ -14,19 +14,33 @@ def _p(**kw):
 
 
 def test_ltv_cap_by_homes_and_first_time():
-    assert _p(homes=0).ltv_cap() == 0.70
-    assert _p(homes=0, first_time=True).ltv_cap() == 0.80
-    assert _p(homes=1).ltv_cap() == 0.70                    # 처분·전입 약정 기준
-    assert _p(homes=1, dispose=False).ltv_cap() == 0.60
+    # 지역 미지정 = 규제지역 보수 가정
+    assert _p(homes=0).ltv_cap() == 0.40
+    assert _p(homes=0, first_time=True).ltv_cap() == 0.70
+    assert _p(homes=1).ltv_cap() == 0.40                    # 처분·전입 약정 기준
+    assert _p(homes=1, dispose=False).ltv_cap() == 0.00
+    # 비규제(지방) — 지역을 명시해야 완화된다
+    local = dict(region="해운대구", sido="부산")
+    assert _p(homes=0, **local).ltv_cap() == 0.70
+    assert _p(homes=0, first_time=True, **local).ltv_cap() == 0.80
+    assert _p(homes=1, **local).ltv_cap() == 0.70
+    assert _p(homes=1, dispose=False, **local).ltv_cap() == 0.60
     # 규제지역 — 10·15 대책
-    assert _p(homes=0, regulated=True).ltv_cap() == 0.40
-    assert _p(homes=0, first_time=True, regulated=True).ltv_cap() == 0.70
-    assert _p(homes=1, regulated=True).ltv_cap() == 0.40
-    assert _p(homes=1, regulated=True, dispose=False).ltv_cap() == 0.00
-    assert _p(homes=2, regulated=True).ltv_cap() == 0.00
+    assert _p(homes=0, region="강남구").ltv_cap() == 0.40
+    assert _p(homes=0, first_time=True, region="강남구").ltv_cap() == 0.70
+    assert _p(homes=2, region="강남구").ltv_cap() == 0.00
     # 희망 LTV 는 제도 상한을 넘지 못한다
-    assert _p(homes=1, ltv=0.9).ltv_cap() == 0.70
-    assert _p(homes=0, ltv=0.5).ltv_cap() == 0.50
+    assert _p(homes=0, first_time=True, ltv=0.9).ltv_cap() == 0.70
+    assert _p(homes=0, first_time=True, ltv=0.5).ltv_cap() == 0.50
+
+
+def test_no_region_assumes_regulated_metro():
+    p = _p(first_time=True)
+    assert p.regulated is True and p.metro is True
+    assert p.loan_cap(100_000) == 60_000
+    st = bp.statement(p)
+    assert st["규제"]["지역가정"] is True
+    assert any("보수 계산" in n for n in st["안내"])
 
 
 def test_special_borrower_ltv_needs_income_and_price():
