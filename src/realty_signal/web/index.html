@@ -904,6 +904,30 @@
   </div>
 </dialog>
 
+<dialog id="bpDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <h3 style="margin:0 0 2px;font-size:18px">매수력 확정</h3>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 14px">얼마짜리를 · 얼마 대출로 · 매달 얼마 내고 살 수 있는지 하나로 확정합니다. 확정하면 추천·후보·알림이 전부 이 숫자를 기준으로 움직여요.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+    <label>가용자본(만원)<br><input id="bp_capital" type="number" min="0" class="ctrl" style="width:100%" oninput="bpPreview()"></label>
+    <label>연소득(만원)<br><input id="bp_income" type="number" min="0" class="ctrl" style="width:100%" placeholder="DSR 한도" oninput="bpPreview()"></label>
+    <label>기대출 연원리금(만원)<br><input id="bp_debt" type="number" min="0" class="ctrl" style="width:100%" placeholder="0" oninput="bpPreview()"></label>
+    <label>주택 보유<br><select id="bp_homes" class="ctrl" style="width:100%" onchange="bpPreview()">
+      <option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
+    <label>희망 LTV(%)<br><input id="bp_ltv" type="number" min="0" max="100" class="ctrl" style="width:100%" placeholder="제도 상한" oninput="bpPreview()"></label>
+    <label>금리(%) · 만기(년)<br><span style="display:flex;gap:6px">
+      <input id="bp_rate" type="number" step="0.1" value="4" class="ctrl" style="width:50%" oninput="bpPreview()">
+      <input id="bp_years" type="number" value="30" class="ctrl" style="width:50%" oninput="bpPreview()"></span></label>
+    <label style="grid-column:1/-1;font-size:12px;color:var(--dim);display:flex;gap:16px;align-items:center">
+      <span><input type="checkbox" id="bp_first" onchange="bpPreview()" style="vertical-align:middle"> 생애최초 (LTV 80%·취득세 감면)</span>
+      <span><input type="checkbox" id="bp_reg" onchange="bpPreview()" style="vertical-align:middle"> 규제지역</span></label>
+  </div>
+  <div id="bpPreview" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px;font-size:13px;color:var(--dim)">가용자본을 입력하세요.</div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+    <span class="btn" onclick="document.getElementById('bpDlg').close()">닫기</span>
+    <span class="btn primary" onclick="bpConfirm()">이 매수력으로 확정</span>
+  </div>
+</dialog>
+
 <dialog id="onbDlg" style="width:480px;max-width:94vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
   <h3 style="margin:0 0 2px">1분 프로필 설정</h3>
   <p style="color:var(--dim);font-size:13px;margin:0 0 16px">입력하면 청약·결론·필터가 <b>내 조건</b>으로 맞춰집니다. (나중에 변경 가능)</p>
@@ -1362,18 +1386,159 @@ async function loadDashboard(){
     ${go('report','AI 리포트','내 조건 맞춤 매수전략')}
     ${go('mymap','내 시그널맵','즐겨찾기 지도')}
     ${go('tradeup','갈아타기','상급지 시뮬레이션')}</div>`;
-  // Timing desk fold: ★변화 → 예산 BUY+ → 관심동네·국면 → 여정 → 심화(매물)
+  // Timing desk fold: 매수력 → 후보 3곳 → ★변화 → 예산 BUY+ → 관심동네·국면 → 심화
   body.innerHTML=
-    '<div id="dashChangesWrap"></div>'
-    +_dashCard(_dashH('예산 안 BUY+ 지역')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px;border-left:3px solid var(--accent)')
+    '<div id="dashPowerWrap"></div>'
+    +'<div id="dashShortlistWrap"></div>'
+    +'<div id="dashChangesWrap"></div>'
+    +_dashCard(_dashH('예산 안 BUY+ 지역 <span style="font-weight:400">· 시군구</span>')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">불러오는 중…</div>','margin-bottom:14px')
     +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
        ${_dashCard(favH)}${_dashCard(regimeH)}</div>`
     +'<div id="dashFeedWrap"></div>'
     +_dashCard(journeyH,'margin-bottom:14px')
     +_dashCard(shortcutsH);
+  _loadBuyingPower();
+  _loadShortlist();
   _loadDashChanges();
   _loadDashBudget();
   _loadDashFeed();
+}
+// ===== 매수력 확정서 — 최대매수가·대출·월상환·필요현금을 하나로 =====
+let _bp=null;
+async function _loadBuyingPower(){
+  const wrap=document.getElementById('dashPowerWrap'); if(!wrap) return;
+  let d; try{ d=await (await fetch('/api/buying-power')).json(); }catch(e){ wrap.innerHTML=''; return; }
+  _bp=d;
+  if(!d.ready){
+    wrap.innerHTML=_dashCard(_dashH('매수력 확정')
+      +`<div style="font-size:13px;line-height:1.6">${d.message||'가용자본을 입력하면 매수력을 확정할 수 있어요.'}
+        <div style="margin-top:10px"><span class="btn primary" onclick="openBuyingPower()">매수력 계산하기 →</span></div></div>`,
+      'margin-bottom:14px;border-left:3px solid var(--accent)');
+    return;
+  }
+  const confirmed=!!d['확정'];
+  const c=d['비용']||{}, g=d['가정']||{};
+  const line=`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span style="font-size:26px;font-weight:800;color:var(--accent)">${_eok(d['최대매수가'])}</span>
+      <span style="font-size:13px;color:var(--dim)">까지 · 대출 <b style="color:var(--txt)">${_eok(d['대출'])}</b>(LTV ${Math.round((d['실효LTV']||0)*100)}%) · 월 <b style="color:var(--txt)">${(d['월상환']||0).toLocaleString()}만</b>${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</span></div>`;
+  const cash=`<div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6">
+      필요현금 <b style="color:var(--txt)">${_eok(d['필요현금'])}</b> <span style="font-size:11px">(자기자본 ${_eok(g['자기자본'])})</span>
+      <br><span style="font-size:11px">이 중 집값 외 비용 ${((c['취득세']||0)+(c['중개비']||0)+(c['이사비']||0)+(c['수리비']||0)).toLocaleString()}만 — 취득세 ${(c['취득세']||0).toLocaleString()} · 중개 ${(c['중개비']||0).toLocaleString()} · 이사 ${(c['이사비']||0).toLocaleString()}</span>
+      <br><span style="font-size:11px">한도 제약: <b style="color:${d['제약']==='DSR'?'#ea580c':'var(--txt)'}">${d['제약']}</b> · ${g['주택수']===0?'무주택':(g['주택수']===1?'1주택':'다주택')}${g['생애최초']?' · 생애최초':''}${g['규제지역']?' · 규제지역':''} · 금리 ${(g['금리']*100).toFixed(1)}%(스트레스 +${(g['스트레스가산']*100).toFixed(1)}%p) · ${g['만기']}년</span></div>`;
+  const safe=d['안정매수가']?`<div style="font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--dim)">
+      월 상환을 소득의 30% 이내로 두면 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만) — 무리 없는 선</div>`:'';
+  const stale=confirmed && Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01);
+  const cta=(confirmed && !stale)
+    ? `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="btn" style="padding:5px 12px" onclick="openBuyingPower()">조건 바꾸기</span>
+        <span style="font-size:11px;color:var(--dim)">확정됨 — 추천·후보·알림이 이 기준으로 움직입니다</span></div>`
+    : `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="btn primary" style="padding:6px 14px" onclick="openBuyingPower()">${stale?'다시 확정하기 →':'이 매수력으로 확정 →'}</span>
+        <span style="font-size:11px;color:var(--dim)">${stale?`조건이 바뀌었어요 (확정값 ${_eok(d['확정'])})`:'확정 전이라 추천이 잠정치입니다'}</span></div>`;
+  const tag=(confirmed && !stale) ? '<span style="font-weight:400">· 확정</span>'
+    : (stale ? '<span style="font-weight:400;color:#ea580c">· 재확정 필요</span>'
+             : '<span style="font-weight:400;color:#ea580c">· 미확정</span>');
+  wrap.innerHTML=_dashCard(_dashH('내 매수력 '+tag)
+    +line+cash+safe+cta, 'margin-bottom:14px;border-left:3px solid var(--accent)');
+}
+function openBuyingPower(){
+  const p=_profile||{}, g=(_bp&&_bp['가정'])||{};
+  const set=(id,v)=>{const el=document.getElementById(id); if(el&&v!=null&&v!=='') el.value=v;};
+  set('bp_capital', g['자기자본']||p['가용자본']||'');
+  set('bp_income', g['연소득']||p['연소득']||'');
+  set('bp_debt', g['기대출연원리금']??p['기대출연원리금']??'');
+  document.getElementById('bp_homes').value=String(g['주택수']??p['주택수']??0);
+  document.getElementById('bp_first').checked=!!(g['생애최초']??p['생애최초']);
+  document.getElementById('bp_reg').checked=!!g['규제지역'];
+  set('bp_rate', g['금리']?(g['금리']*100).toFixed(1):'4');
+  set('bp_years', g['만기']||30);
+  document.getElementById('bpDlg').showModal();
+  bpPreview();
+}
+function _bpParams(){
+  const n=id=>{const v=document.getElementById(id).value; return v===''?null:+v;};
+  return {capital:n('bp_capital'), income:n('bp_income'), existing_debt_annual:n('bp_debt')||0,
+    homes:+document.getElementById('bp_homes').value,
+    first_time:document.getElementById('bp_first').checked,
+    regulated:document.getElementById('bp_reg').checked,
+    ltv:n('bp_ltv')!=null?n('bp_ltv')/100:null,
+    rate:(n('bp_rate')??4)/100, years:n('bp_years')||30};
+}
+let _bpTimer=null;
+function bpPreview(){
+  clearTimeout(_bpTimer);
+  _bpTimer=setTimeout(async ()=>{
+    const p=_bpParams(), el=document.getElementById('bpPreview');
+    if(!p.capital){ el.textContent='가용자본을 입력하세요.'; return; }
+    const q=Object.entries(p).filter(([,v])=>v!=null&&v!=='').map(([k,v])=>`${k}=${v}`).join('&');
+    try{
+      const d=await (await fetch('/api/buying-power?'+q)).json();
+      if(!d.ready){ el.textContent=d.message||'계산할 수 없습니다.'; return; }
+      const c=d['비용']||{};
+      el.innerHTML=`<div style="color:var(--txt);font-size:15px;font-weight:700;margin-bottom:6px">${_eok(d['최대매수가'])}까지 · 월 ${(d['월상환']||0).toLocaleString()}만</div>
+        대출 ${_eok(d['대출'])} (LTV ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%)${d['DSR']!=null?` · DSR ${d['DSR']}%`:''} · 제약 ${d['제약']}<br>
+        필요현금 ${_eok(d['필요현금'])} — 취득세 ${(c['취득세']||0).toLocaleString()}만 · 중개 ${(c['중개비']||0).toLocaleString()}만 · 이사 ${(c['이사비']||0).toLocaleString()}만
+        ${d['안정매수가']?`<br>소득 30% 기준 안정선 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만)`:''}`;
+    }catch(e){ el.textContent='계산에 실패했습니다.'; }
+  }, 250);
+}
+async function bpConfirm(){
+  const p=_bpParams();
+  if(!p.capital){ toast('가용자본을 입력해 주세요'); return; }
+  const r=await fetch('/api/buying-power/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+  const d=await r.json();
+  if(!d.ok){ toast(d.error||'확정에 실패했습니다'); return; }
+  _profile['매수력']=d['매수력'];
+  if(p.capital) _profile['가용자본']=p.capital;
+  if(p.income) _profile['연소득']=p.income;
+  document.getElementById('bpDlg').close();
+  toast('매수력을 확정했습니다');
+  _loadBuyingPower(); _loadShortlist(); _loadDashBudget();
+}
+// ===== 이번 주 볼 단지 3곳 — 매수력 × 라이프스타일 적합도 =====
+async function _loadShortlist(){
+  const wrap=document.getElementById('dashShortlistWrap'); if(!wrap) return;
+  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>','margin-bottom:14px');
+  let d; try{ d=await (await fetch('/api/shortlist')).json(); }catch(e){ wrap.innerHTML=''; return; }
+  if(!d.ready){
+    wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')
+      +`<div style="color:var(--dim);font-size:13px;line-height:1.6">${d.message||'예산 안에서 볼 만한 단지를 찾지 못했습니다.'}
+        ${d['탈락']?`<div style="margin-top:6px;font-size:12px">${_slRejectLine(d)}</div>`:''}
+        <div style="margin-top:8px"><span class="btn" style="padding:5px 12px" onclick="switchTab('signal')">시장·지역에서 ★ 추가 →</span></div></div>`,
+      'margin-bottom:14px');
+    return;
+  }
+  const cards=d.candidates.map((c,i)=>{
+    const z=c['자금']||{};
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-top:${i?10:0}px;background:var(--panel)">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:800;color:var(--accent)">${i+1}</span>
+        <b style="font-size:15px">${c['단지']}</b>${badge(c['시그널'])}
+        <span style="margin-left:auto;font-size:13px"><b>${_eok(c['예상가'])}</b> <span style="color:var(--dim);font-size:11px">${c['평단가']}만/평 · 적합 ${c['점수']}</span></span>
+      </div>
+      <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.5">${c['근거']}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">필요현금 ${_eok(z['필요현금'])} · 대출 ${_eok(z['대출'])} · 월 ${(z['월상환']||0).toLocaleString()}만${z['부족']?` · <span style="color:#ea580c">${_eok(z['부족'])} 부족</span>`:''}</div>
+      <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">
+        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${c['단지'].replace(/'/g,'')}','${c['region']}')">단지 상세</span>
+        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openNbhd('${c['region']}')">동네 리포트</span>
+        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="askNick('${c['region']} ${c['단지'].replace(/'/g,'')} 지금 사도 될까? 실거래·단지시그널·내 예산 기준으로 근거와 함께 알려줘.')">Nick에게</span>
+      </div></div>`;
+  }).join('');
+  const sub=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} · ${d.pyeong}평 기준 · ${d['지역'].length}개 지역 ${d['검토']}개 단지에서 추림${d['확정예산']?'':' <span style="color:#ea580c">(매수력 미확정 — 잠정)</span>'}</div>`;
+  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지 <span style="font-weight:400">· 적합도순</span>')+sub+cards
+    +`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지는 왜 뺐나</summary>
+      <div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.6">${_slRejectLine(d)}
+      <br><span style="font-size:11px">가중치 ${Object.entries(d['가중치']).map(([k,v])=>`${k} ${Math.round(v*100)}%`).join(' · ')}${d['직장']?'':' · 직장 주소를 넣으면 통근이 반영됩니다'}</span></div></details>`,
+    'margin-bottom:14px;border-left:3px solid var(--sig-buy)');
+}
+function _slRejectLine(d){
+  const r=d['탈락']||{};
+  const parts=[];
+  if(r['예산초과']) parts.push(`예산 초과 ${r['예산초과']}개`);
+  if(r['통근초과']) parts.push(`통근 70분 초과 ${r['통근초과']}개`);
+  if(r['시그널']) parts.push(`매도주의 지역 ${r['시그널']}개`);
+  if(r['데이터없음']) parts.push(`실거래 데이터 없음 ${r['데이터없음']}개 지역`);
+  return parts.length?parts.join(' · '):'탈락 없음';
 }
 // 내 예산 맞춤(aha) — 실거주 매수 타깃: 가용자본→매수가능가→예산내 BUY+ 지역 top
 async function _loadDashBudget(){
@@ -4343,6 +4508,7 @@ function renderMyPageSummary(){
 function saveMyPage(){
   const v=id=>document.getElementById(id).value;
   const chungyak=document.getElementById('mp_chungyak').checked;
+  const prevPower=(_profile||{})['매수력'];
   _profile = {주택수:+v('mp_own'), 가용자본:+v('mp_capital')||0,
     관심평수:[..._sizeSel.mp], 거주지:v('mp_region').trim(),
     직장:v('mp_work').trim(),
@@ -4357,6 +4523,7 @@ function saveMyPage(){
     세대주:v('mp_householder')===''?null:+v('mp_householder'),
     생애최초:v('mp_firsthome')===''?null:+v('mp_firsthome'),
   } : {무주택기간:null, 부양가족:null, 청약통장개월:null, 자녀수:null, 혼인상태:null, 세대주:null, 생애최초:null});
+  if(prevPower) _profile['매수력']=prevPower;   // 확정 매수력은 프로필 저장으로 지워지지 않는다
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
   if(_profile['가용자본']) track('profile_complete',{capital:_profile['가용자본']});
   renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults(); renderAha();
