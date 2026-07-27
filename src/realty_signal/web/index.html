@@ -2853,8 +2853,17 @@ function plotPins(mapId, items, coords, opt, opts){
     const isfb=fb.has(i);
     const icon=L.divIcon({className:'',html:`<div class="mpin${isfb?' fb':''}" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
     const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사 (지역 중심)</span>`:'');
-    const mk=L.marker(c,{icon}).bindPopup(lbl);
-    mk.on('click', e=>{ L.DomEvent.stopPropagation(e); selectMsRow(mapId, i); });
+    const cxName=(it['단지명']||'').replace(/['"\\]/g,''), cxReg=((it['지역']||it.region)||'').replace(/['"\\]/g,'');
+    const popup=lbl+(cxName&&cxReg
+      ? `<div style="margin-top:6px;font-size:11px;color:var(--dim)">다시 누르면 단지 상세</div>` : '');
+    const mk=L.marker(c,{icon}).bindPopup(popup);
+    mk.on('click', e=>{
+      L.DomEvent.stopPropagation(e);
+      const cur=_ms[mapId];
+      // 같은 핀 두 번째 클릭 → 단지 상세 모달
+      if(cur && cur.sel===i && cxName && cxReg){ openComplex(cxName, cxReg); return; }
+      selectMsRow(mapId, i);
+    });
     st.markers[i]=mk;
     // 뷰포트 잠금 중이면 화면 안 핀만 올린다 (다시 찾기 결과 유지)
     if(!viewSet || viewSet.has(i)) mk.addTo(st.map);
