@@ -10,7 +10,9 @@
 
 지역 BUY/STRONG_BUY 시그널과는 축이 다르다 — 지역 시그널은 그 동네 KB 수급·모멘텀,
 이 모듈은 수도권 전체 유동성 국면. 둘이 겹치면 '막차 매수' 가능성으로 읽는다.
-수도권 통합 권역 1개. 지방은 시군구 평단가 부족으로 미산출.
+
+표본 가드: E급 중간 평단가가 비정상적으로 높으면(외곽 시군구 누락) 급지가 찌그러진
+것이므로 끝물/주의를 내지 않는다. 예: 수원 영통이 E로 잡히는 경우.
 """
 
 from __future__ import annotations
@@ -23,6 +25,11 @@ _LO = ("D", "E")                   # 끝물 주도·막차 후보
 _HI = ("A", "B")
 # 계단 한 칸이 노이즈로 뒤집히지 않게 최소 상승폭(%p, 8주 누적)
 _STEP_EPS = 0.05
+# 수도권 시군구 풀이 이보다 작으면 5분위가 불안정
+_MIN_METRO = 30  # 5분위 안정 하한(정상 수도권 ~80)
+# E급 중간 평단가(만/평) 상한 — 정상 E는 연천·가평·포천대(~500–1600).
+# 이보다 크면 외곽이 빠진 채 수원·서울 중저가가 E/D로 밀려 끝물이 거짓 양성됨.
+_E_MEDIAN_MAX = 2000
 
 
 def _linfit(xs, ys):
@@ -52,6 +59,13 @@ def _tier_avgs(rows: list) -> list[dict]:
     return out
 
 
+def _median(xs: list[float]) -> float | None:
+    if not xs:
+        return None
+    s = sorted(xs)
+    return s[len(s) // 2]
+
+
 def _ladder_stats(tier_avgs: list[dict]) -> tuple[int, int, float | None]:
     """A→E 방향 상승 계단·하락 계단 수, Spearman-ish corr(급지순위, 상승률)."""
     if len(tier_avgs) < 3:
@@ -59,7 +73,6 @@ def _ladder_stats(tier_avgs: list[dict]) -> tuple[int, int, float | None]:
     vals = [t["avg_rise"] for t in tier_avgs]
     ascents = sum(1 for i in range(len(vals) - 1) if vals[i + 1] > vals[i] + _STEP_EPS)
     descents = sum(1 for i in range(len(vals) - 1) if vals[i] > vals[i + 1] + _STEP_EPS)
-    # 급지 순위 0=A … — avg_rise 와 부호상관 (양수 = 하급지가 더 오름)
     n = len(vals)
     mx = (n - 1) / 2
     my = sum(vals) / n
@@ -67,6 +80,19 @@ def _ladder_stats(tier_avgs: list[dict]) -> tuple[int, int, float | None]:
     sxy = sum((i - mx) * (v - my) for i, v in enumerate(vals))
     corr = (sxy / sxx) if sxx else 0.0
     return ascents, descents, round(corr, 3)
+
+
+def _sample_skewed(rows: list) -> tuple[bool, float | None, str | None]:
+    """외곽 누락으로 E/D가 중저가 도시로 채워졌는지."""
+    if len(rows) < _MIN_METRO:
+        return True, None, f"수도권 {len(rows)}곳만 확보(최소 {_MIN_METRO})."
+    e_med = _median([r["price"] for r in rows if r["급지"] == "E"])
+    if e_med is not None and e_med > _E_MEDIAN_MAX:
+        return True, e_med, (
+            f"E급 중간 평단가 {e_med:.0f}만/평(정상 ≤{_E_MEDIAN_MAX}). "
+            "외곽 시군구가 빠져 수원·서울 중저가가 최하급으로 잡혔을 수 있어요."
+        )
+    return False, e_med, None
 
 
 def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
@@ -84,7 +110,6 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
             continue
         rows.append({"region": region, "price": float(lr["price"]),
                      "rise": round(float(s.tail(window).sum()), 2)})
-    # 5분위가 의미 있으려면 급지당 ~3곳 → 최소 15
     if len(rows) < 15:
         return {}
 
@@ -92,6 +117,7 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
     tier_avgs = _tier_avgs(rows)
     ascents, descents, ladder_corr = _ladder_stats(tier_avgs)
     steps = max(len(tier_avgs) - 1, 1)
+    skewed, e_med, skew_note = _sample_skewed(rows)
 
     beta = _linfit([math.log(r["price"]) for r in rows], [r["rise"] for r in rows])
     lo = [r["rise"] for r in rows if r["급지"] in _LO]
@@ -100,28 +126,39 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
     lo_avg = round(sum(lo) / len(lo), 2) if lo else None
     hi_avg = round(sum(hi) / len(hi), 2) if hi else None
 
-    # 국면: A→E 가 갈수록 커질 때만 끝물(중간 하락 계단이 있으면 끝물 아님).
     av = {t["급지"]: t["avg_rise"] for t in tier_avgs}
     e_gt_a = (av.get("E") is not None and av.get("A") is not None
               and av["E"] > av["A"] + _STEP_EPS)
-    if gap > 0 and e_gt_a and descents == 0 and ascents >= 3:
+
+    if skewed:
+        # 급지가 거짓말하는 상태 — 끝물/주의·막차 금지
+        phase, color = "급지 표본 주의", "yellow"
+        endgame, late = False, False
+    elif gap > 0 and e_gt_a and descents == 0 and ascents >= 3:
         phase, color = "끝물(매도 경고)", "red"
+        endgame, late = True, True
     elif gap > 0 and e_gt_a and descents <= 1 and ascents >= 2:
         phase, color = "하급지 순환(끝물 주의)", "orange"
+        endgame, late = False, True
     elif descents >= 3 and ascents <= 1 and gap <= 0:
         phase, color = "상급지 주도", "green"
+        endgame, late = False, False
     else:
         phase, color = "광역 확산", "yellow"
-    endgame = phase.startswith("끝물") and "주의" not in phase
+        endgame, late = False, False
 
-    # 막차: 최하급(D/E) + 상승 상위20% + 끝물·주의
-    late = phase.find("끝물") >= 0
     rises = sorted(r["rise"] for r in rows)
     thr = rises[int(len(rises) * 0.8)]
     for r in rows:
-        r["막차"] = bool(r["급지"] in _LO and r["rise"] >= thr and late)
+        r["막차"] = bool(late and r["급지"] in _LO and r["rise"] >= thr)
 
-    evidence = _evidence(rows, window, lo_avg, hi_avg, tier_avgs) if late else {}
+    # 표본 이상일 때도 계단·주도 지역을 펼쳐 보여 '왜 보류인지' 설명
+    evidence = _evidence(rows, window, lo_avg, hi_avg, tier_avgs) if (late or skewed) else {}
+    if skewed and evidence is not None:
+        evidence["quality"] = "skewed"
+        evidence["quality_note"] = skew_note
+
+    desc = _desc(phase, ascents, gap, tier_avgs, skew_note)
 
     return {
         "phase": phase, "color": color, "endgame": endgame,
@@ -129,7 +166,11 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
         "ascents": ascents, "descents": descents,
         "ladder_corr": ladder_corr, "ladder_steps": steps,
         "tier_avgs": tier_avgs,
-        "desc": _desc(phase, ascents, gap, tier_avgs),
+        "n_regions": len(rows),
+        "e_median_price": round(e_med) if e_med is not None else None,
+        "quality": "skewed" if skewed else "ok",
+        "quality_note": skew_note,
+        "desc": desc,
         "evidence": evidence,
         "regions": {r["region"]: {"급지": r["급지"], "평단가": round(r["price"]),
                                   "rise": r["rise"], "막차": r["막차"]} for r in rows},
@@ -165,21 +206,27 @@ def _evidence(rows: list, window: int, lo_avg: float | None, hi_avg: float | Non
     }
 
 
-def _desc(phase: str, ascents: int, gap: float, tier_avgs: list[dict]) -> str:
+def _desc(phase: str, ascents: int, gap: float, tier_avgs: list[dict],
+          skew_note: str | None = None) -> str:
+    if skew_note:
+        return (
+            f"{skew_note} 끝물·주의 판정을 보류합니다. "
+            "지역 BUY/매도 시그널은 그대로 동네 수급 정본으로 보시면 됩니다."
+        )
     ladder_txt = " → ".join(
         f"{t['급지']} {t['avg_rise']:+g}%" for t in tier_avgs
     ) if tier_avgs else ""
     trust = " 지역 BUY/매도 시그널은 동네 수급·모멘텀(정본)이고, 이 국면은 수도권 유동성 경고입니다."
     if phase.startswith("끝물") and "주의" not in phase:
         base = f"A→E 상승 계단 {ascents}칸 · 최하급지가 상급지보다 더 오르는 끝물."
-    elif "주의" in phase:
+    elif "주의" in phase and "표본" not in phase:
         base = f"A→E 상승 계단 {ascents}칸 · 유동성이 하급지로 밀리기 시작."
     elif phase.startswith("상급지"):
         base = "비싼 급지(A·B)가 더 오르는 정상 상승 국면 — 유동성 풍부, 매수 우호."
     else:
         base = "급지별 상승률이 섞인 확산 국면 — 중반."
-    if ladder_txt and ("끝물" in phase):
+    if ladder_txt and ("끝물" in phase and "표본" not in phase):
         return f"{base} 계단: {ladder_txt}.{trust}"
-    if "끝물" in phase:
+    if "끝물" in phase and "표본" not in phase:
         return base + trust
     return base
