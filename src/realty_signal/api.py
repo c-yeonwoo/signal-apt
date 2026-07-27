@@ -155,15 +155,18 @@ async def _auto_refresh_loop():
                 await asyncio.to_thread(backup.run_backup)
         except Exception as e:
             log.error("백업 실패: %s", e)
-        try:  # 급매·찐매물 — 하루 1회(캐시 mtime/버전 기준)
+        try:  # 급매·찐매물·콕집 — 하루 1회(캐시 mtime/버전·DB ts 기준)
             if _quicksale_stale():
                 log.warning("급매 캐시 만료 — 일일 스캔")
                 await asyncio.to_thread(lambda: quicksale_refresh({}))
             if _certified_stale():
                 log.warning("찐매물 캐시 만료 — 일일 스캔")
                 await asyncio.to_thread(lambda: certified_refresh({}))
+            if _koczip_stale():
+                log.warning("콕집 DB 만료 — 일일 스캔")
+                await asyncio.to_thread(lambda: koczip_refresh({}))
         except Exception as e:
-            log.error("급매/찐매물 일일 갱신 실패: %s", e)
+            log.error("급매/찐매물/콕집 일일 갱신 실패: %s", e)
         await asyncio.sleep(86400)  # 하루마다 점검
 
 
@@ -192,6 +195,12 @@ def _seed_if_missing():
             certified_refresh({})
         except Exception as e:  # noqa: BLE001
             log.error("certified 시딩 실패: %s", e)
+    if _koczip_stale():                                  # 콕집(할인·특가) — 급매와 동일 주기
+        try:
+            log.warning("koczip 없음/만료 — 콕집 스캔 중…")
+            koczip_refresh({})
+        except Exception as e:  # noqa: BLE001
+            log.error("koczip 시딩 실패: %s", e)
     if config.seoul_key():                               # 재건축 워밍(BUY+ 지역)
         try:
             log.warning("재건축 워밍 중(BUY+ 지역)…")
@@ -1319,6 +1328,16 @@ def _quicksale_stale() -> bool:
 def _certified_stale() -> bool:
     """찐매물 캐시가 없거나 옛 버전·1일 경과면 True."""
     return _radar_cache_stale(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
+
+
+def _koczip_stale() -> bool:
+    """콕집 DB가 비었거나 마지막 스캔이 1일 경과면 True (바로집과 동일 TTL)."""
+    import time
+    st = db.koczip_stats()
+    ts = st.get("article_ts") or st.get("complex_ts")
+    if not ts:
+        return True
+    return time.time() - float(ts) >= _RADAR_MAX_AGE
 
 
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
@@ -2576,6 +2595,23 @@ def certified_refresh(data: dict = Body(default={})):
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
     CERTIFIED_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
+
+
+def koczip_refresh(data: dict | None = None):
+    """콕집 할인·특가·호가요약 스캔. 바로집과 동일 범위·주기(BUY+∪관심, 1일)."""
+    from realty_signal.ingest import koczip as kz
+
+    data = data or {}
+    regions = data.get("regions") or _scan_regions()
+    if not regions:
+        return {"ok": False, "error": "스캔 대상 지역 없음", "stats": {}}
+    sig = _signal_map()
+
+    def _centroid(region: str):
+        return _region_centroid(region, _code_of(region))
+
+    stats = kz.scan_regions(regions, centroid_fn=_centroid, signal_map=sig)
+    return {"ok": True, "stats": stats, "db": db.koczip_stats(), "regions": len(regions)}
 
 
 
