@@ -38,6 +38,13 @@
   .dash-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
   .dash-col-label { font-size:15px; font-weight:700; color:var(--txt); letter-spacing:-0.02em;
     margin:2px 0 4px; }
+  .dash-more { margin-top:10px; }
+  .dash-more > summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--accent);
+    list-style:none; user-select:none; }
+  .dash-more > summary::-webkit-details-marker { display:none; }
+  .dash-more > summary::after { content:' ▾'; color:var(--dim); font-weight:400; }
+  .dash-more[open] > summary::after { content:' ▴'; }
+  .dash-more-body { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
   /* 청약 필터·자격 */
   .ps-toolbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:0 0 14px;
     padding:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
@@ -1508,14 +1515,19 @@ function routeFromHash(){
 // ===== 대시보드 홈 — 좌:할 일·후보 / 우:주간 동향 =====
 const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;${extra}">${inner}</div>`;
 const _dashH=t=>`<div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:-0.01em">${t}</div>`;
+const _dashMore=(label,html)=>{
+  if(!html) return '';
+  return `<details class="dash-more"><summary>${label||'근거 보기'}</summary><div class="dash-more-body">${html}</div></details>`;
+};
 function _regimeRise(v){
   if(v==null||v==='') return '–';
   const n=+v; if(Number.isNaN(n)) return String(v);
   return (n>0?'+':'')+n+'%';
 }
-/** 끝물 판단 근거 — A→E 계단 + D·E 주도 지역. compact=true 면 한 줄 요약. */
+/** 끝물/국면 근거 — A→E 계단 + (있을 때) D·E 주도. compact=시그널 탭 한 줄. */
 function _regimeEvidenceHtml(rg, compact){
-  const ev=rg&&rg.evidence; if(!ev) return '';
+  if(!rg) return '';
+  const ev=rg.evidence||{};
   const w=ev.window||rg.window||8;
   const lo=ev['하급지평균'], hi=ev['상급지평균'];
   const drivers=ev.drivers||[];
@@ -1524,35 +1536,38 @@ function _regimeEvidenceHtml(rg, compact){
     if(ladder.length){
       return `<span style="color:var(--dim)"> · ${ladder.map(t=>`${t['급지']}${_regimeRise(t.avg_rise)}`).join('→')}</span>`;
     }
-    if(!drivers.length) return '';
-    const bits=drivers.slice(0,3).map(d=>`${d.region} ${_regimeRise(d.rise)}`);
-    return `<span style="color:var(--dim)"> · 주도 ${bits.join(' · ')}</span>`;
+    return '';
   }
   let h='';
   if(ladder.length){
-    h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55">급지 계단(최근 ${w}주) · `
-      + ladder.map(t=>`<b style="color:var(--txt)">${t['급지']}</b> ${_regimeRise(t.avg_rise)}`).join(' → ')
+    h+=`<div style="font-size:13px;color:var(--dim);line-height:1.55">급지 계단(최근 ${w}주)<div style="margin-top:6px;color:var(--txt);font-weight:600">`
+      + ladder.map(t=>`${t['급지']} ${_regimeRise(t.avg_rise)}`).join(' → ')
+      +`</div></div>`;
+  }
+  if(lo!=null||hi!=null){
+    h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.55">최하급(D·E) ${_regimeRise(lo)} · 상급(A·B) ${_regimeRise(hi)}`
+      +(rg.ascents!=null?` · 상승계단 ${rg.ascents}`:'')
+      +(rg.descents!=null?` · 하락계단 ${rg.descents}`:'')
       +`</div>`;
   }
-  h+=`<div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.55">최하급(D·E) 평균 <b style="color:var(--txt)">${_regimeRise(lo)}</b> vs 상급(A·B) <b style="color:var(--txt)">${_regimeRise(hi)}</b></div>`;
-  h+=`<div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.5;padding:8px 10px;background:#f8fafc;border-radius:8px">지역 <b style="color:var(--txt)">BUY/매도 시그널</b>은 그 동네 수급·모멘텀이 정본이고, 이 국면은 수도권 유동성 경고입니다. 둘 다 매수+끝물이면 <b style="color:var(--txt)">막차 가능성</b>으로 읽으세요.</div>`;
+  h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.5;padding:8px 10px;background:#f8fafc;border-radius:8px">지역 <b style="color:var(--txt)">BUY/매도</b>는 동네 수급 정본, 이 국면은 수도권 유동성 경고입니다.</div>`;
   if(drivers.length){
-    h+=`<div style="font-size:11px;font-weight:600;color:var(--dim);margin:10px 0 4px">상승 주도 · D·E급</div>`;
+    h+=`<div style="font-size:12px;font-weight:600;color:var(--dim);margin:12px 0 4px">상승 주도 · D·E급</div>`;
     h+=drivers.map(d=>{
       const col=d.rise>=0?'#b91c1c':'#15803d';
-      return `<div style="display:flex;align-items:baseline;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line)">`
+      return `<div style="display:flex;align-items:baseline;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)">`
         +`<b style="min-width:4.5em">${d.region}</b>`
         +`<span style="color:var(--dim)">${d['급지']}급</span>`
-        +(d['막차']?`<span style="font-size:10px;color:#b91c1c;font-weight:600">막차</span>`:'')
+        +(d['막차']?`<span style="font-size:11px;color:#b91c1c;font-weight:600">막차</span>`:'')
         +`<span style="margin-left:auto;font-weight:600;color:${col}">${_regimeRise(d.rise)}</span></div>`;
     }).join('');
   }
   const anchors=ev['상급지참고']||[];
   if(anchors.length){
-    h+=`<div style="font-size:11px;font-weight:600;color:var(--dim);margin:10px 0 4px">상급지(A) 참고</div>`;
+    h+=`<div style="font-size:12px;font-weight:600;color:var(--dim);margin:12px 0 4px">상급지(A) 참고</div>`;
     h+=anchors.map(d=>{
       const col=d.rise>=0?'#b91c1c':'#15803d';
-      return `<div style="display:flex;align-items:baseline;gap:8px;font-size:12px;padding:4px 0;color:var(--dim)">`
+      return `<div style="display:flex;align-items:baseline;gap:8px;font-size:12.5px;padding:4px 0;color:var(--dim)">`
         +`<span style="min-width:4.5em;color:var(--txt)">${d.region}</span>`
         +`<span>${d['급지']}급</span>`
         +`<span style="margin-left:auto;font-weight:600;color:${col}">${_regimeRise(d.rise)}</span></div>`;
@@ -1581,16 +1596,20 @@ async function loadDashboard(){
   } else {
     favH+=`<div style="color:var(--dim);font-size:13px;padding:4px 0">아직 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 추가</span></div>`;
   }
-  let regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
+  let regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
   try{ const rg=await (await fetch('/api/regime')).json();
     if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
-      const showEv=String(rg.phase).includes('끝물'); // 끝물·주의일 때 근거 펼침
-      const meta=[rg.ascents!=null?`A→E 상승계단 ${rg.ascents}`:null, `갭 ${rg.gap}`].filter(Boolean).join(' · ');
+      const blurb=String(rg.phase).includes('끝물')
+        ? (String(rg.phase).includes('주의')
+          ? '하급지 상승이 커지기 시작 — 유동성 주의.'
+          : '최하급지가 더 오르는 유동성 끝물.')
+        : (rg.phase==='상급지 주도'
+          ? '비싼 급지가 더 오르는 정상 상승.'
+          : '급지별 상승률이 섞인 확산 구간.');
       regimeH=_dashH('수도권 유동성 국면')
         +`<div style="font-size:22px;font-weight:600;color:${C};letter-spacing:-0.02em">${rg.phase}</div>`
-        +`<div style="color:var(--dim);font-size:12px;margin-top:6px">${meta}</div>`
-        +(rg.desc?`<div style="color:var(--dim);font-size:12.5px;margin-top:8px;line-height:1.5">${rg.desc}</div>`:'')
-        +(showEv?_regimeEvidenceHtml(rg,false):''); }
+        +`<div style="color:var(--dim);font-size:13.5px;margin-top:8px;line-height:1.5">${blurb}</div>`
+        +_dashMore('근거 보기', _regimeEvidenceHtml(rg,false)+(rg.desc?`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55">${rg.desc}</div>`:'')); }
     else regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
   }catch(e){ regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
   const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
@@ -1682,36 +1701,32 @@ async function _loadWeekly(){
     return;
   }
   const mine=d.mine||[], rest=d.rest||[], movers=d.movers||[], t=d.totals||{};
-  // 데이터가 멈춘 것과 조용한 것은 다르다 — 0 에는 항상 이유를 붙인다
   const stale=(d.stale_days>10)
     ? `<div style="margin-bottom:10px;padding:8px 11px;background:#fef3c7;border:1px solid #fcd34d;border-radius:9px;font-size:12px;color:#92400e">
-         ⚠ KB 데이터가 <b>${d.stale_days}일째</b> 그대로입니다. 주 1회 갱신이라 10일을 넘으면 수집이 멈춘 것일 수 있어요.</div>` : '';
-  let h=_dashH(head)+stale;
+         ⚠ KB 데이터가 <b>${d.stale_days}일째</b> 그대로입니다.</div>` : '';
+  const nChange=(t.up||0)+(t.down||0);
+  let conclusion='';
   if(!mine.length && !rest.length){
-    h+=`<div style="font-size:13px;line-height:1.65">이번 주 KB 갱신에서 <b>등급이 바뀐 지역은 없습니다</b>
-      <span style="color:var(--dim)">(${t.regions||0}곳 확인).</span>`
-      + (movers.length?` 등급은 그대로지만 지표가 크게 움직인 곳이 ${movers.length}건 있어요.`:' 지표 급변도 없었습니다.')+`</div>`;
+    conclusion=`<div style="font-size:15px;line-height:1.55">등급 변화 없음`
+      +`<div style="font-size:13px;color:var(--dim);margin-top:6px">${t.regions||0}곳 확인`
+      +(movers.length?` · 지표 급변 ${movers.length}건`:'')+`</div></div>`;
   } else {
-    h+=`<div style="font-size:13px;margin-bottom:10px">등급 변화 <b>${(t.up||0)+(t.down||0)}곳</b>
-      <span style="color:#16a34a;font-weight:700">▲${t.up||0}</span> <span style="color:#dc2626;font-weight:700">▼${t.down||0}</span>
-      <span style="color:var(--dim)">· ${t.regions||0}곳 중</span></div>`;
-    h+=_myWeeklyBlock(mine, d.my_movers||[]);
-    // ★ 변화가 없으면 최상단 카드가 빈 아코디언만 남는다 — 전체 변화 일부는 펴 둔다
-    const open=mine.length?0:3, shown=rest.slice(0,open), hidden=rest.slice(open);
-    if(shown.length){
-      h+=`<div style="font-size:12px;color:var(--dim);margin:2px 0 4px">전체 변화</div>`
-        +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:${hidden.length?'8px':'0'}">${shown.map(s=>_sigMoveRow(s,false)).join('')}</div>`;
-    }
-    if(hidden.length){
-      h+=`<details><summary style="cursor:pointer;font-size:12px;color:var(--dim)">${shown.length?'나머지':'그 외'} 지역 ${hidden.length}곳 보기</summary>
-        <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px">${hidden.map(s=>_sigMoveRow(s,false)).join('')}</div></details>`;
-    }
+    conclusion=`<div style="font-size:15px;line-height:1.55">등급 변화 <b>${nChange}곳</b>
+      <span style="color:#16a34a;font-weight:700">▲${t.up||0}</span>
+      <span style="color:#dc2626;font-weight:700">▼${t.down||0}</span>`
+      +(mine.length?`<div style="font-size:13px;color:var(--dim);margin-top:6px">★ 관심 ${mine.length}곳 포함</div>`:'')
+      +`</div>`;
+  }
+  let detail=_myWeeklyBlock(mine, d.my_movers||[]);
+  if(rest.length){
+    detail+=`<div style="font-size:12px;color:var(--dim);margin:8px 0 4px">전체 변화</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${rest.map(s=>_sigMoveRow(s,false)).join('')}</div>`;
   }
   if(movers.length){
-    h+=`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">등급은 그대로, 지표가 크게 움직인 곳 ${movers.length}건</summary>
-      <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px">${movers.slice(0,10).map(_moverRow).join('')}</div></details>`;
+    detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">등급 그대로 · 지표 급변</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${movers.slice(0,10).map(_moverRow).join('')}</div>`;
   }
-  wrap.innerHTML=_dashCard(h);
+  wrap.innerHTML=_dashCard(_dashH(head)+stale+conclusion+_dashMore('상세 보기', detail));
 }
 // ===== 다음 할 일 — 텔레그램 브리핑과 같은 판단(briefing.actions) =====
 function _planGo(key, tab){
@@ -1723,19 +1738,26 @@ function _planGo(key, tab){
 async function _loadPlan(){
   const wrap=document.getElementById('dashPlanWrap'); if(!wrap) return;
   let d; try{ d=await (await fetch('/api/action-plan')).json(); }catch(e){ wrap.innerHTML=''; return; }
-  const acts=(d.actions||[]).slice(0,4);
+  const acts=(d.actions||[]).slice(0,3);
   if(!acts.length){ wrap.innerHTML=''; return; }
-  const row=(a,i)=>`<div style="display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-top:${i?'1px solid var(--line)':'none'}">
+  const top=acts[0];
+  const conclusion=`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:16px;font-weight:700;line-height:1.4">${top.title}
+        ${top.urgent?'<span style="margin-left:6px;font-size:11px;font-weight:800;color:#dc2626">지금</span>':''}</div>
+      ${acts.length>1?`<div style="font-size:13px;color:var(--dim);margin-top:6px">외 ${acts.length-1}건</div>`:''}
+    </div>
+    <span class="btn primary" style="padding:7px 14px;white-space:nowrap" onclick="_planGo('${top.key}','${top.tab}')">${top.cta}</span>
+  </div>`;
+  const detail=acts.map((a,i)=>`<div style="display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-top:${i?'1px solid var(--line)':'none'}">
     <span style="flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
       font-size:11px;font-weight:800;background:${a.urgent?'#dc2626':'var(--accent)'};color:#fff">${i+1}</span>
     <div style="flex:1;min-width:0">
-      <div style="font-size:14px;font-weight:700;line-height:1.4">${a.title}
-        ${a.urgent?'<span style="margin-left:6px;font-size:10px;font-weight:800;color:#dc2626">지금</span>':''}</div>
-      <div style="font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.5">${a.why}</div></div>
+      <div style="font-size:14px;font-weight:700;line-height:1.4">${a.title}</div>
+      <div style="font-size:13px;color:var(--dim);margin-top:4px;line-height:1.5">${a.why||''}</div></div>
     <span class="btn" style="padding:5px 12px;white-space:nowrap;align-self:center"
-      onclick="_planGo('${a.key}','${a.tab}')">${a.cta}</span></div>`;
-  wrap.innerHTML=_dashCard(_dashH('다음 할 일')
-    +acts.slice(0,3).map(row).join(''));
+      onclick="_planGo('${a.key}','${a.tab}')">${a.cta}</span></div>`).join('');
+  wrap.innerHTML=_dashCard(_dashH('다음 할 일')+conclusion+_dashMore('할 일 전체', detail));
 }
 // ===== 이번 주 부동산 이슈 =====
 // 뉴스 탭을 없앤 이유가 그대로 규칙: 창을 7일로 고정하고 항목마다 언제 기사인지 붙인다.
@@ -1756,19 +1778,16 @@ async function _loadIssues(){
     return;
   }
   const tc={정책:'var(--accent)',금리:'#dc2626',청약:'#16a34a',재건축:'#d97706',시장:'#7c3aed'};
-  let h=_dashH(head);
-  if(d.summary){
-    h+=`<div style="font-size:13px;line-height:1.7;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;margin-bottom:10px">
-      ${mdLite(d.summary)}
-      <div style="font-size:11px;color:var(--dim);margin-top:7px">${d.count}건 헤드라인 기반${d.mock?' · 로컬 개발 요약(LLM 미호출)':''}</div></div>`;
-  }
-  h+=(d.items||[]).slice(0,6).map(n=>{const c=tc[n.topic]||'#64748b';
+  const conclusion=d.summary
+    ? `<div style="font-size:14px;line-height:1.65">${mdLite(d.summary)}</div>`
+    : `<div style="font-size:15px">이슈 <b>${d.count||d.items.length}건</b></div>`;
+  const detail=(d.items||[]).slice(0,8).map(n=>{const c=tc[n.topic]||'#64748b';
     return `<a href="${n.link||'#'}" target="_blank" rel="noopener"
         style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--line);text-decoration:none;color:inherit">
-      <span class="pill" style="font-size:10px;font-weight:700;color:${c};background:${c}12;border-color:${c}44;flex:0 0 auto">${n.topic||'시장'}</span>
-      <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.title}</span>
-      <span style="font-size:11px;color:var(--dim);white-space:nowrap">${n.source||''} · ${_ago(n.pubdate)}</span></a>`;}).join('');
-  wrap.innerHTML=_dashCard(h);
+      <span class="pill" style="font-size:11px;font-weight:700;color:${c};background:${c}12;border-color:${c}44;flex:0 0 auto">${n.topic||'시장'}</span>
+      <span style="font-size:13.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.title}</span>
+      <span style="font-size:12px;color:var(--dim);white-space:nowrap">${_ago(n.pubdate)}</span></a>`;}).join('');
+  wrap.innerHTML=_dashCard(_dashH(head)+conclusion+_dashMore('기사 목록', detail));
 }
 // ===== 매수력 확정서 — 최대매수가·대출·월상환·필요현금을 하나로 =====
 let _bp=null;
@@ -1800,16 +1819,16 @@ async function _loadBuyingPower(){
   const stale=confirmed && Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01);
   const tag=(confirmed && !stale) ? '확정' : (stale ? '재확정 필요' : '미확정');
   const tagCol=(confirmed && !stale) ? 'var(--dim)' : '#b45309';
-  const line=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+  const conclusion=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
       <span style="font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">${_eok(d['최대매수가'])}</span>
       <span style="font-size:12px;color:${tagCol}">${tag}</span></div>
-    <div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])} · 월 ${(d['월상환']||0).toLocaleString()}만 · 필요현금 ${_eok(d['필요현금'])}
-      ${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
+    <div style="font-size:13.5px;color:var(--dim);margin-top:6px;line-height:1.5">월 ${(d['월상환']||0).toLocaleString()}만 · 필요현금 ${_eok(d['필요현금'])}</div>`;
+  const detail=`<div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])}${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
     <div style="margin-top:8px">${_bpRegBadge(d['규제'])}</div>`;
   const cta=(confirmed && !stale)
-    ? `<div style="margin-top:14px"><span class="btn" style="padding:6px 14px" onclick="openBuyingPower()">조건 바꾸기</span></div>`
-    : `<div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">${stale?'다시 확정':'매수력 확정'}</span></div>`;
-  wrap.innerHTML=_dashCard(_dashH('내 매수력')+line+cta);
+    ? `<div style="margin-top:12px"><span class="btn" style="padding:6px 14px" onclick="openBuyingPower()">조건 바꾸기</span></div>`
+    : `<div style="margin-top:12px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">${stale?'다시 확정':'매수력 확정'}</span></div>`;
+  wrap.innerHTML=_dashCard(_dashH('내 매수력')+conclusion+cta+_dashMore('대출·규제 상세', detail));
 }
 function openBuyingPower(){
   const p=_profile||{}, g=(_bp&&_bp['가정'])||{};
@@ -1888,26 +1907,27 @@ async function _loadShortlist(){
         <div style="margin-top:8px"><span class="btn" style="padding:5px 12px" onclick="switchTab('signal')">시장·지역에서 ★ 추가 →</span></div></div>`);
     return;
   }
-  const cards=d.candidates.map((c,i)=>{
+  const conclusion=d.candidates.map((c,i)=>`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:${i?10:0}px 0 0;${i?'border-top:1px solid var(--line);margin-top:10px':''}">
+      <span style="font-size:12px;color:var(--dim)">${i+1}</span>
+      <b style="font-size:15px;font-weight:600">${c['단지']}</b>${badge(c['시그널'])}
+      <span style="margin-left:auto;font-size:15px;font-weight:600">${_eok(c['예상가'])}</span>
+    </div>`).join('');
+  const detail=d.candidates.map((c,i)=>{
     const z=c['자금']||{};
-    return `<div style="padding:${i?16:0}px 0 0;margin-top:${i?14:0}px;border-top:${i?'1px solid var(--line)':'none'}">
-      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--dim)">${i+1}</span>
-        <b style="font-size:15px;font-weight:600">${c['단지']}</b>${badge(c['시그널'])}
-        <span style="margin-left:auto;font-size:15px;font-weight:600">${_eok(c['예상가'])}</span>
-      </div>
-      <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.5">${c['근거']}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:4px">현금 ${_eok(z['필요현금'])} · 월 ${(z['월상환']||0).toLocaleString()}만</div>
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+    return `<div style="padding:${i?14:0}px 0 0;margin-top:${i?12:0}px;border-top:${i?'1px solid var(--line)':'none'}">
+      <b style="font-size:14px">${c['단지']}</b>
+      <div style="font-size:13px;color:var(--dim);margin-top:6px;line-height:1.5">${c['근거']||''}</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:4px">현금 ${_eok(z['필요현금'])} · 월 ${(z['월상환']||0).toLocaleString()}만</div>
+      <div style="margin-top:8px;display:flex;gap:8px">
         <span class="btn" style="padding:5px 12px;font-size:12px" onclick="openComplex('${c['단지'].replace(/'/g,'')}','${c['region']}')">단지</span>
         <span class="btn" style="padding:5px 12px;font-size:12px" onclick="openNbhd('${c['region']}')">동네</span>
       </div></div>`;
-  }).join('');
-  const sub=`<div style="font-size:12px;color:var(--dim);margin-bottom:4px">${d.pyeong}평 · 예산 ${_eok(d.budget)}${d['확정예산']?'':' · 잠정'}</div>`;
-  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+sub+cards
-    +`<div style="margin-top:16px"><span class="btn primary" style="padding:7px 16px" onclick="openImjang()">임장 코스</span></div>`
-    +`<details style="margin-top:12px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">탈락 사유</summary>
-      <div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.6">${_slRejectLine(d)}</div></details>`);
+  }).join('')
+    +`<div style="margin-top:12px;font-size:12.5px;color:var(--dim)">${_slRejectLine(d)}</div>`;
+  const sub=`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">${d.pyeong}평 · 예산 ${_eok(d.budget)}${d['확정예산']?'':' · 잠정'}</div>`;
+  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+sub+conclusion
+    +`<div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openImjang()">임장 코스</span></div>`
+    +_dashMore('근거 · 탈락 사유', detail));
 }
 // ===== 임장 코스 — 후보 3곳을 시각이 박힌 반나절 일정으로 =====
 let _imj=null, _imjMarks={};
@@ -3639,12 +3659,9 @@ async function loadData(){
     if(rg && rg.phase){
       const C = {green:'#22c55e', yellow:'#ca8a04', orange:'#ea580c', red:'#ef4444'}[rg.color]||'#94a3b8';
       box.style.display='block'; box.title = rg.desc || '';
-      const compactEv = String(rg.phase||'').includes('끝물') ? _regimeEvidenceHtml(rg, true) : '';
-      const meta = rg.ascents!=null ? `A→E 상승계단 ${rg.ascents} · 갭 ${rg.gap}` : `갭 ${rg.gap}`;
       box.innerHTML = `<span style="color:${C}">●</span> <b>수도권 유동성</b>: `
         + `<span style="color:${C};font-weight:700">${rg.phase}</span>`
-        + `<span style="color:var(--dim)"> · ${meta}</span>`
-        + compactEv;
+        + _regimeEvidenceHtml(rg, true);
     } else box.style.display='none';
   } catch(e){}
   try {

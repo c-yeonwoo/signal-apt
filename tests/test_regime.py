@@ -92,26 +92,45 @@ def test_normal_phase_has_no_evidence():
 
 
 def test_caution_not_full_endgame():
-    # 계단 2칸 + 하급지>상급지 → 주의 (endgame False)
+    # E>A·갭+ 이지만 상승 계단 2칸(+평탄) → 주의, 빨간 끝물 X
     rises = {}
     for r, p in _PRICES:
         if p < 1200:
             rises[r] = 1.5
         elif p < 1900:
-            rises[r] = 1.4
+            rises[r] = 0.9
         elif p < 2800:
-            rises[r] = 0.5
+            rises[r] = 0.9
         elif p < 4200:
             rises[r] = 0.4
         else:
-            rises[r] = 0.2
+            rises[r] = 0.4
     out = compute_regime(_FakeKB(rises), _loc(_PRICES), _codes(), window=8)
-    assert "끝물" in out["phase"]
-    assert out["ascents"] >= 2
-    # 빨간 끝물은 계단 3+ 필요 — 이 데이터는 주의일 수 있음
-    if out["ascents"] < 3:
-        assert out["endgame"] is False
-        assert "주의" in out["phase"]
+    assert out["gap"] > 0
+    assert out["endgame"] is False
+    assert out["phase"] == "하급지 순환(끝물 주의)"
+    assert out["ascents"] == 2
+    assert out["descents"] == 0
+
+
+def test_zigzag_is_not_endgame():
+    # 상승칸 3개여도 중간에 크게 꺾이면(descents≥1) 빨간 끝물 아님
+    rises = {}
+    for r, p in _PRICES:
+        if p < 1200:
+            rises[r] = 2.0   # E
+        elif p < 1900:
+            rises[r] = 0.2   # D 급락 → descent
+        elif p < 2800:
+            rises[r] = 1.2   # C
+        elif p < 4200:
+            rises[r] = 1.0   # B
+        else:
+            rises[r] = 0.8   # A
+    out = compute_regime(_FakeKB(rises), _loc(_PRICES), _codes(), window=8)
+    assert out["descents"] >= 1
+    assert out["phase"] != "끝물(매도 경고)"
+    assert out["endgame"] is False
 
 
 def test_regime_empty_without_localities():
