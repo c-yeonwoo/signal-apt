@@ -1158,6 +1158,8 @@ def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
     for v in quick_by.values():
         v.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
 
+    from realty_signal.services import shortlist as sl
+
     regions = _regime().get("regions", {})
     rank = {"STRONG_BUY": 2, "BUY": 1}
 
@@ -1169,14 +1171,22 @@ def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
         if not lr:
             continue
         price = lr.get("price")
-        est = round(price * pyeong) if price else None       # 84㎡ 예상 매수가(만원)
+        est = round(price * pyeong) if price else None       # 선택 평형 예상 매수가(만원)
         affordable = bool(est and est <= budget)
         uv = lr.get("저평가도") or 0
-        score = rank[s] * 1000 + uv * 10 + (lr.get("입지점수") or 0)
+        # 레버리지는 budget 필터로 이미 반영. 예산 안에서는
+        # 예산을 80~100% 쓰는 쪽을 우대(너무 싼 외곽만 1위 되는 것 방지) → 시그널 → 저평가 → 입지.
+        ratio = (est / budget) if (affordable and budget) else 0.0
+        budget_fit = sl._budget_score(ratio) if affordable else 0.0
+        score = (rank[s] * 10000
+                 + budget_fit * 50
+                 + uv * 10
+                 + (lr.get("입지점수") or 0))
         rg = regions.get(region, {})
         cards.append({
             "region": region, "시그널": s, "평단가": price, "예상매수가": est,
-            "예산내": affordable, "저평가도": uv, "입지점수": lr.get("입지점수"),
+            "예산내": affordable, "예산비율": round(ratio, 3) if affordable else None,
+            "저평가도": uv, "입지점수": lr.get("입지점수"),
             "지역급지": rg.get("급지"), "해설": lr.get("해설"),
             "경매단지": auc_by.get(region, []), "청약단지": ps_by.get(region, []),
             "급매단지": quick_by.get(region, []),
