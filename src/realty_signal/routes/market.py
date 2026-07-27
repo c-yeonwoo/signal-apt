@@ -220,3 +220,57 @@ def series(region: str):
 def listings_all(request: Request, types: str = "경매,급매,청약"):
     from realty_signal import api as app_api
     return app_api.listings_all(request, types)
+
+
+@router.get("/api/listing-costs")
+def listing_costs(
+    request: Request,
+    price: float,
+    region: str | None = None,
+    area: float | None = None,
+    pyeong: float | None = None,
+    homes: int | None = None,
+    first_time: bool | None = None,
+    moving: float | None = None,
+    interior: float | None = None,
+):
+    """매물 호가·실거래가 기준 매수 부대비용(취득세·중개·법무·이사·인테리어).
+
+    쿼리 생략 시 로그인 프로필의 주택수·생애최초를 기본값으로 쓴다.
+    interior 미지정=평당 기본, interior=0=인테리어 제외.
+    """
+    from realty_signal import transaction_costs as tc
+
+    if price is None or price <= 0:
+        return JSONResponse({"error": "price required"}, status_code=400)
+
+    uid_ = deps.uid(request)
+    profile = db.profile_get(uid_) if uid_ else {}
+    conf = (profile.get("매수력") or {}).get("가정") or {}
+
+    def _pick_homes() -> int:
+        if homes is not None:
+            return int(homes)
+        v = profile.get("주택수")
+        if v is None or v == "":
+            v = conf.get("주택수")
+        return int(v or 0)
+
+    def _pick_ft() -> bool:
+        if first_time is not None:
+            return bool(first_time)
+        v = profile.get("생애최초")
+        if v is None or v == "":
+            v = conf.get("생애최초")
+        return bool(v)
+
+    return tc.estimate(
+        price,
+        region=(region or "").strip() or None,
+        exclusive_m2=area,
+        pyeong=pyeong,
+        homes=_pick_homes(),
+        first_time=_pick_ft(),
+        moving=moving,
+        interior=interior,
+    )

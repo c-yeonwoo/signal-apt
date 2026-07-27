@@ -254,6 +254,14 @@
   .ms-row .sub { color:var(--dim); font-size:12px; margin-top:4px; line-height:1.45; }
   .ms-detail { padding:12px 16px 14px; background:#fafafa; border-bottom:1px solid var(--line); font-size:12.5px; line-height:1.65; }
   .ms-detail .kv { display:flex; flex-wrap:wrap; gap:5px 14px; }
+  .tx-costs { margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .tx-costs summary { cursor:pointer; font-weight:700; font-size:12.5px; list-style:none; }
+  .tx-costs summary::-webkit-details-marker { display:none; }
+  .tx-costs .tx-row { display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:12px; }
+  .tx-costs .tx-row.total { font-weight:700; border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
+  .tx-costs .tx-note { font-size:10.5px; color:var(--dim); margin-top:6px; line-height:1.45; }
+  .tx-costs label.tx-edit { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--dim); }
+  .tx-costs label.tx-edit input { width:64px; background:#fff; border:1px solid var(--line); border-radius:5px; padding:2px 5px; color:var(--txt); }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#ffffff; color:#1e293b; box-shadow:0 4px 18px rgba(0,0,0,.5); }
   .leaflet-popup-content { font-size:12px; line-height:1.4; }
   .mpin { width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.25), 0 0 10px rgba(37,99,235,.5); }
@@ -2503,7 +2511,9 @@ function renderQuicksale(){
       sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">집주인 인증</span>':''}</div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
+      <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">집주인 인증</span>':''}</div>
+      ${txCostsSlot(m['호가'], m['지역'], m['평형'], m['전용면적'])}
+      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     regionOf:m=>m['지역'],
     color:m=>m['급매갭']!=null&&m['급매갭']<=-8?deep:accent,
@@ -2608,9 +2618,12 @@ function renderAllListings(){
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
         : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
+      const priced=['급매','찐매물','경매'].includes(x['유형']) && x['총액'];
+      const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
       return `<div class="kv"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
         ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">신뢰도 ${Math.round(x.confidence*100)}%</div>`:''}
+        ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
         <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
@@ -2703,6 +2716,7 @@ async function selectMsRow(mapId, i){
     if(det&&det.classList.contains('ms-detail')){
       det.innerHTML=st.opt.detail(st.items[i]); det.style.display='block';
       row.classList.add('sel'); row.scrollIntoView({block:'nearest',behavior:'smooth'});
+      if(typeof hydrateTxCosts==='function') hydrateTxCosts(det);
       const it=st.items[i];
       if(it&&typeof track==='function') track('listing_detail_open',{kind:it['유형'],region:it['지역'],name:it['단지명']});
     }
@@ -2889,6 +2903,67 @@ function calcLoan(){
     </div>`;
 }
 const loanBtn=(price,label)=>`<span class="btn" style="padding:3px 11px;margin-top:7px;display:inline-block;background:var(--accent);color:#fff" onclick="event.stopPropagation();openLoanCalc(${Math.round(price||0)},'${(label||'').replace(/'/g,'')}')">대출계산</span>`;
+/** 매수 부대비용 자리 — selectMsRow / openComplex 가 mountTxCosts 로 채움 */
+function txCostsSlot(price, region, pyeong, area){
+  if(!price || price<=0) return '';
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return `<div class="tx-costs" data-tx-costs data-price="${Math.round(price)}" data-region="${esc(region||'')}" data-pyeong="${pyeong!=null&&pyeong!==''?esc(pyeong):''}" data-area="${area!=null&&area!==''?esc(area):''}"><div style="color:var(--dim);font-size:12px">실제비용 계산 중…</div></div>`;
+}
+let _txTimers=new WeakMap();
+async function mountTxCosts(el, override){
+  if(!el) return;
+  const price=+(override?.price ?? el.dataset.price||0);
+  if(!price){ el.innerHTML=''; return; }
+  const region=override?.region ?? el.dataset.region || '';
+  const pyeong=override?.pyeong ?? el.dataset.pyeong;
+  const area=override?.area ?? el.dataset.area;
+  const moving=override?.moving;
+  const interior=override?.interior;
+  const q=new URLSearchParams({price:String(Math.round(price))});
+  if(region) q.set('region', region);
+  if(pyeong!==''&&pyeong!=null) q.set('pyeong', String(pyeong));
+  if(area!==''&&area!=null) q.set('area', String(area));
+  if(moving!=null) q.set('moving', String(moving));
+  if(interior!=null) q.set('interior', String(interior));
+  let d; try{ d=await (await fetch('/api/listing-costs?'+q)).json(); }
+  catch(e){ el.innerHTML='<div style="color:#b45309;font-size:12px">실제비용 조회 실패</div>'; return; }
+  if(d.error){ el.innerHTML=`<div style="color:#b45309;font-size:12px">${d.error}</div>`; return; }
+  const c=d['부대비용']||{};
+  const assum=d['가정']||{};
+  const eok=n=> (n==null||n<=0)?'–':(n/10000).toFixed(2)+'억';
+  const won=n=> (n==null)?'–':Number(n).toLocaleString()+'만';
+  const rows=[['취득세',c['취득세']],['중개비',c['중개비']],['법무비',c['법무비']],['이사비',c['이사비']],['인테리어',c['인테리어']]]
+    .map(([k,v])=>`<div class="tx-row"><span>${k}</span><span>${won(v)}</span></div>`).join('');
+  const hyp=[assum['규제지역']?'규제지역':'비규제', `주택${assum['주택수']??0}채`, assum['생애최초']?'생애최초':'']
+    .filter(Boolean).join(' · ');
+  const interVal = interior!=null ? interior : (c['인테리어']??0);
+  const moveVal = moving!=null ? moving : (c['이사비']??200);
+  el.innerHTML=`<details open>
+    <summary>실제비용 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b></summary>
+    <div style="margin-top:8px">${rows}
+      <div class="tx-row total"><span>부대 합계</span><span>${won(c['합계'])}</span></div>
+      <div class="tx-row total"><span>총매입가 (매수 ${_eok(d['매수가'])}+부대)</span><span>${won(d['총매입가'])}</span></div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
+      <label class="tx-edit">이사 <input type="number" min="0" step="50" value="${moveVal}" data-tx-move>만</label>
+      <label class="tx-edit">인테리어 <input type="number" min="0" step="100" value="${interVal}" data-tx-inter>만</label>
+    </div>
+    <div class="tx-note">${hyp?hyp+' · ':''}${(d.notes||[]).slice(0,2).join(' · ')}</div>
+  </details>`;
+  const re=()=>{
+    const mv=+el.querySelector('[data-tx-move]')?.value;
+    const iv=+el.querySelector('[data-tx-inter]')?.value;
+    clearTimeout(_txTimers.get(el));
+    _txTimers.set(el, setTimeout(()=>mountTxCosts(el,{price,region,pyeong,area,moving:mv,interior:iv}), 350));
+  };
+  el.querySelectorAll('[data-tx-move],[data-tx-inter]').forEach(inp=>{
+    inp.addEventListener('change', re);
+    inp.addEventListener('input', re);
+  });
+}
+function hydrateTxCosts(root){
+  (root||document).querySelectorAll('[data-tx-costs]').forEach(el=>mountTxCosts(el));
+}
 // 프로필 + 종합 데이터 → 개인화 내러티브 리포트
 function renderAiReport(d, eok){
   const el=document.getElementById('aiReport'); if(!el) return;
@@ -4300,6 +4375,7 @@ async function openComplex(name, region){
       <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">평형</th><th style="text-align:right;padding:6px">최근매매</th><th style="text-align:right;padding:6px">평단가</th><th style="text-align:right;padding:6px">최근전세</th><th style="text-align:right;padding:6px">전세가율</th><th style="text-align:right;padding:6px">갭</th></tr></thead>
       <tbody>${rows}</tbody></table>
     <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 기준 · 전세가율=최근 전세보증금÷최근 매매가 · 갭=매매−전세 (실투자금 가늠)${d['cached']?' · 캐시(7일)':''}</div>
+    <div id="cxTxCosts" style="margin-top:12px"></div>
     <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">
       <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)">더 보기 · 건축물대장 · 대출 시나리오</summary>
       <div id="cxBuilding" style="margin-top:10px;font-size:12px;color:var(--dim)">건축물대장 불러오는 중…</div>
@@ -4315,6 +4391,18 @@ async function openComplex(name, region){
   loadComplexAgents(name, region);
   loadCxBuilding(name, region);
   loadCxLoanScen(d);
+  loadCxTxCosts(d, region);
+}
+function loadCxTxCosts(cx, region){
+  const el=document.getElementById('cxTxCosts'); if(!el) return;
+  const plist=cx['평형별']||[];
+  const main=plist.length?plist.reduce((a,b)=>(a['매매건수']||0)>=(b['매매건수']||0)?a:b):{};
+  let price=main['최근매매']||null;
+  const py=main['평형'], area=main['전용㎡'];
+  if(!price && cx['최근평단가'] && py) price=Math.round(cx['최근평단가']*py);
+  if(!price){ el.innerHTML=''; return; }
+  el.innerHTML=txCostsSlot(price, region||cx['region'], py, area);
+  hydrateTxCosts(el);
 }
 async function loadCxBuilding(name, region){
   const el=document.getElementById('cxBuilding'); if(!el) return;
