@@ -458,10 +458,11 @@ def evaluate(
         rg = (regime or {}).get("regions", {}).get(region)
         급지 = rg["급지"] if rg else None
         if rg and rg.get("막차"):
-            reasons.append("막차경고(하급지 급등)")
-            해설 += " 하급지인데 최근 급등해 유동성 끝물의 막차 위험이 있습니다."
+            reasons.append("막차경고(D·E급 급등)")
+            해설 += " 최하급지(D·E)인데 최근 급등해 수도권 유동성 끝물의 막차 위험이 있습니다. 지역 BUY와 겹치면 특히 주의하세요."
         elif rg and (regime or {}).get("endgame"):
-            reasons.append("권역 끝물(급지역전)")
+            reasons.append("권역 끝물(급지계단)")
+            해설 += " 수도권 A→E 상승 계단이 포착된 유동성 끝물 국면입니다. 지역 매수 시그널과는 별개 축이에요."
 
         # 매도(끝물) 강화 — 공급과잉 + 유동성감소(금리상승·거래량위축·급지역전·매매하락)
         bear = 0.0

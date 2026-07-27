@@ -139,7 +139,7 @@ TOOLS = [
     },
     {
         "name": "get_regime",
-        "description": "현재 수도권 경기 국면(벌집순환/급지역전 등)과 β·급지갭·끝물 근거(하급지 주도 지역·상승폭)를 반환.",
+        "description": "수도권 유동성 국면(A→E 급지 상승 계단·끝물). 지역 BUY 시그널과 축이 다름 — how_to_read·evidence(ladder·D/E 주도) 포함.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
