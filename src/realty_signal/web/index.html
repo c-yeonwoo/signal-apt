@@ -2689,6 +2689,10 @@ function applyViewportFilter(mapId, opts){
   const b=st.map.getBounds(), indices=[];
   (st.items||[]).forEach((it,i)=>{ const c=st.coords&&st.coords[i];
     if(c&&b.contains(L.latLng(c[0],c[1]))) indices.push(i); });
+  // 좌표가 아직 없으면(청약·centroid 실패) 뷰포트로 전부 걸러지지 않게 전체 표시
+  if(!indices.length && (st.items||[]).length && !Object.keys(st.coords||{}).length){
+    for(let i=0;i<st.items.length;i++) indices.push(i);
+  }
   st.viewIndices=indices; st.lastBoundsKey=_boundsKey(b);
   // 리스트와 핀을 같은 범위로 — 화면 밖 핀을 지우지 않으면 "갱신 안 됨"처럼 보인다
   Object.keys(st.markers||{}).forEach(k=>{
@@ -3166,7 +3170,21 @@ async function expandCandidates(region, el){
 }
 let _presaleList=[];
 async function loadPresale(){
-  _presaleList = await (await fetch('/api/presale')).json();
+  try{
+    const r=await fetch('/api/presale');
+    const d=await r.json();
+    if(!r.ok || !Array.isArray(d)){
+      _presaleList=[];
+      document.getElementById('psEmpty').textContent =
+        (d&&d.error) ? `청약을 불러오지 못했습니다: ${d.error}` : '청약 데이터를 불러오지 못했습니다.';
+      mapSplit('psList','psMap',[],{summary:()=>({}),detail:()=>'',label:()=>''});
+      return;
+    }
+    _presaleList=d;
+  }catch(e){
+    _presaleList=[];
+    document.getElementById('psEmpty').textContent='청약 데이터를 불러오지 못했습니다.';
+  }
   renderPresale();
 }
 // 주소에서 지역 컬럼(시도+시군구)에 이미 보이는 부분 제거 → 동·번지 등 세부만

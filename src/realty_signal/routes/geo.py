@@ -37,6 +37,11 @@ def geocode_ep(data: dict = Body(...)):
     return _api().geocode_ep(data)
 
 
+@router.get("/api/region-centroids")
+def region_centroids(regions: str = ""):
+    return _api().region_centroids(regions)
+
+
 @router.get("/api/mapconfig")
 def mapconfig():
     return _api().mapconfig()

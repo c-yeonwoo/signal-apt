@@ -807,14 +807,23 @@ def _presale():
     from realty_signal.ingest import applyhome
     from datetime import date
     config.load_env()
-    applyhome.set_key(config.public_data_key())
+    key = config.public_data_key()
+    if not key:
+        log.warning("PUBLIC_DATA_KEY 없음 — 청약 목록 비움")
+        return []
+    applyhome.set_key(key)
+    try:
+        raw = applyhome.fetch_pblanc(_presale_since())
+    except Exception as e:  # noqa: BLE001
+        log.error("청약홈 fetch 실패: %s", e)
+        return []
     sig = _signal_map()
     regions = _regime().get("regions", {})
     codes = _kb().codes or {}
     region_sido = {r: _SIDO.get((c or "")[:2]) for r, c in codes.items()}  # 시군구→시도 (동명이군 구분)
     today = date.today().isoformat()
     out = []
-    for d in applyhome.fetch_pblanc(_presale_since()):
+    for d in raw:
         sgg = d["시군구"]
         # 시군구명 + 시도 둘 다 일치할 때만 결합(부산 강서구↔서울 강서구 오매칭 방지)
         region = sgg if (sgg in sig and region_sido.get(sgg) == d["시도"]) else None
@@ -2255,11 +2264,14 @@ def complex_building(region: str, name: str):
     if not b:
         return {"ok": False, "reason": "not_found"}
     return {"ok": True, "building": b}
+
+
+def region_centroids(regions: str):
     """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).
 
     핀 폴백용: 단지 지오코딩 실패 단지를 지역 중심에 표시해 항상 클릭/포커스 가능.
+    청약처럼 lat/lng 없는 매물은 이 좌표로 리스트·지도가 채워진다.
     """
-    codes = _kb().codes
     out = {}
     for region in [r for r in regions.split(",") if r][:60]:
         c = _region_centroid(region, _code_of(region))
