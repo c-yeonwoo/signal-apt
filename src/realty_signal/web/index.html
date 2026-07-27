@@ -1990,7 +1990,7 @@ function _renderImjang(){
       <div style="font-size:11px;color:var(--dim);margin-top:5px">${s['근거']||''}</div>
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <a class="btn" style="padding:4px 11px;font-size:12px;text-decoration:none" href="${s['지도']}" target="_blank" rel="noopener">지도</a>
-        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${(s['단지']||'').replace(/'/g,'')}','${s['region']}')">단지 상세</span>
+        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${(s['단지']||'').replace(/'/g,'')}','${s['region']}')">단지</span>
         <span class="btn" style="padding:4px 11px;font-size:12px" onclick="_imjToggle(${i})">현장 체크 ▾</span>
       </div>
       <div id="imjChk${i}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"></div>
@@ -2857,15 +2857,17 @@ function plotPins(mapId, items, coords, opt, opts){
     const color=(opt.color&&opt.color(it))||'var(--accent)';
     const isfb=fb.has(i);
     const icon=L.divIcon({className:'',html:`<div class="mpin${isfb?' fb':''}" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
-    const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사 (지역 중심)</span>`:'');
-    const cxName=(it['단지명']||'').replace(/['"\\]/g,''), cxReg=((it['지역']||it.region)||'').replace(/['"\\]/g,'');
+    const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사</span>`:'');
+    // 청약(분양)·opt.complexDetail=false 는 실거래 단지상세가 없어 재클릭 생략
+    const cxOk = opt.complexDetail!==false && it['유형']!=='청약';
+    const cxName=cxOk ? (it['단지명']||'').replace(/['"\\]/g,'') : '';
+    const cxReg=cxOk ? ((it['지역']||it.region)||'').replace(/['"\\]/g,'') : '';
     const popup=lbl+(cxName&&cxReg
-      ? `<div style="margin-top:6px;font-size:11px;color:var(--dim)">다시 누르면 단지 상세</div>` : '');
+      ? `<div style="margin-top:4px;font-size:11px;color:var(--dim)">다시 클릭 · 상세</div>` : '');
     const mk=L.marker(c,{icon}).bindPopup(popup);
     mk.on('click', e=>{
       L.DomEvent.stopPropagation(e);
       const cur=_ms[mapId];
-      // 같은 핀 두 번째 클릭 → 단지 상세 모달
       if(cur && cur.sel===i && cxName && cxReg){ openComplex(cxName, cxReg); return; }
       selectMsRow(mapId, i);
     });
@@ -3242,6 +3244,7 @@ function renderPresale(){
     regionOf:r=>r['지역'],
     color:r=>r['상태']==='접수중'?'#16a34a':r['상태']==='접수예정'?'var(--accent)':'#94a3b8',
     label:r=>`<b>${r['단지명']}</b><br>${r['지역']||''} · ${psStatusBadge(r['상태'],r['Dday'])}`,
+    complexDetail:false,
   });
 }
 // 평형별 분양가·특공·메리트를 elId 컨테이너에 채움 (드릴다운용)
@@ -4028,7 +4031,7 @@ function renderNbhd(d){
        ${Object.entries(inf).map(([k,v])=>_nbStat(k, (v!=null?v:'–'))).join('')}</div>
        <div style="font-size:10px;color:var(--dim);margin-top:6px">${d['인프라기준']||''}</div>`);
   }
-  if(gong) more+=_nbSec('관심단지 공시(캐시)', `<div style="font-size:12px;line-height:1.6">${gong}</div><div style="font-size:10px;color:var(--dim);margin-top:4px">단지 상세를 연 적 있을 때만 표시 · 신규 조회 없음</div>`);
+  if(gong) more+=_nbSec('관심단지 공시(캐시)', `<div style="font-size:12px;line-height:1.6">${gong}</div><div style="font-size:10px;color:var(--dim);margin-top:4px">캐시만 · 신규 조회 없음</div>`);
   // 임장 체크 + 외부 링크
   const items=d['임장체크항목']||[], saved=d['임장체크']||{};
   more+=`<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--dim);margin-bottom:7px">임장 체크리스트</div>
@@ -4096,7 +4099,7 @@ function cxBtn(name, region){
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
   const on=(_favs||new Set()).has('complex:'+r+'|'+n);
   return ` <span class="btn favcx" data-n="${n}" data-r="${r}" style="padding:3px 10px${on?';background:var(--accent);color:#fff':''}" onclick="event.stopPropagation();favCxToggle(this)">${on?'★':'☆'} 관심단지</span>`
-    + ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">📈 단지 상세</span>`;
+    + ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">단지</span>`;
 }
 function favCxToggle(el){ const n=el.dataset.n, r=el.dataset.r;
   toggleFav('complex', r+'|'+n, n).then(()=>{ const on=_favs.has('complex:'+r+'|'+n);
@@ -4338,7 +4341,7 @@ async function renderFavList(){
             <span onclick="addToCompare('${nq}','${reg}')" style="cursor:pointer;color:var(--accent);font-size:12px">＋비교</span>
             <span onclick="document.getElementById('favListDlg').close();openComplex('${nq}','${reg}')" style="cursor:pointer;font-size:12px">상세</span>
             <span onclick="favRemove('complex','${kq}','${nq}')" style="cursor:pointer;color:#dc2626;font-size:12px">✕</span></span></div>`;}).join('')
-      : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 매물·단지 상세의 ☆ 관심단지로 추가하세요.</div>');
+      : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 매물에서 ☆로 추가</div>');
   body.innerHTML=rSec+cSec;
 }
 async function favRemove(kind,key,label){ await toggleFav(kind,key,label); renderFavList();
