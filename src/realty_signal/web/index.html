@@ -454,7 +454,6 @@
     </div>
     <div id="laMoreFilters" class="la-more">
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
-      <span class="chip" id="laBuyChip" onclick="toggleLaBuyOnly()" title="매수·적극매수 시그널 지역만" style="font-size:12px;white-space:nowrap">매수신호만</span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
         <select id="laSort" class="ctrl" onchange="onLaSort()" style="font-size:12px;padding:3px 6px">
           <option value="opp">기회도순</option>
@@ -2529,9 +2528,8 @@ function renderQuicksale(){
 const _LA_TYPES=['경매','급매','찐매물','청약','재건축'];
 const _LA_COLOR={경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
-let _laSort='opp', _laBuyOnly=false;          // 정렬 기준 + 매수신호(BUY+)만 필터
+let _laSort='opp';          // 정렬 기준 (매수신호는 공통 _mtBuyOnly)
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
-function toggleLaBuyOnly(){ _laBuyOnly=!_laBuyOnly; document.getElementById('laBuyChip').classList.toggle('on', _laBuyOnly); renderAllListings(); }
 function toggleLaMore(){
   const box=document.getElementById('laMoreFilters'), btn=document.getElementById('laMoreBtn');
   if(!box) return;
@@ -2601,9 +2599,7 @@ function _laPricePass(x){
   return v>=_laPrice.min && v<=cap;
 }
 function renderAllListings(){
-  const _BUYSIG=new Set(['STRONG_BUY','BUY']);
-  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']) && _laPricePass(x)
-    && (!_laBuyOnly || _BUYSIG.has(x['시그널'])));
+  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']) && _laPricePass(x));
   // 정렬 — 기회도순(기본)·시그널 강한순·가격순. null 지표는 뒤로.
   const opp=x=>x['기회도']??-1, tot=x=>(x['총액']!=null&&x['총액']>0)?x['총액']:null;
   const sr=x=>_SIGRANK[x['시그널']]??9;
