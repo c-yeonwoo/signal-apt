@@ -1164,12 +1164,14 @@
     <label>연소득<br><input id="ccIncome" type="number" placeholder="선택(DSR)" style="width:110px"> <span style="color:var(--dim)">만원</span></label>
     <label>대출금리<br><input id="ccRate" type="number" value="4.0" step="0.1" style="width:64px"> %</label>
     <label>기준 평형<br><select id="ccPyeong" class="ctrl">
-      <option value="17.4">59㎡(24평)</option><option value="25.7" selected>84㎡(34평)</option><option value="35.4">114㎡(45평)</option>
+      <option value="17.4">59㎡ · 전용 17.4평</option>
+      <option value="25.7" selected>84㎡ · 전용 25.7평</option>
+      <option value="35.4">114㎡ · 전용 35.4평</option>
     </select></label>
     <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
     <span id="ccBudget" style="color:var(--dim);font-size:13px"></span>
   </div>
-  <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영.</p>
+  <p style="color:var(--dim);font-size:11px;margin:-8px 0 12px">매수가능가 = 자본 + 대출(LTV·DSR 중 작은 쪽) − 취득세 − 중개비. 연소득 입력 시 DSR 40% 한도 반영. 추천은 예산 안에서 레버리지를 쓰는 쪽(예산의 80~100%)을 우선합니다. 카드의 지역평균은 시군구 평단×전용평수이고, ‘예산 꽉 채운 단지’는 그 예산 한도까지 올려본 단지입니다.</p>
   <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
   <p id="ccEmpty" style="color:var(--dim)"></p>
  </div>
@@ -3103,32 +3105,37 @@ async function loadConclusion(){
   const dsrNote = dt['DSR제약'] ? ' <span style="color:#ea580c">·DSR한도 적용</span>' : '';
   document.getElementById('ccBudget').innerHTML =
     `매수가능 <b style="color:var(--accent)">${eok(d.budget)}</b> `
-    + `<span style="color:var(--dim)">= 자본 ${eok(d.capital)} + 대출 ${eok(dt['대출'])} − 취득세 ${eok(dt['취득세'])} − 중개 ${eok(dt['중개비'])}</span>${dsrNote} · 기준 ${pyeong}평`;
+    + `<span style="color:var(--dim)">= 자본 ${eok(d.capital)} + 대출 ${eok(dt['대출'])} − 취득세 ${eok(dt['취득세'])} − 중개 ${eok(dt['중개비'])}</span>${dsrNote} · 기준 전용 ${pyeong}평`;
   const inb = d.cards.filter(c=>c['예산내']);
   empty.textContent = inb.length ? '' : '예산 범위 내 매수 시그널 지역이 없습니다. 자본·LTV·평형을 조정해보세요.';
   renderAiReport(d, eok);
-  d.cards.forEach((c,i)=>{
+  // 예산 내 카드만 순번 — 예산초과는 흐리게 뒤에
+  let rankN=0;
+  d.cards.forEach((c)=>{
     const af = c['예산내'];
+    if(af) rankN++;
     const uv = c['저평가도'];
     const haesol = (c['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
     const subs = renderSubListings(c['경매단지']||[], c['청약단지']||[], c['급매단지']||[]);
+    const pct = (c['예산비율']!=null) ? Math.round(c['예산비율']*100) : null;
     const card = document.createElement('div');
     card.style.cssText = `border:1px solid ${af?'var(--accent)':'var(--line)'};border-radius:10px;padding:14px 16px;background:#ffffff;${af?'':'opacity:.55'}`;
     card.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:16px;font-weight:700">${af?`#${i+1} `:''}${c.region}</span>
+        <span style="font-size:16px;font-weight:700">${af?`#${rankN} `:''}${c.region}</span>
         ${badge(c['시그널'])}
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:8px">
-        <span>예상매수가 <b>${eok(c['예상매수가'])}</b></span>
+        <span title="지역 평균 평단가 × 선택 전용평수">지역평균 <b>${eok(c['예상매수가'])}</b></span>
         <span style="color:var(--dim)">평단 ${c['평단가']}만</span>
+        ${pct!=null?`<span style="color:var(--dim)">예산의 ${pct}%</span>`:''}
         ${uvPill(uv)}
         ${c['지역급지']?regionGradeBadge(c['지역급지']):''}
         ${af?'':'<span class="pill">예산초과</span>'}
       </div>
       ${haesol?`<div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:8px">${haesol}</div>`:''}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        ${af?`<span class="pill" style="cursor:pointer;border-color:var(--accent);color:var(--accent)" onclick="expandCandidates('${c.region}',this)">예산 내 단지 ▾</span>`:''}
+        ${af?`<span class="pill" style="cursor:pointer;border-color:var(--accent);color:var(--accent)" onclick="expandCandidates('${c.region}',this)">예산 꽉 채운 단지 ▾</span>`:''}
       </div>
       <div class="cc-cands"></div>
       ${subs}`;
@@ -3163,10 +3170,10 @@ function renderSubListings(auc, ps, quick){
 // 추천 지역 → 예산 내로 살 수 있는 단지를 급지 높은 순으로 (예산 내 최고 가성비 상급지)
 async function expandCandidates(region, el){
   const wrap = el.closest('div').parentElement.querySelector('.cc-cands');
-  if(wrap.dataset.open==='1'){ wrap.innerHTML=''; wrap.dataset.open='0'; el.textContent='예산 내 단지 ▾'; return; }
+  if(wrap.dataset.open==='1'){ wrap.innerHTML=''; wrap.dataset.open='0'; el.textContent='예산 꽉 채운 단지 ▾'; return; }
   el.textContent='로딩…';
   const d = await (await fetch('/api/complex-grades/'+encodeURIComponent(region))).json();
-  el.textContent='예산 내 단지 ▲'; wrap.dataset.open='1';
+  el.textContent='예산 꽉 채운 단지 ▲'; wrap.dataset.open='1';
   const eok = n => (n/10000).toFixed(1)+'억';
   // 단지별 예상 매수가 = 평단가 × 기준평형, 예산 내만, 급지 오름차순(상급지 먼저)→평단가 내림차순
   const cands = (d.complexes||[])
@@ -3175,7 +3182,7 @@ async function expandCandidates(region, el){
     .sort((a,b)=> a['급지']-b['급지'] || b['평단가']-a['평단가'])
     .slice(0,12);
   if(!cands.length){ wrap.innerHTML='<div style="color:var(--dim);font-size:12px;padding:6px 0">예산 내 실거래 단지가 없습니다(시군구 단위만 지원).</div>'; return; }
-  wrap.innerHTML = `<div style="color:var(--dim);font-size:11px;margin:8px 0 4px">예산(${eok(_ccBudget)}) 내 ${_ccPyeong}평 기준 · 급지 높은 순</div>`
+  wrap.innerHTML = `<div style="color:var(--dim);font-size:11px;margin:8px 0 4px">예산(${eok(_ccBudget)})까지 · 전용 ${_ccPyeong}평 · 급지 높은 순</div>`
     + cands.map(c=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-bottom:1px solid var(--line)">
         <span>${gradeBadge(c['급지'])} ${c['단지']}</span>
         <span><b>${eok(c.예상가)}</b> <span style="color:var(--dim)">${c['평단가']}만/평</span></span></div>`).join('');
