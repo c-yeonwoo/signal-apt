@@ -1599,16 +1599,23 @@ async function loadDashboard(){
   let regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
   try{ const rg=await (await fetch('/api/regime')).json();
     if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
-      const blurb=String(rg.phase).includes('끝물')
-        ? (String(rg.phase).includes('주의')
-          ? '하급지 상승이 커지기 시작 — 유동성 주의.'
-          : '최하급지가 더 오르는 유동성 끝물.')
-        : (rg.phase==='상급지 주도'
-          ? '비싼 급지가 더 오르는 정상 상승.'
-          : '급지별 상승률이 섞인 확산 구간.');
+      const skewed=rg.quality==='skewed' || String(rg.phase).includes('표본');
+      const blurb=skewed
+        ? (rg.quality_note || '급지 표본이 찌그러져 끝물 판정을 보류합니다.')
+        : (String(rg.phase).includes('끝물')
+          ? (String(rg.phase).includes('주의')
+            ? '하급지 상승이 커지기 시작 — 유동성 주의.'
+            : '최하급지가 더 오르는 유동성 끝물.')
+          : (rg.phase==='상급지 주도'
+            ? '비싼 급지가 더 오르는 정상 상승.'
+            : '급지별 상승률이 섞인 확산 구간.'));
+      const warn=skewed
+        ? `<div style="margin-top:10px;padding:10px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;font-size:13px;color:#92400e;line-height:1.5">영통·노원이 최하급으로 보이면 데이터가 비정상입니다. 외곽 시군구 캐시를 갱신해야 해요.</div>`
+        : '';
       regimeH=_dashH('수도권 유동성 국면')
         +`<div style="font-size:22px;font-weight:600;color:${C};letter-spacing:-0.02em">${rg.phase}</div>`
         +`<div style="color:var(--dim);font-size:13.5px;margin-top:8px;line-height:1.5">${blurb}</div>`
+        +warn
         +_dashMore('근거 보기', _regimeEvidenceHtml(rg,false)+(rg.desc?`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55">${rg.desc}</div>`:'')); }
     else regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
   }catch(e){ regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }

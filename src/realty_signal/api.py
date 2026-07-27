@@ -516,7 +516,8 @@ def _advisor_tool(name: str, args: dict) -> dict:
     if name == "get_regime":
         rg = _regime() or {}
         keys = ("phase", "beta", "gap", "color", "desc", "endgame",
-                "ascents", "descents", "ladder_corr", "tier_avgs")
+                "ascents", "descents", "ladder_corr", "tier_avgs",
+                "n_regions", "e_median_price", "quality", "quality_note")
         out = {k: rg.get(k) for k in keys if k in rg}
         if rg.get("evidence"):
             out["evidence"] = rg["evidence"]
