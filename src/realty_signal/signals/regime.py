@@ -100,16 +100,19 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
     lo_avg = round(sum(lo) / len(lo), 2) if lo else None
     hi_avg = round(sum(hi) / len(hi), 2) if hi else None
 
-    # 국면: A→E 계단이 정본. β는 참고만.
-    if ascents >= 3 and gap > 0:
+    # 국면: A→E 가 갈수록 커질 때만 끝물(중간 하락 계단이 있으면 끝물 아님).
+    av = {t["급지"]: t["avg_rise"] for t in tier_avgs}
+    e_gt_a = (av.get("E") is not None and av.get("A") is not None
+              and av["E"] > av["A"] + _STEP_EPS)
+    if gap > 0 and e_gt_a and descents == 0 and ascents >= 3:
         phase, color = "끝물(매도 경고)", "red"
-    elif ascents >= 2 and gap > 0:
+    elif gap > 0 and e_gt_a and descents <= 1 and ascents >= 2:
         phase, color = "하급지 순환(끝물 주의)", "orange"
-    elif descents >= 3 and gap <= 0:
+    elif descents >= 3 and ascents <= 1 and gap <= 0:
         phase, color = "상급지 주도", "green"
     else:
         phase, color = "광역 확산", "yellow"
-    endgame = phase.startswith("끝물")  # 빨간 끝물만 True (주의는 False)
+    endgame = phase.startswith("끝물") and "주의" not in phase
 
     # 막차: 최하급(D/E) + 상승 상위20% + 끝물·주의
     late = phase.find("끝물") >= 0
