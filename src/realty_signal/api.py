@@ -155,6 +155,15 @@ async def _auto_refresh_loop():
                 await asyncio.to_thread(backup.run_backup)
         except Exception as e:
             log.error("백업 실패: %s", e)
+        try:  # 급매·찐매물 — 하루 1회(캐시 mtime/버전 기준)
+            if _quicksale_stale():
+                log.warning("급매 캐시 만료 — 일일 스캔")
+                await asyncio.to_thread(lambda: quicksale_refresh({}))
+            if _certified_stale():
+                log.warning("찐매물 캐시 만료 — 일일 스캔")
+                await asyncio.to_thread(lambda: certified_refresh({}))
+        except Exception as e:
+            log.error("급매/찐매물 일일 갱신 실패: %s", e)
         await asyncio.sleep(86400)  # 하루마다 점검
 
 
@@ -171,17 +180,18 @@ def _seed_if_missing():
             store.build_localities()
         except Exception as e:  # noqa: BLE001
             log.error("localities 시딩 실패: %s", e)
-    if pk and _quicksale_stale():                        # 급매 레이더 (없거나 옛 스캔버전이면 재스캔)
+    if pk and _quicksale_stale():                        # 급매 레이더 (없거나 1일 경과·옛 버전)
         try:
-            log.warning("quicksale 없음/구버전 — 급매 레이더 스캔 중…")
-            regions = _scan_regions()
-            listings = _radar_scan(regions)
-            QUICKSALE_FILE.write_text(json.dumps(
-                {"ready": True, "listings": listings, "regions": regions,
-                 "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER},
-                ensure_ascii=False), encoding="utf-8")
+            log.warning("quicksale 없음/만료 — 급매 레이더 스캔 중…")
+            quicksale_refresh({})
         except Exception as e:  # noqa: BLE001
             log.error("quicksale 시딩 실패: %s", e)
+    if pk and _certified_stale():                        # 찐매물(내집등록) — 급매와 동일 주기
+        try:
+            log.warning("certified 없음/만료 — 찐매물 스캔 중…")
+            certified_refresh({})
+        except Exception as e:  # noqa: BLE001
+            log.error("certified 시딩 실패: %s", e)
     if config.seoul_key():                               # 재건축 워밍(BUY+ 지역)
         try:
             log.warning("재건축 워밍 중(BUY+ 지역)…")
@@ -580,6 +590,16 @@ def _advisor_tool(name: str, args: dict) -> dict:
             qs = sorted(qs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
             out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
                           "호가": m.get("호가"), "급매갭": m.get("급매갭"), "시그널": m.get("시그널")} for m in qs]
+        if kind in ("찐매물", "전체"):
+            try:
+                cs = json.loads(CERTIFIED_FILE.read_text(encoding="utf-8")).get("listings", []) if CERTIFIED_FILE.exists() else []
+            except Exception:  # noqa: BLE001
+                cs = []
+            if region:
+                cs = [m for m in cs if region in (m.get("지역") or "")]
+            cs = sorted(cs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
+            out["찐매물"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
+                            "호가": m.get("호가"), "시세갭": m.get("급매갭"), "시그널": m.get("시그널")} for m in cs]
         if kind in ("경매", "전체"):
             from realty_signal.auction import AUCTION_FILE
             try:
@@ -591,8 +611,8 @@ def _advisor_tool(name: str, args: dict) -> dict:
                 au = [m for m in au if region in (m.get("region") or "")]
             out["경매"] = [{"단지명": m.get("단지명"), "region": m.get("region"), "최저매각가": m.get("최저매각가"),
                           "감정가": m.get("감정가"), "유찰횟수": m.get("유찰횟수"), "입찰기일": m.get("입찰기일")} for m in au[:10]]
-        if not out.get("급매") and not out.get("경매"):
-            return {"result": "해당 조건의 매물이 없습니다(급매는 관리자 스캔 시점 기준)."}
+        if not out.get("급매") and not out.get("찐매물") and not out.get("경매"):
+            return {"result": "해당 조건의 매물이 없습니다(급매·찐매물은 하루 1회 캐시)."}
         return out
     if name == "get_policy":
         _seed_policies()
@@ -1251,17 +1271,35 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
 
 
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
+CERTIFIED_FILE = store.CACHE_DIR / "certified.json"
 _QUICKSALE_SCAN_VER = 3   # 스캔 로직 버전 — 올리면 배포 후 부팅 시 자동 재스캔(3=BUY+∪관심지역 커버리지 확대)
+_CERTIFIED_SCAN_VER = 1   # 1=scope=all + has_certified 찐매물
+_RADAR_MAX_AGE = 86400     # 급매·찐매물 캐시 TTL(1일)
+
+
+def _radar_cache_stale(path, min_ver: int) -> bool:
+    """캐시 없음 · 스캔버전 낮음 · mtime 1일 경과 → 재스캔."""
+    import time
+    if not path.exists():
+        return True
+    try:
+        if time.time() - path.stat().st_mtime >= _RADAR_MAX_AGE:
+            return True
+        return json.loads(path.read_text(encoding="utf-8")).get("_scan_ver", 0) < min_ver
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _quicksale_stale() -> bool:
-    """급매 캐시가 없거나 옛 스캔버전이면 True → 재스캔 필요."""
-    if not QUICKSALE_FILE.exists():
-        return True
-    try:
-        return json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("_scan_ver", 0) < _QUICKSALE_SCAN_VER
-    except Exception:  # noqa: BLE001
-        return True
+    """급매 캐시가 없거나 옛 버전·1일 경과면 True."""
+    return _radar_cache_stale(QUICKSALE_FILE, _QUICKSALE_SCAN_VER)
+
+
+def _certified_stale() -> bool:
+    """찐매물 캐시가 없거나 옛 버전·1일 경과면 True."""
+    return _radar_cache_stale(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
+
+
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
 
 
@@ -2276,14 +2314,15 @@ def _sigungu_at(lat, lng) -> str | None:
     return None
 
 
-def _radar_scan(regions: list[str]) -> list[dict]:
-    """급매 레이더 — 지역별 baroezip 공개 spatialmarket 조회 → 급매 매물 + 지역 시그널.
+def _radar_scan(regions: list[str], *, kind: str = "급매") -> list[dict]:
+    """baroezip spatialmarket 스캔 → 급매 또는 찐매물 + 지역 시그널.
 
-    bbox 스캔은 인접 구를 덮으므로, 매물의 실제 좌표로 시군구를 역판정해 지역·급지 오분류를 막는다.
+    kind='급매': 기본 피드(is_urgent). kind='찐매물': scope=all + has_certified.
+    bbox 스캔은 인접 구를 덮으므로, 매물 좌표로 시군구를 역판정해 지역·급지 오분류를 막는다.
     """
     from realty_signal.ingest.baroezip import bbox_around, fetch_market
 
-    codes = _kb().codes
+    scope = "all" if kind == "찐매물" else None
     sig = _signal_map()
     seen, out = set(), []
     for region in regions:
@@ -2291,10 +2330,12 @@ def _radar_scan(regions: list[str]) -> list[dict]:
         c = _region_centroid(region, code)
         if not c:
             continue
-        for m in fetch_market(*bbox_around(c[0], c[1])):
-            if not m["급매"]:
+        for m in fetch_market(*bbox_around(c[0], c[1]), scope=scope):
+            if kind == "급매" and not m.get("급매"):
                 continue
-            key = (m["complex_no"], m["평형"], m["층"])
+            if kind == "찐매물" and not m.get("찐매물"):
+                continue
+            key = (m.get("complex_no"), m.get("평형"), m.get("층"), m.get("호가"))
             if key in seen:
                 continue
             seen.add(key)
@@ -2410,6 +2451,13 @@ def _build_listings(want: set[str]) -> list[dict]:
                 "급매갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no")},
                 total=m.get("호가"))
+    if "찐매물" in want and CERTIFIED_FILE.exists():
+        for m in json.loads(CERTIFIED_FILE.read_text(encoding="utf-8")).get("listings", []):
+            add("찐매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
+                "시세갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
+                {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
+                 "찐매물": True},
+                total=m.get("호가"))
     if "청약" in want:
         for d in _presale():
             add("청약", d.get("단지명"), d.get("지역"), d.get("시그널"),
@@ -2428,7 +2476,7 @@ def _build_listings(want: set[str]) -> list[dict]:
 
 
 def listings_all(request: Request, types: str = "경매,급매,청약"):
-    """통합 매물 — 경매·급매·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환). 유형 교차 정렬."""
+    """통합 매물 — 경매·급매·찐매물·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환)."""
     from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
 
@@ -2439,6 +2487,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
         out = eng_rank.apply_engagement_bonus(out, scores)
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
     asof = _timing_asof()
+    kinds = ("경매", "급매", "찐매물", "청약", "재건축")
     return {
         "listings": out,
         "asof": asof,
@@ -2448,7 +2497,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "data_age_days": round(_data_age_days() or 0, 1),
             "engagement_boost": bool(scores),
         },
-        "counts": {k: sum(1 for x in out if x["유형"] == k) for k in ("경매", "급매", "청약", "재건축")},
+        "counts": {k: sum(1 for x in out if x["유형"] == k) for k in kinds},
     }
 
 
@@ -2460,11 +2509,18 @@ def quicksale():
     return {"ready": False, "listings": [], "regions": []}
 
 
+def certified():
+    """찐매물(내집등록·인증) 레이더 결과 (캐시). scope=all + has_certified."""
+    if CERTIFIED_FILE.exists():
+        return json.loads(CERTIFIED_FILE.read_text(encoding="utf-8"))
+    return {"ready": False, "listings": [], "regions": []}
+
+
 
 def _scan_regions() -> list[str]:
-    """급매 스캔 대상 = BUY+ 시그널 지역 ∪ 전체 사용자 관심 지역(중복 제거).
+    """급매·찐매물 스캔 대상 = BUY+ 시그널 지역 ∪ 전체 사용자 관심 지역(중복 제거).
 
-    관심 지역엔 시그널과 무관하게 급매 데이터가 항상 있도록 보장 → 관심 피드·동네 리포트 밀도↑.
+    관심 지역엔 시그널과 무관하게 매물 데이터가 항상 있도록 보장 → 관심 피드·동네 리포트 밀도↑.
     """
     df = _signals_df()
     buy = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
@@ -2480,10 +2536,20 @@ def _scan_regions() -> list[str]:
 def quicksale_refresh(data: dict = Body(default={})):
     """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
     regions = data.get("regions") or _scan_regions()
-    listings = _radar_scan(regions)
+    listings = _radar_scan(regions, kind="급매")
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
     QUICKSALE_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True, "count": len(listings), "regions": len(regions)}
+
+
+def certified_refresh(data: dict = Body(default={})):
+    """찐매물 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
+    regions = data.get("regions") or _scan_regions()
+    listings = _radar_scan(regions, kind="찐매물")
+    result = {"ready": True, "listings": listings, "regions": regions,
+              "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
+    CERTIFIED_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 
 

@@ -51,20 +51,24 @@ def _listing_base(kind: str, raw: dict) -> tuple[int, list[str], float]:
     """유형별 고유 할인/기대(0~60) + 신뢰도 보정."""
     why: list[str] = []
     conf = 0.72
-    if kind == "급매":
+    if kind in ("급매", "찐매물"):
         g = raw.get("급매갭")
+        label = "시세갭" if kind == "찐매물" else "급매갭"
         if g is None:
-            base, why = 0, ["급매갭 –"]
+            base, why = 0, [f"{label} –"]
             conf = 0.45
         elif g <= -35:
-            base, why = 15, [f"급매갭 {g}%(⚠️비현실적·확인필요)"]
+            base, why = 15, [f"{label} {g}%(⚠️비현실적·확인필요)"]
             conf = 0.35
         elif g < 0:
-            base, why = min(60, round(-g * 2)), [f"급매갭 {g}%"]
+            base, why = min(60, round(-g * 2)), [f"{label} {g}%"]
             conf = 0.78 if g >= -30 else 0.55
         else:
-            base, why = 0, [f"급매갭 {g}%(시세 이상)"]
+            base, why = 0, [f"{label} {g}%(시세 이상)"]
             conf = 0.5
+        if kind == "찐매물":
+            conf = min(0.9, conf + 0.08)   # 집주인 인증 — 허위매물 리스크↓
+            why.append("찐매물(내집등록)")
     elif kind == "경매":
         r = raw.get("시세차익률")
         base = 0 if r is None else max(0, min(60, round(r * 1.8)))
