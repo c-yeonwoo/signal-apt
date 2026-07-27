@@ -260,6 +260,7 @@ from realty_signal.routes.strategy import router as strategy_router  # noqa: E40
 from realty_signal.routes.geo import router as geo_router  # noqa: E402
 from realty_signal.routes.brain import router as brain_router  # noqa: E402
 from realty_signal.routes.home import router as home_router  # noqa: E402
+from realty_signal.routes.koczip import router as koczip_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(alerts_router)
@@ -273,6 +274,7 @@ app.include_router(strategy_router)
 app.include_router(geo_router)
 app.include_router(brain_router)
 app.include_router(home_router)
+app.include_router(koczip_router)
 
 
 def _signal_config() -> SignalConfig:

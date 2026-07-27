@@ -598,19 +598,46 @@
   <div class="tabs" style="margin-bottom:12px">
     <button class="tab on" data-qstab="급매" onclick="qsMode('급매')">급매</button>
     <button class="tab" data-qstab="찐매물" onclick="qsMode('찐매물')">찐매물 <span class="pill" style="margin-left:4px">인증</span></button>
+    <button class="tab" data-qstab="할인율" id="qsDiscTab" onclick="qsMode('할인율')" style="display:none" title="개인 확인용 · 콕집 집계">할인율</button>
   </div>
-  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-    <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
-    <label id="qsGapLabel">최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
-      <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
-    <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
-    <span id="qsMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+  <div id="qsRadarPane">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
+      <label id="qsGapLabel">최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
+        <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
+      <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
+      <span id="qsMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+    </div>
+    <div class="mapsplit">
+      <div class="ms-list" id="qsList"></div>
+      <div class="ms-map" id="qsMap"></div>
+    </div>
+    <p id="qsEmpty" style="color:var(--dim)"></p>
   </div>
-  <div class="mapsplit">
-    <div class="ms-list" id="qsList"></div>
-    <div class="ms-map" id="qsMap"></div>
+  <div id="qsDiscPane" style="display:none">
+    <p style="font-size:12px;color:var(--dim);margin:0 0 12px">실거래 평균보다 싼 호가(단지×면적) · 개인 확인용 · 재배포 금지 · 원천 네이버(콕집 집계)</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <label>시도 <select id="kzSido" class="ctrl" onchange="loadKoczipDeals()"></select></label>
+      <label>최소 할인 <select id="kzDisc" class="ctrl" onchange="loadKoczipDeals()">
+        <option value="0.05" selected>5%+</option>
+        <option value="0.1">10%+</option>
+        <option value="0.15">15%+</option>
+      </select></label>
+      <label>면적 <select id="kzPyeong" class="ctrl" onchange="loadKoczipDeals()">
+        <option value="">전체</option>
+        <option value="10">10평대</option>
+        <option value="20">20평대</option>
+        <option value="30">30평대</option>
+        <option value="40">40평+</option>
+      </select></label>
+      <label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:4px">
+        <input type="checkbox" id="kzBuyOnly" onchange="renderKoczipDeals()"> 매수신호만</label>
+      <button class="chip" onclick="loadKoczipDeals(1)" style="font-size:12px">새로고침</button>
+      <span id="kzStatus" style="color:var(--dim);font-size:12px"></span>
+    </div>
+    <div id="kzTable" style="overflow:auto;border:1px solid var(--line);border-radius:10px"></div>
+    <p id="kzEmpty" style="color:var(--dim)"></p>
   </div>
-  <p id="qsEmpty" style="color:var(--dim)"></p>
 </div>
 
 <div id="view-redev" style="display:none">
@@ -2443,24 +2470,99 @@ async function loadRedevZones(){
     tb.appendChild(tr);
   });
 }
-let _qsList=[], _qsCertList=[], _qsMode='급매';
+let _qsList=[], _qsCertList=[], _qsMode='급매', _kzItems=[], _kzAllowed=null;
 function qsMode(mode){
-  _qsMode=mode==='찐매물'?'찐매물':'급매';
+  _qsMode = mode==='찐매물' ? '찐매물' : (mode==='할인율' ? '할인율' : '급매');
   document.querySelectorAll('[data-qstab]').forEach(b=>b.classList.toggle('on', b.dataset.qstab===_qsMode));
-  document.getElementById('qsHead').textContent=_qsMode;
-  document.getElementById('qsSub').textContent=_qsMode==='찐매물'
-    ? '집주인 내집등록·인증 매물 · 허위매물 리스크↓ · 개인 참고용'
-    : '시세 대비 저가 매물 · 개인 참고용';
+  const disc = _qsMode==='할인율';
+  document.getElementById('qsRadarPane').style.display = disc ? 'none' : '';
+  document.getElementById('qsDiscPane').style.display = disc ? '' : 'none';
+  document.getElementById('qsHead').textContent = disc ? '할인율 급매' : _qsMode;
+  document.getElementById('qsSub').textContent = disc
+    ? '실거래 대비 호가 할인 · 개인 확인용 (콕집 집계)'
+    : (_qsMode==='찐매물'
+      ? '집주인 내집등록·인증 매물 · 허위매물 리스크↓ · 개인 참고용'
+      : '시세 대비 저가 매물 · 개인 참고용');
+  if(disc){ loadKoczipDeals(); return; }
   const gl=document.getElementById('qsGapLabel');
   if(gl) gl.firstChild.textContent=_qsMode==='찐매물'?'최소 시세갭 ':'최소 급매갭 ';
-  // 찐매물은 갭이 얕은 경우가 많아 기본 필터를 '전체'로
   if(_qsMode==='찐매물' && +document.getElementById('qsGap').value===-5) document.getElementById('qsGap').value='0';
   const n=_qsMode==='찐매물'?_qsCertList.length:_qsList.length;
   const st=document.getElementById('qsStatus');
   if(st && n) st.textContent=`${n}건 · 하루 1회 캐시 · 참고용`;
   renderQuicksale();
 }
+async function _ensureKoczipTab(){
+  if(_kzAllowed!=null) return _kzAllowed;
+  try{
+    const m=await (await fetch('/api/koczip/meta')).json();
+    _kzAllowed=!!m.allowed;
+    const tab=document.getElementById('qsDiscTab');
+    if(tab) tab.style.display=_kzAllowed?'':'none';
+    const sel=document.getElementById('kzSido');
+    if(sel && !sel.options.length && m.sido_opts){
+      m.sido_opts.forEach(o=>{ const el=document.createElement('option'); el.value=o.code; el.textContent=o.label; sel.appendChild(el); });
+    }
+  }catch(e){ _kzAllowed=false; }
+  return _kzAllowed;
+}
+async function loadKoczipDeals(force){
+  if(!(await _ensureKoczipTab())){ document.getElementById('kzEmpty').textContent='할인율 뷰는 로컬 또는 관리자만 사용할 수 있습니다.'; return; }
+  const st=document.getElementById('kzStatus');
+  st.textContent='불러오는 중…';
+  document.getElementById('kzEmpty').textContent='';
+  const sido=document.getElementById('kzSido').value;
+  const disc=document.getElementById('kzDisc').value;
+  const py=document.getElementById('kzPyeong').value;
+  const qs=new URLSearchParams({days:'90', min_discount:disc, asset:'apt', trade_type:'A1', limit:'80'});
+  if(sido) qs.set('sido', sido);
+  if(py) qs.set('pyeong', py);
+  if(force) qs.set('refresh', '1');
+  try{
+    const r=await fetch('/api/koczip/quick-deals?'+qs);
+    const d=await r.json();
+    if(!r.ok || d.ok===false){ st.textContent=''; document.getElementById('kzEmpty').textContent=d.error||'불러오기 실패'; _kzItems=[]; renderKoczipDeals(); return; }
+    _kzItems=d.items||[];
+    st.textContent=`${_kzItems.length}건${d.cached?' · 캐시':''} · 참고용`;
+    renderKoczipDeals();
+  }catch(e){ st.textContent=''; document.getElementById('kzEmpty').textContent='불러오기 실패'; }
+}
+function renderKoczipDeals(){
+  const buyOnly=document.getElementById('kzBuyOnly')?.checked;
+  const rows=_kzItems.filter(x=>{
+    if(buyOnly && !['STRONG_BUY','BUY'].includes(x['시그널'])) return false;
+    return true;
+  });
+  const box=document.getElementById('kzTable');
+  const empty=document.getElementById('kzEmpty');
+  if(!rows.length){ box.innerHTML=''; empty.textContent='조건에 맞는 단지가 없습니다. (시도·할인율·매수신호 완화)'; return; }
+  empty.textContent='';
+  const eok=n=>n==null?'–':(n/10000).toFixed(1)+'억';
+  box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:var(--dim);font-size:11px;text-align:left">
+      <th style="padding:8px 10px">단지</th><th style="padding:8px">지역</th><th style="padding:8px">시그널</th>
+      <th style="padding:8px;text-align:right">할인</th><th style="padding:8px;text-align:right">호가min</th>
+      <th style="padding:8px;text-align:right">실거래평균</th><th style="padding:8px;text-align:right">매물</th><th style="padding:8px"></th>
+    </tr></thead><tbody>${rows.map(x=>{
+      const disc=x['할인율'], col=disc!=null&&disc>=10?'#b91c1c':(disc!=null&&disc>=5?'#ea580c':'var(--txt)');
+      const nv=x.naver_url?`<a href="${x.naver_url}" target="_blank" rel="noopener" style="font-size:12px">네이버</a>`:'';
+      const cx=(x['단지']&&x.region)?cxBtn(x['단지'],x.region):'';
+      return `<tr style="border-top:1px solid var(--line)">
+        <td style="padding:8px 10px"><b>${x['단지']||'–'}</b>
+          <div style="font-size:11px;color:var(--dim)">${x['면적타입']||''} · ${x['전용㎡']?Math.round(x['전용㎡'])+'㎡':''}</div></td>
+        <td style="padding:8px;font-size:12px">${x.region||x['지역표시']||'–'}</td>
+        <td style="padding:8px">${x['시그널']?badge(x['시그널']):'<span class="pill">–</span>'}</td>
+        <td style="padding:8px;text-align:right;font-weight:700;color:${col}">${disc!=null?disc+'%':'–'}</td>
+        <td style="padding:8px;text-align:right">${eok(x['호가min'])}</td>
+        <td style="padding:8px;text-align:right;color:var(--dim)">${eok(x['실거래평균'])}</td>
+        <td style="padding:8px;text-align:right">${x['매물수']??'–'}</td>
+        <td style="padding:8px;white-space:nowrap">${nv}${cx}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
 async function loadQuicksale(){
+  await _ensureKoczipTab();
+  if(_qsMode==='할인율'){ loadKoczipDeals(); return; }
   // 지역 셀렉트 채우기(BUY+ 지역)
   const sel=document.getElementById('qsRegion');
   if(sel.options.length<=1){
@@ -2498,6 +2600,7 @@ async function refreshQuicksale(){
 }
 const _eok = n => (n==null||n<=0)?'–':(n/10000).toFixed(1)+'억';
 function renderQuicksale(){
+  if(_qsMode==='할인율'){ renderKoczipDeals(); return; }
   renderMtFilter('qsMtFilter', renderQuicksale);
   const minGap = +document.getElementById('qsGap').value || 0;
   const src = _qsMode==='찐매물' ? _qsCertList : _qsList;
