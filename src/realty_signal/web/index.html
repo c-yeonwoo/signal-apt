@@ -116,7 +116,8 @@
   #refresh:disabled { opacity:.5; cursor:wait; }
   .right { margin-left:auto; display:flex; gap:12px; align-items:center; }
   .wrap { display:flex; height:calc(100vh - var(--hh, 70px)); }
-  .side { width:264px; border-right:1px solid var(--line); display:flex; flex-direction:column; }
+  .side { width:264px; min-width:0; border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+  #regimeBox { min-width:0; overflow:hidden; overflow-wrap:anywhere; word-break:break-word; line-height:1.45; }
   /* 사이드바 필터 */
   .sfilters { padding:10px 12px; border-bottom:1px solid var(--line); background:#f1f5f9;
               display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
@@ -389,7 +390,7 @@
 <div id="view-signal">
   <div class="wrap">
     <div class="side">
-      <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help"></div>
+      <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help;flex:0 0 auto"></div>
       <div class="sfilters">
         <button id="filterToggle" onclick="toggleFilters()" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;text-align:left;display:flex;align-items:center;gap:4px">지역 검색·필터 <span id="filterCaret">▾</span></button>
         <div id="filterPanel" style="display:none;flex-direction:column;gap:8px">
@@ -1546,7 +1547,9 @@ function _regimeEvidenceHtml(rg, compact){
   const ladder=ev.ladder||rg.tier_avgs||[];
   if(compact){
     if(ladder.length){
-      return `<span style="color:var(--dim)"> · ${ladder.map(t=>`${t['급지']}${_regimeRise(t.avg_rise)}`).join('→')}</span>`;
+      return `<div style="color:var(--dim);margin-top:3px;line-height:1.4;overflow-wrap:anywhere">${
+        ladder.map(t=>`${t['급지']}${_regimeRise(t.avg_rise)}`).join(' → ')
+      }</div>`;
     }
     return '';
   }
