@@ -2925,9 +2925,9 @@ function txCostsSlot(price, region, pyeong, area){
 let _txTimers=new WeakMap();
 async function mountTxCosts(el, override){
   if(!el) return;
-  const price=+(override?.price ?? el.dataset.price||0);
+  const price=+(override?.price ?? (el.dataset.price || 0));
   if(!price){ el.innerHTML=''; return; }
-  const region=override?.region ?? el.dataset.region || '';
+  const region=(override?.region ?? el.dataset.region) || '';
   const pyeong=override?.pyeong ?? el.dataset.pyeong;
   const area=override?.area ?? el.dataset.area;
   const moving=override?.moving;
