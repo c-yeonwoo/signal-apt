@@ -585,11 +585,15 @@
 </div>
 
 <div id="view-quicksale" style="display:none">
-  <h2 class="page-head">급매</h2>
-  <p class="page-sub">시세 대비 저가 매물 · 개인 참고용</p>
+  <h2 class="page-head" id="qsHead">급매</h2>
+  <p class="page-sub" id="qsSub">시세 대비 저가 매물 · 개인 참고용</p>
+  <div class="tabs" style="margin-bottom:12px">
+    <button class="tab on" data-qstab="급매" onclick="qsMode('급매')">급매</button>
+    <button class="tab" data-qstab="찐매물" onclick="qsMode('찐매물')">찐매물 <span class="pill" style="margin-left:4px">인증</span></button>
+  </div>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
     <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
-    <label>최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
+    <label id="qsGapLabel">최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
       <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
     <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
     <span id="qsMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
@@ -836,7 +840,7 @@
     </div>
     <div><div style="font-size:12px;font-weight:700;margin-bottom:6px">급매 · 재건축 · 검증</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <span class="btn" id="qsBtn" onclick="refreshQuicksale()">BUY+ 급매 스캔</span>
+        <span class="btn" id="qsBtn" onclick="refreshQuicksale()">BUY+ 급매·찐매물 스캔</span>
         <span class="btn" onclick="adminWarmRedev()">재건축 워밍</span>
         <span class="btn" onclick="adminRunBacktest()">단지 백테스트 재계산</span>
       </div></div>
@@ -1416,7 +1420,7 @@ let _listingMoreOpen=false;
 const _GROUP_LABEL={market:'시장 분석', listings:'매물 발견', find:'내 집찾기'};
 const _SUBMETA={
   signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'저평가',d:'지역 랭킹'},
-  all:{l:'전체',d:'기회도순'}, quicksale:{l:'급매',d:'시세 이하 호가'},
+  all:{l:'전체',d:'기회도순'}, quicksale:{l:'급매',d:'급매·찐매물'},
   presale:{l:'청약',d:'신규 분양'}, auction:{l:'경매',d:'시세 이하 낙찰'},
   redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
   mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
@@ -2427,7 +2431,23 @@ async function loadRedevZones(){
     tb.appendChild(tr);
   });
 }
-let _qsList=[];
+let _qsList=[], _qsCertList=[], _qsMode='급매';
+function qsMode(mode){
+  _qsMode=mode==='찐매물'?'찐매물':'급매';
+  document.querySelectorAll('[data-qstab]').forEach(b=>b.classList.toggle('on', b.dataset.qstab===_qsMode));
+  document.getElementById('qsHead').textContent=_qsMode;
+  document.getElementById('qsSub').textContent=_qsMode==='찐매물'
+    ? '집주인 내집등록·인증 매물 · 허위매물 리스크↓ · 개인 참고용'
+    : '시세 대비 저가 매물 · 개인 참고용';
+  const gl=document.getElementById('qsGapLabel');
+  if(gl) gl.firstChild.textContent=_qsMode==='찐매물'?'최소 시세갭 ':'최소 급매갭 ';
+  // 찐매물은 갭이 얕은 경우가 많아 기본 필터를 '전체'로
+  if(_qsMode==='찐매물' && +document.getElementById('qsGap').value===-5) document.getElementById('qsGap').value='0';
+  const n=_qsMode==='찐매물'?_qsCertList.length:_qsList.length;
+  const st=document.getElementById('qsStatus');
+  if(st && n) st.textContent=`${n}건 · 하루 1회 캐시 · 참고용`;
+  renderQuicksale();
+}
 async function loadQuicksale(){
   // 지역 셀렉트 채우기(BUY+ 지역)
   const sel=document.getElementById('qsRegion');
@@ -2437,20 +2457,29 @@ async function loadQuicksale(){
       buy.forEach(b=>{const o=document.createElement('option');o.value=b.region;o.textContent=`${b.region} (${b.signal})`;sel.appendChild(o);});
     }catch(e){}
   }
-  const d=await (await fetch('/api/quicksale')).json();
+  const [d, c] = await Promise.all([
+    (await fetch('/api/quicksale')).json(),
+    (await fetch('/api/certified')).json().catch(()=>({ready:false,listings:[]})),
+  ]);
   _qsList = d.listings||[];
-  document.getElementById('qsStatus').textContent = d.ready
-    ? `${d.count}건 (스캔 지역 ${d.regions?.length||0}곳) · 스캔 시점 기준(실시간 아님) · 참고용`
-    : '아직 스캔 안 됨 — 버튼을 눌러 수집하세요.';
+  _qsCertList = c.listings||[];
+  const cur=_qsMode==='찐매물'?c:d;
+  document.getElementById('qsStatus').textContent = cur.ready
+    ? `${cur.count||(cur.listings||[]).length}건 (스캔 지역 ${cur.regions?.length||0}곳) · 하루 1회 캐시 · 참고용`
+    : '아직 스캔 안 됨 — 관리자 스캔 또는 서버 일일 갱신을 기다리세요.';
   renderQuicksale();
 }
 async function refreshQuicksale(){
   const btn=document.getElementById('qsBtn'); const region=document.getElementById('qsRegion').value;
   btn.disabled=true; const o=btn.textContent;
-  btn.textContent = region ? `${region} 스캔 중…` : 'BUY+ 전체 스캔 중… (수십초)';
+  btn.textContent = region ? `${region} 스캔 중…` : 'BUY+ 급매·찐매물 스캔 중… (수십초)';
   try{
     const body = region ? {regions:[region]} : {};
-    const r = await (await fetch('/api/quicksale/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    const hdr={'Content-Type':'application/json'};
+    await Promise.all([
+      fetch('/api/quicksale/refresh',{method:'POST',headers:hdr,body:JSON.stringify(body)}),
+      fetch('/api/certified/refresh',{method:'POST',headers:hdr,body:JSON.stringify(body)}),
+    ]);
     await loadQuicksale();
   }catch(e){ document.getElementById('qsStatus').textContent='스캔 실패: '+e; }
   btn.disabled=false; btn.textContent=o;
@@ -2459,24 +2488,31 @@ const _eok = n => (n==null||n<=0)?'–':(n/10000).toFixed(1)+'억';
 function renderQuicksale(){
   renderMtFilter('qsMtFilter', renderQuicksale);
   const minGap = +document.getElementById('qsGap').value || 0;
-  const rows = _qsList.filter(m=> (minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap)) && inFocus(m['지역']||'') && _mtPass(m['지역'], m['시그널']));
-  document.getElementById('qsEmpty').textContent = rows.length?'':'조건에 맞는 급매가 없습니다. (스캔 먼저 / 갭·급지·신호 기준 완화)';
+  const src = _qsMode==='찐매물' ? _qsCertList : _qsList;
+  const gapLabel = _qsMode==='찐매물' ? '시세갭' : '급매갭';
+  const rows = src.filter(m=> (minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap)) && inFocus(m['지역']||'') && _mtPass(m['지역'], m['시그널']));
+  document.getElementById('qsEmpty').textContent = rows.length?'':(
+    _qsMode==='찐매물'
+      ? '조건에 맞는 찐매물이 없습니다. (스캔 먼저 / 갭·급지·신호 기준 완화)'
+      : '조건에 맞는 급매가 없습니다. (스캔 먼저 / 갭·급지·신호 기준 완화)');
+  const accent = _qsMode==='찐매물' ? '#0f766e' : '#ea580c';
+  const deep = _qsMode==='찐매물' ? '#0d9488' : '#ef4444';
   mapSplit('qsList','qsMap',rows,{
-    summary:m=>({nm:`${m['단지명']||'–'} ${m['시그널']?badge(m['시그널']):''}`,
-      right:_mtMetric('급매갭', `<b style="color:${m['급매갭']<=-8?'#ef4444':'#ea580c'}">${m['급매갭']}%</b>`),
+    summary:m=>({nm:`${m['단지명']||'–'} ${_qsMode==='찐매물'?'<span class="pill" style="background:#ccfbf1;color:#0f766e">찐</span> ':''}${m['시그널']?badge(m['시그널']):''}`,
+      right:_mtMetric(gapLabel, `<b style="color:${m['급매갭']!=null&&m['급매갭']<=-8?deep:accent}">${m['급매갭']??'–'}%</b>`),
       sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
-      <span>연식 ${m['연식']||'–'}</span></div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
+      <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">집주인 인증</span>':''}</div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     regionOf:m=>m['지역'],
-    color:m=>m['급매갭']<=-8?'#ef4444':'#ea580c',
-    label:m=>`<b>${m['단지명']}</b><br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:#ea580c">(${m['급매갭']}%)</span>`,
+    color:m=>m['급매갭']!=null&&m['급매갭']<=-8?deep:accent,
+    label:m=>`<b>${m['단지명']}</b>${_qsMode==='찐매물'?' · 찐':''}<br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:${accent}">(${m['급매갭']??'–'}%)</span>`,
   });
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
-const _LA_TYPES=['경매','급매','청약','재건축'];
-const _LA_COLOR={경매:'#4f46e5', 급매:'#c2410c', 청약:'#0e7490', 재건축:'#15803d'};
+const _LA_TYPES=['경매','급매','찐매물','청약','재건축'];
+const _LA_COLOR={경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 let _laSort='opp', _laBuyOnly=false;          // 정렬 기준 + 매수신호(BUY+)만 필터
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }

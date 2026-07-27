@@ -88,6 +88,7 @@ def freshness():
     from realty_signal import api as app_api
     last_date = str(md.kb().last_date.date())
     qs = getattr(app_api, "QUICKSALE_FILE", store.CACHE_DIR / "quicksale.json")
+    cert = getattr(app_api, "CERTIFIED_FILE", store.CACHE_DIR / "certified.json")
     sources = [
         {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
          "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동",
@@ -95,7 +96,9 @@ def freshness():
         {"key": "trade", "label": "국토부 실거래", "ts": db.kv_max_ts("complex:"),
          "cycle": "조회 시 · 14일 캐시", "note": "단지 조회 시 국토부 실거래를 수집(14일 캐시), 관심단지는 주 1회 자동 프리페치."},
         {"key": "quicksale", "label": "급매 스캔", "ts": _file_mtime(qs),
-         "cycle": "관리자 스캔 시", "note": "BUY+ 시그널 지역의 시세 이하 호가를 스캔해 적재."},
+         "cycle": "하루 1회 자동", "note": "BUY+·관심지역 시세 이하 호가(baroezip). 캐시 1일."},
+        {"key": "certified", "label": "찐매물 스캔", "ts": _file_mtime(cert),
+         "cycle": "하루 1회 자동", "note": "바로이집 내집등록·인증 매물(scope=all). 캐시 1일."},
         {"key": "auction", "label": "경매 물건", "ts": _file_mtime(AUCTION_FILE),
          "cycle": "관리자 등록·갱신 시", "note": "법원경매 물건과 시세를 관리자가 등록·갱신."},
         {"key": "presale", "label": "청약", "ts": None, "cycle": "실시간",

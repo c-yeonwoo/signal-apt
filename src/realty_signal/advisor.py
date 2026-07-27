@@ -121,7 +121,7 @@ TOOLS = [
             "layer": {"type": "string", "enum": ["region", "listing"],
                       "description": "region=지역 KB 시그널, listing=경매·급매 등 매물"},
             "region": {"type": "string", "description": "지역명(필수)"},
-            "kind": {"type": "string", "enum": ["경매", "급매", "청약", "재건축"],
+            "kind": {"type": "string", "enum": ["경매", "급매", "찐매물", "청약", "재건축"],
                      "description": "layer=listing 일 때 유형(기본 급매)"},
         }, "required": ["region"]},
     },
@@ -177,10 +177,10 @@ TOOLS = [
     },
     {
         "name": "get_listings",
-        "description": "실제 매물 — 급매(시세 이하 호가)·경매. region 으로 좁힘. kind: '급매'|'경매'|'전체'. '강남 급매 있어?' 류에 사용. 급매는 관리자 스캔 시점 기준.",
+        "description": "실제 매물 — 급매·찐매물(집주인 인증)·경매. region 으로 좁힘. kind: '급매'|'찐매물'|'경매'|'전체'. 하루 1회 캐시.",
         "input_schema": {"type": "object", "properties": {
             "region": {"type": "string", "description": "지역명(선택)"},
-            "kind": {"type": "string", "enum": ["급매", "경매", "전체"], "description": "매물 종류(기본 급매)"},
+            "kind": {"type": "string", "enum": ["급매", "찐매물", "경매", "전체"], "description": "매물 종류(기본 급매)"},
         }},
     },
     {

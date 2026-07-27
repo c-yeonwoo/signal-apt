@@ -47,3 +47,16 @@ def quicksale_refresh(request: Request, data: dict = Body(default={})):
     if err := deps.require_admin(request):
         return err
     return _api().quicksale_refresh(data)
+
+
+@router.get("/api/certified")
+def certified():
+    return _api().certified()
+
+
+@router.post("/api/certified/refresh")
+def certified_refresh(request: Request, data: dict = Body(default={})):
+    from realty_signal.routes import deps
+    if err := deps.require_admin(request):
+        return err
+    return _api().certified_refresh(data)
