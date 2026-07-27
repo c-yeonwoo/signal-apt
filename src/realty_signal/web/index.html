@@ -1264,7 +1264,7 @@
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
 const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};
 let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
-let activeGrade = new Set(["A","B","C","D"]);   // 지역 급지 필터(상~하급지). 급지 없는 지방은 항상 통과
+let activeGrade = new Set(["A","B","C","D","E"]);   // 지역 급지 필터(A~E). 급지 없는 지방은 항상 통과
 let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'));
 // 헤더 실제 높이를 --hh 로 반영 → .wrap 높이가 헤더/뷰포트와 정확히 맞아 footer 침범 방지
@@ -1355,14 +1355,15 @@ function gradeBadge(g, top){
   const t = top!=null ? ` <span style="color:var(--dim);font-size:10px">상위${top}%</span>` : '';
   return `<span title="지역 내 평단가 순위" style="color:${col};font-weight:700">${g}급지</span>${t}`;
 }
-// 시군구 급지(평단가 분위 A~D) → 직관 라벨(상/중상/중하/하급지)
+// 시군구 급지(수도권 평단가 5분위 A~E) → 직관 라벨
 const _REGION_GRADE = {A:{label:'상급지',col:'#ca8a04'}, B:{label:'중상급지',col:'#16a34a'},
-                       C:{label:'중하급지',col:'#0891b2'}, D:{label:'하급지',col:'#94a3b8'}};
+                       C:{label:'중급지',col:'#0891b2'}, D:{label:'중하급지',col:'#64748b'},
+                       E:{label:'하급지',col:'#94a3b8'}};
 function regionGradeBadge(g, pyeong){
   if(!g) return '–';
   const gd = _REGION_GRADE[g] || {label:g+'급지', col:'#94a3b8'};
   const p = pyeong ? ` <span style="color:var(--dim);font-size:10px">${pyeong}만/평</span>` : '';
-  return `<span title="시군구 평단가 분위(A~D)" style="color:${gd.col};font-weight:700">${gd.label}</span>${p}`;
+  return `<span title="수도권 시군구 평단가 5분위(A~E)" style="color:${gd.col};font-weight:700">${gd.label}</span>${p}`;
 }
 
 // ===== 매물 공통 카드 요소(경매·급매·청약 표준화) =====
@@ -1373,7 +1374,7 @@ function _mtGradeTag(region){ const gd=_mtGradeLabel(region);
 function _mtMetric(label, valHtml){   // 우측 핵심지표 — 라벨+값 통일
   return `<div style="text-align:right;line-height:1.15"><div style="font-size:9px;color:var(--dim)">${label}</div>${valHtml}</div>`; }
 // 공통 필터 상태(급지·BUY+) — 매물 3탭 공통
-let _mtGradeSet=new Set(['A','B','C','D']), _mtBuyOnly=false;
+let _mtGradeSet=new Set(['A','B','C','D','E']), _mtBuyOnly=false;
 function _mtRegionGrade(region){ const s=(allSignals||[]).find(x=>x.region===region); return s?s['급지']:null; }
 function _mtPass(region, signal){
   const g=_mtRegionGrade(region);
@@ -1388,7 +1389,7 @@ function renderMtFilter(hostId, rerender){
   const lblStyle=big?'':'style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px"';
   el.innerHTML=`<label ${lblStyle}><input type="checkbox" ${_mtBuyOnly?'checked':''} class="mt-buy"> 매수신호만</label>`
     + `<span class="${big?'mt-label':''}" style="${big?'':'font-size:11px;color:var(--dim);margin-left:6px'}">급지</span>`
-    + [['A','상'],['B','중상'],['C','중하'],['D','하']].map(([c,l])=>chip(c,l)).join('');
+    + [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].map(([c,l])=>chip(c,l)).join('');
   el.querySelector('.mt-buy').onchange=e=>{ _mtBuyOnly=e.target.checked; rerender(); };
   el.querySelectorAll('[data-g]').forEach(c=>c.onclick=()=>{ const g=c.dataset.g;
     if(_mtGradeSet.has(g)) _mtGradeSet.delete(g); else _mtGradeSet.add(g);
@@ -1512,20 +1513,31 @@ function _regimeRise(v){
   const n=+v; if(Number.isNaN(n)) return String(v);
   return (n>0?'+':'')+n+'%';
 }
-/** 끝물 판단 근거 — 하급지 주도 지역·상승폭 (+ 상급지 참고). compact=true 면 한 줄 요약. */
+/** 끝물 판단 근거 — A→E 계단 + D·E 주도 지역. compact=true 면 한 줄 요약. */
 function _regimeEvidenceHtml(rg, compact){
   const ev=rg&&rg.evidence; if(!ev) return '';
   const w=ev.window||rg.window||8;
   const lo=ev['하급지평균'], hi=ev['상급지평균'];
   const drivers=ev.drivers||[];
+  const ladder=ev.ladder||rg.tier_avgs||[];
   if(compact){
+    if(ladder.length){
+      return `<span style="color:var(--dim)"> · ${ladder.map(t=>`${t['급지']}${_regimeRise(t.avg_rise)}`).join('→')}</span>`;
+    }
     if(!drivers.length) return '';
     const bits=drivers.slice(0,3).map(d=>`${d.region} ${_regimeRise(d.rise)}`);
     return `<span style="color:var(--dim)"> · 주도 ${bits.join(' · ')}</span>`;
   }
-  let h=`<div style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.55">최근 ${w}주 누적 상승률 · 하급지(C·D) 평균 <b style="color:var(--txt)">${_regimeRise(lo)}</b> vs 상급지(A·B) <b style="color:var(--txt)">${_regimeRise(hi)}</b></div>`;
+  let h='';
+  if(ladder.length){
+    h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55">급지 계단(최근 ${w}주) · `
+      + ladder.map(t=>`<b style="color:var(--txt)">${t['급지']}</b> ${_regimeRise(t.avg_rise)}`).join(' → ')
+      +`</div>`;
+  }
+  h+=`<div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.55">최하급(D·E) 평균 <b style="color:var(--txt)">${_regimeRise(lo)}</b> vs 상급(A·B) <b style="color:var(--txt)">${_regimeRise(hi)}</b></div>`;
+  h+=`<div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.5;padding:8px 10px;background:#f8fafc;border-radius:8px">지역 <b style="color:var(--txt)">BUY/매도 시그널</b>은 그 동네 수급·모멘텀이 정본이고, 이 국면은 수도권 유동성 경고입니다. 둘 다 매수+끝물이면 <b style="color:var(--txt)">막차 가능성</b>으로 읽으세요.</div>`;
   if(drivers.length){
-    h+=`<div style="font-size:11px;font-weight:600;color:var(--dim);margin:10px 0 4px">상승 주도 · 하급지</div>`;
+    h+=`<div style="font-size:11px;font-weight:600;color:var(--dim);margin:10px 0 4px">상승 주도 · D·E급</div>`;
     h+=drivers.map(d=>{
       const col=d.rise>=0?'#b91c1c':'#15803d';
       return `<div style="display:flex;align-items:baseline;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line)">`
@@ -1537,7 +1549,7 @@ function _regimeEvidenceHtml(rg, compact){
   }
   const anchors=ev['상급지참고']||[];
   if(anchors.length){
-    h+=`<div style="font-size:11px;font-weight:600;color:var(--dim);margin:10px 0 4px">상급지 참고</div>`;
+    h+=`<div style="font-size:11px;font-weight:600;color:var(--dim);margin:10px 0 4px">상급지(A) 참고</div>`;
     h+=anchors.map(d=>{
       const col=d.rise>=0?'#b91c1c':'#15803d';
       return `<div style="display:flex;align-items:baseline;gap:8px;font-size:12px;padding:4px 0;color:var(--dim)">`
@@ -1572,14 +1584,15 @@ async function loadDashboard(){
   let regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
   try{ const rg=await (await fetch('/api/regime')).json();
     if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
-      const showEv=rg.beta!=null && +rg.beta<0; // 끝물·주의일 때 근거 펼침
-      regimeH=_dashH('수도권 경기 국면')
+      const showEv=String(rg.phase).includes('끝물'); // 끝물·주의일 때 근거 펼침
+      const meta=[rg.ascents!=null?`A→E 상승계단 ${rg.ascents}`:null, `갭 ${rg.gap}`].filter(Boolean).join(' · ');
+      regimeH=_dashH('수도권 유동성 국면')
         +`<div style="font-size:22px;font-weight:600;color:${C};letter-spacing:-0.02em">${rg.phase}</div>`
-        +`<div style="color:var(--dim);font-size:12px;margin-top:6px">β ${rg.beta} · 급지갭 ${rg.gap}</div>`
+        +`<div style="color:var(--dim);font-size:12px;margin-top:6px">${meta}</div>`
         +(rg.desc?`<div style="color:var(--dim);font-size:12.5px;margin-top:8px;line-height:1.5">${rg.desc}</div>`:'')
         +(showEv?_regimeEvidenceHtml(rg,false):''); }
-    else regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
-  }catch(e){ regimeH=_dashH('수도권 경기 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
+    else regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
+  }catch(e){ regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
   const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
   const moreLinks=`<div style="display:flex;flex-wrap:wrap;gap:6px 0;padding:2px 0">
     ${link('signal','시장·지역')}${link('all','매물')}${link('report','AI 리포트')}
@@ -2214,7 +2227,7 @@ const _GLOSSARY=[
   ["전세수급지수","전세 수요/공급(100 기준). 높으면 전세난→매매 전이 압력.","앱"],
   ["주택구입부담지수","중위소득 가구의 중간가 주택 구입 부담. 높을수록 비쌈.","앱"],
   ["저평가도","교통·학군·환경 점수로 계산한 '이 정도 입지면 보통 이 가격'과 실제 시세의 차이. +면 그보다 싼 편, −면 비싼 편. 브랜드·재건축 기대는 반영되지 않아 강남·과천처럼 프리미엄이 큰 곳은 크게 '비싼 편'으로 나온다.","앱"],
-  ["급지","지역/단지 등급(입지·시세 순위). A~D·1~5.","앱"],
+  ["급지","지역/단지 등급(입지·시세 순위). 시군구는 수도권 평단가 A~E, 단지는 지역 내 1~5.","앱"],
   ["벌집순환모형","회복→상승→후퇴→침체 4국면 부동산 경기 사이클.","앱"],
   ["입주물량","향후 입주 예정 물량. 많으면 공급과잉(가격 압력).","앱"],
 ]],
@@ -3287,7 +3300,7 @@ function toggleFilters(){ _filtersOpen=!_filtersOpen;
 function updateFilterToggleLabel(){
   const btn=document.getElementById('filterToggle'); if(!btn) return;
   // 비활성(전체가 아닌) 필터 개수 = 접혔을 때 적용중임을 표시
-  const off = SIGNALS.length - active.size + (4 - (typeof activeGrade!=='undefined'?activeGrade.size:4));
+  const off = SIGNALS.length - active.size + (5 - (typeof activeGrade!=='undefined'?activeGrade.size:5));
   const cnt = off>0 ? ` <span style="color:var(--accent)">· ${off} 적용중</span>` : '';
   btn.innerHTML = `지역 검색·필터${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
 }
@@ -3303,7 +3316,7 @@ function renderFilters(){
   const g = document.createElement('div');
   g.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;align-items:center';
   g.innerHTML = '<span style="font-size:10px;color:var(--dim)">급지</span>';
-  [['A','상급지'],['B','중상'],['C','중하'],['D','하급지']].forEach(([code,lbl]) => {
+  [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].forEach(([code,lbl]) => {
     const el = document.createElement('span');
     el.className = 'chip' + (activeGrade.has(code)?' on':''); el.textContent = lbl;
     el.style.fontSize = '11px';
@@ -3626,10 +3639,11 @@ async function loadData(){
     if(rg && rg.phase){
       const C = {green:'#22c55e', yellow:'#ca8a04', orange:'#ea580c', red:'#ef4444'}[rg.color]||'#94a3b8';
       box.style.display='block'; box.title = rg.desc || '';
-      const compactEv = (rg.beta!=null && +rg.beta<0) ? _regimeEvidenceHtml(rg, true) : '';
+      const compactEv = String(rg.phase||'').includes('끝물') ? _regimeEvidenceHtml(rg, true) : '';
+      const meta = rg.ascents!=null ? `A→E 상승계단 ${rg.ascents} · 갭 ${rg.gap}` : `갭 ${rg.gap}`;
       box.innerHTML = `<span style="color:${C}">●</span> <b>수도권 유동성</b>: `
         + `<span style="color:${C};font-weight:700">${rg.phase}</span>`
-        + `<span style="color:var(--dim)"> · β ${rg.beta} · 급지갭 ${rg.gap}</span>`
+        + `<span style="color:var(--dim)"> · ${meta}</span>`
         + compactEv;
     } else box.style.display='none';
   } catch(e){}

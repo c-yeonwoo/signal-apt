@@ -515,9 +515,16 @@ def _advisor_tool(name: str, args: dict) -> dict:
         return strength_api(region=(args.get("region") or "").strip() or None)
     if name == "get_regime":
         rg = _regime() or {}
-        out = {k: rg.get(k) for k in ("phase", "beta", "gap", "color", "desc", "endgame") if k in rg}
+        keys = ("phase", "beta", "gap", "color", "desc", "endgame",
+                "ascents", "descents", "ladder_corr", "tier_avgs")
+        out = {k: rg.get(k) for k in keys if k in rg}
         if rg.get("evidence"):
             out["evidence"] = rg["evidence"]
+        # Nick이 BUY와 끝물을 같은 축으로 섞지 않게
+        out["how_to_read"] = (
+            "지역 BUY/매도 시그널은 그 동네 KB 수급·모멘텀(정본). "
+            "국면(끝물)은 수도권 유동성 경고. 둘 다 매수+끝물이면 막차 가능성으로 설명."
+        )
         return out
     if name == "get_news":
         try:

@@ -1,9 +1,15 @@
 """급지역전 지표 — 수도권 유동성 국면 (매도 타이밍 방법론).
 
-자금은 상급지→하급지로 흐른다. 하급지(싼 곳)가 상급지보다 더 오르면 = 유동성이 외곽까지
-밀려난 '끝물' 신호. 평단가(국토부)로 급지를 나누고, KB 주간 매매증감으로 상승률을 재서:
-  - β: 상승률 ~ log(평단가) 회귀 기울기. β<0 = 하급지 주도 = 끝물.
-  - 군집갭: (C·D급 평균 상승률) − (A·B급 평균 상승률). >0 = 끝물.
+자금은 상급지→하급지로 흐른다. 평단가(국토부)로 급지 A~E를 나누고, KB 주간 매매증감
+(최근 window주 합)을 급지 순(A→E)으로 봤을 때 **상승률이 갈수록 커지면** 유동성이
+외곽·최하급지까지 밀린 '끝물'로 본다.
+
+  - ladder: 급지별 평균 상승률. A→B→C→D→E 로 오르는 계단 수(ascents).
+  - endgame: 계단이 뚜렷하고 최하급(D·E) 평균이 상급(A·B)보다 큼.
+  - β·gap: 참고 지표(연속 회귀 / 상·하 군집 차). 국면 판정의 정본은 ladder.
+
+지역 BUY/STRONG_BUY 시그널과는 축이 다르다 — 지역 시그널은 그 동네 KB 수급·모멘텀,
+이 모듈은 수도권 전체 유동성 국면. 둘이 겹치면 '막차 매수' 가능성으로 읽는다.
 수도권 통합 권역 1개. 지방은 시군구 평단가 부족으로 미산출.
 """
 
@@ -12,6 +18,11 @@ from __future__ import annotations
 import math
 
 _METRO = ("11", "41", "28")  # 서울·경기·인천
+_TIERS = ("A", "B", "C", "D", "E")  # A=최상급 … E=최하급
+_LO = ("D", "E")                   # 끝물 주도·막차 후보
+_HI = ("A", "B")
+# 계단 한 칸이 노이즈로 뒤집히지 않게 최소 상승폭(%p, 8주 누적)
+_STEP_EPS = 0.05
 
 
 def _linfit(xs, ys):
@@ -20,6 +31,42 @@ def _linfit(xs, ys):
     sxx = sum((x - mx) ** 2 for x in xs)
     sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
     return (sxy / sxx) if sxx else 0.0
+
+
+def _assign_tiers(rows: list) -> None:
+    """평단가 순위 5분위 — 싼 쪽 E, 비싼 쪽 A. 빈 구간 없도록 순위 기반."""
+    ranked = sorted(rows, key=lambda r: r["price"])
+    n = len(ranked)
+    for i, r in enumerate(ranked):
+        q = min(4, (i * 5) // n)          # 0=최저가 … 4=최고가
+        r["급지"] = "EDCBA"[q]
+
+
+def _tier_avgs(rows: list) -> list[dict]:
+    out = []
+    for t in _TIERS:
+        xs = [r["rise"] for r in rows if r["급지"] == t]
+        if not xs:
+            continue
+        out.append({"급지": t, "avg_rise": round(sum(xs) / len(xs), 2), "n": len(xs)})
+    return out
+
+
+def _ladder_stats(tier_avgs: list[dict]) -> tuple[int, int, float | None]:
+    """A→E 방향 상승 계단·하락 계단 수, Spearman-ish corr(급지순위, 상승률)."""
+    if len(tier_avgs) < 3:
+        return 0, 0, None
+    vals = [t["avg_rise"] for t in tier_avgs]
+    ascents = sum(1 for i in range(len(vals) - 1) if vals[i + 1] > vals[i] + _STEP_EPS)
+    descents = sum(1 for i in range(len(vals) - 1) if vals[i] > vals[i + 1] + _STEP_EPS)
+    # 급지 순위 0=A … — avg_rise 와 부호상관 (양수 = 하급지가 더 오름)
+    n = len(vals)
+    mx = (n - 1) / 2
+    my = sum(vals) / n
+    sxx = sum((i - mx) ** 2 for i in range(n))
+    sxy = sum((i - mx) * (v - my) for i, v in enumerate(vals))
+    corr = (sxy / sxx) if sxx else 0.0
+    return ascents, descents, round(corr, 3)
 
 
 def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
@@ -37,67 +84,71 @@ def compute_regime(kb, loc_df, codes: dict, window: int = 8) -> dict:
             continue
         rows.append({"region": region, "price": float(lr["price"]),
                      "rise": round(float(s.tail(window).sum()), 2)})
-    if len(rows) < 12:
+    # 5분위가 의미 있으려면 급지당 ~3곳 → 최소 15
+    if len(rows) < 15:
         return {}
 
-    prices = sorted(r["price"] for r in rows)
-    q1, q2, q3 = prices[len(prices) // 4], prices[len(prices) // 2], prices[3 * len(prices) // 4]
-    for r in rows:
-        p = r["price"]
-        r["급지"] = "D" if p < q1 else "C" if p < q2 else "B" if p < q3 else "A"
+    _assign_tiers(rows)
+    tier_avgs = _tier_avgs(rows)
+    ascents, descents, ladder_corr = _ladder_stats(tier_avgs)
+    steps = max(len(tier_avgs) - 1, 1)
 
     beta = _linfit([math.log(r["price"]) for r in rows], [r["rise"] for r in rows])
-    lo = [r["rise"] for r in rows if r["급지"] in ("C", "D")]
-    hi = [r["rise"] for r in rows if r["급지"] in ("A", "B")]
-    gap = (sum(lo) / len(lo)) - (sum(hi) / len(hi))
+    lo = [r["rise"] for r in rows if r["급지"] in _LO]
+    hi = [r["rise"] for r in rows if r["급지"] in _HI]
+    gap = (sum(lo) / len(lo)) - (sum(hi) / len(hi)) if lo and hi else 0.0
+    lo_avg = round(sum(lo) / len(lo), 2) if lo else None
+    hi_avg = round(sum(hi) / len(hi), 2) if hi else None
 
-    # 국면 4단계 (β 우선, 군집갭 보조)
-    if beta >= 0.5:
-        phase, color = "상급지 주도", "green"
-    elif beta >= 0:
-        phase, color = "광역 확산", "yellow"
-    elif beta > -0.5:
-        phase, color = "하급지 순환(끝물 주의)", "orange"
-    else:
+    # 국면: A→E 계단이 정본. β는 참고만.
+    if ascents >= 3 and gap > 0:
         phase, color = "끝물(매도 경고)", "red"
-    endgame = beta < 0 and gap > 0  # 끝물 종합 판정
+    elif ascents >= 2 and gap > 0:
+        phase, color = "하급지 순환(끝물 주의)", "orange"
+    elif descents >= 3 and gap <= 0:
+        phase, color = "상급지 주도", "green"
+    else:
+        phase, color = "광역 확산", "yellow"
+    endgame = phase.startswith("끝물")  # 빨간 끝물만 True (주의는 False)
 
-    # 막차 경고: 하급지(C/D)인데 최근 상승 상위20% + 끝물 국면
+    # 막차: 최하급(D/E) + 상승 상위20% + 끝물·주의
+    late = phase.find("끝물") >= 0
     rises = sorted(r["rise"] for r in rows)
     thr = rises[int(len(rises) * 0.8)]
     for r in rows:
-        r["막차"] = bool(r["급지"] in ("C", "D") and r["rise"] >= thr and beta < 0)
+        r["막차"] = bool(r["급지"] in _LO and r["rise"] >= thr and late)
 
-    lo_avg = round(sum(lo) / len(lo), 2) if lo else None
-    hi_avg = round(sum(hi) / len(hi), 2) if hi else None
-    # 끝물·주의(β<0)일 때만 — Nick이 정상 국면에서 drivers를 끝물로 오해하지 않게
-    evidence = _evidence(rows, window, lo_avg, hi_avg) if beta < 0 else {}
+    evidence = _evidence(rows, window, lo_avg, hi_avg, tier_avgs) if late else {}
 
     return {
         "phase": phase, "color": color, "endgame": endgame,
         "beta": round(beta, 2), "gap": round(gap, 2), "window": window,
-        "desc": _desc(phase, beta, gap),
+        "ascents": ascents, "descents": descents,
+        "ladder_corr": ladder_corr, "ladder_steps": steps,
+        "tier_avgs": tier_avgs,
+        "desc": _desc(phase, ascents, gap, tier_avgs),
         "evidence": evidence,
         "regions": {r["region"]: {"급지": r["급지"], "평단가": round(r["price"]),
                                   "rise": r["rise"], "막차": r["막차"]} for r in rows},
     }
 
 
-def _evidence(rows: list, window: int, lo_avg: float | None, hi_avg: float | None) -> dict:
-    """끝물 판단 근거 — 하급지 주도 지역·상승폭 + 상급지 참고."""
+def _evidence(rows: list, window: int, lo_avg: float | None, hi_avg: float | None,
+              tier_avgs: list[dict]) -> dict:
+    """끝물 판단 근거 — 급지 계단 + D·E 주도 지역 + A급 참고."""
     drivers = sorted(
-        (r for r in rows if r["급지"] in ("C", "D")),
+        (r for r in rows if r["급지"] in _LO),
         key=lambda r: (-int(r["막차"]), -r["rise"]),
     )[:5]
-    # 상급지 기준점 = 평단가 최상위(진짜 A급). rise 대비는 drivers와 나란히 보면 됨.
     anchors = sorted(
-        (r for r in rows if r["급지"] in ("A", "B")),
+        (r for r in rows if r["급지"] == "A"),
         key=lambda r: -r["price"],
     )[:3]
     return {
         "window": window,
-        "하급지평균": lo_avg,
-        "상급지평균": hi_avg,
+        "하급지평균": lo_avg,   # D·E
+        "상급지평균": hi_avg,   # A·B
+        "ladder": tier_avgs,
         "drivers": [
             {"region": r["region"], "급지": r["급지"], "rise": r["rise"],
              "평단가": round(r["price"]), "막차": r["막차"]}
@@ -111,11 +162,21 @@ def _evidence(rows: list, window: int, lo_avg: float | None, hi_avg: float | Non
     }
 
 
-def _desc(phase: str, beta: float, gap: float) -> str:
-    if beta >= 0.5:
-        return "상급지가 하급지보다 더 오르는 정상 상승 국면 — 유동성 풍부, 매수 우호."
-    if beta >= 0:
-        return "상·하급지 상승률이 비슷해지는 확산 국면 — 중반."
-    if beta > -0.5:
-        return "하급지가 상급지보다 더 오르기 시작 — 유동성이 외곽으로 밀리는 끝물 진입 주의."
-    return "하급지 상승률이 상급지를 크게 추월 — 유동성 끝물, 매도/관망 경고."
+def _desc(phase: str, ascents: int, gap: float, tier_avgs: list[dict]) -> str:
+    ladder_txt = " → ".join(
+        f"{t['급지']} {t['avg_rise']:+g}%" for t in tier_avgs
+    ) if tier_avgs else ""
+    trust = " 지역 BUY/매도 시그널은 동네 수급·모멘텀(정본)이고, 이 국면은 수도권 유동성 경고입니다."
+    if phase.startswith("끝물") and "주의" not in phase:
+        base = f"A→E 상승 계단 {ascents}칸 · 최하급지가 상급지보다 더 오르는 끝물."
+    elif "주의" in phase:
+        base = f"A→E 상승 계단 {ascents}칸 · 유동성이 하급지로 밀리기 시작."
+    elif phase.startswith("상급지"):
+        base = "비싼 급지(A·B)가 더 오르는 정상 상승 국면 — 유동성 풍부, 매수 우호."
+    else:
+        base = "급지별 상승률이 섞인 확산 국면 — 중반."
+    if ladder_txt and ("끝물" in phase):
+        return f"{base} 계단: {ladder_txt}.{trust}"
+    if "끝물" in phase:
+        return base + trust
+    return base
