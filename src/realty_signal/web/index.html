@@ -605,6 +605,9 @@
       <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
       <label id="qsGapLabel">최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
         <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
+      <label id="qsKzMixWrap" style="display:none;font-size:12px;color:var(--dim);align-items:center;gap:4px">
+        <input type="checkbox" id="qsKzMix" checked onchange="renderQuicksale()"> 콕집 핀</label>
+      <button class="chip" id="qsKzScanBtn" onclick="scanKoczipListings()" style="display:none;font-size:12px;border-color:#db2777;color:#db2777" title="BUY+/관심지역 · 개인 확인용">콕집 갱신</button>
       <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
       <span id="qsMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
     </div>
@@ -2470,7 +2473,7 @@ async function loadRedevZones(){
     tb.appendChild(tr);
   });
 }
-let _qsList=[], _qsCertList=[], _qsMode='급매', _kzItems=[], _kzAllowed=null;
+let _qsList=[], _qsCertList=[], _qsKzList=[], _qsMode='급매', _kzItems=[], _kzAllowed=null;
 function qsMode(mode){
   _qsMode = mode==='찐매물' ? '찐매물' : (mode==='할인율' ? '할인율' : '급매');
   document.querySelectorAll('[data-qstab]').forEach(b=>b.classList.toggle('on', b.dataset.qstab===_qsMode));
@@ -2482,7 +2485,7 @@ function qsMode(mode){
     ? '실거래 대비 호가 할인 · 개인 확인용 (콕집 집계)'
     : (_qsMode==='찐매물'
       ? '집주인 내집등록·인증 매물 · 허위매물 리스크↓ · 개인 참고용'
-      : '시세 대비 저가 매물 · 개인 참고용');
+      : '시세 대비 저가 매물 · 바로집+콕집(개인) 참고용');
   if(disc){ loadKoczipDeals(); return; }
   const gl=document.getElementById('qsGapLabel');
   if(gl) gl.firstChild.textContent=_qsMode==='찐매물'?'최소 시세갭 ':'최소 급매갭 ';
@@ -2499,12 +2502,41 @@ async function _ensureKoczipTab(){
     _kzAllowed=!!m.allowed;
     const tab=document.getElementById('qsDiscTab');
     if(tab) tab.style.display=_kzAllowed?'':'none';
+    const mix=document.getElementById('qsKzMixWrap'), btn=document.getElementById('qsKzScanBtn');
+    if(mix) mix.style.display=_kzAllowed?'inline-flex':'none';
+    if(btn) btn.style.display=_kzAllowed?'':'none';
     const sel=document.getElementById('kzSido');
     if(sel && !sel.options.length && m.sido_opts){
       m.sido_opts.forEach(o=>{ const el=document.createElement('option'); el.value=o.code; el.textContent=o.label; sel.appendChild(el); });
     }
   }catch(e){ _kzAllowed=false; }
   return _kzAllowed;
+}
+async function loadKoczipListings(){
+  if(!(await _ensureKoczipTab())){ _qsKzList=[]; return; }
+  try{
+    const d=await (await fetch('/api/koczip/listings?kind=all')).json();
+    _qsKzList = (d.ok!==false && d.listings) ? d.listings : [];
+  }catch(e){ _qsKzList=[]; }
+}
+async function scanKoczipListings(){
+  if(!(await _ensureKoczipTab())) return;
+  const btn=document.getElementById('qsKzScanBtn'), st=document.getElementById('qsStatus');
+  const region=document.getElementById('qsRegion').value;
+  if(btn){ btn.disabled=true; btn.textContent='콕집 스캔 중…'; }
+  if(st) st.textContent='콕집 BUY+/관심지역 스캔 중 (수 분 걸릴 수 있음)…';
+  try{
+    const body = region ? {regions:[region]} : {};
+    const r=await fetch('/api/koczip/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok || d.ok===false){ if(st) st.textContent='콕집 스캔 실패: '+(d.error||r.status); }
+    else {
+      const s=d.stats||{};
+      if(st) st.textContent=`콕집 갱신 · 단지 ${s.complexes||0} · 할인 ${s.articles_discount||0} · 특가 ${s.articles_special||0}`;
+      await loadKoczipListings(); renderQuicksale();
+    }
+  }catch(e){ if(st) st.textContent='콕집 스캔 실패'; }
+  if(btn){ btn.disabled=false; btn.textContent='콕집 갱신'; }
 }
 async function loadKoczipDeals(force){
   if(!(await _ensureKoczipTab())){ document.getElementById('kzEmpty').textContent='할인율 뷰는 로컬 또는 관리자만 사용할 수 있습니다.'; return; }
@@ -2577,10 +2609,12 @@ async function loadQuicksale(){
   ]);
   _qsList = d.listings||[];
   _qsCertList = c.listings||[];
+  await loadKoczipListings();
   const cur=_qsMode==='찐매물'?c:d;
+  const kzN=_qsKzList.length;
   document.getElementById('qsStatus').textContent = cur.ready
-    ? `${cur.count||(cur.listings||[]).length}건 (스캔 지역 ${cur.regions?.length||0}곳) · 하루 1회 캐시 · 참고용`
-    : '아직 스캔 안 됨 — 관리자 스캔 또는 서버 일일 갱신을 기다리세요.';
+    ? `${cur.count||(cur.listings||[]).length}건${kzN?` · 콕집 ${kzN}건`:''} (스캔 지역 ${cur.regions?.length||0}곳) · 참고용`
+    : (kzN?`바로집 미스캔 · 콕집 ${kzN}건`:'아직 스캔 안 됨 — 관리자 스캔 또는 콕집 갱신');
   renderQuicksale();
 }
 async function refreshQuicksale(){
@@ -2603,28 +2637,71 @@ function renderQuicksale(){
   if(_qsMode==='할인율'){ renderKoczipDeals(); return; }
   renderMtFilter('qsMtFilter', renderQuicksale);
   const minGap = +document.getElementById('qsGap').value || 0;
-  const src = _qsMode==='찐매물' ? _qsCertList : _qsList;
+  const mixKz = _qsMode==='급매' && _kzAllowed && document.getElementById('qsKzMix')?.checked;
+  let src = _qsMode==='찐매물' ? _qsCertList.slice() : _qsList.slice();
+  if(mixKz && _qsKzList.length){
+    // 바로집과 동일 article/호가 중복은 콕집 쪽 우선 표시하지 않고 둘 다 두되 complex+호가로 느슨 중복 제거
+    const seen=new Set(src.map(m=>`${m['complex_no']||m['단지명']}|${m['호가']}|${m['층']||''}`));
+    _qsKzList.forEach(m=>{
+      const k=`${m['complex_no']||m['단지명']}|${m['호가']}|${m['층']||''}`;
+      if(m['유형']==='호가요약' || !seen.has(k)){ src.push(m); seen.add(k); }
+    });
+  }
   const gapLabel = _qsMode==='찐매물' ? '시세갭' : '급매갭';
-  const rows = src.filter(m=> (minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap)) && inFocus(m['지역']||'') && _mtPass(m['지역'], m['시그널']));
+  const rows = src.filter(m=>{
+    if(!(inFocus(m['지역']||'') && _mtPass(m['지역'], m['시그널']))) return false;
+    if(m['출처']==='콕집' && m['유형']==='호가요약') return true; // 요약 핀은 갭 필터 제외
+    return minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap);
+  });
   document.getElementById('qsEmpty').textContent = rows.length?'':(
     _qsMode==='찐매물'
       ? '조건에 맞는 찐매물이 없습니다. (스캔 먼저 / 갭·급지·신호 기준 완화)'
-      : '조건에 맞는 급매가 없습니다. (스캔 먼저 / 갭·급지·신호 기준 완화)');
+      : '조건에 맞는 급매가 없습니다. (바로집·콕집 스캔 / 갭·급지 완화)');
   const accent = _qsMode==='찐매물' ? '#0f766e' : '#ea580c';
   const deep = _qsMode==='찐매물' ? '#0d9488' : '#ef4444';
+  const kzCol = '#db2777';
+  const isKz = m => m['출처']==='콕집';
+  const kzPill = m => {
+    if(!isKz(m)) return '';
+    const t=m['유형']||'콕집';
+    return `<span class="pill" style="background:#fce7f3;color:${kzCol};border-color:#fbcfe8">${t}</span> `;
+  };
   mapSplit('qsList','qsMap',rows,{
-    summary:m=>({nm:`${m['단지명']||'–'} ${_qsMode==='찐매물'?'<span class="pill" style="background:#ccfbf1;color:#0f766e">찐</span> ':''}${m['시그널']?badge(m['시그널']):''}`,
-      right:_mtMetric(gapLabel, `<b style="color:${m['급매갭']!=null&&m['급매갭']<=-8?deep:accent}">${m['급매갭']??'–'}%</b>`),
-      sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''}평 · 호가 ${_eok(m['호가'])}`}),
-    detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
+    summary:m=>({nm:`${m['단지명']||'–'} ${kzPill(m)}${_qsMode==='찐매물'&&!isKz(m)?'<span class="pill" style="background:#ccfbf1;color:#0f766e">찐</span> ':''}${m['시그널']?badge(m['시그널']):''}`,
+      right:_mtMetric(
+        isKz(m)&&(m['할인율']!=null)?'할인':(m['유형']==='호가요약'?'호가':gapLabel),
+        m['유형']==='호가요약'
+          ? `<b style="color:${kzCol}">${_eok(m['호가'])}${m['호가max']?'~'+_eok(m['호가max']):''}</b>`
+          : `<b style="color:${isKz(m)?kzCol:(m['급매갭']!=null&&m['급매갭']<=-8?deep:accent)}">${m['할인율']!=null?m['할인율']+'%':(m['급매갭']??'–')+(m['급매갭']!=null?'%':'')}</b>`),
+      sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||m['유형']||''}${m['매물수']!=null?` · ${m['매물수']}건`:''} · 호가 ${_eok(m['호가'])}`}),
+    detail:m=>{
+      if(isKz(m)){
+        const nv = m.naver_url
+          ? `<a class="btn" href="${m.naver_url}" target="_blank" rel="noopener" style="padding:3px 10px;background:#fce7f3;color:${kzCol};text-decoration:none" onclick="event.stopPropagation()">네이버</a>`
+          : naverBtn(m['complex_no']);
+        return `<div class="kv"><span>출처 <b style="color:${kzCol}">콕집</b></span><span>유형 ${m['유형']||'–'}</span>
+          <span>호가 <b>${_eok(m['호가'])}</b>${m['호가max']?` ~ ${_eok(m['호가max'])}`:''}</span>
+          ${m['할인율']!=null?`<span>할인 <b style="color:${kzCol}">${m['할인율']}%</b></span>`:''}
+          ${m['매물수']!=null?`<span>매물 ${m['매물수']}건</span>`:''}
+          <span>${m['층']||'–'} ${m['방향']||''}</span>
+          ${m['중개사']?`<span>${m['중개사']}</span>`:''}
+          ${m.matched?`<span>${m.matched}</span>`:''}</div>
+          <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${nv}${nickCxBtn(m['단지명'],m['지역'])}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:6px">개인 확인용 · 재배포 금지 · 네이버 호가(콕집 집계)</div>`;
+      }
+      return `<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
       <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">집주인 인증</span>':''}</div>
       ${txCostsSlot(m['호가'], m['지역'], m['평형'], m['전용면적'])}
-      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
+      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`;
+    },
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
+    geoq:m=> (m['lat']&&m['lng']) ? null : `${m['지역']||''} ${m['단지명']||''}`,
     regionOf:m=>m['지역'],
-    color:m=>m['급매갭']!=null&&m['급매갭']<=-8?deep:accent,
-    label:m=>`<b>${m['단지명']}</b>${_qsMode==='찐매물'?' · 찐':''}<br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:${accent}">(${m['급매갭']??'–'}%)</span>`,
+    color:m=> isKz(m) ? kzCol : (m['급매갭']!=null&&m['급매갭']<=-8?deep:accent),
+    label:m=> isKz(m)
+      ? `<b>${m['단지명']}</b> · ${m['유형']}<br>${m['지역']||''} · ${_eok(m['호가'])}${m['할인율']!=null?` <span style="color:${kzCol}">(${m['할인율']}%)</span>`:''}`
+      : `<b>${m['단지명']}</b>${_qsMode==='찐매물'?' · 찐':''}<br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:${accent}">(${m['급매갭']??'–'}%)</span>`,
   });
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====

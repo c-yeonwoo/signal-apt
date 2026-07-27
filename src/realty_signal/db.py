@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS imjang_visit(id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid INTEGER, region TEXT, cx TEXT, visited TEXT, checks TEXT, memo TEXT,
     verdict TEXT, score INTEGER, ts INTEGER);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_imjang_uid_cx ON imjang_visit(uid, region, cx, visited);
+CREATE TABLE IF NOT EXISTS koczip_complex(
+    complex_no TEXT PRIMARY KEY, region TEXT, name TEXT,
+    lat REAL, lng REAL, sale_count INTEGER, sale_min INTEGER, sale_max INTEGER,
+    listing_total INTEGER, signal TEXT, raw TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS ix_kz_cx_region ON koczip_complex(region);
+CREATE INDEX IF NOT EXISTS ix_kz_cx_ts ON koczip_complex(ts);
+CREATE TABLE IF NOT EXISTS koczip_article(
+    article_no TEXT PRIMARY KEY, complex_no TEXT, region TEXT, kind TEXT,
+    name TEXT, price INTEGER, area TEXT, floor TEXT, direction TEXT,
+    discount_pct REAL, naver_url TEXT, realtor TEXT, matched TEXT,
+    lat REAL, lng REAL, signal TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS ix_kz_art_region ON koczip_article(region);
+CREATE INDEX IF NOT EXISTS ix_kz_art_kind ON koczip_article(kind);
+CREATE INDEX IF NOT EXISTS ix_kz_art_ts ON koczip_article(ts);
 """
 
 _migrated = [False]
@@ -517,6 +531,109 @@ def alert_prefs_set(uid: int, prefs: dict) -> dict:
     clean = merge_prefs(prefs)
     kv_set(f"alert_prefs:{uid}", clean)
     return clean
+
+
+# ---------- 콕집 매물 (개인 확인용 · quicksale.json 과 분리) ----------
+def koczip_complex_upsert(row: dict) -> None:
+    c = conn()
+    c.execute(
+        """INSERT OR REPLACE INTO koczip_complex
+           (complex_no,region,name,lat,lng,sale_count,sale_min,sale_max,
+            listing_total,signal,raw,ts)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (row["complex_no"], row.get("region"), row.get("name"),
+         row.get("lat"), row.get("lng"), row.get("sale_count"),
+         row.get("sale_min"), row.get("sale_max"), row.get("listing_total"),
+         row.get("signal"), row.get("raw"), int(row.get("ts") or time.time())))
+    c.commit()
+    c.close()
+
+
+def koczip_article_upsert(row: dict) -> None:
+    c = conn()
+    c.execute(
+        """INSERT OR REPLACE INTO koczip_article
+           (article_no,complex_no,region,kind,name,price,area,floor,direction,
+            discount_pct,naver_url,realtor,matched,lat,lng,signal,ts)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (row["article_no"], row.get("complex_no"), row.get("region"),
+         row.get("kind"), row.get("name"), row.get("price"), row.get("area"),
+         row.get("floor"), row.get("direction"), row.get("discount_pct"),
+         row.get("naver_url"), row.get("realtor"), row.get("matched"),
+         row.get("lat"), row.get("lng"), row.get("signal"),
+         int(row.get("ts") or time.time())))
+    c.commit()
+    c.close()
+
+
+def koczip_clear_region(region: str) -> None:
+    """스캔 전 해당 지역 행 제거(갈아끼우기)."""
+    c = conn()
+    c.execute("DELETE FROM koczip_complex WHERE region=?", (region,))
+    c.execute("DELETE FROM koczip_article WHERE region=?", (region,))
+    c.commit()
+    c.close()
+
+
+def koczip_complex_list(*, region: str | None = None, max_age: int | None = None) -> list[dict]:
+    c = conn()
+    q = "SELECT complex_no,region,name,lat,lng,sale_count,sale_min,sale_max,listing_total,signal,ts FROM koczip_complex"
+    args: list = []
+    where = []
+    if region:
+        where.append("region=?")
+        args.append(region)
+    if max_age is not None:
+        where.append("ts>=?")
+        args.append(int(time.time()) - max_age)
+    if where:
+        q += " WHERE " + " AND ".join(where)
+    q += " ORDER BY (sale_count IS NULL), sale_count DESC"
+    rows = c.execute(q, args).fetchall()
+    c.close()
+    keys = ("complex_no", "region", "name", "lat", "lng", "sale_count",
+            "sale_min", "sale_max", "listing_total", "signal", "ts")
+    return [dict(zip(keys, r)) for r in rows]
+
+
+def koczip_article_list(*, region: str | None = None, kind: str | None = None,
+                        max_age: int | None = None) -> list[dict]:
+    c = conn()
+    q = ("SELECT article_no,complex_no,region,kind,name,price,area,floor,direction,"
+         "discount_pct,naver_url,realtor,matched,lat,lng,signal,ts FROM koczip_article")
+    args: list = []
+    where = []
+    if region:
+        where.append("region=?")
+        args.append(region)
+    if kind:
+        where.append("kind=?")
+        args.append(kind)
+    if max_age is not None:
+        where.append("ts>=?")
+        args.append(int(time.time()) - max_age)
+    if where:
+        q += " WHERE " + " AND ".join(where)
+    q += " ORDER BY (discount_pct IS NULL), discount_pct DESC, (price IS NULL), price ASC"
+    rows = c.execute(q, args).fetchall()
+    c.close()
+    keys = ("article_no", "complex_no", "region", "kind", "name", "price", "area",
+            "floor", "direction", "discount_pct", "naver_url", "realtor", "matched",
+            "lat", "lng", "signal", "ts")
+    return [dict(zip(keys, r)) for r in rows]
+
+
+def koczip_stats() -> dict:
+    c = conn()
+    cx = c.execute("SELECT COUNT(*), MAX(ts) FROM koczip_complex").fetchone()
+    art = c.execute("SELECT COUNT(*), MAX(ts) FROM koczip_article").fetchone()
+    by_kind = {r[0]: r[1] for r in c.execute(
+        "SELECT kind, COUNT(*) FROM koczip_article GROUP BY kind").fetchall()}
+    c.close()
+    return {
+        "complexes": cx[0] or 0, "articles": art[0] or 0,
+        "complex_ts": cx[1], "article_ts": art[1], "by_kind": by_kind,
+    }
 
 
 def kv_get(k: str, max_age: int | None = None):

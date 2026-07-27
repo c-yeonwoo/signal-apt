@@ -89,6 +89,7 @@ def freshness():
     last_date = str(md.kb().last_date.date())
     qs = getattr(app_api, "QUICKSALE_FILE", store.CACHE_DIR / "quicksale.json")
     cert = getattr(app_api, "CERTIFIED_FILE", store.CACHE_DIR / "certified.json")
+    kz = db.koczip_stats()
     sources = [
         {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
          "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동",
@@ -99,6 +100,9 @@ def freshness():
          "cycle": "하루 1회 자동", "note": "BUY+·관심지역 시세 이하 호가(baroezip). 캐시 1일."},
         {"key": "certified", "label": "찐매물 스캔", "ts": _file_mtime(cert),
          "cycle": "하루 1회 자동", "note": "바로이집 내집등록·인증 매물(scope=all). 캐시 1일."},
+        {"key": "koczip", "label": "콕집 스캔",
+         "ts": kz.get("article_ts") or kz.get("complex_ts"),
+         "cycle": "하루 1회 자동", "note": "BUY+·관심지역 할인·특가·호가(개인 확인용). 바로집과 동일 주기."},
         {"key": "auction", "label": "경매 물건", "ts": _file_mtime(AUCTION_FILE),
          "cycle": "관리자 등록·갱신 시", "note": "법원경매 물건과 시세를 관리자가 등록·갱신."},
         {"key": "presale", "label": "청약", "ts": None, "cycle": "실시간",
