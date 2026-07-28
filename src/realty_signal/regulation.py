@@ -71,11 +71,24 @@ MAX_YEARS_METRO = 30      # 수도권·규제지역 주담대 최장 만기
 MOVE_IN_MONTHS = 6        # 전입 의무
 DISPOSE_MONTHS = 6        # 1주택 처분 기한
 
+# 소액임차보증금 최우선변제(방공제) — 주택임대차보호법. 만원.
+# MCI/MCG 가입 시 은행이 차감하지 않을 수 있어 계산기에서 on/off.
+BANGONGJE = {
+    "서울": 5_500,
+    "과밀억제": 5_000,   # 인천·경기 등 과밀억제권역 근사
+    "광역시": 2_800,
+    "기타": 2_000,
+}
+BANGONGJE_NOTE = (
+    "방공제(소액임차 최우선변제)를 대출금에서 차감했어요. "
+    "MCI/MCG를 가입하면 은행이 빼지 않을 수 있어요."
+)
+
 POLICY_LOAN_NOTE = (
     "디딤돌·보금자리론·은행 생애최초 특례보증은 부부합산 소득·주택가격 요건이 따로 있어 "
     "여기 계산과 한도가 다를 수 있어요."
 )
-DISCLAIMER = f"{AS_OF} 기준 공개 규제 요약이며, 실제 한도는 은행 심사(방공제·신용도)에 따라 달라집니다."
+DISCLAIMER = f"{AS_OF} 기준 공개 규제 요약이며, 실제 한도는 은행 심사·신용도에 따라 달라집니다."
 
 
 def _norm(region: str | None) -> str:
@@ -179,3 +192,23 @@ def stress_rate(*, metro: bool, regulated: bool, rate_type: str = DEFAULT_RATE_T
 def max_years(years: int, *, metro: bool, regulated: bool) -> int:
     years = max(1, int(years or MAX_YEARS_METRO))
     return min(years, MAX_YEARS_METRO) if (metro or regulated) else years
+
+
+def bangongje_zone(region: str | None, sido: str | None = None) -> str:
+    """방공제 금액 구간 키 — 서울 / 과밀억제 / 광역시 / 기타."""
+    sido = sido or sido_hint(region)
+    if sido == "서울" or (region and _norm(region) in SEOUL_GU and sido in (None, "서울")):
+        return "서울"
+    if sido in ("인천", "경기") or (is_metro(region, sido) and sido != "서울"):
+        return "과밀억제"
+    if sido in ("부산", "대구", "광주", "대전", "울산", "세종"):
+        return "광역시"
+    name = _norm(region)
+    if any(name.startswith(h) for h in ("해운대", "수성", "달서", "유성")):
+        return "광역시"
+    return "기타"
+
+
+def bangongje_of(region: str | None, sido: str | None = None) -> float:
+    """지역별 방공제 금액(만원)."""
+    return float(BANGONGJE[bangongje_zone(region, sido)])

@@ -43,13 +43,17 @@ def buying_power_get(request: Request, capital: float | None = None, income: flo
                      existing_debt_annual: float | None = None, homes: int | None = None,
                      first_time: bool | None = None, region: str | None = None,
                      regulated: bool | None = None, dispose: bool | None = None,
+                     temp_two_home: bool | None = None, big_area: bool | None = None,
+                     apply_bangongje: bool | None = None,
                      ltv: float | None = None, rate: float | None = None,
                      rate_type: str | None = None, years: int | None = None):
     from realty_signal import api as app_api
     return app_api.buying_power_statement(
         request, capital=capital, income=income, existing_debt_annual=existing_debt_annual,
         homes=homes, first_time=first_time, region=region, regulated=regulated,
-        dispose=dispose, ltv=ltv, rate=rate, rate_type=rate_type, years=years)
+        dispose=dispose, temp_two_home=temp_two_home, big_area=big_area,
+        apply_bangongje=apply_bangongje,
+        ltv=ltv, rate=rate, rate_type=rate_type, years=years)
 
 
 @router.post("/api/buying-power/confirm")

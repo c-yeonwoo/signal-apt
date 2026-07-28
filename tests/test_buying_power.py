@@ -70,11 +70,40 @@ def test_metro_loan_cap_by_price():
 
 def test_loan_for_takes_lowest_of_three():
     # 생애최초 규제지역 12억: LTV 70%=8.4억 이지만 절대한도 6억이 먼저 막는다
-    lim = bp.loan_for(120_000, _p(region="강남구", first_time=True, income=20_000))
+    # 방공제는 별도 테스트 — 여기서는 승인액 제약만 본다
+    lim = bp.loan_for(120_000, _p(region="강남구", first_time=True, income=20_000,
+                                  apply_bangongje=False))
     assert lim["대출"] == 60_000
     assert lim["제약"] == "한도"
     # 소득이 낮으면 DSR 이 먼저 막는다
-    assert bp.loan_for(120_000, _p(region="강남구", first_time=True, income=5_000))["제약"] == "DSR"
+    assert bp.loan_for(120_000, _p(region="강남구", first_time=True, income=5_000,
+                                   apply_bangongje=False))["제약"] == "DSR"
+
+
+def test_bangongje_reduces_disbursed_loan():
+    lim = bp.loan_for(120_000, _p(region="강남구", first_time=True, income=20_000))
+    assert lim["승인액"] == 60_000
+    assert lim["방공제"] == 5_500
+    assert lim["대출"] == 54_500
+    off = bp.loan_for(120_000, _p(region="강남구", first_time=True, income=20_000,
+                                  apply_bangongje=False))
+    assert off["대출"] == 60_000
+    assert bp.Params(capital=1, region="남양주시", sido="경기").bangongje() == 5_000
+    assert bp.Params(capital=1, region="해운대구", sido="부산").bangongje() == 2_800
+
+
+def test_temp_two_home_lowers_acq_tax():
+    heavy = bp.acq_tax(50_000, _p(homes=1, region="강남구"))
+    relief = bp.acq_tax(50_000, _p(homes=1, region="강남구", temp_two_home=True))
+    assert relief < heavy
+    assert relief == pytest.approx(bp.acq_tax(50_000, _p(homes=0, region="강남구")))
+
+
+def test_extra_closing_costs_in_cash_needed():
+    cash = bp.cash_needed(50_000, _p(region="강남구", apply_bangongje=False), loan=20_000)
+    for k in ("법무비", "인지세", "등록면허세", "국민주택채권"):
+        assert cash[k] > 0
+    assert cash["합계"] > cash["자기자본투입"] + cash["취득세"] + cash["중개비"]
 
 
 def test_metro_stress_and_term_clamp():
