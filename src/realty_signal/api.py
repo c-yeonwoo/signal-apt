@@ -947,7 +947,8 @@ def buying_power_confirm(request: Request, data: dict):
         return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
     profile = db.profile_get(uid) or {}
     kw = {k: data.get(k) for k in ("capital", "income", "existing_debt_annual", "homes",
-                                   "first_time", "region", "regulated", "dispose",
+                                   "first_time", "temp_two_home", "big_area",
+                                   "apply_bangongje", "region", "regulated", "dispose",
                                    "ltv", "rate", "rate_type", "years")}
     if not kw.get("region"):
         kw["region"] = _default_region(request, profile)
@@ -1126,89 +1127,106 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     return out
 
 
-def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
-               income: float | None = None, rate: float = 0.04, years: int = 30):
-    """가용자본 → (LTV+DSR+취득세 반영) 매수가능가 → BUY+ × 저평가 × 단지급지 종합 추천.
+def conclusion(request: Request | None = None, capital: float | None = None,
+               ltv: float | None = None, pyeong: float | None = None,
+               income: float | None = None, rate: float | None = None,
+               years: int | None = None, prefer_strong: bool = True):
+    """매수력 정본 예산 + 통합 매물(`_build_listings`) 기반 추천.
 
-    capital: 자기자본(만원), income: 연소득(만원, DSR용·선택), rate: 대출금리, years: 만기.
-    경매·급매·청약은 랭킹에 섞지 않고 '그 지역 N건'으로 카드에 첨부.
+    지역 평단×평형이 아니라 급매·경매·찐·청약·재건축 정규 뷰를 후보로 쓴다.
+    기본 풀 STRONG_BUY(부족 시 BUY 보충). UI·AI 리포트·대시보드가 동일 응답을 소비한다.
     """
-    from collections import defaultdict
+    from realty_signal.services import recommend as rec
 
-    budget, budget_detail = _max_purchase(capital, ltv, income, rate, years)
-    sig = _signal_map()
+    profile = {}
+    if request is not None:
+        profile = db.profile_get(_uid(request)) or {}
+    override = {}
+    if capital is not None:
+        override["capital"] = capital
+    if income is not None:
+        override["income"] = income
+    if ltv is not None:
+        override["ltv"] = ltv
+    if rate is not None:
+        override["rate"] = rate
+    if years is not None:
+        override["years"] = years
+    if not override.get("region"):
+        override["region"] = (
+            ((profile.get("매수력") or {}).get("가정") or {}).get("지역")
+            or profile.get("매수지역")
+        )
+    override.setdefault("sido", _sido_of(override.get("region")))
+    p = buying_power.params_from_profile(profile, **override)
+    py = float(pyeong) if pyeong is not None else buying_power.pyeong_of(profile.get("관심평수"))
+
+    if p.capital <= 0:
+        return {"ready": False, "reason": "no_capital", "budget": 0, "cards": [],
+                "listings": [], "message": "가용자본을 입력하면 매수가능가·추천 매물을 계산합니다."}
+
+    st = buying_power.statement(p)
+    budget = float(st["최대매수가"])
+    costs = st.get("비용") or {}
+    equity = max(0.0, budget - float(st.get("대출") or 0))
+    detail = {
+        "대출": st["대출"], "승인액": st.get("승인액"), "방공제": st.get("방공제"),
+        "자기자본투입": round(equity),
+        "취득세": costs.get("취득세"), "중개비": costs.get("중개비"),
+        "법무비": costs.get("법무비"), "인지세": costs.get("인지세"),
+        "등록면허세": costs.get("등록면허세"), "국민주택채권": costs.get("국민주택채권"),
+        "이사비": costs.get("이사비"), "수리비": costs.get("수리비"),
+        "월상환": st.get("월상환"), "실효LTV": st.get("실효LTV"),
+        "LTV상한": st.get("LTV상한"), "제약": st.get("제약"),
+        "DSR제약": st.get("제약") == "DSR",
+        "필요현금": st.get("필요현금"),
+    }
+    자금 = {
+        "매수가": budget, "대출": st["대출"], "자기자본투입": round(equity),
+        "실효LTV": st.get("실효LTV"), "LTV상한": st.get("LTV상한"),
+        "희망LTV": p.ltv, "필요현금": st.get("필요현금"),
+        "방공제": st.get("방공제"), "제약": st.get("제약"),
+        "규제": st.get("규제"),
+    }
+
     loc = store.load_localities()
     locmap = {}
     if not loc.empty:
         for r in json.loads(loc.to_json(orient="records", force_ascii=False)):
             locmap[r["region"]] = r
-    # 지역별 경매 매물(권장입찰가·급지) + 청약 단지(분양가·일정) 상세
-    auc_by = defaultdict(list)
-    for e in auction.enrich(auction.load(), sig):
-        auc_by[e["region"]].append({
-            "단지명": e["단지명"], "단지급지": e.get("단지급지"),
-            "권장입찰가": e.get("권장입찰가"), "시세차익률": e.get("시세차익률"),
-            "전용면적": e.get("전용면적"),
+
+    raw = _build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+    listings = rec.rank_listings(
+        raw, budget=budget, pyeong=py,
+        loc_price_of=lambda region: (locmap.get(region) or {}).get("price"),
+        prefer_strong=prefer_strong, limit=40,
+    )
+    # 응답 경량화 — 프론트·AI에 필요한 필드만
+    slim = []
+    for L in listings:
+        slim.append({
+            "유형": L.get("유형"), "단지명": L.get("단지명"), "지역": L.get("지역"),
+            "시그널": L.get("시그널"), "지역급지": L.get("지역급지"),
+            "총액": L.get("총액"), "추정가": L.get("추정가"), "평형": L.get("평형"),
+            "지표라벨": L.get("지표라벨"), "지표값": L.get("지표값"),
+            "지표단위": L.get("지표단위"), "기회도": L.get("기회도"),
+            "예산내": L.get("예산내"), "예산비율": L.get("예산비율"),
+            "ref": L.get("ref"), "_score": L.get("_score"),
         })
-    ps_by = defaultdict(list)
-    for d in _presale():
-        if d.get("시그널") in ("STRONG_BUY", "BUY") and d.get("상태") in ("접수중", "접수예정"):
-            ps_by[d["지역"]].append({
-                "단지명": d["단지명"], "관리번호": d.get("관리번호"),
-                "주택구분": d.get("주택구분"), "상태": d.get("상태"), "Dday": d.get("Dday"),
-                "총세대": d.get("총세대"), "정비사업": d.get("정비사업"),
-            })
-    # 지역별 급매(baroezip 레이더 캐시) — 급매갭 깊은 순
-    quick_by = defaultdict(list)
-    if QUICKSALE_FILE.exists():
-        for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
-            quick_by[m.get("지역")].append({
-                "단지명": m.get("단지명"), "평형": m.get("평형"), "층": m.get("층"),
-                "호가": m.get("호가"), "급매갭": m.get("급매갭"),
-            })
-    for v in quick_by.values():
-        v.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
-
-    from realty_signal.services import shortlist as sl
-
-    regions = _regime().get("regions", {})
-    rank = {"STRONG_BUY": 2, "BUY": 1}
-
-    cards = []
-    for region, s in sig.items():
-        if s not in rank:
-            continue
-        lr = locmap.get(region)
-        if not lr:
-            continue
-        price = lr.get("price")
-        est = round(price * pyeong) if price else None       # 선택 평형 예상 매수가(만원)
-        affordable = bool(est and est <= budget)
-        uv = lr.get("저평가도") or 0
-        # 레버리지는 budget 필터로 이미 반영. 예산 안에서는
-        # 예산을 80~100% 쓰는 쪽을 우대(너무 싼 외곽만 1위 되는 것 방지) → 시그널 → 저평가 → 입지.
-        ratio = (est / budget) if (affordable and budget) else 0.0
-        budget_fit = sl._budget_score(ratio) if affordable else 0.0
-        score = (rank[s] * 10000
-                 + budget_fit * 50
-                 + uv * 10
-                 + (lr.get("입지점수") or 0))
-        rg = regions.get(region, {})
-        cards.append({
-            "region": region, "시그널": s, "평단가": price, "예상매수가": est,
-            "예산내": affordable, "예산비율": round(ratio, 3) if affordable else None,
-            "저평가도": uv, "입지점수": lr.get("입지점수"),
-            "지역급지": rg.get("급지"), "해설": lr.get("해설"),
-            "경매단지": auc_by.get(region, []), "청약단지": ps_by.get(region, []),
-            "급매단지": quick_by.get(region, []),
-            "경매건수": len(auc_by.get(region, [])), "청약건수": len(ps_by.get(region, [])),
-            "급매건수": len(quick_by.get(region, [])),
-            "_score": round(score, 1),
-        })
-    # 예산 내 우선 → 점수순
-    cards.sort(key=lambda c: (c["예산내"], c["_score"]), reverse=True)
-    return {"budget": budget, "pyeong": pyeong, "ltv": ltv, "capital": capital,
-            "income": income, "detail": budget_detail, "cards": cards}
+    cards = rec.aggregate_regions(listings, locmap=locmap, budget=budget, pyeong=py)
+    return {
+        "ready": True,
+        "budget": budget, "pyeong": py, "ltv": p.ltv, "capital": round(p.capital),
+        "income": round(p.income) if p.income else None,
+        "detail": detail, "자금": 자금, "안내": st.get("안내") or [],
+        "listings": slim, "cards": cards,
+        "prefer_strong": prefer_strong,
+        "counts": {
+            "listings": len(slim),
+            "strong": sum(1 for x in slim if x.get("시그널") == "STRONG_BUY"),
+            "in_budget": sum(1 for x in slim if x.get("예산내")),
+        },
+    }
 
 
 

@@ -23,9 +23,14 @@ def presale_types(manage_no: str):
 
 
 @router.get("/api/conclusion")
-def conclusion(capital: float, ltv: float = 0.7, pyeong: float = 25.7,
-               income: float | None = None, rate: float = 0.04, years: int = 30):
-    return _api().conclusion(capital, ltv, pyeong, income, rate, years)
+def conclusion(request: Request, capital: float | None = None, ltv: float | None = None,
+               pyeong: float | None = None, income: float | None = None,
+               rate: float | None = None, years: int | None = None,
+               prefer_strong: bool = True):
+    """매수력 정본 + 통합 매물 추천. capital 없으면 프로필/확정 매수력 사용."""
+    return _api().conclusion(
+        request, capital=capital, ltv=ltv, pyeong=pyeong, income=income,
+        rate=rate, years=years, prefer_strong=prefer_strong)
 
 
 @router.get("/api/tradeup")

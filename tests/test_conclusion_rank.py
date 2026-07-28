@@ -1,25 +1,29 @@
-"""결론 탭 랭킹 — 예산(레버리지) 안에서는 예산을 쓰는 쪽을 우대."""
+"""결론 추천 — 통합 매물 점수(STRONG_BUY·예산 적합)."""
 
-from realty_signal.services import shortlist as sl
-
-
-def _score(signal_rank: int, est: float, budget: float, uv: float, loc: float = 0):
-    """api.conclusion 과 같은 식."""
-    affordable = est <= budget
-    ratio = (est / budget) if (affordable and budget) else 0.0
-    budget_fit = sl._budget_score(ratio) if affordable else 0.0
-    return affordable, signal_rank * 10000 + budget_fit * 50 + uv * 10 + loc
+from realty_signal.services import recommend as rec
 
 
-def test_prefers_near_budget_over_cheap_undervalued():
-    # 같은 BUY: 예산 97%·저평가 37 vs 예산 68%·저평가 63 → 전자 승
-    a = _score(1, 39_000, 40_000, uv=37)  # 권선구 류
-    b = _score(1, 27_000, 40_000, uv=63)  # 의정부 류
-    assert a[0] and b[0]
-    assert a[1] > b[1]
+def test_prefers_near_budget_over_cheap_undervalued_via_budget_fit():
+    # 같은 BUY: 예산 97% vs 68% → 전자 승 (의정부류 억제)
+    a = rec.score_listing(
+        {"유형": "급매", "단지명": "권선", "지역": "수원시 권선구", "시그널": "BUY",
+         "총액": 39_000, "기회도": 50},
+        budget=40_000, pyeong=25.7)
+    b = rec.score_listing(
+        {"유형": "급매", "단지명": "의정부", "지역": "의정부시", "시그널": "BUY",
+         "총액": 27_000, "기회도": 50},
+        budget=40_000, pyeong=25.7)
+    assert a["예산내"] and b["예산내"]
+    assert a["_score"] > b["_score"]
 
 
-def test_over_budget_loses_to_in_budget():
-    over = _score(2, 49_000, 40_000, uv=80)  # STRONG_BUY지만 초과
-    inn = _score(1, 39_000, 40_000, uv=37)
-    assert (inn[0], inn[1]) > (over[0], over[1])
+def test_strong_buy_beats_buy_even_if_cheaper_buy():
+    cheap_buy = rec.score_listing(
+        {"유형": "급매", "단지명": "외곽", "지역": "의정부시", "시그널": "BUY",
+         "총액": 25_000, "기회도": 80, "지표값": -10},
+        budget=40_000, pyeong=25.7)
+    strong = rec.score_listing(
+        {"유형": "급매", "단지명": "노원", "지역": "노원구", "시그널": "STRONG_BUY",
+         "총액": 36_000, "기회도": 60, "지표값": -3},
+        budget=40_000, pyeong=25.7)
+    assert strong["_score"] > cheap_buy["_score"]
