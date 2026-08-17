@@ -15,26 +15,38 @@ _SIG_RANK = {"STRONG_BUY": 2, "BUY": 1}
 _KIND_BONUS = {"급매": 8, "경매": 6, "찐매물": 5, "청약": 3, "재건축": 2}
 
 
-def _est_total(row: dict, loc_price: float | None, pyeong: float) -> float | None:
-    """매물 총액. 없으면 지역평단×기준평으로 근사(청약·재건축)."""
+def _est_total(row: dict, loc_price: float | None,
+               pyeong: float) -> tuple[float | None, str | None]:
+    """(총액, 출처). 출처를 함께 돌려주는 이유 —
+
+    지역평단×기준평 근사는 **그 매물의 가격이 아니다.** 같은 필드에 담아 두면
+    화면이 근사치를 실제 호가처럼 보여주게 된다. 출처를 붙여 UI 가 구분할 수 있게 한다.
+    """
     tot = row.get("총액")
     if tot is not None and tot > 0:
-        return float(tot)
+        return float(tot), "매물가"
     if loc_price and pyeong:
-        return round(float(loc_price) * float(pyeong))
-    return None
+        return round(float(loc_price) * float(pyeong)), "지역평단추정"
+    return None, None
 
 
 def score_listing(row: dict, *, budget: float, pyeong: float,
                   loc_price: float | None = None) -> dict | None:
-    """단일 매물 점수. 시그널 없으면 제외."""
+    """단일 매물 점수. 시그널 없으면 제외.
+
+    **가격을 모르는 매물을 '예산 내'로 치지 않는다.** 예전엔 `est is None` 이면 무조건
+    통과시키고 기본 적합도 40 을 줬는데, 그 40 은 예산의 56% 짜리 *실제* 매물보다 높은 점수라
+    "가격을 모르는 쪽이 유리"해졌다. V2("내 매수력으로 실제로 살 수 있는 집") 정면 위배다.
+    이제 가격 미상은 `예산확인필요` 로 분리하고 예산 적합도는 0 이다.
+    """
     sig = row.get("시그널") or ""
     if sig not in _SIG_RANK:
         return None
-    est = _est_total(row, loc_price, pyeong)
-    affordable = bool(est is None or (budget > 0 and est <= budget))
+    est, est_src = _est_total(row, loc_price, pyeong)
+    unknown_price = est is None
+    affordable = bool(est is not None and budget > 0 and est <= budget)
     ratio = (est / budget) if (affordable and est and budget) else 0.0
-    budget_fit = sl._budget_score(ratio) if affordable and est else (40.0 if affordable else 0.0)
+    budget_fit = sl._budget_score(ratio) if affordable else 0.0
     opp = row.get("기회도") or row.get("타이밍점수") or 0
     kind_b = _KIND_BONUS.get(row.get("유형") or "", 0)
     # 급매갭이 깊을수록(음수) 가산
@@ -51,7 +63,9 @@ def score_listing(row: dict, *, budget: float, pyeong: float,
     out = dict(row)
     out.update({
         "추정가": est,
+        "가격출처": est_src,
         "예산내": affordable,
+        "예산확인필요": unknown_price,
         "예산비율": round(ratio, 3) if affordable and est else None,
         "_score": round(score, 1),
     })
@@ -66,8 +80,19 @@ def rank_listings(
     loc_price_of: Callable[[str], float | None],
     prefer_strong: bool = True,
     limit: int = 40,
+    max_per_region: int = 3,
 ) -> list[dict]:
-    """통합 매물 → 점수순. prefer_strong 이면 STRONG_BUY 우선, 부족 시 BUY 보충."""
+    """통합 매물 → 점수순. **예산이 1차 정렬 기준이고 시그널은 그 다음이다.**
+
+    예전엔 STRONG_BUY 가 3건 이상이면 BUY 풀을 통째로 버렸다(`pool = strong`).
+    그런데 STRONG_BUY 는 광역 지표 상속 탓에 특정 시기 특정 광역에 몰린다 —
+    실측(2026-08-10)에서 STRONG_BUY 26개 지역이 **전부 서울**이었고, 그 결과
+    경기·인천 매물 797건이 예산을 보기도 전에 사라졌다. 예산이 안 되는 사용자에게
+    추천이 구조적으로 "못 사는 집" 목록이 된다.
+
+    이제 등급으로 후보를 버리지 않는다. `prefer_strong` 은 **정렬 가중치**로만 남는다
+    (`_SIG_RANK` 가 점수의 지배항이므로 예산 내 그룹 안에서 STRONG_BUY 가 여전히 앞선다).
+    """
     scored: list[dict] = []
     for r in rows:
         region = r.get("지역") or ""
@@ -75,16 +100,26 @@ def rank_listings(
                           loc_price=loc_price_of(region))
         if s:
             scored.append(s)
-    strong = [x for x in scored if x.get("시그널") == "STRONG_BUY"]
-    buy = [x for x in scored if x.get("시그널") == "BUY"]
-    if prefer_strong and len(strong) >= 3:
-        pool = strong
-    elif prefer_strong:
-        pool = strong + buy
-    else:
-        pool = scored
-    pool.sort(key=lambda x: (x["예산내"], x["_score"]), reverse=True)
-    return pool[:limit]
+    # 정렬 우선순위: ① 예산 내  ② 가격을 아는가  ③ 점수(시그널 지배)
+    scored.sort(key=lambda x: (x["예산내"], not x["예산확인필요"], x["_score"]), reverse=True)
+
+    # 한 동네가 목록을 독식하지 않게 — 숏리스트(MAX_PER_REGION=2)와 같은 이유다.
+    # 실측에서 노원구 하나가 상위 40건 중 11건(27%)을 차지했다. 같은 동네 11개를 보여주는 건
+    # 후보를 넓히는 게 아니라 같은 후보를 반복하는 것이다.
+    if max_per_region and max_per_region > 0:
+        seen: dict[str, int] = {}
+        capped, overflow = [], []
+        for x in scored:
+            region = x.get("지역") or ""
+            n = seen.get(region, 0)
+            if n < max_per_region:
+                seen[region] = n + 1
+                capped.append(x)
+            else:
+                overflow.append(x)
+        # 상한 때문에 자리가 남으면 넘친 것으로 채운다(빈손보다 낫다)
+        scored = capped + overflow
+    return scored[:limit]
 
 
 def aggregate_regions(listings: list[dict], *, locmap: dict,

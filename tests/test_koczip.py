@@ -87,6 +87,76 @@ def test_koczip_stale_matches_radar_ttl(tmp_path, monkeypatch):
     assert app_api._koczip_stale() is True
 
 
+def test_prod_does_not_seed_koczip_on_boot(monkeypatch):
+    """prod 는 **부팅 시딩**으로 콕집을 긁지 않는다.
+
+    읽기(routes/koczip.py)는 admin 으로 막혀 있었지만 수집 경로엔 게이트가 없어서,
+    배포 서버가 재배포할 때마다 제3자 사이트에 자동으로 붙었다.
+    prod 자동 갱신은 주 1회 루프만 남기고, 첫 수집은 admin 이 시작한다.
+    """
+    from realty_signal import api as app_api
+
+    calls = []
+    monkeypatch.setattr(app_api, "koczip_refresh", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(app_api, "_koczip_stale", lambda: True)
+    monkeypatch.setattr(app_api, "_quicksale_stale", lambda: False)
+    monkeypatch.setattr(app_api, "_certified_stale", lambda: False)
+    monkeypatch.setattr(app_api.config, "public_data_key", lambda: None)
+    monkeypatch.setattr(app_api.config, "seoul_key", lambda: None)
+
+    monkeypatch.setenv("APP_ENV", "prod")
+    app_api._seed_if_missing()
+    assert calls == [], "prod 부팅 시딩에서 콕집을 수집하면 안 된다"
+
+    monkeypatch.delenv("APP_ENV")
+    app_api._seed_if_missing()
+    assert len(calls) == 1, "로컬에서는 기존대로 시딩한다"
+
+
+def test_koczip_auto_refresh_is_weekly_not_daily(tmp_path, monkeypatch):
+    """자동 수집은 주 1회. 수동 기준(1일)과 다른 임계값을 쓴다."""
+    import time
+    from realty_signal import api as app_api
+
+    monkeypatch.setattr(db, "DB", tmp_path / "t.db")
+    db._migrated[0] = False
+
+    def _seed(age_sec):
+        db.koczip_complex_upsert({
+            "complex_no": "1", "region": "노원구", "name": "T",
+            "lat": 37.0, "lng": 127.0, "sale_count": 1,
+            "sale_min": 1, "sale_max": 2, "listing_total": 1,
+            "signal": "BUY", "raw": "{}", "ts": int(time.time()) - age_sec,
+        })
+
+    # 비어 있으면 자동 수집하지 않는다 — 첫 수집은 admin 이 시작한다
+    assert app_api._koczip_auto_due() is False
+    assert app_api._koczip_stale() is True      # 화면 표시는 '갱신 필요'
+
+    _seed(2 * 86400)                            # 2일 — 수동 기준은 만료, 자동은 아직
+    assert app_api._koczip_stale() is True
+    assert app_api._koczip_auto_due() is False
+
+    _seed(8 * 86400)                            # 8일 — 자동 수집 대상
+    assert app_api._koczip_auto_due() is True
+
+
+def test_admin_manual_scan_still_works_in_prod(monkeypatch):
+    """수동 스캔은 prod 에서도 admin 이면 항상 된다. 목록 기능은 살아 있어야 한다."""
+    from realty_signal import api as app_api
+    from realty_signal.routes import koczip as kz_routes
+
+    calls = []
+    monkeypatch.setenv("APP_ENV", "prod")
+    monkeypatch.setattr(app_api, "koczip_refresh",
+                        lambda d=None: (calls.append(1), {"ok": True})[1])
+    monkeypatch.setattr(kz_routes.deps, "require_admin", lambda r: None)
+
+    out = kz_routes.koczip_scan(object(), {})
+    assert out.get("ok") is True
+    assert len(calls) == 1, "prod admin 수동 스캔이 막히면 안 된다"
+
+
 def test_buyer_discount_pct_from_asking_below_real():
     assert kz.buyer_discount_pct({"discount_min": -0.269}) == 26.9
     assert kz.buyer_discount_pct({"discount_min": 0.1}) == -10.0

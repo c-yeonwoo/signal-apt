@@ -366,9 +366,15 @@ def users_with_region_favs() -> list[dict]:
 
 
 # ---------- funnel events ----------
+# 이 집합이 이벤트 이름의 **정본**이다. 프론트가 오타를 내면 여기서 걸려 조용히 버려진다.
+# 새 이벤트를 심을 때는 반드시 여기에 먼저 추가한다.
 _ALLOWED_EVENTS = frozenset({
     "signup", "profile_complete", "fav_add", "report_open", "nick_ask", "nbhd_open",
     "listing_detail_open", "listing_click", "timing_card_expand", "alert_feedback",
+    # 2026-08-17 진단 — 세 가지를 못 재고 있었다
+    "weekly_open",            # 주 1회 갱신 제품의 북극성 후보. 이번 주 화면을 실제로 열었나
+    "buying_power_confirm",   # V1(타이밍) → V2(매물) 파이프가 작동하나
+    "evidence_open",          # "근거가 증명되는"이 카피인가 기능인가 — 성적표를 실제로 여나
 })
 
 

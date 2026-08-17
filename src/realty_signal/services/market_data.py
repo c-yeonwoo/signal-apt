@@ -78,9 +78,13 @@ def data_age_days() -> float | None:
 
 
 def clear_caches() -> None:
+    from realty_signal.signals.engine import clear_backtest_caches
+
     kb.cache_clear()
     signals_df.cache_clear()
     regime.cache_clear()
     backtest.cache_clear()
     codes_nospace.cache_clear()
     alert_track_record.cache_clear()
+    # 가격지수·시장 기준선은 engine 모듈 전역에 남는다 — KB 가 바뀌면 같이 버려야 한다
+    clear_backtest_caches()
