@@ -164,7 +164,7 @@ def _classify(
             if sale_mom == "하락":
                 signal = "SELL_RISK"  # 입주폭탄 + 가격하락 = 매도 구간
             elif signal in ("STRONG_BUY", "BUY"):
-                reasons.append("⚠️입주부담 주의")
+                reasons.append("입주부담 주의")
         elif supply <= c.supply_dry:
             reasons.append(f"공급부족(향후 입주 {supply:g}배)")
 

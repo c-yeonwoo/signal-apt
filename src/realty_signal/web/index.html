@@ -12,11 +12,16 @@
 <style>
   :root {
     /* 표면·텍스트 — 차분한 잉크 톤 */
-    --bg:#f4f5f7; --panel:#ffffff; --line:#e6e8ec; --txt:#111827; --dim:#6b7280;
+    /* --dim 은 #6b7280 이었는데 --bg 대비 4.43:1 로 WCAG AA(4.5:1) 미달이었다 → 5.17:1 */
+    --bg:#f4f5f7; --panel:#ffffff; --line:#e6e8ec; --txt:#111827; --dim:#5f6875;
     /* 브랜드 — 딥 블루 */
     --accent:#1d4ed8; --accent-ink:#ffffff; --accent-weak:rgba(29,78,216,.08); --ring:rgba(29,78,216,.18);
     /* 시그널·의미 색 (단일 소스) */
-    --sig-strong:#15803d; --sig-buy:#166534; --sig-watch:#b45309; --sig-neutral:#6b7280; --sig-sell:#b91c1c;
+    /* 램프 방향: 강한 신호일수록 **진하게**. 예전엔 거꾸로였다 —
+       STRONG_BUY #15803d(대비 4.60:1) 가 BUY #166534(6.54:1) 보다 밝아서
+       강력매수가 매수보다 약해 보였다. 두 값을 맞바꿨다.
+       --sig-neutral 도 4.43:1 AA 미달이라 --dim 과 같이 올렸다. */
+    --sig-strong:#166534; --sig-buy:#15803d; --sig-watch:#b45309; --sig-neutral:#5f6875; --sig-sell:#b91c1c;
     --quick:#c2410c; --success:#15803d; --danger:#b91c1c; --warn:#b45309;
     /* 라운드·그림자 (스케일) */
     --r-sm:8px; --r-md:12px; --r-lg:16px; --shadow:0 1px 2px rgba(17,24,39,.04), 0 10px 28px rgba(17,24,39,.06);
@@ -137,13 +142,25 @@
   .row .mn { width:100%; color:var(--dim); font-size:11px; }
   .badge { font-size:11px; padding:3px 8px; border-radius:6px; font-weight:600; white-space:nowrap;
            border:1px solid transparent; letter-spacing:-0.01em; }
-  .STRONG_BUY{background:rgba(21,128,61,.10);color:#15803d;border-color:rgba(21,128,61,.22);}
-  .BUY{background:rgba(22,101,52,.08);color:#166534;border-color:rgba(22,101,52,.18);}
-  .WATCH{background:rgba(180,83,9,.08);color:#b45309;border-color:rgba(180,83,9,.18);}
-  .NEUTRAL{background:rgba(107,114,128,.08);color:#6b7280;border-color:rgba(107,114,128,.16);}
-  .SELL_RISK{background:rgba(185,28,28,.08);color:#b91c1c;border-color:rgba(185,28,28,.18);}
+  /* 배지 색은 :root 토큰에서만 가져온다 — 하드코딩하면 JS 팔레트와 또 갈라진다.
+     투명 배경/테두리는 color-mix 로 같은 토큰에서 파생시킨다. */
+  .STRONG_BUY{background:color-mix(in srgb,var(--sig-strong) 10%,transparent);color:var(--sig-strong);
+              border-color:color-mix(in srgb,var(--sig-strong) 22%,transparent);}
+  .BUY{background:color-mix(in srgb,var(--sig-buy) 8%,transparent);color:var(--sig-buy);
+       border-color:color-mix(in srgb,var(--sig-buy) 18%,transparent);}
+  .WATCH{background:color-mix(in srgb,var(--sig-watch) 8%,transparent);color:var(--sig-watch);
+         border-color:color-mix(in srgb,var(--sig-watch) 18%,transparent);}
+  .NEUTRAL{background:color-mix(in srgb,var(--sig-neutral) 8%,transparent);color:var(--sig-neutral);
+           border-color:color-mix(in srgb,var(--sig-neutral) 16%,transparent);}
+  .SELL_RISK{background:color-mix(in srgb,var(--sig-sell) 8%,transparent);color:var(--sig-sell);
+             border-color:color-mix(in srgb,var(--sig-sell) 18%,transparent);}
   /* 성적표: 좁은 화면에선 부차 열을 숨긴다. '초과'가 이 표의 결론이라 잘리면 안 된다. */
   @media (max-width:560px){ .bt-aux{display:none} }
+  /* 모션 최소화 설정을 존중한다 */
+  @media (prefers-reduced-motion:reduce){
+    *, *::before, *::after { animation-duration:.001ms !important; animation-iteration-count:1 !important;
+                             transition-duration:.001ms !important; scroll-behavior:auto !important; }
+  }
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
   #chart { flex:1; min-height:0; }
   .acard { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; cursor:pointer;
@@ -1340,7 +1357,20 @@
 
 <script>
 const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
-const SIGCOLOR = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};
+/** 시그널 색 — **`:root` 토큰에서 읽는다.** 하드코딩하지 않는다.
+ *  예전엔 CSS 배지와 JS 가 각각 다른 팔레트를 들고 있어서, 같은 시그널이 배지에서는 짙은 초록,
+ *  차트·지도·리스트 좌측선에서는 밝은 초록으로 나왔다. 한 곳에서만 정의한다. */
+const SIGCOLOR = (() => {
+  const cs = getComputedStyle(document.documentElement);
+  const t = (name, fallback) => (cs.getPropertyValue(name) || '').trim() || fallback;
+  return {
+    STRONG_BUY: t('--sig-strong', '#166534'),
+    BUY:        t('--sig-buy',    '#15803d'),
+    WATCH:      t('--sig-watch',  '#b45309'),
+    NEUTRAL:    t('--sig-neutral','#5f6875'),
+    SELL_RISK:  t('--sig-sell',   '#b91c1c'),
+  };
+})();
 let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
 let activeGrade = new Set(["A","B","C","D","E"]);   // 지역 급지 필터(A~E). 급지 없는 지방은 항상 통과
 let allSignals = [], selected = null, meta = null;
@@ -1893,7 +1923,18 @@ function _bpRegBadge(r){
 }
 async function _loadBuyingPower(){
   const wrap=document.getElementById('dashPowerWrap'); if(!wrap) return;
-  let d; try{ d=await (await fetch('/api/buying-power')).json(); }catch(e){ wrap.innerHTML=''; return; }
+  // 실패를 빈 화면으로 삼키지 않는다 — 홈 좌열 첫 카드가 말없이 사라지면 고장을 모른다.
+  let d;
+  try{
+    const r=await fetch('/api/buying-power');
+    if(!r.ok) throw new Error(r.status===401?'로그인이 필요합니다':`서버 오류 ${r.status}`);
+    d=await r.json();
+  }catch(e){
+    wrap.innerHTML=_dashCard(_dashH('내 매수력')
+      +`<div style="font-size:14px;color:var(--dim);line-height:1.55">매수력을 불러오지 못했습니다 (${e.message}).
+        <div style="margin-top:12px"><span class="btn" style="padding:6px 14px" onclick="_loadBuyingPower()">다시 시도</span></div></div>`);
+    return;
+  }
   _bp=d;
   if(!d.ready){
     wrap.innerHTML=_dashCard(_dashH('내 매수력')
@@ -3821,7 +3862,7 @@ function renderFilters(){
 const collapsed = new Set();   // 접힌 그룹/시 키
 const GROUP_ORDER = ['서울','경기','인천','지방·광역'];
 
-const _SIGC = {STRONG_BUY:'#22c55e', BUY:'#16a34a', WATCH:'#d97706', NEUTRAL:'#94a3b8', SELL_RISK:'#dc2626'};  // = SIGCOLOR 와 동일(단일 팔레트)
+const _SIGC = SIGCOLOR;   // 별칭. 두 벌로 나뉘어 있던 걸 하나로 합쳤다(2026-08-17)
 function rowEl(r, lv){
   const row = document.createElement('div');
   row.className = `row${lv?' lv'+lv:''}` + (selected===r.region?' sel':'');
@@ -4293,7 +4334,7 @@ async function openScoreboard(){
 }
 // ===== 단지 deep-dive =====
 function naverBtn(cno){
-  return cno ? ` <a class="btn" href="https://new.land.naver.com/complexes/${cno}" target="_blank" rel="noopener" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">🟢 네이버부동산</a>` : '';
+  return cno ? ` <a class="btn" href="https://new.land.naver.com/complexes/${cno}" target="_blank" rel="noopener" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">네이버부동산 ↗</a>` : '';
 }
 // 닉 문맥 진입 — 버튼에서 챗봇을 열고 질문을 미리 채워 전송
 function askNick(q){
@@ -4961,7 +5002,13 @@ async function loadFreshness(){
           <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600">${s.label}</span><span style="white-space:nowrap;font-size:12px">${when(s)}</span></div>
           <div style="font-size:11px;color:var(--dim);line-height:1.5">${s.note||''} <span style="opacity:.8">· 주기: ${s.cycle||'–'}</span></div>
         </div></div>`).join('')
-    + `<div style="font-size:10px;color:var(--dim);margin-top:6px">🟢 8일 이내 · 🟡 한 달 이내 · 🔴 오래됨 · 회색 실시간/미수집</div>`;
+    // 색만으로 정보를 전달하지 않는다 — 점 색 + 글자 라벨을 같이 준다(색각 이상 대응)
+    + `<div style="font-size:10px;color:var(--dim);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">`
+    + [['최신','8일 이내','var(--sig-strong)'],['보통','한 달 이내','var(--sig-watch)'],
+       ['오래됨','','var(--sig-sell)'],['미수집','실시간 또는 없음','var(--sig-neutral)']]
+        .map(([l,d2,c])=>`<span style="display:inline-flex;align-items:center;gap:4px">
+          <span style="width:7px;height:7px;border-radius:50%;background:${c}"></span>${l}${d2?` (${d2})`:''}</span>`).join('')
+    + `</div>`;
 }
 async function openHistModal(){
   const iv = _histCache[selected]||[];
@@ -5835,7 +5882,7 @@ function renderAlerts(d){
   let html='';
   const tr=_alertsTrack;
   if(tr && tr.scored){
-    html += `<div style="font-size:11px;color:var(--dim);margin-bottom:10px">📊 알림 성적표: 지난 ${tr.horizon_weeks}주 적중률 <b style="color:var(--txt)">${tr.hit_rate}%</b> (평가 ${tr.scored}건${tr.pending?` · 대기 ${tr.pending}건`:''})</div>`;
+    html += `<div style="font-size:11px;color:var(--dim);margin-bottom:10px"><b>알림 성적표</b> · 지난 ${tr.horizon_weeks}주 적중률 <b style="color:var(--txt)">${tr.hit_rate}%</b> (평가 ${tr.scored}건${tr.pending?` · 대기 ${tr.pending}건`:''})</div>`;
   }
   if(d.timing && d.timing.length){
     html += `<div style="font-weight:700;font-size:13px;margin-bottom:8px">고타이밍 매물 <span style="color:var(--dim);font-weight:400">${d.timing.length}건</span></div>`

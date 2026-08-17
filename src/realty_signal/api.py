@@ -404,8 +404,22 @@ def _signals_df():
 
 
 @app.get("/", response_class=HTMLResponse)
-def index():
-    return (WEB_DIR / "index.html").read_text(encoding="utf-8")
+def index(request: Request):
+    """단일 HTML(약 460KB). 재방문마다 통째로 다시 내려보내지 않는다.
+
+    파일 mtime+길이를 ETag 로 쓰고 `If-None-Match` 가 같으면 **304** 로 끝낸다.
+    `no-cache, must-revalidate` 라 배포 직후에도 낡은 화면이 남지 않는다 —
+    항상 물어보되 같으면 본문만 생략한다(460KB → 헤더 몇 줄).
+    """
+    from fastapi.responses import Response
+
+    p = WEB_DIR / "index.html"
+    body = p.read_text(encoding="utf-8")
+    etag = f'W/"{int(p.stat().st_mtime)}-{len(body)}"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache, must-revalidate"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return HTMLResponse(body, headers=headers)
 
 
 @app.get("/legal/terms", response_class=HTMLResponse)

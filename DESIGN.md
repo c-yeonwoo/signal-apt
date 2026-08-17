@@ -40,20 +40,22 @@
 > `tests/test_design_tokens.py` 가 이 표와 `:root` 를 대조한다.
 
 ```
-표면   --bg #f4f5f7 · --panel #ffffff · --line #e6e8ec · --txt #111827 · --dim #6b7280
+표면   --bg #f4f5f7 · --panel #ffffff · --line #e6e8ec · --txt #111827 · --dim #5f6875
 브랜드 --accent #1d4ed8 · --accent-ink #ffffff · --accent-weak rgba(29,78,216,.08) · --ring rgba(29,78,216,.18)
-시그널 --sig-strong #15803d · --sig-buy #166534 · --sig-watch #b45309 · --sig-neutral #6b7280 · --sig-sell #b91c1c
+시그널 --sig-strong #166534 · --sig-buy #15803d · --sig-watch #b45309 · --sig-neutral #5f6875 · --sig-sell #b91c1c
 의미   --quick #c2410c(급매) · --success #15803d · --danger #b91c1c · --warn #b45309
 형태   --r-sm 8 · --r-md 12 · --r-lg 16 · --space 8
 ```
 - **색은 반드시 토큰 사용.** hex 하드코딩 금지 (특히 브랜드색 = `var(--accent)`).
   구 브랜드색 `#2563eb` 잔재가 아직 10곳 남아 있다(진단 N9).
-- **시그널 색은 CSS 와 JS 가 같아야 한다**: CSS `.STRONG_BUY/.BUY/…`(`index.html:140`) 와
-  JS `SIGCOLOR`(`:1324`)·`_SIGC`(`:3761`). **현재 갈라져 있다** — CSS 는 신형(어두운) 팔레트,
-  JS 두 벌은 구형(밝은) 팔레트라 같은 시그널이 배지와 차트에서 다른 색으로 나온다(진단 N9).
-  `_SIGC` 는 파이썬이 아니라 같은 HTML 안의 JS 다(문서가 파이썬이라고 적어 뒀었다 — 오류).
-- ⚠️ **램프 방향이 뒤집혀 있다**: 두 팔레트 모두 STRONG_BUY 가 BUY 보다 **밝다** —
-  강한 신호가 약해 보인다. N9 에서 뒤집는다.
+- **시그널 색은 `:root` 에서만 정의한다.** CSS 배지는 `color-mix()` 로 토큰에서 파생시키고,
+  JS `SIGCOLOR` 는 `getComputedStyle` 로 같은 토큰을 읽는다(`_SIGC` 는 그 별칭).
+  하드코딩된 팔레트 두 벌은 2026-08-17 에 제거했다 — 같은 시그널이 배지와 차트에서
+  다른 색으로 나오던 문제의 원인이었다.
+- **램프 방향: 강한 신호일수록 진하게.** `--sig-strong`(대비 6.54:1) > `--sig-buy`(4.60:1).
+  2026-08-17 이전에는 거꾸로여서 강력매수가 매수보다 약해 보였다.
+- 대비비 실측(`--bg #f4f5f7` 기준): sig-strong 6.54 · sig-buy 4.60 · sig-watch 4.60 ·
+  sig-neutral 5.17 · sig-sell 5.93 · dim 5.17 — **전부 WCAG AA(4.5:1) 통과.**
 
 ## 3. 타이포 스케일 (px)
 | 용도 | 크기 |
