@@ -267,6 +267,12 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
         dv = bd.asof(d) if not bd.empty else float("nan")
         mom = sale.iloc[max(0, i - c.momentum_weeks + 1): i + 1].mean()
         mom_lbl = "상승" if mom >= c.momentum_up else ("하락" if mom <= c.momentum_down else "보합")
+        # `supply` 를 **일부러 넘기지 않는다.** `evaluate()` 는 넘기지만 여기서는 안 된다 —
+        # `supply.parquet` 는 현재 시점 스냅샷 하나뿐이고(향후 입주 예정, future_to=2028)
+        # 과거 각 주차의 공급압력 시계열이 없다. 그걸 과거 판정에 넣으면
+        # 2014년 시그널에 2028년 예측을 쓰는 **룩어헤드 편향**이 된다.
+        # → 백테스트와 화면 등급이 매도 계열에서 갈리는 건 알려진 한계지, 고칠 버그가 아니다.
+        #   과거 입주물량 시계열을 확보하기 전까지 이 줄은 그대로 둔다.
         sig, _ = _classify(jv, bv, dv, _jeonse_state(jv, c) if pd.notna(jv) else "—", mom_lbl, c)
         # 상태: 매수(hot) / 매도(매매 하락 지속) / 중립
         if sig in ("STRONG_BUY", "BUY"):
@@ -306,13 +312,92 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
     return intervals
 
 
+def _forward_pct(idx: "pd.Series", at, weeks: int = 12) -> float | None:
+    """`at` 시점 지수 대비 `weeks` 주 뒤 변화율(%). signal_history 와 동일 산식."""
+    i1 = idx.asof(at)
+    if pd.isna(i1) or not i1:
+        return None
+    after = idx[idx.index > at]
+    if not len(after):
+        return None
+    a = after.iloc[min(weeks - 1, len(after) - 1)]
+    return None if pd.isna(a) else round((a / i1 - 1) * 100, 1)
+
+
+# 시장 기준선은 **config 와 무관하다** — 날짜와 가격지수에만 의존한다.
+# 캘리브레이션이 임계값을 바꿔 가며 백테스트를 12번 돌려도 이 부분은 한 번만 계산하면 된다
+# (안 그러면 1회 12초 × 12 = 143초). 키는 kb 의 마지막 주차 + 지역 수.
+_MKT_BASELINE: dict[tuple, dict] = {}
+_PRICE_INDEX: dict[tuple, dict] = {}
+
+
+def _kb_key(kb: KBWeekly) -> tuple:
+    """캐시 키. **호출 비용이 있으니 루프 안에서 부르지 마라** —
+    `kb.latest()` 는 전체 long 프레임을 groupby·pivot 한다.
+    (한 번 그렇게 만들었다가 백테스트가 12초 → 89초가 됐다.)"""
+    return (str(kb.last_date), len(list(kb.latest().index)))
+
+
+def _price_index_map(kb: KBWeekly, key: tuple) -> dict:
+    cached = _PRICE_INDEX.get(key)
+    if cached is None:
+        cached = {}
+        for region in kb.latest().index:
+            s = kb.series(region, "sale_change")
+            if not s.empty:
+                cached[region] = price_index_from(s)
+        _PRICE_INDEX[key] = cached
+    return cached
+
+
+def _market_up_rate_fn(kb: KBWeekly, key: tuple):
+    """`at → 상승 비율(0~1)` 클로저. 키·지수맵을 한 번만 풀고 memo 는 프로세스 전역에 남긴다."""
+    idx_of = _price_index_map(kb, key)
+    memo = _MKT_BASELINE.setdefault(key, {})
+
+    def rate(at) -> float | None:
+        dkey = str(at)
+        if dkey in memo:
+            return memo[dkey]
+        up = tot = 0
+        for ix in idx_of.values():
+            f = _forward_pct(ix, at)
+            if f is None:
+                continue
+            tot += 1
+            if f > 0:
+                up += 1
+        memo[dkey] = (up / tot) if tot else None
+        return memo[dkey]
+
+    return rate
+
+
+def market_up_rate(kb: KBWeekly, at) -> float | None:
+    """그 날짜에 전체 지역 중 이후 12주가 상승한 비율(0~1). 시그널 적중률의 base rate."""
+    return _market_up_rate_fn(kb, _kb_key(kb))(at)
+
+
+def clear_backtest_caches() -> None:
+    """KB 데이터가 갱신되면 호출 — 가격지수·시장 기준선 캐시를 버린다."""
+    _MKT_BASELINE.clear()
+    _PRICE_INDEX.clear()
+
+
 def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
     """전 지역 과거 시그널 구간을 모아 타입별 적중률·평균 수익률 집계.
 
     적중 정의 — 매수(STRONG_BUY/BUY): 시그널 이후 12주 가격 상승. 매도(SELL): 이후 12주 하락.
     오직 보유 데이터(KB 누적 가격지수)만으로 '이 신호가 과거에 맞았나'를 수치화.
+
+    **적중률만 내보내지 않는다.** 비율은 base rate 없이는 무정보일 수 있다 —
+    "항상 매수"라고만 답하는 예측기도 상승장에선 높은 적중률을 얻는다. 그래서 각 시그널마다
+    **같은 날짜 분포에서 전체 지역이 얻은 적중률**(`시장평균`)과 그 차이(`초과`)를 함께 낸다.
+    화면은 이 세 값을 나란히 보여줘야 한다.
     """
     c = config or SignalConfig()
+    mkey = _kb_key(kb)                       # 루프 밖에서 한 번만
+    _mkt = _market_up_rate_fn(kb, mkey)
     agg: dict = {}
     for region in kb.latest().index:
         try:
@@ -323,7 +408,8 @@ def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
             t = iv.get("signal")
             if t not in ("STRONG_BUY", "BUY", "SELL"):
                 continue
-            a = agg.setdefault(t, {"n": 0, "during": [], "after": [], "hit": 0, "neval": 0})
+            a = agg.setdefault(t, {"n": 0, "during": [], "after": [], "hit": 0,
+                                   "neval": 0, "mkt": []})
             a["n"] += 1
             if iv.get("during_pct") is not None:
                 a["during"].append(iv["during_pct"])
@@ -333,6 +419,10 @@ def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
                 up = iv["after12w_pct"] > 0
                 if (t in ("STRONG_BUY", "BUY") and up) or (t == "SELL" and not up):
                     a["hit"] += 1
+                # 같은 날짜의 시장 기준선 — 매도는 하락 비율이 기준이라 1에서 뺀다
+                m = _mkt(pd.Timestamp(iv["end"]))
+                if m is not None:
+                    a["mkt"].append(m if t != "SELL" else 1 - m)
 
     def _avg(xs):
         return round(sum(xs) / len(xs), 1) if xs else None
@@ -342,13 +432,35 @@ def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
         a = agg.get(t)
         if not a:
             continue
+        hit = round(a["hit"] / a["neval"] * 100, 1) if a["neval"] else None
+        mkt = round(sum(a["mkt"]) / len(a["mkt"]) * 100, 1) if a["mkt"] else None
         by.append({
             "signal": t, "구간수": a["n"], "평가수": a["neval"],
-            "적중률": round(a["hit"] / a["neval"] * 100) if a["neval"] else None,
+            "적중률": hit,
+            "시장평균": mkt,
+            "초과": round(hit - mkt, 1) if (hit is not None and mkt is not None) else None,
             "기간중평균": _avg(a["during"]), "이후12주평균": _avg(a["after"]),
         })
-    return {"기준일": str(kb.last_date.date()), "by_signal": by,
-            "설명": "과거 각 지역 시그널 구간의 실제 가격 변화. 매수=이후 12주 상승, 매도=이후 12주 하락이면 적중."}
+
+    # 표본 주의 — 평가수는 독립 관측 수가 아니다
+    own = sum(1 for r in kb.latest().index if not kb.series(r, "jeonse_supply").empty)
+    total = len(list(kb.latest().index))
+
+    return {
+        "기준일": str(kb.last_date.date()),
+        "by_signal": by,
+        "표본": {"지역수": total, "원본지표보유": own, "광역상속": total - own},
+        "주의": [
+            "적중률은 같은 기간 전체 지역이 얻은 값(시장평균)과 함께 봐야 의미가 있습니다.",
+            f"전세수급·매수우위를 직접 조사하는 지역은 {own}곳이고 나머지 {total - own}곳은 "
+            "상위 광역 값을 상속합니다. 상속 지역은 시그널이 함께 움직여 "
+            "유효 표본이 표기된 평가수보다 작습니다.",
+            "이 표는 화면에 뜨는 등급(evaluate)이 아니라 단순화된 규칙(_classify)을 채점합니다. "
+            "'매매 하락 지속' 행은 화면의 SELL_RISK 와 다른 기준입니다.",
+        ],
+        "설명": "과거 각 지역 시그널 구간의 실제 가격 변화. 매수=이후 12주 상승, "
+                "매도=이후 12주 하락이면 적중.",
+    }
 
 
 def price_index_from(sale: "pd.Series") -> "pd.Series":

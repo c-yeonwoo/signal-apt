@@ -18,8 +18,12 @@ from realty_signal.signals.engine import SignalConfig
 
 log = logging.getLogger("realty_signal")
 
-# 인증 게이트: /api/* 는 세션 필수(아래 경로 prefix 만 예외). 그 외(/, 정적)는 허용.
+# 인증 게이트: /api/* 는 세션 필수(아래 prefix·정확경로만 예외). 그 외(/, 정적)는 허용.
 _OPEN_PREFIXES = ("/api/auth/",)
+# 가입 전에 보여줘도 되는 것 — **집계 수치만.** 지역별·개인별 데이터는 절대 여기 넣지 않는다.
+# 백테스트 성적표는 "근거가 증명되는"이라는 약속을 가입 전에 확인시켜 줄 유일한 산출물이고,
+# 전 지역 집계라 공개해도 잃는 게 없다.
+_OPEN_PATHS = ("/api/backtest",)
 
 
 from realty_signal.routes import deps
@@ -162,8 +166,11 @@ async def _auto_refresh_loop():
             if _certified_stale():
                 log.warning("찐매물 캐시 만료 — 일일 스캔")
                 await asyncio.to_thread(lambda: certified_refresh({}))
-            if _koczip_stale():
-                log.warning("콕집 DB 만료 — 일일 스캔")
+            # 콕집은 **주 1회**만 자동 수집한다(급매·찐매물은 일 1회).
+            # 제3자 사이트를 긁는 개인 확인용 소스라 배포 서버가 매일 붙을 이유가 없다.
+            # 비어 있을 때는 자동으로 채우지 않는다 — 첫 수집은 admin 이 시작한다.
+            if _koczip_auto_due():
+                log.warning("콕집 DB %d일 경과 — 주간 스캔", _KOCZIP_AUTO_MAX_AGE // 86400)
                 await asyncio.to_thread(lambda: koczip_refresh({}))
         except Exception as e:
             log.error("급매/찐매물/콕집 일일 갱신 실패: %s", e)
@@ -195,7 +202,10 @@ def _seed_if_missing():
             certified_refresh({})
         except Exception as e:  # noqa: BLE001
             log.error("certified 시딩 실패: %s", e)
-    if _koczip_stale():                                  # 콕집(할인·특가) — 급매와 동일 주기
+    # 콕집(할인·특가) — **부팅 시딩은 로컬에서만.** prod 는 재배포할 때마다 제3자 사이트에
+    # 붙게 되므로 시딩을 걸지 않는다. prod 의 자동 갱신은 `_auto_refresh_loop` 의 주 1회뿐이고,
+    # 그마저 이미 데이터가 있을 때만 따라간다. 첫 수집·즉시 갱신은 admin 의 `POST /api/koczip/scan`.
+    if not config.is_prod() and _koczip_stale():
         try:
             log.warning("koczip 없음/만료 — 콕집 스캔 중…")
             koczip_refresh({})
@@ -296,9 +306,9 @@ def _clear_signal_caches() -> None:
 
 @app.middleware("http")
 async def _auth_gate(request: Request, call_next):
-    """인증된 유저만 데이터 API 접근. /api/auth/* 와 비-API(/, 정적)는 허용."""
+    """인증된 유저만 데이터 API 접근. /api/auth/*·집계 공개 경로·비-API(/, 정적)는 허용."""
     p = request.url.path
-    if p.startswith("/api/") and not p.startswith(_OPEN_PREFIXES):
+    if p.startswith("/api/") and not p.startswith(_OPEN_PREFIXES) and p not in _OPEN_PATHS:
         if not _uid(request):
             return JSONResponse({"error": "인증이 필요합니다.", "auth": False}, status_code=401)
     return await call_next(request)
@@ -1348,14 +1358,34 @@ def _certified_stale() -> bool:
     return _radar_cache_stale(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
 
 
-def _koczip_stale() -> bool:
-    """콕집 DB가 비었거나 마지막 스캔이 1일 경과면 True (바로집과 동일 TTL)."""
+def _koczip_age_sec() -> float | None:
+    """마지막 콕집 스캔 이후 경과 초. 한 번도 안 했으면 None."""
     import time
     st = db.koczip_stats()
     ts = st.get("article_ts") or st.get("complex_ts")
-    if not ts:
-        return True
-    return time.time() - float(ts) >= _RADAR_MAX_AGE
+    return None if not ts else time.time() - float(ts)
+
+
+def _koczip_stale() -> bool:
+    """콕집 DB가 비었거나 마지막 스캔이 1일 경과면 True (바로집과 동일 TTL).
+
+    **화면 표시·수동 스캔 판정용.** 자동 수집 주기는 `_koczip_auto_due()` 를 쓴다 — 둘은 다르다.
+    """
+    age = _koczip_age_sec()
+    return age is None or age >= _RADAR_MAX_AGE
+
+
+# 자동 수집 주기는 수동 기준(1일)보다 훨씬 길게 잡는다.
+# 콕집은 제3자 사이트를 긁는 개인 확인용 소스라 배포 서버가 매일 자동으로 붙을 이유가 없다.
+# 필요하면 admin 이 `POST /api/koczip/scan` 으로 언제든 즉시 갱신할 수 있다.
+_KOCZIP_AUTO_MAX_AGE = 7 * 86400
+
+
+def _koczip_auto_due() -> bool:
+    """자동 수집을 돌려도 되는가. **비어 있을 때는 자동으로 채우지 않는다** —
+    첫 수집은 admin 이 명시적으로 시작하게 두고, 그 뒤 주 1회만 따라간다."""
+    age = _koczip_age_sec()
+    return age is not None and age >= _KOCZIP_AUTO_MAX_AGE
 
 
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"

@@ -33,15 +33,27 @@
 - 포지션 "친근한 전문가": 쉽게 설명하되 근거로 말한다. 존댓말·담백, 과한 감탄사·이모지 금지.
 
 ## 2. 토큰 (`:root`, 단일 소스)
+
+> **정본은 `index.html` 의 `:root` 다. 이 표는 그것을 옮긴 것이고, 어긋나면 코드가 맞다.**
+> 2026-08-17 진단 시 이 표가 색 토큰 12개 중 11개에서 실제와 달랐다 —
+> 코드는 대비 높은 어두운 팔레트로 이미 옮겨갔는데 문서가 옛 팔레트에 남아 있었다.
+> `tests/test_design_tokens.py` 가 이 표와 `:root` 를 대조한다.
+
 ```
-표면   --bg #f8fafc · --panel #fff · --line #e2e8f0 · --txt #1e293b · --dim #64748b
-브랜드 --accent #2563eb · --accent-ink #fff · --accent-weak rgba(37,99,235,.10) · --ring rgba(37,99,235,.22)
-시그널 --sig-strong #22c55e · --sig-buy #16a34a · --sig-watch #d97706 · --sig-neutral #94a3b8 · --sig-sell #dc2626
-의미   --quick #ea580c(급매) · --success #16a34a · --danger #dc2626 · --warn #d97706
-형태   --r-sm 8 · --r-md 12 · --r-lg 16 · --shadow 0 8px 24px rgba(2,32,71,.09)
+표면   --bg #f4f5f7 · --panel #ffffff · --line #e6e8ec · --txt #111827 · --dim #6b7280
+브랜드 --accent #1d4ed8 · --accent-ink #ffffff · --accent-weak rgba(29,78,216,.08) · --ring rgba(29,78,216,.18)
+시그널 --sig-strong #15803d · --sig-buy #166534 · --sig-watch #b45309 · --sig-neutral #6b7280 · --sig-sell #b91c1c
+의미   --quick #c2410c(급매) · --success #15803d · --danger #b91c1c · --warn #b45309
+형태   --r-sm 8 · --r-md 12 · --r-lg 16 · --space 8
 ```
 - **색은 반드시 토큰 사용.** hex 하드코딩 금지 (특히 브랜드색 = `var(--accent)`).
-- **시그널 색은 3곳이 동일해야 함**: CSS `.STRONG_BUY/.BUY/...`, JS `SIGCOLOR`, `_SIGC`. STRONG_BUY=`#22c55e`, BUY=`#16a34a`, WATCH=`#d97706`, NEUTRAL=`#94a3b8`, SELL_RISK=`#dc2626`.
+  구 브랜드색 `#2563eb` 잔재가 아직 10곳 남아 있다(진단 N9).
+- **시그널 색은 CSS 와 JS 가 같아야 한다**: CSS `.STRONG_BUY/.BUY/…`(`index.html:140`) 와
+  JS `SIGCOLOR`(`:1324`)·`_SIGC`(`:3761`). **현재 갈라져 있다** — CSS 는 신형(어두운) 팔레트,
+  JS 두 벌은 구형(밝은) 팔레트라 같은 시그널이 배지와 차트에서 다른 색으로 나온다(진단 N9).
+  `_SIGC` 는 파이썬이 아니라 같은 HTML 안의 JS 다(문서가 파이썬이라고 적어 뒀었다 — 오류).
+- ⚠️ **램프 방향이 뒤집혀 있다**: 두 팔레트 모두 STRONG_BUY 가 BUY 보다 **밝다** —
+  강한 신호가 약해 보인다. N9 에서 뒤집는다.
 
 ## 3. 타이포 스케일 (px)
 | 용도 | 크기 |

@@ -142,6 +142,8 @@
   .WATCH{background:rgba(180,83,9,.08);color:#b45309;border-color:rgba(180,83,9,.18);}
   .NEUTRAL{background:rgba(107,114,128,.08);color:#6b7280;border-color:rgba(107,114,128,.16);}
   .SELL_RISK{background:rgba(185,28,28,.08);color:#b91c1c;border-color:rgba(185,28,28,.18);}
+  /* 성적표: 좁은 화면에선 부차 열을 숨긴다. '초과'가 이 표의 결론이라 잘리면 안 된다. */
+  @media (max-width:560px){ .bt-aux{display:none} }
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
   #chart { flex:1; min-height:0; }
   .acard { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; cursor:pointer;
@@ -608,6 +610,8 @@
       <label id="qsKzMixWrap" style="display:none;font-size:12px;color:var(--dim);align-items:center;gap:4px">
         <input type="checkbox" id="qsKzMix" checked onchange="renderQuicksale()"> 콕집 핀</label>
       <button class="chip" id="qsKzScanBtn" onclick="scanKoczipListings()" style="display:none;font-size:12px;border-color:#db2777;color:#db2777" title="BUY+/관심지역 · 개인 확인용">콕집 갱신</button>
+      <!-- 자동 수집이 주 1회라 '언제 수집한 데이터인지'가 보여야 한다 -->
+      <span id="qsKzAge" style="display:none;font-size:11px;color:var(--dim)"></span>
       <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
       <span id="qsMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
     </div>
@@ -899,6 +903,17 @@
           <textarea id="pol_body" rows="3" placeholder="내용* — 제도/계획 개요, 시장 영향" class="ctrl" style="font-size:12px;resize:vertical;font-family:inherit"></textarea>
           <span class="btn primary" style="align-self:flex-start" onclick="adminAddPolicy()">저장</span>
         </div></details></div>
+    <div><div style="font-size:12px;font-weight:700;margin-bottom:6px">사용 지표
+        <span style="font-weight:400;color:var(--dim)">— 적재만 하고 볼 곳이 없었다(2026-08-17)</span></div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <select id="evDays" class="ctrl" style="font-size:12px;padding:5px 8px" onchange="loadAdminEvents()">
+          <option value="7">최근 7일</option>
+          <option value="30" selected>최근 30일</option>
+          <option value="90">최근 90일</option>
+        </select>
+        <span class="btn" style="font-size:12px" onclick="loadAdminEvents()">새로고침</span>
+      </div>
+      <div id="evList" style="font-size:12px;border:1px solid var(--line);border-radius:8px;padding:8px">불러오는 중…</div></div>
     <div id="adminStatus" style="font-size:12px;color:var(--dim);min-height:18px"></div>
   </div>
 </dialog>
@@ -990,7 +1005,11 @@
       </div>
     </div>
     <div class="auth-points">
-      <span>검증된 시그널</span><span>자본 적합 추천</span><span>관심지역 주간 추적</span>
+      <!-- '검증된 시그널'은 가입 전에 실제로 확인할 수 있어야 한다. 약속만 하고 증명을 잠그지 않는다. -->
+      <span role="button" tabindex="0" onclick="openScoreboard()"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openScoreboard()}"
+            style="cursor:pointer;text-decoration:underline;text-underline-offset:2px"
+            title="지난 시그널의 적중률과 같은 기간 시장 평균을 확인합니다">검증된 시그널 →</span><span>자본 적합 추천</span><span>관심지역 주간 추적</span>
     </div>
     <div class="auth-field"><label>이메일</label>
       <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="username"></div>
@@ -1268,7 +1287,7 @@
     <h3 style="margin:0;font-size:19px">시그널 성적표</h3>
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('scoreDlg').close()">✕</span>
   </div>
-  <p class="page-sub" style="margin-bottom:14px">신호 이후 12주 방향이 맞으면 적중</p>
+  <p class="page-sub" style="margin-bottom:14px">신호 이후 12주 방향이 맞으면 적중 · 같은 기간 시장 평균과 나란히 봅니다</p>
   <div id="scoreBody"></div>
 </dialog>
 
@@ -1629,8 +1648,12 @@ function _regimeEvidenceHtml(rg, compact){
   }
   return h;
 }
+let _weeklyOpenSent=false;
 async function loadDashboard(){
   const body=document.getElementById('dashBody'); if(!body) return;
+  // 주 1회 갱신 제품의 북극성 후보. 탭을 오갈 때마다 세면 방문 수가 아니라 클릭 수가 된다 —
+  // 세션당 1회만 보낸다.
+  if(!_weeklyOpenSent){ _weeklyOpenSent=true; track(EVENTS.WEEKLY_OPEN); }
   const nm=(_userEmail||'').split('@')[0]||'회원';
   document.getElementById('dashHello').textContent=`${nm}님, 이번 주`;
   const sub=document.getElementById('dashSub');
@@ -1707,7 +1730,10 @@ async function loadDashboard(){
   _loadIssues();
 }
 // ===== 이번 주 변화 — 지난주 KB 대비 =====
-// 왜 홈 최상단인가: 주 1회 갱신되는 서비스에서 사용자가 가장 먼저 묻는 건 "지난주랑 뭐가 달라졌나"다.
+// 위치: 홈 **우열(`주간 동향`) 첫 카드**. 좌열(`할 일 · 후보`) 첫 카드는 매수력이다.
+// (예전 주석은 "홈 최상단"이라고 적혀 있었는데 사실이 아니었다 — 2026-08-17 정정)
+// 주 1회 갱신 서비스라 "지난주랑 뭐가 달라졌나"가 중요한 건 맞지만, 현재 화면의 시각 정점은
+// 매수력 카드(32px)다. 이 순서를 바꿀지는 진단 N7 에서 다룬다(V-2 선행).
 function _sigMoveRow(s, mine){
   const col=s.up?'#16a34a':'#dc2626';
   return `<div onclick="openNbhd('${s.region}')" title="${(s['근거']||'').replace(/"/g,'')}"
@@ -1963,6 +1989,8 @@ async function bpConfirm(){
   if(p.income) _profile['연소득']=p.income;
   document.getElementById('bpDlg').close();
   toast('매수력을 확정했습니다');
+  // V1(타이밍) → V2(매물) 파이프가 실제로 이어지는지 재는 유일한 지점
+  track(EVENTS.BUYING_POWER_CONFIRM, {capital:p.capital, budget:d['매수력']||null});
   _loadBuyingPower(); _loadShortlist(); _loadDashBudget();
 }
 // ===== 이번 주 볼 단지 3곳 — 매수력 × 라이프스타일 적합도 =====
@@ -2129,7 +2157,7 @@ async function _loadDashBudget(){
     if(listings.length){
       h+=listings.map(L=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('report')">
         <span class="pill" style="font-size:10px">${L['유형']}</span><b style="min-width:90px">${L['단지명']||'–'}</b>${badge(L['시그널'])}
-        <span style="margin-left:auto;color:var(--dim);font-size:12px">${L['지역']||''} · ${_eok(L['추정가']??L['총액'])}</span></div>`).join('');
+        <span style="margin-left:auto;color:var(--dim);font-size:12px">${L['지역']||''} · ${_priceLabel(L)}</span></div>`).join('');
       h+=`<div style="margin-top:10px"><span class="btn" style="padding:5px 12px" onclick="switchTab('report')">추천 매물·리포트 →</span></div>`;
     } else if(inb.length){
       h+=inb.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('signal');selectRegion('${c.region}')">
@@ -2518,6 +2546,20 @@ function qsMode(mode){
   if(st && n) st.textContent=`${n}건 · 하루 1회 캐시 · 참고용`;
   renderQuicksale();
 }
+/** 콕집 데이터 신선도. 자동 수집이 주 1회라 "언제 수집한 것인지"를 반드시 같이 보여준다.
+ *  0 을 '없음'과 구분하는 것과 같은 원칙 — 화면이 오래된 데이터를 최신처럼 보이게 하면 안 된다. */
+function _renderKoczipAge(dbst){
+  const el=document.getElementById('qsKzAge'); if(!el) return;
+  if(!_kzAllowed){ el.style.display='none'; return; }
+  const ts=(dbst||{}).article_ts || (dbst||{}).complex_ts;
+  el.style.display='';
+  if(!ts){ el.textContent='· 아직 수집 안 함 — [콕집 갱신]을 눌러 주세요'; el.style.color='var(--warn)'; return; }
+  const days=Math.floor((Date.now()/1000 - Number(ts))/86400);
+  const when = days<=0 ? '오늘' : `${days}일 전`;
+  el.textContent=`· 마지막 수집 ${when}`;
+  el.style.color = days>=7 ? 'var(--warn)' : 'var(--dim)';
+}
+
 async function _ensureKoczipTab(){
   if(_kzAllowed!=null) return _kzAllowed;
   try{
@@ -2528,6 +2570,7 @@ async function _ensureKoczipTab(){
     const mix=document.getElementById('qsKzMixWrap'), btn=document.getElementById('qsKzScanBtn');
     if(mix) mix.style.display=_kzAllowed?'inline-flex':'none';
     if(btn) btn.style.display=_kzAllowed?'':'none';
+    _renderKoczipAge(m.db);
     const sel=document.getElementById('kzSido');
     if(sel && !sel.options.length && m.sido_opts){
       m.sido_opts.forEach(o=>{ const el=document.createElement('option'); el.value=o.code; el.textContent=o.label; sel.appendChild(el); });
@@ -2556,6 +2599,7 @@ async function scanKoczipListings(){
     else {
       const s=d.stats||{};
       if(st) st.textContent=`콕집 갱신 · 단지 ${s.complexes||0} · 할인 ${s.articles_discount||0} · 특가 ${s.articles_special||0}`;
+      _renderKoczipAge({article_ts: Date.now()/1000});
       await loadKoczipListings(); renderQuicksale();
     }
   }catch(e){ if(st) st.textContent='콕집 스캔 실패'; }
@@ -2656,6 +2700,16 @@ async function refreshQuicksale(){
   btn.disabled=false; btn.textContent=o;
 }
 const _eok = n => (n==null||n<=0)?'–':(n/10000).toFixed(1)+'억';
+/** 매물 가격 표기. 지역평단 근사는 **그 매물의 호가가 아니므로** 반드시 그렇게 밝힌다.
+ *  청약·재건축은 호가가 없어 지역 평단가×기준평으로 근사한다 — 이걸 실제 가격처럼
+ *  보여주면 '예산 내'라는 표시가 거짓이 된다. */
+function _priceLabel(L, fmt){
+  const f = fmt || _eok;
+  const v = L && (L['추정가'] ?? L['총액']);
+  if (L && L['예산확인필요']) return '가격 미정';
+  const s = f(v);
+  return (L && L['가격출처']==='지역평단추정') ? `${s} <span style="font-size:10px;opacity:.75">(지역평균 추정)</span>` : s;
+}
 function renderQuicksale(){
   if(_qsMode==='할인율'){ renderKoczipDeals(); return; }
   renderMtFilter('qsMtFilter', renderQuicksale);
@@ -3204,7 +3258,7 @@ function renderAiReport(d, eok){
     + ` = 대출 ${eok(z['대출']??dt['대출'])}(실효 LTV ${Math.round(((z['실효LTV']??dt['실효LTV'])||0)*100)}%) + 자기자본 ${eok(z['자기자본투입']??dt['자기자본투입'])}.`);
   if(topL.length){
     lines.push(`통합 매물에서 고른 후보 ${listings.length}건 — 상위: `
-      + topL.map(L=>`<b>${L['단지명']}</b>(${L['유형']}·${L['시그널']==='STRONG_BUY'?'강력매수':'매수'}·${eok(L['추정가']??L['총액'])})`).join(', ') + `.`);
+      + topL.map(L=>`<b>${L['단지명']}</b>(${L['유형']}·${L['시그널']==='STRONG_BUY'?'강력매수':'매수'}·${_priceLabel(L, eok)})`).join(', ') + `.`);
   } else if(top3.length){
     lines.push(`지역 요약 상위: ` + top3.map(c=>`<b>${c.region}</b>(${c['시그널']==='STRONG_BUY'?'강력매수':'매수'})`).join(', ') + `.`);
   }
@@ -3240,6 +3294,15 @@ function toast(msg){
   t.textContent=msg; t.style.opacity='1';
   clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';},3200);
 }
+/** 이벤트 이름 — 정본은 서버 `db._ALLOWED_EVENTS` 다. 여기 없는 이름은 서버가 버린다.
+ *  상수로 두는 이유는 오타 방지가 아니라(그건 서버가 한다) **어떤 이벤트가 있는지 한눈에 보이게** 하기 위함. */
+const EVENTS = {
+  SIGNUP:'signup', PROFILE_COMPLETE:'profile_complete', FAV_ADD:'fav_add',
+  REPORT_OPEN:'report_open', NICK_ASK:'nick_ask', NBHD_OPEN:'nbhd_open',
+  LISTING_DETAIL_OPEN:'listing_detail_open',
+  WEEKLY_OPEN:'weekly_open', BUYING_POWER_CONFIRM:'buying_power_confirm',
+  EVIDENCE_OPEN:'evidence_open',
+};
 /** 퍼널 이벤트 — 실패해도 UX 방해 없음(fire-and-forget). */
 function track(name, props){
   try{
@@ -4121,17 +4184,42 @@ function renderHistPanel(){
     <span style="color:var(--dim);font-size:11px">차트의 색 구간 = 초록(매수)·빨강(매도). 버튼을 누르면 구간별 근거가 표로 뜹니다</span></div>`;
   p.classList.add('open');
 }
-let _btCache=null;
+// ===== 시그널 성적표 =====
+// 규칙: 적중률을 **혼자 내보내지 않는다.** 같은 기간 전체 지역이 얻은 값(시장평균)과
+// 그 차이(초과)를 항상 나란히 둔다. base rate 없는 비율은 무정보일 수 있다.
+let _btCache=null, _btErr=null;
+// 성적표 라벨 — 'SELL' 은 화면의 SELL_RISK 가 아니라 '4주 모멘텀 하락' 이다. 이름으로 구분한다.
+const _BT_LAB={STRONG_BUY:'강력매수',BUY:'매수',SELL:'매매 하락 지속'};
+const _btCol=s=>SIGCOLOR[s==='SELL'?'SELL_RISK':s]||SIGCOLOR.NEUTRAL;
+
+/** 성적표 데이터 로드. 실패를 삼키지 않고 사유를 남긴다. */
+async function loadBacktest(){
+  if(_btCache) return _btCache;
+  _btErr=null;
+  try{
+    const r=await fetch('/api/backtest');
+    if(!r.ok){ _btErr = r.status===401 ? '로그인이 필요합니다.' : `불러오지 못했습니다 (HTTP ${r.status})`; return null; }
+    _btCache=await r.json();
+    return _btCache;
+  }catch(e){ _btErr='네트워크 오류로 성적표를 불러오지 못했습니다.'; return null; }
+}
+
+// 소수 1자리 고정 — 77% 와 86.3% 가 섞이면 자릿수가 어긋나 표가 안 읽힌다
+function _btPct(v){ return (v===null||v===undefined)?'–':`${Number(v).toFixed(1)}%`; }
+function _btPp(v){ return (v===null||v===undefined)?'–':`${v>0?'+':''}${Number(v).toFixed(1)}%p`; }
+
 async function backtestBanner(){
-  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){ return ''; } }
-  const bt=_btCache; if(!bt||!bt.by_signal||!bt.by_signal.length) return '';
-  const lab={STRONG_BUY:'강력매수',BUY:'매수',SELL:'매도'}, col={STRONG_BUY:'#16a34a',BUY:'#22c55e',SELL:'#dc2626'};
-  const cards=bt.by_signal.map(s=>`<div style="flex:1;background:${col[s.signal]}14;border:1px solid ${col[s.signal]}55;border-radius:10px;padding:9px 12px">
-    <div style="font-size:12px;color:${col[s.signal]};font-weight:700">${lab[s.signal]||s.signal}</div>
-    <div style="font-size:23px;font-weight:800;line-height:1.1">${s['적중률']??'–'}<span style="font-size:13px;font-weight:600">%</span></div>
-    <div style="font-size:11px;color:var(--dim)">${s['구간수'].toLocaleString()}구간 · 기간중 ${s['기간중평균']>0?'+':''}${s['기간중평균']}%</div></div>`).join('');
+  const bt=await loadBacktest();
+  if(!bt||!bt.by_signal||!bt.by_signal.length) return '';
+  const cards=bt.by_signal.map(s=>{
+    const c=_btCol(s.signal);
+    return `<div style="flex:1;background:${c}14;border:1px solid ${c}55;border-radius:10px;padding:9px 12px">
+    <div style="font-size:12px;color:${c};font-weight:700">${_BT_LAB[s.signal]||s.signal}</div>
+    <div style="font-size:23px;font-weight:800;line-height:1.1">${_btPct(s['적중률'])}</div>
+    <div style="font-size:11px;color:var(--dim)">같은 기간 시장 ${_btPct(s['시장평균'])} · 초과 <b style="color:var(--txt)">${_btPp(s['초과'])}</b></div></div>`;
+  }).join('');
   return `<div style="margin-bottom:13px">
-    <div style="font-size:12px;color:var(--dim);margin-bottom:6px" title="${bt['설명']||''}"><b style="color:var(--txt)">전체 지역 시그널 적중률</b> — 과거 모든 구간 기준 (매수=이후 12주 상승 / 매도=하락이면 적중)</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:6px" title="${bt['설명']||''}"><b style="color:var(--txt)">전체 지역 시그널 적중률</b> — 적중률만 보지 말고 <b style="color:var(--txt)">초과</b>를 보세요</div>
     <div style="display:flex;gap:8px">${cards}</div></div>`;
 }
 // ===== 온보딩 아하 모먼트 — "내 예산이면 지금 여기" =====
@@ -4158,25 +4246,50 @@ async function renderAha(){
     el.style.display='block';
   }catch(e){ el.style.display='none'; }
 }
-async function renderScoreboard(){
-  // 성적표는 footer '📊 시그널 성적표' 버튼 → openScoreboard() 다이얼로그로. 여기선 캐시만 미리 로드.
-  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){} }
-}
+// 예전엔 여기서 성적표를 미리 로드했다. 모달용 데이터를 탭 진입마다 당기는 건 순손실이라 뺐다.
+// (openScoreboard 가 필요할 때 직접 로드한다)
+async function renderScoreboard(){}
+
 async function openScoreboard(){
-  if(!_btCache){ try{ _btCache=await (await fetch('/api/backtest')).json(); }catch(e){ return; } }
-  const bt=_btCache; if(!bt||!bt.by_signal) return;
-  const lab={STRONG_BUY:'강력매수',BUY:'매수',SELL:'매도'}, col={STRONG_BUY:'#16a34a',BUY:'#22c55e',SELL:'#dc2626'};
-  const rows=bt.by_signal.map(s=>`<tr style="border-bottom:1px solid var(--line)">
-    <td style="padding:10px 6px"><span style="color:${col[s.signal]};font-weight:700">${lab[s.signal]||s.signal}</span></td>
-    <td style="padding:10px 6px;text-align:right;font-weight:800;font-size:16px">${s['적중률']??'–'}%</td>
-    <td style="padding:10px 6px;text-align:right;color:var(--dim)">${(s['평가수']??0).toLocaleString()}</td>
-    <td style="padding:10px 6px;text-align:right;color:${(s['기간중평균']||0)>=0?'#16a34a':'#dc2626'}">${s['기간중평균']>0?'+':''}${s['기간중평균']??'–'}%</td>
-    <td style="padding:10px 6px;text-align:right;color:var(--dim)">${s['이후12주평균']>0?'+':''}${s['이후12주평균']??'–'}%</td></tr>`).join('');
-  document.getElementById('scoreBody').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">시그널</th><th style="text-align:right;padding:6px">적중률</th><th style="text-align:right;padding:6px">평가구간</th><th style="text-align:right;padding:6px">기간중평균</th><th style="text-align:right;padding:6px">이후12주</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <div style="font-size:11px;color:var(--dim);margin-top:12px">기준일 ${bt['기준일']||''} · <b>적중률</b>=신호 방향이 이후 12주에 실현된 비율 · <b>기간중</b>=신호 구간 내 누적 변화 · <b>이후12주</b>=구간 종료 후 12주 변화</div>`;
-  document.getElementById('scoreDlg').showModal();
+  const body=document.getElementById('scoreBody'), dlg=document.getElementById('scoreDlg');
+  if(!body||!dlg) return;
+  body.innerHTML=`<div style="font-size:13px;color:var(--dim);padding:10px 0">성적표를 불러오는 중…</div>`;
+  dlg.showModal();                                  // 먼저 연다 — 무반응이 가장 나쁘다
+  const bt=await loadBacktest();
+  if(!bt||!bt.by_signal){
+    body.innerHTML=`<div style="font-size:13px;color:var(--dim);padding:10px 0;line-height:1.6">
+      ${_btErr||'성적표를 불러오지 못했습니다.'}<br>
+      <span class="btn" style="margin-top:10px;padding:5px 12px" onclick="_btCache=null;openScoreboard()">다시 시도</span></div>`;
+    return;
+  }
+  const rows=bt.by_signal.map(s=>{
+    const c=_btCol(s.signal), ex=s['초과'];
+    return `<tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:10px 6px"><span style="color:${c};font-weight:700">${_BT_LAB[s.signal]||s.signal}</span></td>
+    <td style="padding:10px 6px;text-align:right;font-weight:800;font-size:16px;font-variant-numeric:tabular-nums">${_btPct(s['적중률'])}</td>
+    <td style="padding:10px 6px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums">${_btPct(s['시장평균'])}</td>
+    <td style="padding:10px 6px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${(ex||0)>0?'var(--success)':'var(--danger)'}">${_btPp(ex)}</td>
+    <td class="bt-aux" style="padding:10px 6px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums">${(s['평가수']??0).toLocaleString()}</td>
+    <td class="bt-aux" style="padding:10px 6px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums">${s['이후12주평균']>0?'+':''}${s['이후12주평균']??'–'}%</td></tr>`;
+  }).join('');
+  // "근거가 증명되는"이 카피인지 기능인지 — 성적표를 실제로 여는 사람이 있는지 잰다.
+  // (로그아웃 상태에선 uid 가 없어 서버가 스킵한다. 그건 의도된 동작이다)
+  track(EVENTS.EVIDENCE_OPEN, {surface:'scoreboard'});
+  const notes=(bt['주의']||[]).map(t=>`<li style="margin-bottom:4px">${t}</li>`).join('');
+  body.innerHTML=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:var(--dim);font-size:11px">
+      <th style="text-align:left;padding:6px">시그널</th>
+      <th style="text-align:right;padding:6px">적중률</th>
+      <th style="text-align:right;padding:6px">같은 기간 시장</th>
+      <th style="text-align:right;padding:6px">초과</th>
+      <th class="bt-aux" style="text-align:right;padding:6px">평가구간</th>
+      <th class="bt-aux" style="text-align:right;padding:6px">이후12주</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <div style="font-size:11px;color:var(--dim);margin-top:12px;line-height:1.6">
+      기준일 ${bt['기준일']||''} · <b>적중률</b>=신호 방향이 이후 12주에 실현된 비율 ·
+      <b>같은 기간 시장</b>=동일 날짜에 전체 지역이 같은 기준으로 얻은 값 ·
+      <b>초과</b>=둘의 차이. <b style="color:var(--txt)">초과가 시그널의 실제 기여분입니다.</b>
+      <ul style="margin:9px 0 0;padding-left:17px">${notes}</ul></div>`;
 }
 // ===== 단지 deep-dive =====
 function naverBtn(cno){
@@ -4930,7 +5043,35 @@ async function importCsv(input){
   input.value=''; alert(`${r.added}건 추가됨`); loadAuction();
 }
 async function delListing(id){ await fetch('/api/auction/listings/'+id, {method:'DELETE'}); loadAuction(); }
-function openAdmin(){ if(!_isAdmin){ toast('관리자 권한이 필요합니다'); return; } document.getElementById('adminStatus').textContent=''; document.getElementById('adminDlg').showModal(); loadAdminPolicy(); }
+function openAdmin(){ if(!_isAdmin){ toast('관리자 권한이 필요합니다'); return; } document.getElementById('adminStatus').textContent=''; document.getElementById('adminDlg').showModal(); loadAdminPolicy(); loadAdminEvents(); }
+
+/** 퍼널 이벤트 집계. 심어만 두고 보지 않으면 계측이 아니다 —
+ *  이 화면이 없어서 events 테이블이 7종을 적재하고도 아무도 안 봤다. */
+async function loadAdminEvents(){
+  const el=document.getElementById('evList'); if(!el) return;
+  const days=+(document.getElementById('evDays')||{}).value || 30;
+  el.textContent='불러오는 중…';
+  let d;
+  try{
+    const r=await fetch(`/api/admin/events?days=${days}`);
+    d=await r.json();
+    if(!r.ok || d.ok===false) throw new Error(d.error||`HTTP ${r.status}`);
+  }catch(e){ el.innerHTML=`<span style="color:var(--dim)">불러오지 못했습니다 (${e.message})</span>`; return; }
+  const counts=d.counts||[];
+  if(!counts.length){ el.innerHTML=`<span style="color:var(--dim)">최근 ${days}일 기록 없음</span>`; return; }
+  // 심어는 뒀는데 한 건도 안 들어온 이벤트가 진짜 정보다 — 0 건도 같이 보여준다.
+  const got=new Set(counts.map(c=>c.name));
+  const zero=Object.values(EVENTS).filter(n=>!got.has(n));
+  const max=Math.max(...counts.map(c=>c.count), 1);
+  el.innerHTML=counts.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+      <span style="min-width:150px;font-family:ui-monospace,monospace;font-size:11px">${c.name}</span>
+      <span style="flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+        <span style="display:block;height:100%;width:${Math.round(c.count/max*100)}%;background:var(--accent)"></span></span>
+      <b style="min-width:44px;text-align:right;font-variant-numeric:tabular-nums">${c.count.toLocaleString()}</b>
+    </div>`).join('')
+    + (zero.length?`<div style="margin-top:8px;padding-top:7px;border-top:1px solid var(--line);color:var(--warn);font-size:11px">
+        0건: ${zero.join(' · ')}</div>`:'');
+}
 function closeAdmin(){ document.getElementById('adminDlg').close(); }
 function _adminStatus(t){ const e=document.getElementById('adminStatus'); if(e) e.textContent=t; }
 async function loadAdminPolicy(){
