@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import time
+
 import os
 from pathlib import Path
 
@@ -17,7 +19,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from realty_signal import store
+from realty_signal import db, store
 from realty_signal.brain import snapshots
 from realty_signal.ingest import kb_weekly
 from realty_signal.signals.engine import SignalConfig, evaluate
@@ -48,6 +50,10 @@ def fetch():
     """KB 데이터허브에서 최신 지표를 자동 수집해 캐시 갱신 (엑셀 불필요)."""
     console.print("[dim]KB 데이터허브 수집 중…[/dim]")
     kb = store.fetch()
+    # 수집 경로가 CLI 든 서버든 '마지막 수집 시각'은 한 곳에 남긴다 —
+    # 예전엔 서버(_do_refresh)만 기록해, launchd 로 매주 받아도 신선도 패널이
+    # '47일 전'이라고 표시했다(2026-09-06 조사).
+    db.kv_set("last_kb_fetch", time.time())
     console.print(f"[green]수집 완료[/green] → {store.CACHE_FILE} "
                   f"(지역 {len(kb.regions)} · 지표 {len(kb.metrics)} · 최신 {kb.last_date.date()})")
 
@@ -74,6 +80,7 @@ def watch(
 ):
     """최신 지표 수집 → 지난주 대비 등급 변화 지역 알림 + 스냅샷 갱신."""
     kb = store.fetch()
+    db.kv_set("last_kb_fetch", time.time())   # fetch 와 같은 이유 — 수집 시각은 한 곳에
     df = evaluate(kb, SignalConfig(), store.load_supply())
     as_of = str(kb.last_date.date())
     prev = snapshots.load()

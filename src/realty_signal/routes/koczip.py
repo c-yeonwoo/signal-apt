@@ -19,11 +19,26 @@ _CACHE_PREFIX = "koczip:qd:"
 _LISTING_MAX_AGE = 86400  # 바로집 레이더와 동일(1일)
 
 
+# 2026-09-06 — koczip 관련 기능 전면 중단.
+# 운영자가 403 과 함께 "무단 크롤링·스크래핑·복제·저장·재배포 금지" 를 명시했다.
+# 수집만 막고 저장분을 계속 보여주면 **재배포**가 계속된다. 그래서 조회도 함께 닫는다.
+_GONE = {
+    "ok": False,
+    "error": "koczip_disabled",
+    "message": (
+        "콕집 연동을 중단했습니다. 서비스 운영자가 무단 수집·저장·재배포를 명시적으로 "
+        "금지하고 접근을 차단했습니다(2026-09-06). 서면 이용 허락 없이는 재개하지 않습니다."
+    ),
+}
+
+
+def _disabled() -> JSONResponse:
+    return JSONResponse(_GONE, status_code=410)
+
+
 def _allow_personal(request: Request) -> JSONResponse | None:
-    """prod 에서는 admin만, 로컬은 로그인 유저면 OK."""
-    if not config.is_prod():
-        return None
-    return deps.require_admin(request)
+    """더 이상 통과시키지 않는다. 권한 문제가 아니라 **이용 권리** 문제다."""
+    return _disabled()
 
 
 def _cache_key(params: dict) -> str:
@@ -117,6 +132,12 @@ def quick_deals(
 
 @router.get("/api/koczip/meta")
 def koczip_meta(request: Request):
+    # 프론트는 이 응답의 allowed 로 탭·버튼 노출을 정한다. False 를 주면 화면에서 사라진다.
+    return {"ok": True, "allowed": False, "disabled": True,
+            "sido_opts": [], "db": {}, "note": _GONE["message"]}
+
+
+def _koczip_meta_legacy(request: Request):
     allowed = _allow_personal(request) is None
     st = db.koczip_stats() if allowed else {}
     return {

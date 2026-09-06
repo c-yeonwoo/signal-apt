@@ -121,7 +121,9 @@ def freshness():
     ]
     from realty_signal.ingest import pipeline
     return {"기준일": last_date, "now": int(__import__("time").time()),
-            "sources": sources, "pipeline": pipeline.cache_health()}
+            "sources": sources, "pipeline": pipeline.cache_health(),
+            # 수집이 멈췄을 때 '왜' 를 화면이 말할 수 있어야 한다. 로그를 볼 수 없는 사용자도 본다.
+            "kb_fetch": app_api.kb_fetch_health()}
 
 
 @router.get("/api/signals")

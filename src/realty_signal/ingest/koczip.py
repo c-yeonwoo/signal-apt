@@ -22,16 +22,27 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+# ══════════════════════════════════════════════════════════════════════════
+# 2026-09-06 — 수집 영구 중단
+#
+# koczip.com 이 전 지역 요청에 HTTP 403 과 함께 다음을 명시적으로 고지했다:
+#   "KOCZIP — RESERVATION OF RIGHTS / 무단 이용 금지
+#    이 서비스의 콘텐츠·데이터·소스코드에 대한 무단 크롤링, 스크래핑, 복제, 저장, 재배포 …"
+#
+# 운영자가 기술적 차단(403)과 권리 유보 고지를 **동시에** 했다. 재시도·우회 대상이 아니다.
+# 이전에 이 클라이언트는 브라우저 User-Agent·Origin·Referer 를 위장했는데, 명시적 거부
+# 이후 그런 접근은 더더욱 해서는 안 된다. 그래서 헤더째 지우고 네트워크 호출을 막는다.
+#
+# 되살리려면: koczip 과 **서면 이용 허락**을 받은 뒤 이 플래그를 끄고 정식 API 로 다시 짠다.
+# 그 전에는 이 파일의 어떤 함수도 외부 요청을 보내지 않는다.
+# ══════════════════════════════════════════════════════════════════════════
+DISABLED = True
+DISABLED_REASON = (
+    "koczip.com 이 무단 크롤링·스크래핑·저장·재배포를 명시적으로 금지하고 "
+    "요청을 403 으로 차단했습니다(2026-09-06). 서면 이용 허락 없이는 수집하지 않습니다."
+)
+
 BASE = "https://api.koczip.com"
-_HDR = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json",
-    "Origin": "https://koczip.com",
-    "Referer": "https://koczip.com/quick-deals",
-}
 
 SIDO_OPTS = [
     ("", "전국"),
@@ -54,8 +65,9 @@ SIDO_OPTS = [
     ("5000000000", "제주"),
 ]
 
-# 스캔 한도 — 저빈도·개인용
+# 스캔 한도 — 수집이 중단됐으므로 지금은 쓰이지 않지만 시그니처 유지를 위해 남긴다
 MAX_COMPLEX_PER_REGION = 30
+
 SLEEP_SEC = 0.12
 SPECIAL_LIMIT = 200
 BBOX_DLAT = 0.045
@@ -66,14 +78,22 @@ class KoczipError(RuntimeError):
     """콕집 API 거부·파싱 실패."""
 
 
+class KoczipDisabled(KoczipError):
+    """수집이 영구 중단됐다. **재시도 대상이 아니다** — 권리 보유자가 명시적으로 거부했다."""
+
+
+
 def _get(path: str, params: dict | None = None, *, timeout: float = 45) -> dict:
+    # 모든 외부 요청의 단일 관문. 여기서 막으면 이 모듈의 어떤 경로도 네트워크를 타지 않는다.
+    if DISABLED:
+        raise KoczipDisabled(DISABLED_REASON)
     q = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
     url = f"{BASE}{path}"
     if q:
         url = f"{url}?{urllib.parse.urlencode(q)}"
     try:
         raw = urllib.request.urlopen(  # noqa: S310
-            urllib.request.Request(url, headers=_HDR), timeout=timeout
+            urllib.request.Request(url), timeout=timeout
         ).read()
     except urllib.error.HTTPError as e:
         body = e.read()[:200].decode("utf-8", errors="replace")
