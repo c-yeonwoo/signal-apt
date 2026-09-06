@@ -286,7 +286,37 @@ async def lifespan(app: FastAPI):
     brief.cancel()
 
 
-app = FastAPI(title="realty-signal-map", lifespan=lifespan)
+class SafeJSONResponse(JSONResponse):
+    """NaN·Infinity 를 `null` 로 직렬화한다.
+
+    기본 `JSONResponse` 는 `allow_nan=False` 라 NaN 이 하나만 섞여도
+    **엔드포인트 전체가 500** 이 된다(2026-09-06 prod 실측:
+    `ValueError: Out of range float values are not JSON compliant: nan`).
+
+    값 하나가 비었다고 화면 전체를 죽이는 건 어떤 경우에도 잘못된 트레이드오프다.
+    누락은 `null` 로 내보내고 화면이 '–' 로 처리하게 둔다.
+    **이건 안전망이지 면죄부가 아니다** — NaN 이 나오는 계산부는 따로 고친다.
+    """
+
+    def render(self, content) -> bytes:
+        import json as _json
+        import math as _math
+
+        def clean(o):
+            if isinstance(o, float):
+                return None if (_math.isnan(o) or _math.isinf(o)) else o
+            if isinstance(o, dict):
+                return {k: clean(v) for k, v in o.items()}
+            if isinstance(o, (list, tuple)):
+                return [clean(v) for v in o]
+            return o
+
+        return _json.dumps(clean(content), ensure_ascii=False, allow_nan=False,
+                           separators=(",", ":")).encode("utf-8")
+
+
+app = FastAPI(title="realty-signal-map", lifespan=lifespan,
+              default_response_class=SafeJSONResponse)
 
 from realty_signal.routes.auth import router as auth_router  # noqa: E402
 from realty_signal.routes.alerts import router as alerts_router  # noqa: E402
@@ -302,19 +332,19 @@ from realty_signal.routes.brain import router as brain_router  # noqa: E402
 from realty_signal.routes.home import router as home_router  # noqa: E402
 from realty_signal.routes.koczip import router as koczip_router  # noqa: E402
 
-app.include_router(auth_router)
-app.include_router(alerts_router)
-app.include_router(advisor_router)
-app.include_router(market_router)
-app.include_router(auction_router)
-app.include_router(personal_router)
-app.include_router(complex_router)
-app.include_router(redev_router)
-app.include_router(strategy_router)
-app.include_router(geo_router)
-app.include_router(brain_router)
-app.include_router(home_router)
-app.include_router(koczip_router)
+app.include_router(auth_router, default_response_class=SafeJSONResponse)
+app.include_router(alerts_router, default_response_class=SafeJSONResponse)
+app.include_router(advisor_router, default_response_class=SafeJSONResponse)
+app.include_router(market_router, default_response_class=SafeJSONResponse)
+app.include_router(auction_router, default_response_class=SafeJSONResponse)
+app.include_router(personal_router, default_response_class=SafeJSONResponse)
+app.include_router(complex_router, default_response_class=SafeJSONResponse)
+app.include_router(redev_router, default_response_class=SafeJSONResponse)
+app.include_router(strategy_router, default_response_class=SafeJSONResponse)
+app.include_router(geo_router, default_response_class=SafeJSONResponse)
+app.include_router(brain_router, default_response_class=SafeJSONResponse)
+app.include_router(home_router, default_response_class=SafeJSONResponse)
+app.include_router(koczip_router, default_response_class=SafeJSONResponse)
 
 
 def _signal_config() -> SignalConfig:
