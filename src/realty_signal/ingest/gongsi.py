@@ -7,6 +7,8 @@ VWorld 키는 도메인 잠금 → domain 파라미터 필요(config.vworld_doma
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import urllib.parse
 import urllib.request
 
@@ -22,7 +24,7 @@ def fetch_bbox(lat: float, lng: float, key: str, domain: str = "localhost", d: f
     })
     try:
         raw = urllib.request.urlopen(f"{_URL}?{q}", timeout=15).read()  # noqa: S310
-        feats = json.loads(raw).get("features", [])
+        feats = jsonx.loads(raw).get("features", [])
     except Exception:
         return []
     out = []

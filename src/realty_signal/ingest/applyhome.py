@@ -10,6 +10,8 @@ odcloud ApplyhomeInfoDetailSvc:
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import re
 import urllib.parse
 import urllib.request
@@ -20,7 +22,7 @@ _HDR = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
 
 def _get(ep: str, params: dict) -> dict:
     url = _BASE + ep + "?" + urllib.parse.urlencode(params, safe=":[]")
-    return json.loads(urllib.request.urlopen(  # noqa: S310
+    return jsonx.loads(urllib.request.urlopen(  # noqa: S310
         urllib.request.Request(url, headers=_HDR), timeout=30).read())
 
 

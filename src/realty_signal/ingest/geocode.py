@@ -10,6 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from realty_signal import jsonx
 from realty_signal import db
 
 _URL = "https://nominatim.openstreetmap.org/search"
@@ -24,7 +25,7 @@ def _query_osm(q: str) -> tuple[float, float] | None:
     _last[0] = time.time()
     url = _URL + "?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1, "countrycodes": "kr"})
     try:
-        data = json.loads(urllib.request.urlopen(  # noqa: S310
+        data = jsonx.loads(urllib.request.urlopen(  # noqa: S310
             urllib.request.Request(url, headers={"User-Agent": _UA}), timeout=15).read())
         if data:
             return float(data[0]["lat"]), float(data[0]["lon"])

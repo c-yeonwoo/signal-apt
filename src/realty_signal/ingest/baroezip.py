@@ -10,6 +10,8 @@ baroezip이 집계·노출한다. 재배포/상업이용 금지(부정경쟁방�
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import urllib.parse
 import urllib.request
 
@@ -35,7 +37,7 @@ def fetch_market(lat1: float, lng1: float, lat2: float, lng2: float,
         raw = urllib.request.urlopen(  # noqa: S310
             urllib.request.Request(
                 f"{_URL}?{urllib.parse.urlencode(q)}", headers=_HDR), timeout=25).read()
-        data = json.loads(raw).get("data", [])
+        data = jsonx.loads(raw).get("data", [])
     except Exception:
         return []
 

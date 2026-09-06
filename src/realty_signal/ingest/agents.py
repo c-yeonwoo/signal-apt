@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import urllib.parse
 import urllib.request
 
@@ -20,7 +22,7 @@ def search_agents(lat: float, lng: float, key: str, radius: int = 1000, size: in
     req = urllib.request.Request(_URL + "?" + urllib.parse.urlencode(params),
                                  headers={"Authorization": f"KakaoAK {key}"})
     try:
-        data = json.loads(urllib.request.urlopen(req, timeout=10).read())  # noqa: S310
+        data = jsonx.loads(urllib.request.urlopen(req, timeout=10).read())  # noqa: S310
     except Exception:
         return []
     out = []

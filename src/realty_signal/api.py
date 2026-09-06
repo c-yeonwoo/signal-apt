@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from realty_signal import jsonx
 from realty_signal import auction, auth, buying_power, config, db, store
 from realty_signal.signals.engine import SignalConfig
 
@@ -286,7 +287,26 @@ async def lifespan(app: FastAPI):
     brief.cancel()
 
 
-app = FastAPI(title="realty-signal-map", lifespan=lifespan)
+class SafeJSONResponse(JSONResponse):
+    """NaN·Infinity 를 `null` 로 직렬화한다.
+
+    기본 `JSONResponse` 는 `allow_nan=False` 라 NaN 이 하나만 섞여도
+    **엔드포인트 전체가 500** 이 된다(2026-09-06 prod 실측:
+    `ValueError: Out of range float values are not JSON compliant: nan`).
+
+    값 하나가 비었다고 화면 전체를 죽이는 건 어떤 경우에도 잘못된 트레이드오프다.
+    누락은 `null` 로 내보내고 화면이 '–' 로 처리하게 둔다.
+    **이건 안전망이지 면죄부가 아니다** — NaN 이 나오는 계산부는 따로 고친다.
+    """
+
+    def render(self, content) -> bytes:
+        from realty_signal import jsonx
+
+        return jsonx.dumps(content, separators=(",", ":")).encode("utf-8")
+
+
+app = FastAPI(title="realty-signal-map", lifespan=lifespan,
+              default_response_class=SafeJSONResponse)
 
 from realty_signal.routes.auth import router as auth_router  # noqa: E402
 from realty_signal.routes.alerts import router as alerts_router  # noqa: E402
@@ -302,19 +322,19 @@ from realty_signal.routes.brain import router as brain_router  # noqa: E402
 from realty_signal.routes.home import router as home_router  # noqa: E402
 from realty_signal.routes.koczip import router as koczip_router  # noqa: E402
 
-app.include_router(auth_router)
-app.include_router(alerts_router)
-app.include_router(advisor_router)
-app.include_router(market_router)
-app.include_router(auction_router)
-app.include_router(personal_router)
-app.include_router(complex_router)
-app.include_router(redev_router)
-app.include_router(strategy_router)
-app.include_router(geo_router)
-app.include_router(brain_router)
-app.include_router(home_router)
-app.include_router(koczip_router)
+app.include_router(auth_router, default_response_class=SafeJSONResponse)
+app.include_router(alerts_router, default_response_class=SafeJSONResponse)
+app.include_router(advisor_router, default_response_class=SafeJSONResponse)
+app.include_router(market_router, default_response_class=SafeJSONResponse)
+app.include_router(auction_router, default_response_class=SafeJSONResponse)
+app.include_router(personal_router, default_response_class=SafeJSONResponse)
+app.include_router(complex_router, default_response_class=SafeJSONResponse)
+app.include_router(redev_router, default_response_class=SafeJSONResponse)
+app.include_router(strategy_router, default_response_class=SafeJSONResponse)
+app.include_router(geo_router, default_response_class=SafeJSONResponse)
+app.include_router(brain_router, default_response_class=SafeJSONResponse)
+app.include_router(home_router, default_response_class=SafeJSONResponse)
+app.include_router(koczip_router, default_response_class=SafeJSONResponse)
 
 
 def _signal_config() -> SignalConfig:
@@ -2666,7 +2686,7 @@ def quicksale_refresh(data: dict = Body(default={})):
     listings = _radar_scan(regions, kind="급매")
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
-    QUICKSALE_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    QUICKSALE_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 
 
@@ -2676,7 +2696,7 @@ def certified_refresh(data: dict = Body(default={})):
     listings = _radar_scan(regions, kind="찐매물")
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
-    CERTIFIED_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    CERTIFIED_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 
 
