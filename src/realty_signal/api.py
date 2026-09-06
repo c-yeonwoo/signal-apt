@@ -192,17 +192,15 @@ async def _auto_refresh_loop():
                 await asyncio.to_thread(backup.run_backup)
         except Exception as e:
             log.error("백업 실패: %s", e)
-        try:  # 급매·찐매물·콕집 — 하루 1회(캐시 mtime/버전·DB ts 기준)
+        try:  # 급매·찐매물 — 하루 1회(캐시 mtime/버전 기준)
             if _quicksale_stale():
                 log.warning("급매 캐시 만료 — 일일 스캔")
                 await asyncio.to_thread(lambda: quicksale_refresh({}))
             if _certified_stale():
                 log.warning("찐매물 캐시 만료 — 일일 스캔")
                 await asyncio.to_thread(lambda: certified_refresh({}))
-            # 콕집 자동 수집은 2026-09-06 제거했다 — 운영자가 403 과 함께
-            # 무단 크롤링·저장·재배포 금지를 명시했다(ingest/koczip.py 참조).
         except Exception as e:
-            log.error("급매/찐매물/콕집 일일 갱신 실패: %s", e)
+            log.error("급매/찐매물 일일 갱신 실패: %s", e)
         # 실패했으면 하루를 기다리지 않는다 — 일시적 장애로 한 주를 통째로 잃지 않도록
         await asyncio.sleep(_REFRESH_RETRY_HOURS * 3600 if retry_soon else 86400)
 
@@ -232,7 +230,6 @@ def _seed_if_missing():
             certified_refresh({})
         except Exception as e:  # noqa: BLE001
             log.error("certified 시딩 실패: %s", e)
-    # 콕집 부팅 시딩도 제거(2026-09-06). 수집 자체가 중단돼 호출할 대상이 없다.
     if config.seoul_key():                               # 재건축 워밍(BUY+ 지역)
         try:
             log.warning("재건축 워밍 중(BUY+ 지역)…")
@@ -320,7 +317,6 @@ from realty_signal.routes.strategy import router as strategy_router  # noqa: E40
 from realty_signal.routes.geo import router as geo_router  # noqa: E402
 from realty_signal.routes.brain import router as brain_router  # noqa: E402
 from realty_signal.routes.home import router as home_router  # noqa: E402
-from realty_signal.routes.koczip import router as koczip_router  # noqa: E402
 
 app.include_router(auth_router, default_response_class=SafeJSONResponse)
 app.include_router(alerts_router, default_response_class=SafeJSONResponse)
@@ -334,7 +330,6 @@ app.include_router(strategy_router, default_response_class=SafeJSONResponse)
 app.include_router(geo_router, default_response_class=SafeJSONResponse)
 app.include_router(brain_router, default_response_class=SafeJSONResponse)
 app.include_router(home_router, default_response_class=SafeJSONResponse)
-app.include_router(koczip_router, default_response_class=SafeJSONResponse)
 
 
 def _signal_config() -> SignalConfig:
@@ -1413,34 +1408,6 @@ def _certified_stale() -> bool:
     return _radar_cache_stale(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
 
 
-def _koczip_age_sec() -> float | None:
-    """마지막 콕집 스캔 이후 경과 초. 한 번도 안 했으면 None."""
-    import time
-    st = db.koczip_stats()
-    ts = st.get("article_ts") or st.get("complex_ts")
-    return None if not ts else time.time() - float(ts)
-
-
-def _koczip_stale() -> bool:
-    """콕집 DB가 비었거나 마지막 스캔이 1일 경과면 True (바로집과 동일 TTL).
-
-    **화면 표시·수동 스캔 판정용.** 자동 수집 주기는 `_koczip_auto_due()` 를 쓴다 — 둘은 다르다.
-    """
-    age = _koczip_age_sec()
-    return age is None or age >= _RADAR_MAX_AGE
-
-
-# 자동 수집 주기는 수동 기준(1일)보다 훨씬 길게 잡는다.
-# 콕집은 제3자 사이트를 긁는 개인 확인용 소스라 배포 서버가 매일 자동으로 붙을 이유가 없다.
-# 필요하면 admin 이 `POST /api/koczip/scan` 으로 언제든 즉시 갱신할 수 있다.
-_KOCZIP_AUTO_MAX_AGE = 7 * 86400
-
-
-def _koczip_auto_due() -> bool:
-    """자동 수집을 돌려도 되는가. **비어 있을 때는 자동으로 채우지 않는다** —
-    첫 수집은 admin 이 명시적으로 시작하게 두고, 그 뒤 주 1회만 따라간다."""
-    age = _koczip_age_sec()
-    return age is not None and age >= _KOCZIP_AUTO_MAX_AGE
 
 
 REGION_GEO_FILE = store.CACHE_DIR / "region_geo.json"
@@ -2698,23 +2665,5 @@ def certified_refresh(data: dict = Body(default={})):
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
     CERTIFIED_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
-
-
-def koczip_refresh(data: dict | None = None):
-    """콕집 할인·특가·호가요약 스캔. 바로집과 동일 범위·주기(BUY+∪관심, 1일)."""
-    from realty_signal.ingest import koczip as kz
-
-    data = data or {}
-    regions = data.get("regions") or _scan_regions()
-    if not regions:
-        return {"ok": False, "error": "스캔 대상 지역 없음", "stats": {}}
-    sig = _signal_map()
-
-    def _centroid(region: str):
-        return _region_centroid(region, _code_of(region))
-
-    stats = kz.scan_regions(regions, centroid_fn=_centroid, signal_map=sig)
-    return {"ok": True, "stats": stats, "db": db.koczip_stats(), "regions": len(regions)}
-
 
 
