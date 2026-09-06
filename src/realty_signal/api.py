@@ -38,6 +38,30 @@ _usage_allow = deps.usage_allow
 
 
 _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
+_REFRESH_RETRY_HOURS = 6  # 수집 실패 시 하루를 기다리지 않고 이만큼 뒤 재시도
+
+# 수집 상태 kv 키 — **실패를 화면에서 볼 수 있게 하는 것이 목적이다.**
+# 예전엔 실패가 log.error 로만 남아, prod 컨테이너 로그를 못 보면 2주 내내 실패해도
+# 아무도 몰랐다(2026-09-06 조사: prod 기준일이 8/24 에 13.5일 멈춰 있었다).
+_KB_LAST_ERROR = "kb_fetch_error"      # {"ts","message","consecutive"}
+_KB_LAST_ATTEMPT = "kb_fetch_attempt"  # 마지막 시도 시각(성공·실패 무관)
+
+
+def kb_fetch_health() -> dict:
+    """KB 수집 건강 상태. 로그 없이도 '언제 마지막으로 성공했고 왜 멈췄는지' 가 보여야 한다."""
+    import time
+    last_ok = db.kv_get("last_kb_fetch")
+    attempt = db.kv_get(_KB_LAST_ATTEMPT)
+    err = db.kv_get(_KB_LAST_ERROR) or None
+    now = time.time()
+    return {
+        "last_success_ts": last_ok,
+        "last_success_days": round((now - last_ok) / 86400, 1) if last_ok else None,
+        "last_attempt_ts": attempt,
+        "last_attempt_days": round((now - attempt) / 86400, 1) if attempt else None,
+        "error": err,
+        "failing": bool(err and err.get("consecutive", 0) >= 1),
+    }
 
 
 def _data_age_days() -> float | None:
@@ -132,15 +156,23 @@ async def _auto_refresh_loop():
     import asyncio
     import time
     while True:
+        retry_soon = False
         try:
             last = db.kv_get("last_kb_fetch")
             age_days = (time.time() - last) / 86400 if last else 999
             if age_days >= _REFRESH_EVERY_DAYS:
                 log.warning("마지막 수집 %.1f일 경과 — 자동 갱신 시작", age_days)
+                db.kv_set(_KB_LAST_ATTEMPT, time.time())
                 await asyncio.to_thread(_do_refresh)
+                db.kv_set(_KB_LAST_ERROR, None)      # 성공했으니 실패 기록을 지운다
                 log.warning("자동 갱신 완료")
-        except Exception as e:  # 갱신 실패해도 루프 유지(다음 점검에 재시도)
-            log.error("자동 갱신 실패: %s", e)
+        except Exception as e:  # 갱신 실패해도 루프 유지 — 단 **조용히 실패하지 않는다**
+            prev = db.kv_get(_KB_LAST_ERROR) or {}
+            n = int(prev.get("consecutive") or 0) + 1
+            db.kv_set(_KB_LAST_ERROR, {"ts": time.time(), "message": str(e)[:300],
+                                       "consecutive": n})
+            retry_soon = True
+            log.error("자동 갱신 실패(%d회 연속): %s", n, e)
         try:
             from realty_signal import digest as dig
             last_d = db.kv_get("last_digest_run")
@@ -174,7 +206,8 @@ async def _auto_refresh_loop():
                 await asyncio.to_thread(lambda: koczip_refresh({}))
         except Exception as e:
             log.error("급매/찐매물/콕집 일일 갱신 실패: %s", e)
-        await asyncio.sleep(86400)  # 하루마다 점검
+        # 실패했으면 하루를 기다리지 않는다 — 일시적 장애로 한 주를 통째로 잃지 않도록
+        await asyncio.sleep(_REFRESH_RETRY_HOURS * 3600 if retry_soon else 86400)
 
 
 def _seed_if_missing():

@@ -27,7 +27,14 @@ def weekly_change(request: Request):
     uid = deps.uid(request)
     favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
     try:
-        return weekly.for_user(favs)
+        out = weekly.for_user(favs)
+        # 배너가 "왜 멈췄는지" 를 말하려면 수집 건강 상태가 같이 와야 한다
+        try:
+            from realty_signal import api as app_api
+            out["kb_fetch"] = app_api.kb_fetch_health()
+        except Exception:  # noqa: BLE001 — 부가 정보라 실패해도 본문은 낸다
+            pass
+        return out
     except Exception as e:  # noqa: BLE001
         log.error("주간 변화 계산 실패: %s", e)
         # 실패를 '변화 없음'으로 보이게 하면 고장을 몇 주씩 못 본다

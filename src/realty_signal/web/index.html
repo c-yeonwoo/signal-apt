@@ -1775,6 +1775,27 @@ function _sigMoveRow(s, mine){
     <span style="font-size:13px;font-weight:700;color:${col}">${s.to_ko}</span>
     <span style="margin-left:auto;font-size:11.5px;color:var(--accent)">동네 리포트 →</span></div>`;
 }
+/** KB 수집 지연 배너. **"시장이 조용하다" 와 "우리가 못 받아왔다" 를 절대 섞지 않는다.** */
+function _staleBanner(d){
+  if(!(d.stale_days > 10)) return '';
+  const f = d.kb_fetch || {};
+  const err = f.error;
+  const days = d.stale_days;
+  let why = '';
+  if (err && err.message) {
+    const n = err.consecutive || 1;
+    why = `수집이 <b>${n}회 연속 실패</b>했습니다 — <span style="font-family:ui-monospace,monospace">${String(err.message).slice(0,120)}</span>`;
+  } else if (f.last_success_days != null) {
+    why = `마지막 성공 수집이 <b>${f.last_success_days}일 전</b>입니다.`;
+  } else {
+    why = '수집 기록이 없습니다.';
+  }
+  return `<div style="margin-bottom:10px;padding:9px 12px;background:var(--warn-weak,rgba(180,83,9,.10));
+      border:1px solid var(--sig-watch);border-radius:9px;font-size:12px;color:var(--sig-watch);line-height:1.6">
+    <b>데이터를 ${days}일째 받아오지 못했습니다.</b> 아래 내용은 그만큼 오래된 기준일 기준입니다.<br>
+    <span style="opacity:.9">${why} 시장이 조용한 것과는 다른 상태입니다.</span>
+  </div>`;
+}
 function _moverRow(m){
   const col=m.delta>0?'#16a34a':'#dc2626';
   return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12.5px">
@@ -1818,9 +1839,10 @@ async function _loadWeekly(){
     return;
   }
   const mine=d.mine||[], rest=d.rest||[], movers=d.movers||[], t=d.totals||{};
-  const stale=(d.stale_days>10)
-    ? `<div style="margin-bottom:10px;padding:8px 11px;background:#fef3c7;border:1px solid #fcd34d;border-radius:9px;font-size:12px;color:#92400e">
-         ⚠ KB 데이터가 <b>${d.stale_days}일째</b> 그대로입니다.</div>` : '';
+  // 예전 문구는 "KB 데이터가 N일째 그대로입니다" 였다. 읽으면 "시장이 안 변했다"로 들리는데
+  // 실제 뜻은 "우리가 못 받아오고 있다" 이다. KB 는 그 사이 정상 발표를 계속했다.
+  // 원인을 화면이 직접 말한다 — 로그를 볼 수 없는 사용자도 이 배너만 본다.
+  const stale=_staleBanner(d);
   const nChange=(t.up||0)+(t.down||0);
   let conclusion='';
   if(!mine.length && !rest.length){
