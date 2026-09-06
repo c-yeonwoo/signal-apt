@@ -1,5 +1,10 @@
 """콕집 클라이언트·DB 헬퍼 (네트워크 호출 없음)."""
 
+import json
+import pathlib
+
+import pytest
+
 from realty_signal import db
 from realty_signal.ingest import koczip as kz
 from realty_signal.routes import koczip as kz_routes
@@ -87,31 +92,6 @@ def test_koczip_stale_matches_radar_ttl(tmp_path, monkeypatch):
     assert app_api._koczip_stale() is True
 
 
-def test_prod_does_not_seed_koczip_on_boot(monkeypatch):
-    """prod 는 **부팅 시딩**으로 콕집을 긁지 않는다.
-
-    읽기(routes/koczip.py)는 admin 으로 막혀 있었지만 수집 경로엔 게이트가 없어서,
-    배포 서버가 재배포할 때마다 제3자 사이트에 자동으로 붙었다.
-    prod 자동 갱신은 주 1회 루프만 남기고, 첫 수집은 admin 이 시작한다.
-    """
-    from realty_signal import api as app_api
-
-    calls = []
-    monkeypatch.setattr(app_api, "koczip_refresh", lambda *a, **k: calls.append(1))
-    monkeypatch.setattr(app_api, "_koczip_stale", lambda: True)
-    monkeypatch.setattr(app_api, "_quicksale_stale", lambda: False)
-    monkeypatch.setattr(app_api, "_certified_stale", lambda: False)
-    monkeypatch.setattr(app_api.config, "public_data_key", lambda: None)
-    monkeypatch.setattr(app_api.config, "seoul_key", lambda: None)
-
-    monkeypatch.setenv("APP_ENV", "prod")
-    app_api._seed_if_missing()
-    assert calls == [], "prod 부팅 시딩에서 콕집을 수집하면 안 된다"
-
-    monkeypatch.delenv("APP_ENV")
-    app_api._seed_if_missing()
-    assert len(calls) == 1, "로컬에서는 기존대로 시딩한다"
-
 
 def test_koczip_auto_refresh_is_weekly_not_daily(tmp_path, monkeypatch):
     """자동 수집은 주 1회. 수동 기준(1일)과 다른 임계값을 쓴다."""
@@ -140,21 +120,6 @@ def test_koczip_auto_refresh_is_weekly_not_daily(tmp_path, monkeypatch):
     _seed(8 * 86400)                            # 8일 — 자동 수집 대상
     assert app_api._koczip_auto_due() is True
 
-
-def test_admin_manual_scan_still_works_in_prod(monkeypatch):
-    """수동 스캔은 prod 에서도 admin 이면 항상 된다. 목록 기능은 살아 있어야 한다."""
-    from realty_signal import api as app_api
-    from realty_signal.routes import koczip as kz_routes
-
-    calls = []
-    monkeypatch.setenv("APP_ENV", "prod")
-    monkeypatch.setattr(app_api, "koczip_refresh",
-                        lambda d=None: (calls.append(1), {"ok": True})[1])
-    monkeypatch.setattr(kz_routes.deps, "require_admin", lambda r: None)
-
-    out = kz_routes.koczip_scan(object(), {})
-    assert out.get("ok") is True
-    assert len(calls) == 1, "prod admin 수동 스캔이 막히면 안 된다"
 
 
 def test_buyer_discount_pct_from_asking_below_real():
@@ -226,3 +191,77 @@ def test_db_upsert_and_list(tmp_path, monkeypatch):
     db.koczip_clear_region("노원구")
     assert db.koczip_complex_list(region="노원구") == []
     assert db.koczip_article_list(region="노원구") == []
+
+def test_koczip_collection_is_permanently_disabled():
+    """koczip 수집은 영구 중단이다. **네트워크 호출이 아예 나가면 안 된다.**
+
+    2026-09-06: 운영자가 전 지역 요청에 403 과 함께
+    "무단 크롤링·스크래핑·복제·저장·재배포 금지" 를 명시했다.
+    기술적 차단과 권리 유보 고지가 동시에 있었으므로 재시도·우회 대상이 아니다.
+    """
+    import urllib.request
+
+    assert kz.DISABLED is True
+    called = []
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = lambda *a, **k: called.append(1)
+    try:
+        for fn in (lambda: kz.fetch_complexes_in_bounds(37.4, 127.0, 37.6, 127.1),
+                   lambda: kz.fetch_complex_summary("203"),
+                   lambda: kz.fetch_complex_quick_deals("203"),
+                   lambda: kz.fetch_quick_deals(),
+                   lambda: kz.fetch_special_deals()):
+            with pytest.raises(kz.KoczipDisabled):
+                fn()
+    finally:
+        urllib.request.urlopen = orig
+    assert called == [], "차단 상태인데 외부 요청이 나갔다"
+
+
+def test_disabled_error_is_not_a_retryable_error():
+    """영구 중단은 일시적 오류와 구분돼야 한다 — 재시도 루프에 걸리면 안 된다."""
+    assert issubclass(kz.KoczipDisabled, kz.KoczipError)
+    assert kz.KoczipDisabled is not kz.KoczipError
+
+
+def test_browser_impersonating_headers_are_gone():
+    """명시적 거부 이후 브라우저 위장 헤더는 남겨두면 안 된다."""
+    raw = pathlib.Path("src/realty_signal/ingest/koczip.py").read_text(encoding="utf-8")
+    # 주석에는 "예전에 위장했었다" 는 기록이 남아 있다 — **코드 줄만** 본다
+    code = "\n".join(l for l in raw.splitlines() if not l.lstrip().startswith("#"))
+    assert "_HDR" not in code
+    assert "Mozilla/5.0" not in code
+    assert "Referer" not in code
+    assert "Origin" not in code
+
+
+def test_no_automatic_collection_call_sites_remain():
+    """부팅 시딩·주간 루프에서 수집 호출이 사라져야 한다."""
+    import inspect
+
+    from realty_signal import api as app_api
+
+    for fn in (app_api._seed_if_missing, app_api._auto_refresh_loop):
+        assert "koczip_refresh" not in inspect.getsource(fn), f"{fn.__name__} 에 수집 호출이 남아 있다"
+
+
+def test_all_koczip_routes_are_closed():
+    """수집만 막고 저장분을 계속 보여주면 **재배포**가 이어진다. 조회도 닫는다.
+
+    인증 미들웨어를 거치지 않고 라우트 본체를 직접 부른다 —
+    다른 테스트가 db.DB 를 임시 경로로 바꿔 세션이 안 붙기 때문이다.
+    """
+    req = object()
+    for name, call in (
+        ("listings", lambda: kz_routes.koczip_listings(req)),
+        ("quick-deals", lambda: kz_routes.quick_deals(req)),
+        ("scan", lambda: kz_routes.koczip_scan(req, {})),
+    ):
+        r = call()
+        assert getattr(r, "status_code", None) == 410, f"{name} 이 닫히지 않았다"
+        assert json.loads(bytes(r.body)).get("error") == "koczip_disabled"
+
+    meta = kz_routes.koczip_meta(req)
+    assert meta.get("allowed") is False, "메타가 allowed=True 면 화면에 탭이 남는다"
+    assert meta.get("disabled") is True
+

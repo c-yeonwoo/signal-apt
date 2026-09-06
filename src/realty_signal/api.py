@@ -198,12 +198,8 @@ async def _auto_refresh_loop():
             if _certified_stale():
                 log.warning("찐매물 캐시 만료 — 일일 스캔")
                 await asyncio.to_thread(lambda: certified_refresh({}))
-            # 콕집은 **주 1회**만 자동 수집한다(급매·찐매물은 일 1회).
-            # 제3자 사이트를 긁는 개인 확인용 소스라 배포 서버가 매일 붙을 이유가 없다.
-            # 비어 있을 때는 자동으로 채우지 않는다 — 첫 수집은 admin 이 시작한다.
-            if _koczip_auto_due():
-                log.warning("콕집 DB %d일 경과 — 주간 스캔", _KOCZIP_AUTO_MAX_AGE // 86400)
-                await asyncio.to_thread(lambda: koczip_refresh({}))
+            # 콕집 자동 수집은 2026-09-06 제거했다 — 운영자가 403 과 함께
+            # 무단 크롤링·저장·재배포 금지를 명시했다(ingest/koczip.py 참조).
         except Exception as e:
             log.error("급매/찐매물/콕집 일일 갱신 실패: %s", e)
         # 실패했으면 하루를 기다리지 않는다 — 일시적 장애로 한 주를 통째로 잃지 않도록
@@ -235,15 +231,7 @@ def _seed_if_missing():
             certified_refresh({})
         except Exception as e:  # noqa: BLE001
             log.error("certified 시딩 실패: %s", e)
-    # 콕집(할인·특가) — **부팅 시딩은 로컬에서만.** prod 는 재배포할 때마다 제3자 사이트에
-    # 붙게 되므로 시딩을 걸지 않는다. prod 의 자동 갱신은 `_auto_refresh_loop` 의 주 1회뿐이고,
-    # 그마저 이미 데이터가 있을 때만 따라간다. 첫 수집·즉시 갱신은 admin 의 `POST /api/koczip/scan`.
-    if not config.is_prod() and _koczip_stale():
-        try:
-            log.warning("koczip 없음/만료 — 콕집 스캔 중…")
-            koczip_refresh({})
-        except Exception as e:  # noqa: BLE001
-            log.error("koczip 시딩 실패: %s", e)
+    # 콕집 부팅 시딩도 제거(2026-09-06). 수집 자체가 중단돼 호출할 대상이 없다.
     if config.seoul_key():                               # 재건축 워밍(BUY+ 지역)
         try:
             log.warning("재건축 워밍 중(BUY+ 지역)…")
