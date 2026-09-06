@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import logging
 import re
 import urllib.parse
@@ -41,7 +43,7 @@ def _naver_news(query: str, cid: str, csec: str, n: int = 10) -> list[dict]:
         {"query": query, "display": n, "sort": "date"})
     req = urllib.request.Request(url, headers={"X-Naver-Client-Id": cid, "X-Naver-Client-Secret": csec})
     try:
-        data = json.loads(urllib.request.urlopen(req, timeout=10).read())  # noqa: S310
+        data = jsonx.loads(urllib.request.urlopen(req, timeout=10).read())  # noqa: S310
     except Exception as e:
         log.warning("naver news 실패(%s): %s", query, e)
         return []

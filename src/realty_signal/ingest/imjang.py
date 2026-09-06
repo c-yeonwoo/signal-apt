@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import logging
 import urllib.parse
 import urllib.request
@@ -31,7 +33,7 @@ def youtube_search(query: str, key: str, n: int = 4) -> list[dict]:
         "part": "snippet", "q": query, "type": "video", "maxResults": n,
         "relevanceLanguage": "ko", "regionCode": "KR", "key": key})
     try:
-        data = json.loads(urllib.request.urlopen(urllib.request.Request(url, headers=_UA), timeout=10).read())  # noqa: S310
+        data = jsonx.loads(urllib.request.urlopen(urllib.request.Request(url, headers=_UA), timeout=10).read())  # noqa: S310
     except Exception as e:
         log.warning("youtube search 실패: %s", e)
         return []
@@ -66,7 +68,7 @@ def naver_blog(query: str, cid: str, csec: str, n: int = 4) -> list[dict]:
         {"query": query, "display": n, "sort": "sim"})
     req = urllib.request.Request(url, headers={"X-Naver-Client-Id": cid, "X-Naver-Client-Secret": csec})
     try:
-        data = json.loads(urllib.request.urlopen(req, timeout=10).read())  # noqa: S310
+        data = jsonx.loads(urllib.request.urlopen(req, timeout=10).read())  # noqa: S310
     except Exception as e:
         log.warning("naver blog 실패: %s", e)
         return []

@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import json
+
+from realty_signal import jsonx
 import logging
 import time
 import urllib.error
@@ -104,7 +106,7 @@ def _get(path: str, params: dict | None = None, *, timeout: float = 45) -> dict:
     if not text.lstrip().startswith(("{", "[")):
         raise KoczipError(text[:180].replace("\n", " "))
     try:
-        data = json.loads(text)
+        data = jsonx.loads(text)
     except json.JSONDecodeError as e:
         raise KoczipError(f"JSON 파싱 실패: {text[:120]}") from e
     if not isinstance(data, dict):

@@ -18,6 +18,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from realty_signal import jsonx
 from realty_signal import config
 
 # 주요 업무지구 좌표 (lat, lng)
@@ -38,7 +39,7 @@ def geocode(region: str, code: str) -> tuple[float, float] | None:
     url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
         {"q": q, "format": "json", "limit": 1, "countrycodes": "kr"})
     try:
-        data = json.loads(_fetch(url))
+        data = jsonx.loads(_fetch(url))
         if data:
             return float(data[0]["lat"]), float(data[0]["lon"])
     except Exception:
@@ -80,7 +81,7 @@ def transit_min(lat: float, lng: float) -> tuple[int, str] | tuple[None, None]:
                + urllib.parse.quote(key, safe="")
                + f"&SX={lng}&SY={lat}&EX={hlng}&EY={hlat}")
         try:
-            j = json.loads(_fetch(url))
+            j = jsonx.loads(_fetch(url))
             t = j["result"]["path"][0]["info"]["totalTime"]
             if best is None or t < best:
                 best, best_hub = t, name
@@ -99,7 +100,7 @@ def transit_between(sx: float, sy: float, ex: float, ey: float) -> dict | None:
            + urllib.parse.quote(key, safe="")
            + f"&SX={sx}&SY={sy}&EX={ex}&EY={ey}")
     try:
-        info = json.loads(_fetch(url))["result"]["path"][0]["info"]
+        info = jsonx.loads(_fetch(url))["result"]["path"][0]["info"]
         return {"min": round(info["totalTime"]), "transfer": info.get("busTransitCount", 0) + info.get("subwayTransitCount", 0),
                 "pay": info.get("payment")}
     except Exception:
@@ -113,7 +114,7 @@ def school_count(lat: float, lng: float, radius: int = 1500) -> int | None:
            f"?serviceKey={key}&radius={radius}&cx={lng}&cy={lat}&indsLclsCd=P1"
            "&numOfRows=1&pageNo=1&type=json")
     try:
-        return json.loads(_fetch(url)).get("body", {}).get("totalCount")
+        return jsonx.loads(_fetch(url)).get("body", {}).get("totalCount")
     except Exception:
         return None
 
@@ -140,7 +141,7 @@ def osm_environment(lat: float, lng: float, radius: int = 2000) -> dict:
     data = urllib.parse.quote(q)
     for base in _OVERPASS:
         try:
-            els = json.loads(_fetch(f"{base}?data={data}",
+            els = jsonx.loads(_fetch(f"{base}?data={data}",
                              {"User-Agent": _UA, "Accept": "application/json"}, timeout=50)).get("elements", [])
             return {
                 "공원": sum(1 for e in els if e.get("tags", {}).get("leisure") == "park"),

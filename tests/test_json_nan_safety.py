@@ -76,3 +76,63 @@ def test_real_payload_with_pandas_nan():
     body = json.loads(bytes(SafeJSONResponse(content=payload).body))
     assert body["values"] == [1.0, None, 3.0]
     assert body["mean_of_empty"] is None
+
+
+# ── 근본 원인: 파이썬 json 은 비표준 NaN 리터럴을 기본 허용한다 ──────────
+
+def test_external_nan_literal_is_parsed_as_null():
+    """외부 API 가 `NaN` 을 보내도 우리 데이터에 NaN 이 들어오지 않는다.
+
+    2026-09-06 prod 500 의 실제 경로 — 외부 응답의 `discount_min: NaN` 이
+    `round(-float(d) * 100, 1)` 을 타고 응답까지 흘러갔다.
+    """
+    from realty_signal import jsonx
+
+    d = jsonx.loads('{"discount_min": NaN, "avg": Infinity, "n": -Infinity, "ok": 1.5}')
+    assert d == {"discount_min": None, "avg": None, "n": None, "ok": 1.5}
+    # 표준 json 은 이걸 그대로 통과시킨다 — 우리가 막아야 하는 이유
+    assert math.isnan(json.loads('{"x": NaN}')["x"])
+
+
+def test_cache_writes_never_persist_nan_literal():
+    """`json.dumps` 기본이 allow_nan=True 라 캐시 파일에 `NaN` 이 기록될 수 있었다.
+
+    저장 자체를 실패시키면(allow_nan=False 만 걸면) 스캔 결과를 통째로 잃으므로,
+    **먼저 씻고 나서** 표준 JSON 으로만 쓴다.
+    """
+    from realty_signal import jsonx
+
+    text = jsonx.dumps({"listings": [{"급매갭": float("nan"), "호가": 50000}]})
+    assert "NaN" not in text and "Infinity" not in text
+    back = json.loads(text)          # 표준 파서로 읽혀야 한다
+    assert back["listings"][0]["급매갭"] is None
+    # 표준 dumps 는 NaN 리터럴을 그대로 쓴다 — 우리가 막아야 하는 이유
+    assert "NaN" in json.dumps({"x": float("nan")})
+
+
+def test_ingest_modules_use_safe_loader():
+    """외부 응답을 파싱하는 ingest 모듈이 표준 json.loads 로 되돌아가면 안 된다."""
+    import pathlib
+
+    ing = pathlib.Path("src/realty_signal/ingest")
+    offenders = []
+    for f in sorted(ing.glob("*.py")):
+        code = "\n".join(l for l in f.read_text(encoding="utf-8").splitlines()
+                         if not l.lstrip().startswith("#"))
+        if "json.loads(" in code.replace("jsonx.loads(", ""):
+            offenders.append(f.name)
+    assert not offenders, f"안전하지 않은 json.loads 사용: {offenders}"
+
+
+def test_full_chain_external_nan_to_response():
+    """외부 NaN → 파싱 → 계산 → 저장 → 응답. 어디서도 500 이 나면 안 된다."""
+    from realty_signal import jsonx
+
+    raw = '{"items": [{"discount_min": NaN, "price": 500000000}]}'
+    parsed = jsonx.loads(raw)                                   # ① 파싱
+    d = parsed["items"][0]["discount_min"]
+    pct = None if d is None else round(-float(d) * 100, 1)      # ② 계산
+    stored = jsonx.dumps({"할인율": pct})                        # ③ 저장
+    assert "NaN" not in stored
+    body = json.loads(bytes(SafeJSONResponse(content=json.loads(stored)).body))  # ④ 응답
+    assert body == {"할인율": None}

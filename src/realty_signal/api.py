@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from realty_signal import jsonx
 from realty_signal import auction, auth, buying_power, config, db, store
 from realty_signal.signals.engine import SignalConfig
 
@@ -299,20 +300,9 @@ class SafeJSONResponse(JSONResponse):
     """
 
     def render(self, content) -> bytes:
-        import json as _json
-        import math as _math
+        from realty_signal import jsonx
 
-        def clean(o):
-            if isinstance(o, float):
-                return None if (_math.isnan(o) or _math.isinf(o)) else o
-            if isinstance(o, dict):
-                return {k: clean(v) for k, v in o.items()}
-            if isinstance(o, (list, tuple)):
-                return [clean(v) for v in o]
-            return o
-
-        return _json.dumps(clean(content), ensure_ascii=False, allow_nan=False,
-                           separators=(",", ":")).encode("utf-8")
+        return jsonx.dumps(content, separators=(",", ":")).encode("utf-8")
 
 
 app = FastAPI(title="realty-signal-map", lifespan=lifespan,
@@ -2696,7 +2686,7 @@ def quicksale_refresh(data: dict = Body(default={})):
     listings = _radar_scan(regions, kind="급매")
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
-    QUICKSALE_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    QUICKSALE_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 
 
@@ -2706,7 +2696,7 @@ def certified_refresh(data: dict = Body(default={})):
     listings = _radar_scan(regions, kind="찐매물")
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
-    CERTIFIED_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    CERTIFIED_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
 
 

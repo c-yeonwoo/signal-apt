@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from realty_signal import jsonx
 from realty_signal import store
 from realty_signal.entities import Provenance, RegionEntity, SourceStatus
 from realty_signal.signals.strength import market_strength
@@ -71,7 +72,7 @@ def _quicksale_counts() -> dict[str, int]:
     if not QUICKSALE_FILE.exists():
         return {}
     try:
-        listings = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", [])
+        listings = jsonx.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", [])
     except Exception:  # noqa: BLE001
         return {}
     out: dict[str, int] = {}
@@ -116,7 +117,7 @@ def load_market_strength(cache: Path = STRENGTH_FILE) -> dict[str, Any]:
     if not cache.exists():
         return {}
     try:
-        return json.loads(cache.read_text(encoding="utf-8"))
+        return jsonx.loads(cache.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return {}
 
