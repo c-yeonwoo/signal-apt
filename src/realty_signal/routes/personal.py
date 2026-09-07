@@ -93,6 +93,15 @@ def imjang_visit_delete(request: Request, visit_id: int):
     return app_api.imjang_visit_delete(request, visit_id)
 
 
+@router.get("/api/notify-status")
+def notify_status(request: Request):
+    """알림이 왜 안 오는지 — 채널별 사유와 조치."""
+    from realty_signal.routes import deps
+    from realty_signal.services import notify_status as ns
+
+    return ns.status(deps.uid(request))
+
+
 @router.get("/api/telegram/status")
 def telegram_status(request: Request):
     from realty_signal import api as app_api
