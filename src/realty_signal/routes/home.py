@@ -69,6 +69,34 @@ def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
     return out
 
 
+@router.get("/api/budget-watch")
+def budget_watch(request: Request):
+    """내 예산 안에 새로 들어온 매물 — 진짜 굿뉴스.
+
+    '새로 들어옴' 을 신규 등장 / 가격 인하 / 매수력 상향으로 **구분해서** 낸다.
+    뭉개면 거짓이 된다.
+    """
+    from realty_signal import api as app_api
+    from realty_signal.services import budget_watch as bw
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ready": False, "reason": "login_required"}, status_code=401)
+    try:
+        profile = db.profile_get(uid) or {}
+        budget = (profile.get("매수력") or {}).get("최대매수가")
+        if not budget:
+            return {"ready": False, "reason": "no_budget",
+                    "message": "매수력을 확정하면 예산 안에 들어온 매물을 알려드립니다."}
+        rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+        out = bw.compute(uid, rows, float(budget))
+        bw.mark_seen(uid, rows, float(budget))   # 보여준 뒤에만 기준점을 옮긴다
+        return out
+    except Exception as e:  # noqa: BLE001
+        log.error("예산 변화 계산 실패 uid=%s: %s", uid, e)
+        return {"ready": False, "reason": "error", "detail": str(e)}
+
+
 @router.get("/api/threshold-watch")
 def threshold_watch(request: Request):
     """다음 주에 뒤집힐 수 있는 지역 — **예측이 아니라 임계까지의 거리.**
