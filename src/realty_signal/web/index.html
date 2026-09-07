@@ -1703,7 +1703,7 @@ async function loadDashboard(){
     <span onclick="askNick('지금 내 관심지역과 예산 기준으로 매수 타이밍을 근거와 함께 알려줘.')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500">닉에게</span>
   </div>`;
   // 좌: 할 일·후보 · 우: 주간 동향
-  body.innerHTML=`<div class="dash-layout">
+  body.innerHTML=`<div id="dashComeback"></div><div class="dash-layout">
     <div class="dash-col dash-col-me">
       <div class="dash-col-label">할 일 · 후보</div>
       <div id="dashPowerWrap"></div>
@@ -1735,7 +1735,9 @@ async function loadDashboard(){
 // 주 1회 갱신 서비스라 "지난주랑 뭐가 달라졌나"가 중요한 건 맞지만, 현재 화면의 시각 정점은
 // 매수력 카드(32px)다. 이 순서를 바꿀지는 진단 N7 에서 다룬다(V-2 선행).
 function _sigMoveRow(s, mine){
-  const col=s.up?'#16a34a':'#dc2626';
+  const col = s.up ? 'var(--sig-buy)' : 'var(--sig-sell)';
+  // 복귀 브리핑과 같은 라벨을 쓴다 — 같은 변화를 두 카드가 다르게 말하면 안 된다
+  const chip = _buyerChip(_buyerNoteOf(s.from, s.to));
   return `<div onclick="openNbhd('${s.region}')" title="${(s['근거']||'').replace(/"/g,'')}"
       style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;${mine?'background:rgba(37,99,235,.04)':''}">
     <b style="min-width:96px;font-size:13.5px">${s.region}</b>
@@ -1743,7 +1745,18 @@ function _sigMoveRow(s, mine){
     <span style="font-size:12.5px;color:var(--dim)">${s.from_ko}</span>
     <span style="color:${col};font-weight:800">${s.up?'▲':'▼'}</span>
     <span style="font-size:13px;font-weight:700;color:${col}">${s.to_ko}</span>
+    ${chip}
     <span style="margin-left:auto;font-size:11.5px;color:var(--accent)">동네 리포트 →</span></div>`;
+}
+
+/** 프론트에서 등급 변화 → 매수자 관점 라벨. 서버 `comeback.buyer_note` 와 같은 규칙이다. */
+const _SIG_RANK_KO = {SELL_RISK:0, NEUTRAL:1, WATCH:2, BUY:3, STRONG_BUY:4};
+function _buyerNoteOf(frm, to){
+  const a=_SIG_RANK_KO[frm], b=_SIG_RANK_KO[to];
+  if(a==null||b==null||a===b) return null;
+  return b<a
+    ? {dir:'cool', label:'서두를 이유 감소', why:'매수 신호가 약해졌습니다. 급하게 붙지 않아도 되는 구간으로 이동 중입니다.'}
+    : {dir:'heat', label:'조건 강화',       why:'매수 신호가 강해졌습니다. 관심 단지가 있으면 선택지가 줄기 전에 확인해 보세요.'};
 }
 /** KB 수집 지연 배너. **"시장이 조용하다" 와 "우리가 못 받아왔다" 를 절대 섞지 않는다.** */
 function _staleBanner(d){
@@ -1792,6 +1805,65 @@ function _weeklyQuiet(msg){
   return _dashCard(_dashH('이번 주 변화')
     +`<div style="font-size:14px;color:var(--dim);line-height:1.6">${msg||'지난주와 비교할 데이터가 쌓이면 여기에 보여요.'}</div>`);
 }
+/** 매수 대기자 관점 칩. 등급 변화의 **방향과 의미**만 말한다.
+ *  ⚠️ "매수자 우위" 라는 말은 쓰지 않는다 — KB '매수우위지수' 는 매수 문의가 많다는 뜻이라
+ *  등급 하향을 그렇게 부르면 앱 자신의 지표와 반대로 읽힌다. 확신형 예측도 금지. */
+function _buyerChip(b, big){
+  if(!b) return '';
+  const cool = b.dir==='cool';
+  const c = cool ? 'var(--sig-buy)' : 'var(--sig-watch)';
+  const fs = big ? '12px' : '10.5px';
+  return `<span class="pill" title="${b.why||''}" style="font-size:${fs};color:${c};
+    background:color-mix(in srgb,${c} 10%,transparent);border-color:color-mix(in srgb,${c} 22%,transparent)">${b.label}</span>`;
+}
+
+/** 복귀 브리핑 — 자리를 비운 동안 놓친 것. '이번 주 변화' 는 직전 1주만 보므로 별도다. */
+function _renderComeback(d){
+  const el=document.getElementById('dashComeback'); if(!el) return;
+  const k=d&&d.comeback;
+  if(!k||!k.ready){ el.innerHTML=''; return; }
+  const t=k.totals||{};
+  const mine=k.mine||[], rest=k.rest||[];
+
+  if(k.quiet){
+    el.innerHTML=_dashCard(
+      `<div style="font-size:16px;font-weight:750;margin-bottom:4px">${k.weeks}주 만이네요</div>
+       <div style="font-size:14px;color:var(--dim);line-height:1.6">그 사이 등급이 바뀐 지역은 없었습니다.
+         조용한 ${k.weeks}주였습니다 · 기준일 ${k.as_of}</div>`,
+      'margin-bottom:14px;border-left:3px solid var(--sig-neutral)');
+    return;
+  }
+  const row = v => `<div onclick="openNbhd('${v.region}')" style="display:flex;align-items:center;gap:8px;
+      padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;flex-wrap:wrap">
+    <b style="min-width:92px;font-size:13.5px">${v.region}</b>
+    <span style="font-size:12.5px;color:var(--dim)">${v.from_ko}</span>
+    <span style="color:${v.up?'var(--sig-buy)':'var(--sig-sell)'};font-weight:800">${v.up?'▲':'▼'}</span>
+    <span style="font-size:13px;font-weight:700;color:${v.up?'var(--sig-buy)':'var(--sig-sell)'}">${v.to_ko}</span>
+    ${v.steps>1?`<span style="font-size:10.5px;color:var(--dim)">${v.steps}단계</span>`:''}
+    ${_buyerChip(v.buyer)}
+    <span style="margin-left:auto;font-size:11.5px;color:var(--accent)">동네 리포트 →</span></div>`;
+
+  const path = v => (v.path||[]).map(s=>`${s.date} ${s.from_ko}→${s.to_ko}`).join(' · ');
+  const mineH = mine.length ? `
+    <div style="font-size:12px;color:var(--dim);margin:10px 0 2px">내 관심지역</div>
+    ${mine.map(row).join('')}
+    ${mine.filter(v=>v.steps>1).map(v=>`<div style="font-size:11px;color:var(--dim);padding:4px 0 0">
+        ${v.region} 경로 — ${path(v)}</div>`).join('')}
+    ${mine[0]&&mine[0].buyer?`<div style="font-size:12.5px;color:var(--ink-2,var(--txt));margin-top:8px;line-height:1.6">
+        ${mine[0].buyer.why}</div>`:''}` : '';
+
+  const restH = rest.length ? _dashMore(`그 외 ${k.rest_total}곳 보기`,
+    rest.map(row).join('')) : '';
+
+  el.innerHTML=_dashCard(
+    `<div style="font-size:16px;font-weight:750;margin-bottom:2px">${k.weeks}주 만이네요 — 그 사이 이런 일이 있었습니다</div>
+     <div style="font-size:12.5px;color:var(--dim)">등급 변화 ${t.regions||0}곳
+       (하향 ${t.down||0} · 상향 ${t.up||0}) · ${k.prev_as_of} → ${k.as_of}</div>
+     ${mineH||`<div style="font-size:13px;color:var(--dim);margin-top:10px">관심지역에는 변화가 없었습니다.</div>`}
+     ${restH}`,
+    'margin-bottom:14px;border-left:3px solid var(--accent)');
+}
+
 async function _loadWeekly(){
   const wrap=document.getElementById('dashWeeklyWrap'); if(!wrap) return;
   wrap.innerHTML=_dashCard(_dashH('이번 주 변화')+'<div style="color:var(--dim);font-size:14px">지난주와 비교하는 중…</div>');
@@ -1808,6 +1880,7 @@ async function _loadWeekly(){
     wrap.innerHTML=_weeklyQuiet('지난주와 비교할 데이터가 아직 없어요.');
     return;
   }
+  _renderComeback(d);
   const mine=d.mine||[], rest=d.rest||[], movers=d.movers||[], t=d.totals||{};
   // 예전 문구는 "KB 데이터가 N일째 그대로입니다" 였다. 읽으면 "시장이 안 변했다"로 들리는데
   // 실제 뜻은 "우리가 못 받아오고 있다" 이다. KB 는 그 사이 정상 발표를 계속했다.
