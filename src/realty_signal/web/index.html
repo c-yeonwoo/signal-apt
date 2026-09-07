@@ -1708,6 +1708,7 @@ async function loadDashboard(){
       <div class="dash-col-label">할 일 · 후보</div>
       <div id="dashPowerWrap"></div>
       <div id="dashBudgetNewWrap"></div>
+      <div id="dashCxWrap"></div>
       <div id="dashPlanWrap"></div>
       <div id="dashShortlistWrap"></div>
       ${_dashCard(favH)}
@@ -1725,6 +1726,7 @@ async function loadDashboard(){
   </div>`;
   _loadBuyingPower();
   _loadBudgetWatch();
+  _loadComplexWatch();
   _loadPlan();
   _loadShortlist();
   _loadWeekly();
@@ -2068,6 +2070,67 @@ function _bpRegBadge(r){
 }
 /** 내 예산 안에 새로 들어온 매물. **'새로 들어옴' 을 원인별로 구분한다** —
  *  신규 등장 / 가격 인하 / 매수력 상향은 다른 사건이고, 뭉개면 거짓이 된다. */
+/** 관심단지 변화 (R5). 지역 등급이 아니라 **내가 찍어 둔 단지**의 실거래.
+ *  '변화 없음'·'첫 기록'·'조회 불가'를 같은 화면으로 만들지 않는다. */
+async function _loadComplexWatch(){
+  const wrap=document.getElementById('dashCxWrap'); if(!wrap) return;
+  let d; try{
+    const r=await fetch('/api/complex-watch');
+    if(!r.ok){ wrap.innerHTML=''; return; }
+    d=await r.json();
+  }catch(e){ wrap.innerHTML=''; return; }
+  const head=_dashH('관심단지 변화');
+
+  if(!d.ready){
+    if(d.reason==='no_favorites'){
+      wrap.innerHTML=_dashCard(head
+        +`<div style="font-size:13.5px;color:var(--dim);line-height:1.55">${d.message||''}</div>`);
+    } else { wrap.innerHTML=''; }
+    return;
+  }
+
+  const KCOL={new_trade:'var(--accent)',ppy:null,amt:null,gap:null,
+              budget_in:'var(--sig-buy)',budget_out:'var(--sig-sell)',flat_shift:'var(--dim)'};
+  const chip = c => {
+    const up=(c.delta||0)>0;
+    const col=KCOL[c.kind]!==undefined&&KCOL[c.kind]!==null?KCOL[c.kind]
+      :(c.kind==='gap'? (up?'var(--sig-sell)':'var(--sig-buy)') : (up?'var(--sig-sell)':'var(--sig-buy)'));
+    return `<span class="pill" style="font-size:10.5px;color:${col};
+      background:color-mix(in srgb,${col} 10%,transparent);
+      border-color:color-mix(in srgb,${col} 22%,transparent)">${c['말']}</span>`;
+  };
+  const row = it => `<div style="padding:9px 0;border-bottom:1px solid var(--line)">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <b style="font-size:13px;cursor:pointer;color:var(--accent)"
+         onclick="openComplex('${(it['단지명']||'').replace(/'/g,"")}','${(it['지역']||'').replace(/'/g,"")}')">${it['단지명']}</b>
+      <span style="font-size:11px;color:var(--dim)">${it['지역']||''}</span>
+      ${it['평형']?`<span style="font-size:11px;color:var(--dim)">주력 ${it['평형']}평</span>`:''}
+      ${it['거래가']?`<span style="margin-left:auto;font-size:12.5px;font-variant-numeric:tabular-nums"><b>${_eok(it['거래가'])}</b></span>`:''}
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(it.changes||[]).map(chip).join('')}</div>
+    ${it.data_days!=null?`<div style="font-size:10.5px;color:var(--dim);margin-top:5px">실거래 데이터 ${it.data_days}일 전 수집</div>`:''}
+  </div>`;
+
+  const dead = (d.unavailable||[]).length
+    ? _dashMore(`조회 안 되는 단지 ${d.unavailable.length}곳`,
+        d.unavailable.map(u=>`<div style="padding:7px 0;border-bottom:1px solid var(--line)">
+          <b style="font-size:12.5px">${u['단지명']}</b>
+          <div style="font-size:11.5px;color:var(--dim);margin-top:2px">${u.reason||''}</div></div>`).join(''))
+    : '';
+
+  if(d.quiet){
+    wrap.innerHTML=_dashCard(head
+      +`<div style="font-size:13.5px;line-height:1.55">관심단지 <b>${d.total||0}곳</b> · ${d.quiet_reason||'변화 없음'}</div>`
+      + dead);
+    return;
+  }
+  wrap.innerHTML=_dashCard(head
+    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">관심단지 ${d.total}곳 중 ${d.moved_total}곳이 움직였습니다</div>`
+    + d.moved.map(row).join('')
+    + `<div style="font-size:10.5px;color:var(--dim);margin-top:7px;line-height:1.5">${d.lag_note||''}</div>`
+    + dead);
+}
+
 async function _loadBudgetWatch(){
   const wrap=document.getElementById('dashBudgetNewWrap'); if(!wrap) return;
   let d; try{

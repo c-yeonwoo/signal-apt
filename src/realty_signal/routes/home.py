@@ -97,6 +97,35 @@ def budget_watch(request: Request):
         return {"ready": False, "reason": "error", "detail": str(e)}
 
 
+@router.get("/api/complex-watch")
+def complex_watch(request: Request):
+    """관심단지가 움직였나 — 지역 등급이 아니라 **내가 찍어 둔 단지**.
+
+    실거래 캐시만 읽는다(네트워크 호출 없음). 캐시가 비어 있으면 '데이터 없음' 으로
+    솔직히 답하고, 채우는 건 주간 워밍(`warm_favorite_complexes`)과 단지 상세 조회가 한다 —
+    홈 카드가 국토부 API 를 관심단지 수만큼 때리게 두면 홈이 느려진다.
+    """
+    from realty_signal.services import complex_watch as cw
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ready": False, "reason": "login_required"}, status_code=401)
+
+    favs = cw.favorites_of(uid)
+    if not favs:
+        return {"ready": False, "reason": "no_favorites",
+                "message": "관심단지를 ★ 로 등록하면 그 단지의 실거래 변화를 알려드립니다."}
+    try:
+        budget = ((db.profile_get(uid) or {}).get("매수력") or {}).get("최대매수가")
+        out = cw.compute(uid, favs, cw.cache_loader(),
+                         budget=float(budget) if budget else None)
+        cw.mark_seen(uid, out.pop("_snaps", {}))   # 보여준 뒤에만 기준점을 옮긴다
+        return out
+    except Exception as e:  # noqa: BLE001
+        log.error("관심단지 변화 계산 실패 uid=%s: %s", uid, e)
+        return {"ready": False, "reason": "error", "detail": str(e)}
+
+
 @router.get("/api/threshold-watch")
 def threshold_watch(request: Request):
     """다음 주에 뒤집힐 수 있는 지역 — **예측이 아니라 임계까지의 거리.**
