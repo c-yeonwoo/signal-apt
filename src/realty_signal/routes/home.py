@@ -69,6 +69,40 @@ def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
     return out
 
 
+@router.get("/api/threshold-watch")
+def threshold_watch(request: Request):
+    """다음 주에 뒤집힐 수 있는 지역 — **예측이 아니라 임계까지의 거리.**
+
+    등급이 계단 함수라 몇 달 정지했다가 한꺼번에 뒤집힌다. 그 '남은 거리'를 보여준다.
+    as_of 단위로 캐시 — 117개 지역 × 지표를 매 조회마다 다시 재지 않는다.
+    """
+    from realty_signal.services import market_data as md, threshold_watch as tw
+
+    uid = deps.uid(request)
+    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
+    try:
+        kb = md.kb()
+        as_of = str(kb.last_date.date())
+        # 스키마가 바뀌면 옛 캐시가 조용히 살아남아 ★ 가 안 붙는 식으로 어긋난다 → 버전을 키에 넣는다
+        key = f"threshold_watch:v{tw.CACHE_VER}:{as_of}"
+        cached = db.kv_get(key)
+        if not (isinstance(cached, dict) and cached.get("as_of") == as_of):
+            cached = tw.compute(kb, md.signal_config())
+            db.kv_set(key, cached)
+        # ★ 표시는 사용자마다 다르므로 캐시 뒤에 다시 입힌다
+        items = []
+        for x in cached.get("items", []):
+            mine_regions = [r for r in (x.get("members") or [x.get("scope")]) if r in favs]
+            items.append({**x, "mine": bool(mine_regions), "my_regions": mine_regions})
+        items.sort(key=lambda x: (not x["mine"], x["weeks_away"]))
+        return {**cached, "items": items, "mine": [x for x in items if x["mine"]],
+                "count": len(items)}
+    except Exception as e:  # noqa: BLE001
+        log.error("임계 근접 계산 실패: %s", e)
+        return {"as_of": None, "items": [], "mine": [], "count": 0,
+                "blocked_reason": f"임계 근접을 계산하지 못했습니다 ({e})"}
+
+
 @router.get("/api/action-plan")
 def action_plan(request: Request):
     """다음에 할 일 — 텔레그램 브리핑과 같은 판단(`briefing.actions`)."""
