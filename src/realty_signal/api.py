@@ -2537,6 +2537,21 @@ def _listing_pyeong(kind: str, raw: dict | None, ref: dict | None) -> float | No
     return None
 
 
+def _listing_key(kind: str, raw: dict, ref: dict, name: str | None, region: str | None) -> str:
+    """매물의 **호가와 무관한** 안정 식별자.
+
+    호가를 키에 넣으면 가격이 바뀔 때마다 다른 매물로 보여서 "새로 들어왔다" 가 거짓이 된다.
+    """
+    raw = raw or {}
+    ref = ref or {}
+    for cand in (raw.get("naver_id"), ref.get("naver_id"), ref.get("id"), ref.get("관리번호")):
+        if cand:
+            return f"{kind}:{cand}"
+    parts = [kind, region or "", name or "", str(ref.get("평형") or raw.get("평형") or ""),
+             str(raw.get("층") or "")]
+    return ":".join(parts)
+
+
 def _build_listings(want: set[str]) -> list[dict]:
     """통합 매물 정규화(공통 스키마 + 기회도 + 총액 + 평형). 유형 필터(want)만 수집."""
     grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
@@ -2549,7 +2564,10 @@ def _build_listings(want: set[str]) -> list[dict]:
         row = {"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
                "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
                "총액": total, "평형": _listing_pyeong(kind, raw, ref),
-               "lat": lat, "lng": lng, "ref": ref}
+               "lat": lat, "lng": lng, "ref": ref,
+               # 주간 비교("예산 안에 새로 들어온 매물")를 하려면 **호가와 무관한** 식별자가 필요하다.
+               # 급매·찐매물은 naver_id 가 2,127건 전부 고유해서 그대로 쓴다.
+               "key": _listing_key(kind, raw, ref, name, region)}
         row.update(tr.to_dict())
         out.append(row)
 
@@ -2563,14 +2581,14 @@ def _build_listings(want: set[str]) -> list[dict]:
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "급매갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
-                 "전용면적": m.get("전용면적")},
+                 "전용면적": m.get("전용면적"), "naver_id": m.get("naver_id")},
                 total=m.get("호가"))
     if "찐매물" in want and CERTIFIED_FILE.exists():
         for m in json.loads(CERTIFIED_FILE.read_text(encoding="utf-8")).get("listings", []):
             add("찐매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "시세갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
-                 "전용면적": m.get("전용면적"), "찐매물": True},
+                 "전용면적": m.get("전용면적"), "naver_id": m.get("naver_id"), "찐매물": True},
                 total=m.get("호가"))
     if "청약" in want:
         for d in _presale():
