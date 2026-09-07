@@ -1716,6 +1716,7 @@ async function loadDashboard(){
     <div class="dash-col dash-col-market">
       <div class="dash-col-label">주간 동향</div>
       <div id="dashWeeklyWrap"></div>
+      <div id="dashNearWrap"></div>
       ${_dashCard(regimeH)}
       <div id="dashIssuesWrap"></div>
       ${_dashCard(_dashH('바로가기')+moreLinks)}
@@ -1725,6 +1726,7 @@ async function loadDashboard(){
   _loadPlan();
   _loadShortlist();
   _loadWeekly();
+  _loadNear();
   _loadDashBudget();
   _loadDashFeed();
   _loadIssues();
@@ -1862,6 +1864,49 @@ function _renderComeback(d){
      ${mineH||`<div style="font-size:13px;color:var(--dim);margin-top:10px">관심지역에는 변화가 없었습니다.</div>`}
      ${restH}`,
     'margin-bottom:14px;border-left:3px solid var(--accent)');
+}
+
+/** 임계 근접 워치 — **예측이 아니라 거리.** "오를 것"이 아니라 "0.7 남았다"고만 말한다.
+ *  광역 상속 지표는 발표 단위로 묶여 오므로 한 줄에 '등 N곳' 으로 표시한다. */
+async function _loadNear(){
+  const wrap=document.getElementById('dashNearWrap'); if(!wrap) return;
+  let d; try{
+    const r=await fetch('/api/threshold-watch');
+    if(!r.ok) throw new Error('http '+r.status);
+    d=await r.json();
+  }catch(e){ wrap.innerHTML=''; return; }
+  if(d.blocked_reason){
+    wrap.innerHTML=_dashCard(_dashH('임계 근접')
+      +`<div style="font-size:13px;color:var(--dim)">${d.blocked_reason}</div>`);
+    return;
+  }
+  const items=d.items||[];
+  if(!items.length){
+    wrap.innerHTML=_dashCard(_dashH('임계 근접')
+      +`<div style="font-size:13px;color:var(--dim)">지금은 임계에 붙은 지역이 없습니다. 이번 주는 등급이 뒤집힐 여지가 작습니다.</div>`);
+    return;
+  }
+  const row = x => {
+    const up = x.if_crossed==='STRONG_BUY' || (x.now==='WATCH' && x.if_crossed==='BUY');
+    const col = up ? 'var(--sig-buy)' : 'var(--sig-watch)';
+    const who = x.scope + (x.regions>1 ? ` <span style="font-size:10.5px;color:var(--dim)">등 ${x.regions}곳</span>` : '');
+    const star = x.mine ? '<span style="font-size:10px;color:var(--accent);font-weight:700">★</span> ' : '';
+    return `<div onclick="openNbhd('${(x.my_regions&&x.my_regions[0])||x.scope}')"
+        style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;flex-wrap:wrap">
+      <span style="min-width:118px;font-size:13px;font-weight:600">${star}${who}</span>
+      <span style="font-size:12px;color:var(--dim)">${x.metric}</span>
+      <b style="font-size:13px;font-variant-numeric:tabular-nums">${x.value}</b>
+      <span style="font-size:12px;color:${col};font-weight:700">${x.direction==='up'?'↑':'↓'}${x.need} 남음</span>
+      <span style="font-size:10.5px;color:var(--dim)">주당 ±${x.weekly_move} · 약 ${x.weeks_away}주치</span>
+      <span style="margin-left:auto;font-size:11.5px">${x.now_ko} <span style="color:${col};font-weight:700">→ ${x.if_crossed_ko}</span></span></div>`;
+  };
+  const shown = items.slice(0,5), more = items.slice(5);
+  wrap.innerHTML=_dashCard(
+    _dashH('임계 근접 — 다음 주에 뒤집힐 수 있는 곳')
+    + shown.map(row).join('')
+    + (more.length ? _dashMore(`그 외 ${more.length}곳`, more.map(row).join('')) : '')
+    + `<div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.5">${d.note||''}
+        ${items.some(x=>x.regions>1)?'<br>광역 공통 지표라 한 줄이 여러 구를 함께 움직입니다.':''}</div>`);
 }
 
 async function _loadWeekly(){
