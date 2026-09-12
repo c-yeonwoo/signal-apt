@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Request
 from fastapi.responses import JSONResponse
 
 from realty_signal import auth, config, db
@@ -161,9 +161,22 @@ def favorites_get(request: Request):
     return {"favorites": db.fav_list(deps.uid(request))}
 
 
+def _warm_complex_after_favorite(region: str, name: str) -> None:
+    """등록 응답은 즉시 돌리고, 실거래 수집은 뒤에서 처리한다."""
+    from realty_signal import api as app_api
+
+    app_api.warm_favorite_complex(region, name)
+
+
 @router.post("/api/favorites")
-def favorites_add(request: Request, data: dict = Body(...)):
-    db.fav_add(deps.uid(request), data.get("kind", "region"), data.get("key", ""), data.get("label", ""))
+def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dict = Body(...)):
+    kind, key = data.get("kind", "region"), data.get("key", "")
+    db.fav_add(deps.uid(request), kind, key, data.get("label", ""))
+    if kind == "complex" and "|" in key:
+        region, name = key.split("|", 1)
+        if region and name:
+            background_tasks.add_task(_warm_complex_after_favorite, region, name)
+            return {"ok": True, "warming": "queued"}
     return {"ok": True}
 
 

@@ -6223,7 +6223,9 @@ async function toggleFav(kind, key, label){
   if(_favs.has(id)){ _favs.delete(id);
     await fetch('/api/favorites?kind='+kind+'&key='+encodeURIComponent(key),{method:'DELETE'}); }
   else { _favs.add(id);
-    await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,label})});
+    let out={};
+    try{ out=await (await fetch('/api/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,label})})).json(); }catch(e){}
+    if(kind==='complex' && out.warming==='queued') toast('관심단지로 등록했습니다 · 실거래 변화를 준비하는 중입니다.');
     track('fav_add',{kind,key}); }
   if(typeof renderList==='function') renderList();
   if(kind==='region') loadAlerts();   // 즐겨찾기 변경 → 알림 다이제스트 갱신

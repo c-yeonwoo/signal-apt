@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from realty_signal import api as app_api
 from realty_signal import auth, db, weekly
+from realty_signal.routes import auth as auth_routes
 from realty_signal.routes import home as home_routes
 from realty_signal.services import budget_watch as bw
 from realty_signal.services import complex_watch as cw
@@ -100,6 +101,17 @@ def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
     assert db.kv_get(cw.KV_PREFIX + str(uid))["items"]
 
 
+def test_complex_favorite_queues_first_real_trade_warm(client, monkeypatch):
+    """★ 등록 직후 워밍을 예약해야 다음 홈 방문에서 '아직 수집 안 됨'이 줄어든다."""
+    called = []
+    monkeypatch.setattr(auth_routes, "_warm_complex_after_favorite",
+                        lambda region, name: called.append((region, name)))
+
+    r = client.post("/api/favorites", json={"kind": "complex", "key": "강남구|테스트아파트"})
+    assert r.json() == {"ok": True, "warming": "queued"}
+    assert called == [("강남구", "테스트아파트")]
+
+
 def test_action_plan_requires_login(client):
     client.cookies.clear()
     assert client.get("/api/action-plan").status_code == 401
@@ -164,6 +176,11 @@ def test_change_cards_ack_only_after_entering_the_viewport():
     assert "IntersectionObserver" in html
     for endpoint in ("/api/weekly-change/seen", "/api/budget-watch/seen", "/api/complex-watch/seen"):
         assert endpoint in html
+
+
+def test_complex_favorite_tells_the_buyer_that_warming_started():
+    html = INDEX.read_text(encoding="utf-8")
+    assert "실거래 변화를 준비하는 중입니다" in html
 
 
 def test_stale_data_warning_is_wired():
