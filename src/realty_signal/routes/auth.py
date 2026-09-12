@@ -168,9 +168,34 @@ def _warm_complex_after_favorite(region: str, name: str) -> None:
     app_api.warm_favorite_complex(region, name)
 
 
+def _complex_favorite_error(key: object) -> str | None:
+    """단지 실거래를 실제로 조회할 수 있는 시군구인지 먼저 확인한다."""
+    if not isinstance(key, str) or "|" not in key:
+        return "단지와 시군구를 다시 선택해 주세요."
+    region, name = (part.strip() for part in key.split("|", 1))
+    if not region or not name:
+        return "단지와 시군구를 다시 선택해 주세요."
+    try:
+        code = md.code_of(region)
+    except Exception:  # noqa: BLE001
+        return "실거래 지역을 확인할 수 없습니다. 시군구를 다시 선택해 주세요."
+    if not isinstance(code, str) or len(code) < 5 or not code[:5].isdigit():
+        return "실거래 지역을 확인할 수 없습니다. 시군구를 다시 선택해 주세요."
+    if code[2:5] == "000":
+        return f"‘{region}’ 같은 시·도 단위로는 단지 실거래를 추적할 수 없습니다. 시군구를 선택해 주세요."
+    return None
+
+
 @router.post("/api/favorites")
 def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dict = Body(...)):
     kind, key = data.get("kind", "region"), data.get("key", "")
+    if kind == "complex":
+        error = _complex_favorite_error(key)
+        if error:
+            return JSONResponse(
+                {"ok": False, "error": "untrackable_complex", "message": error},
+                status_code=422,
+            )
     db.fav_add(deps.uid(request), kind, key, data.get("label", ""))
     if kind == "complex" and "|" in key:
         region, name = key.split("|", 1)

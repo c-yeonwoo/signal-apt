@@ -90,6 +90,7 @@ def test_budget_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
 
 def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
     uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    monkeypatch.setattr(auth_routes.md, "code_of", lambda region: "11680")
     client.post("/api/favorites", json={"kind": "complex", "key": "강남구|테스트아파트"})
     payload = {"매매추이": [{"ym": "2026-07", "건수": 1}], "평형별": [], "최근평단가": 4000}
     monkeypatch.setattr(cw, "cache_loader", lambda: lambda region, name: (payload, 1_700_000_000))
@@ -104,12 +105,25 @@ def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
 def test_complex_favorite_queues_first_real_trade_warm(client, monkeypatch):
     """★ 등록 직후 워밍을 예약해야 다음 홈 방문에서 '아직 수집 안 됨'이 줄어든다."""
     called = []
+    monkeypatch.setattr(auth_routes.md, "code_of", lambda region: "11680")
     monkeypatch.setattr(auth_routes, "_warm_complex_after_favorite",
                         lambda region, name: called.append((region, name)))
 
     r = client.post("/api/favorites", json={"kind": "complex", "key": "강남구|테스트아파트"})
     assert r.json() == {"ok": True, "warming": "queued"}
     assert called == [("강남구", "테스트아파트")]
+
+
+def test_complex_favorite_rejects_sido_without_creating_false_watch(client, monkeypatch):
+    """시·도 단위는 단지 API가 조회할 수 없으므로 워밍 약속을 하면 안 된다."""
+    monkeypatch.setattr(auth_routes.md, "code_of", lambda region: "11000")
+
+    r = client.post("/api/favorites", json={"kind": "complex", "key": "서울|상계주공9단지"})
+
+    assert r.status_code == 422
+    assert r.json()["error"] == "untrackable_complex"
+    assert "시군구" in r.json()["message"]
+    assert client.get("/api/favorites").json()["favorites"] == []
 
 
 def test_action_plan_requires_login(client):
@@ -181,6 +195,8 @@ def test_change_cards_ack_only_after_entering_the_viewport():
 def test_complex_favorite_tells_the_buyer_that_warming_started():
     html = INDEX.read_text(encoding="utf-8")
     assert "실거래 변화를 준비하는 중입니다" in html
+    assert "_favs.delete(id)" in html
+    assert "out.message" in html
 
 
 def test_stale_data_warning_is_wired():
