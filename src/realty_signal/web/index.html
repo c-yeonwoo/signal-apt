@@ -1586,6 +1586,26 @@ function routeFromHash(){
 // ===== 대시보드 홈 — 좌:할 일·후보 / 우:주간 동향 =====
 const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;${extra}">${inner}</div>`;
 const _dashH=t=>`<div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:-0.01em">${t}</div>`;
+// 요청 성공만으로 '읽음' 처리하면 모바일에서 화면 아래에 있던 변화가 사라진다.
+// 실제로 뷰포트에 들어온 카드만 다음 비교 기준점으로 확정한다.
+const _deliveryAcked=new Set(), _deliveryAckPending=new Set();
+function _ackWhenVisible(el, endpoint, body){
+  if(!el || _deliveryAcked.has(endpoint) || _deliveryAckPending.has(endpoint)) return;
+  const send=async()=>{
+    if(_deliveryAcked.has(endpoint) || _deliveryAckPending.has(endpoint)) return;
+    _deliveryAckPending.add(endpoint);
+    try{
+      const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:body?JSON.stringify(body):undefined});
+      if(r.ok) _deliveryAcked.add(endpoint);
+    }catch(e){} finally { _deliveryAckPending.delete(endpoint); }
+  };
+  if(!('IntersectionObserver' in window)){ requestAnimationFrame(send); return; }
+  const observer=new IntersectionObserver(entries=>{
+    if(entries.some(e=>e.isIntersecting)){ observer.disconnect(); send(); }
+  },{threshold:0.25});
+  observer.observe(el);
+}
 const _dashMore=(label,html)=>{
   if(!html) return '';
   return `<details class="dash-more"><summary>${label||'근거 보기'}</summary><div class="dash-more-body">${html}</div></details>`;
@@ -1991,6 +2011,7 @@ async function _loadWeekly(){
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${movers.slice(0,10).map(_moverRow).join('')}</div>`;
   }
   wrap.innerHTML=_dashCard(_dashH(head)+stale+conclusion+_dashMore('상세 보기', detail));
+  if(d.as_of) _ackWhenVisible(wrap,'/api/weekly-change/seen',{as_of:d.as_of});
 }
 // ===== 다음 할 일 — 텔레그램 브리핑과 같은 판단(briefing.actions) =====
 function _planGo(key, tab){
@@ -2122,6 +2143,7 @@ async function _loadComplexWatch(){
     wrap.innerHTML=_dashCard(head
       +`<div style="font-size:13.5px;line-height:1.55">관심단지 <b>${d.total||0}곳</b> · ${d.quiet_reason||'변화 없음'}</div>`
       + dead);
+    _ackWhenVisible(wrap,'/api/complex-watch/seen');
     return;
   }
   wrap.innerHTML=_dashCard(head
@@ -2129,6 +2151,7 @@ async function _loadComplexWatch(){
     + d.moved.map(row).join('')
     + `<div style="font-size:10.5px;color:var(--dim);margin-top:7px;line-height:1.5">${d.lag_note||''}</div>`
     + dead);
+  _ackWhenVisible(wrap,'/api/complex-watch/seen');
 }
 
 async function _loadBudgetWatch(){
@@ -2147,6 +2170,7 @@ async function _loadBudgetWatch(){
       wrap.innerHTML=_dashCard(_dashH('내 예산 안 매물')
         +`<div style="font-size:14px;line-height:1.55">지금 예산 안에 <b>${(d.in_budget||0).toLocaleString()}건</b>이 있습니다.
            <div style="font-size:12px;color:var(--dim);margin-top:6px">다음 방문부터 '새로 들어온 것'을 알려드립니다.</div></div>`);
+      _ackWhenVisible(wrap,'/api/budget-watch/seen');
     } else { wrap.innerHTML=''; }
     return;
   }
@@ -2180,11 +2204,13 @@ async function _loadBudgetWatch(){
     wrap.innerHTML=_dashCard(head
       +`<div style="font-size:14px;line-height:1.55">예산 안 <b>${(d.in_budget||0).toLocaleString()}건</b> · 지난 방문 대비 변화 없음
         <div style="font-size:12px;color:var(--dim);margin-top:6px">새로 들어오거나 빠진 매물이 없었습니다.</div></div>`);
+    _ackWhenVisible(wrap,'/api/budget-watch/seen');
     return;
   }
   wrap.innerHTML=_dashCard(head
     + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} 기준 · 지금 예산 안 ${(d.in_budget||0).toLocaleString()}건</div>`
     + parts.join(''));
+  _ackWhenVisible(wrap,'/api/budget-watch/seen');
 }
 
 async function _loadBuyingPower(){

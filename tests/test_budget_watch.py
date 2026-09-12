@@ -121,10 +121,11 @@ def test_listing_key_is_price_independent():
     assert k1 == k2 == "급매:N1"
 
 
-def test_route_advances_snapshot_after_showing():
-    """기준점은 **보여준 뒤에** 옮긴다 — 실패 시 변화를 잃지 않도록."""
-    home = pathlib.Path("src/realty_signal/routes/home.py").read_text(encoding="utf-8")
+def test_route_defers_snapshot_until_seen_ack():
+    """GET 응답은 아직 열람이 아니다 — 브라우저 ack 전에는 기준점을 옮기지 않는다."""
+    home = (pathlib.Path(__file__).resolve().parents[1] / "src/realty_signal/routes/home.py").read_text(encoding="utf-8")
     m = re.search(r"def budget_watch\(request: Request\):.*?(?=\n@router|\Z)", home, re.S)
     assert m
     src = m.group(0)
-    assert src.index("bw.compute(") < src.index("bw.mark_seen("), "기준점을 먼저 옮기고 있다"
+    assert "bw.mark_seen(" not in src
+    assert '@router.post("/api/budget-watch/seen")' in home

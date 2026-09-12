@@ -14,6 +14,9 @@ from fastapi.testclient import TestClient
 from realty_signal import api as app_api
 from realty_signal import auth, db, weekly
 from realty_signal.routes import home as home_routes
+from realty_signal.services import budget_watch as bw
+from realty_signal.services import complex_watch as cw
+from realty_signal.services import market_data as md
 
 INDEX = Path(__file__).resolve().parents[1] / "src/realty_signal/web/index.html"
 
@@ -55,6 +58,46 @@ def test_weekly_change_failure_is_not_silence(client, monkeypatch):
     d = client.get("/api/weekly-change").json()
     assert d["ready"] is False
     assert "캐시 깨짐" in d["blocked_reason"]
+
+
+def test_weekly_visit_is_consumed_only_by_seen_ack(client, monkeypatch):
+    """GET 성공이나 렌더 실패만으로 복귀 기준점을 잃으면 안 된다."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(last_date=__import__("pandas").Timestamp("2026-07-20")))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    assert db.kv_get("last_visit:" + str(uid)) is None
+
+    r = client.post("/api/weekly-change/seen", json={"as_of": "2026-07-20"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert db.kv_get("last_visit:" + str(uid))["as_of"] == "2026-07-20"
+
+
+def test_budget_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.profile_set(uid, {"매수력": {"최대매수가": 90_000}})
+    rows = [{"key": "급매:1", "총액": 80_000, "유형": "급매", "단지명": "테스트", "지역": "노원구"}]
+    monkeypatch.setattr(app_api, "_build_listings", lambda kinds: rows)
+
+    d = client.get("/api/budget-watch").json()
+    assert d["reason"] == "first_run"
+    assert db.kv_get(bw.KV_PREFIX + str(uid)) is None
+
+    assert client.post("/api/budget-watch/seen").json()["ok"] is True
+    assert db.kv_get(bw.KV_PREFIX + str(uid))["items"]
+
+
+def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    client.post("/api/favorites", json={"kind": "complex", "key": "강남구|테스트아파트"})
+    payload = {"매매추이": [{"ym": "2026-07", "건수": 1}], "평형별": [], "최근평단가": 4000}
+    monkeypatch.setattr(cw, "cache_loader", lambda: lambda region, name: (payload, 1_700_000_000))
+
+    assert client.get("/api/complex-watch").json()["ready"] is True
+    assert db.kv_get(cw.KV_PREFIX + str(uid)) is None
+
+    assert client.post("/api/complex-watch/seen").json()["ok"] is True
+    assert db.kv_get(cw.KV_PREFIX + str(uid))["items"]
 
 
 def test_action_plan_requires_login(client):
@@ -114,6 +157,13 @@ def test_home_renders_the_three_new_cards():
     assert "/api/weekly-issues" in html
     # 주간 카드가 옛 ★변동 카드를 대체했다 — 같은 걸 두 번 그리지 않는다
     assert "dashChangesWrap" not in html
+
+
+def test_change_cards_ack_only_after_entering_the_viewport():
+    html = INDEX.read_text(encoding="utf-8")
+    assert "IntersectionObserver" in html
+    for endpoint in ("/api/weekly-change/seen", "/api/budget-watch/seen", "/api/complex-watch/seen"):
+        assert endpoint in html
 
 
 def test_stale_data_warning_is_wired():
