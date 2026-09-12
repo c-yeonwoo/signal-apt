@@ -34,12 +34,39 @@ def weekly_change(request: Request):
             out["kb_fetch"] = app_api.kb_fetch_health()
         except Exception:  # noqa: BLE001 — 부가 정보라 실패해도 본문은 낸다
             pass
+        # 자리를 비운 동안 놓친 것 — '이번 주 변화' 는 직전 1주만 보므로 따로 계산한다
+        if uid:
+            out["comeback"] = _comeback_for(uid, favs, out.get("as_of"))
         return out
     except Exception as e:  # noqa: BLE001
         log.error("주간 변화 계산 실패: %s", e)
         # 실패를 '변화 없음'으로 보이게 하면 고장을 몇 주씩 못 본다
         return {"ready": False, "blocked_reason": f"주간 변화를 계산하지 못했습니다 ({e})",
                 "signals": [], "movers": [], "mine": [], "rest": [], "my_movers": []}
+
+
+    except Exception as e:  # noqa: BLE001
+        log.error("주간 변화 계산 실패: %s", e)
+        # 실패를 '변화 없음'으로 보이게 하면 고장을 몇 주씩 못 본다
+        return {"ready": False, "blocked_reason": f"주간 변화를 계산하지 못했습니다 ({e})",
+                "signals": [], "movers": [], "mine": [], "rest": [], "my_movers": []}
+
+
+def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
+    """복귀 브리핑. **만들어 낸 뒤에만** 기준점을 옮긴다 — 실패 시 변화를 잃지 않도록."""
+    from realty_signal.services import comeback, market_data as md
+
+    if not as_of:
+        return {"ready": False, "reason": "no_as_of"}
+    try:
+        kb_dates = sorted({str(d.date()) for d in md.kb().long["date"].unique()})
+        out = comeback.compute(uid, favs, as_of, kb_dates)
+    except Exception as e:  # noqa: BLE001
+        log.error("복귀 브리핑 실패 uid=%s: %s", uid, e)
+        return {"ready": False, "reason": "error", "detail": str(e)}
+    # 첫 방문도 기준점은 잡아 둬야 다음 복귀에 비교 대상이 생긴다
+    comeback.mark_seen(uid, as_of)
+    return out
 
 
 @router.get("/api/action-plan")
