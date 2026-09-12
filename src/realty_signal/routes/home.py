@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from realty_signal import db
@@ -45,15 +45,8 @@ def weekly_change(request: Request):
                 "signals": [], "movers": [], "mine": [], "rest": [], "my_movers": []}
 
 
-    except Exception as e:  # noqa: BLE001
-        log.error("주간 변화 계산 실패: %s", e)
-        # 실패를 '변화 없음'으로 보이게 하면 고장을 몇 주씩 못 본다
-        return {"ready": False, "blocked_reason": f"주간 변화를 계산하지 못했습니다 ({e})",
-                "signals": [], "movers": [], "mine": [], "rest": [], "my_movers": []}
-
-
 def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
-    """복귀 브리핑. **만들어 낸 뒤에만** 기준점을 옮긴다 — 실패 시 변화를 잃지 않도록."""
+    """복귀 브리핑을 계산한다. 기준점 이동은 브라우저의 열람 확인 뒤에 별도 처리한다."""
     from realty_signal.services import comeback, market_data as md
 
     if not as_of:
@@ -64,9 +57,24 @@ def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
     except Exception as e:  # noqa: BLE001
         log.error("복귀 브리핑 실패 uid=%s: %s", uid, e)
         return {"ready": False, "reason": "error", "detail": str(e)}
-    # 첫 방문도 기준점은 잡아 둬야 다음 복귀에 비교 대상이 생긴다
-    comeback.mark_seen(uid, as_of)
     return out
+
+
+@router.post("/api/weekly-change/seen")
+def weekly_change_seen(request: Request, data: dict | None = Body(default=None)):
+    """브라우저가 주간 카드를 실제로 본 뒤에만 복귀 기준점을 전진한다."""
+    from realty_signal.services import comeback, market_data as md
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    as_of = str((data or {}).get("as_of") or "")
+    current = str(md.kb().last_date.date())
+    if not as_of or as_of != current:
+        # 화면이 그려진 뒤 데이터가 갱신됐으면, 새 주차까지 보았다고 처리하면 안 된다.
+        return JSONResponse({"ok": False, "reason": "stale_response"}, status_code=409)
+    comeback.mark_seen(uid, as_of)
+    return {"ok": True, "as_of": as_of}
 
 
 @router.get("/api/budget-watch")
@@ -89,12 +97,28 @@ def budget_watch(request: Request):
             return {"ready": False, "reason": "no_budget",
                     "message": "매수력을 확정하면 예산 안에 들어온 매물을 알려드립니다."}
         rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
-        out = bw.compute(uid, rows, float(budget))
-        bw.mark_seen(uid, rows, float(budget))   # 보여준 뒤에만 기준점을 옮긴다
-        return out
+        return bw.compute(uid, rows, float(budget))
     except Exception as e:  # noqa: BLE001
         log.error("예산 변화 계산 실패 uid=%s: %s", uid, e)
         return {"ready": False, "reason": "error", "detail": str(e)}
+
+
+@router.post("/api/budget-watch/seen")
+def budget_watch_seen(request: Request):
+    """예산 매물 카드가 보인 뒤에만 다음 비교 기준점을 저장한다."""
+    from realty_signal import api as app_api
+    from realty_signal.services import budget_watch as bw
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    profile = db.profile_get(uid) or {}
+    budget = (profile.get("매수력") or {}).get("최대매수가")
+    if not budget:
+        return {"ok": False, "reason": "no_budget"}
+    rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+    bw.mark_seen(uid, rows, float(budget))
+    return {"ok": True}
 
 
 @router.get("/api/complex-watch")
@@ -119,11 +143,29 @@ def complex_watch(request: Request):
         budget = ((db.profile_get(uid) or {}).get("매수력") or {}).get("최대매수가")
         out = cw.compute(uid, favs, cw.cache_loader(),
                          budget=float(budget) if budget else None)
-        cw.mark_seen(uid, out.pop("_snaps", {}))   # 보여준 뒤에만 기준점을 옮긴다
+        out.pop("_snaps", None)       # 기준점은 열람 확인 API 에서만 전진한다
         return out
     except Exception as e:  # noqa: BLE001
         log.error("관심단지 변화 계산 실패 uid=%s: %s", uid, e)
         return {"ready": False, "reason": "error", "detail": str(e)}
+
+
+@router.post("/api/complex-watch/seen")
+def complex_watch_seen(request: Request):
+    """관심단지 카드가 보인 뒤에만 실거래 비교 기준점을 저장한다."""
+    from realty_signal.services import complex_watch as cw
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    favs = cw.favorites_of(uid)
+    if not favs:
+        return {"ok": False, "reason": "no_favorites"}
+    budget = ((db.profile_get(uid) or {}).get("매수력") or {}).get("최대매수가")
+    out = cw.compute(uid, favs, cw.cache_loader(),
+                     budget=float(budget) if budget else None)
+    cw.mark_seen(uid, out.get("_snaps", {}))
+    return {"ok": True}
 
 
 @router.get("/api/threshold-watch")
