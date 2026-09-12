@@ -22,6 +22,7 @@ CODES_FILE = CACHE_DIR / "codes.json"
 LOCALITY_FILE = CACHE_DIR / "locality.parquet"
 MACRO_FILE = CACHE_DIR / "macro.json"
 VOLUME_FILE = CACHE_DIR / "volume.json"
+V2_REAL_TRADE_DIR = CACHE_DIR / "v2_real_trade"
 
 
 def _recent_months(n: int = 3) -> list[str]:
