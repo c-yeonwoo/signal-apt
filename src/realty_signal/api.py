@@ -1892,32 +1892,49 @@ def complex_backtest_run(request: Request):
 
 
 
-def warm_favorite_complexes() -> dict:
-    """전체 관심단지 실거래 캐시 워밍(주간 스케줄러용). 14일내 신선한 건 건너뜀."""
+def warm_favorite_complex(region: str, name: str) -> dict:
+    """관심단지 하나의 실거래 캐시를 준비한다. 등록 직후와 주간 워밍이 함께 쓴다."""
     from realty_signal import db
     from realty_signal.ingest import complex as cx
     config.load_env()
     pk = config.public_data_key()
     if not pk:
-        return {"warmed": 0, "skipped": 0, "no_key": True}
-    codes = _kb().codes
-    warmed = skipped = 0
+        return {"status": "unavailable", "reason": "no_key"}
+    code = _code_of(region)
+    if not (code and code.isdigit() and len(code) >= 5):
+        return {"status": "unavailable", "reason": "invalid_region"}
+    if code[2:5] == "000":
+        # 국토부 API는 '서울' 같은 시·도 코드로 단지를 특정할 수 없다.
+        return {"status": "unavailable", "reason": "sido_level"}
+    ckey = f"complex:{code[:5]}:{name}"
+    if db.kv_get(ckey, max_age=_COMPLEX_TTL) is not None:
+        return {"status": "skipped"}
+    try:
+        data = cx.fetch_complex(code[:5], name, pk)
+        data["region"] = region
+        db.kv_set(ckey, data)
+        return {"status": "warmed"}
+    except Exception as e:  # noqa: BLE001
+        log.warning("관심단지 워밍 실패 %s/%s: %s", region, name, e)
+        return {"status": "error"}
+
+
+def warm_favorite_complexes() -> dict:
+    """전체 관심단지 실거래 캐시 워밍(주간 스케줄러용). 14일내 신선한 건 건너뜀."""
+    from realty_signal import db
+
+    warmed = skipped = unavailable = errors = 0
     for region, name in db.all_fav_complexes():
-        code = _code_of(region)
-        if not (code and code.isdigit() and len(code) >= 5):
-            continue
-        ckey = f"complex:{code[:5]}:{name}"
-        if db.kv_get(ckey, max_age=_COMPLEX_TTL) is not None:
-            skipped += 1
-            continue
-        try:
-            data = cx.fetch_complex(code[:5], name, pk)
-            data["region"] = region
-            db.kv_set(ckey, data)
+        status = warm_favorite_complex(region, name).get("status")
+        if status == "warmed":
             warmed += 1
-        except Exception as e:  # noqa: BLE001
-            log.warning("관심단지 워밍 실패 %s/%s: %s", region, name, e)
-    return {"warmed": warmed, "skipped": skipped}
+        elif status == "skipped":
+            skipped += 1
+        elif status == "unavailable":
+            unavailable += 1
+        else:
+            errors += 1
+    return {"warmed": warmed, "skipped": skipped, "unavailable": unavailable, "errors": errors}
 
 
 # 가치기준 → (필드, 작을수록 유리?, 표시라벨, 값포맷)
@@ -2686,5 +2703,4 @@ def certified_refresh(data: dict = Body(default={})):
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
     CERTIFIED_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
     return {"ok": True, "count": len(listings), "regions": len(regions)}
-
 
