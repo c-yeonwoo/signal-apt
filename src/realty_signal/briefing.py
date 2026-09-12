@@ -247,7 +247,7 @@ def plan(uid: int) -> dict:
 
 def build(uid: int, *, force: bool = False) -> dict:
     """유저 1인 브리핑. 보낼 게 없으면 {'send': False, 'reason': ...}."""
-    from realty_signal.services import shortlist as sl
+    from realty_signal.services import complex_watch as cw, shortlist as sl
 
     profile = dict(db.profile_get(uid) or {})
     profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
@@ -269,6 +269,12 @@ def build(uid: int, *, force: bool = False) -> dict:
     first = not prev
     diff = _diff_candidates(cands, prev.get("candidates") or {})
     sigs = _diff_signals(cur_sigs, prev.get("signals") or {})
+    # 관심단지는 **브리핑 자기 스냅샷**으로 비교한다 — 홈 카드(`complex_snap:`)와
+    # 키를 공유하면 브리핑이 나갈 때마다 홈의 관심단지 변화가 사라진다.
+    cx_items, cx_snaps, _ = cw.scan(cw.favorites_of(uid), cw.cache_loader(),
+                                    prev.get("complexes") or {}, budget=float(budget))
+    cx_moved = [it for it in cx_items if it.get("changes")]
+
     qs = _quicksales(watch, float(budget))
     qs_new = len(qs) - int(prev.get("quicksale") or 0)
     auctions = _auction_alerts()
@@ -279,23 +285,27 @@ def build(uid: int, *, force: bool = False) -> dict:
         "candidates": {_key(c): c.get("예상가") for c in cands},
         "signals": cur_sigs,
         "quicksale": len(qs),
+        "complexes": cx_snaps,
     }
     news = len(diff["new"]) + len(diff["dropped"]) + len(diff["moved"]) + len(sigs) \
         + (qs_new if qs_new > 0 else 0) \
-        + sum(1 for a in auctions if a["D"] in ALERT_DDAYS)
+        + sum(1 for a in auctions if a["D"] in ALERT_DDAYS) \
+        + len(cx_moved)
     weekly = today_kst().weekday() == 0
     if not first and not news and not weekly and not force:
         return {"send": False, "reason": "no_news", "snapshot": snapshot}
 
     text = _render(profile, data, diff, sigs, qs, qs_new, first=first,
-                   visited=db.imjang_latest(uid), auctions=auctions)
+                   visited=db.imjang_latest(uid), auctions=auctions,
+                   complexes=cx_moved)
     return {"send": True, "text": text, "snapshot": snapshot, "news": news,
             "first": first, "candidates": cands}
 
 
 def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             qs: list[dict], qs_new: int, *, first: bool,
-            visited: dict | None = None, auctions: list[dict] | None = None) -> str:
+            visited: dict | None = None, auctions: list[dict] | None = None,
+            complexes: list[dict] | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
     L = [f"🦊 닉 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
@@ -344,6 +354,14 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             gap_s = f" (시세 {gap:+.1f}%)" if gap is not None else ""
             py = f"{m['평형']}평 " if m.get("평형") else ""
             L.append(f"· {m.get('단지명')} {py}{_eok(m.get('호가'))}{gap_s}")
+        L.append("")
+
+    if complexes:
+        L.append(f"[관심단지] {len(complexes)}곳 변화")
+        for it in complexes[:3]:
+            말 = " · ".join(c["말"] for c in (it.get("changes") or [])[:3])
+            L.append(f"· {it['단지명']}({it['지역']}) — {말}")
+        L.append("※ 실거래는 계약 후 30일 내 신고라 최근 달 건수는 계속 늘어납니다.")
         L.append("")
 
     if auctions:
