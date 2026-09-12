@@ -192,6 +192,28 @@ def volumes():
     console.print(f"[green]완료[/green] → {store.VOLUME_FILE} ({len(v)}개 지역)")
 
 
+@app.command("v2-collect")
+def v2_collect(
+    start: str = typer.Option("200801", help="수집 시작월 YYYYMM"),
+    end: str = typer.Option("202609", help="수집 종료월 YYYYMM"),
+    workers: int = typer.Option(4, min=1, max=8, help="국토부 API 병렬 요청 수"),
+):
+    """V-2 실거래 검증용 시군구 월별 중위 평단가를 재개 가능 캐시로 수집한다."""
+    from realty_signal import config, real_trade
+
+    config.load_env()
+    key = config.public_data_key()
+    if not key:
+        console.print("[red]PUBLIC_DATA_KEY 없음[/red]")
+        raise typer.Exit(1)
+    kb = store.load()
+    lawds = real_trade.target_lawds(kb.codes)
+    months = real_trade.month_range(start, end)
+    console.print(f"[dim]V-2 실거래 수집: 시군구 {len(lawds)} × {len(months)}개월 = {len(lawds) * len(months):,}건[/dim]")
+    stats = real_trade.collect(lawds, months, key, store.V2_REAL_TRADE_DIR, workers=workers)
+    console.print(f"[green]V-2 수집[/green] 신규 {stats['fetched']:,} · 캐시 {stats['cached']:,} · 실패 {stats['failed']:,} / {stats['total']:,}")
+
+
 @app.command()
 def serve(
     host: str = typer.Option(lambda: os.environ.get("HOST", "127.0.0.1")),
