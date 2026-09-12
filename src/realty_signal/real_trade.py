@@ -69,7 +69,7 @@ def fetch_month(lawd: str, ym: str, key: str, timeout: int = 30) -> dict | None:
         except Exception:  # noqa: BLE001 - failed months must remain eligible for a later retry
             return None
         result_code = root.findtext(".//resultCode")
-        if result_code and result_code != "00":
+        if result_code and result_code not in {"00", "000"}:
             return None
         if total is None:
             raw_total = root.findtext(".//totalCount")

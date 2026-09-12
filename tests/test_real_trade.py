@@ -1,4 +1,5 @@
 from realty_signal import real_trade
+import xml.etree.ElementTree as ET
 
 
 def test_month_range_is_inclusive_and_validates_order():
@@ -30,3 +31,16 @@ def test_collect_resumes_cache_and_does_not_cache_failures(tmp_path, monkeypatch
     assert (tmp_path / "11680" / "202401.json").exists()
     assert not (tmp_path / "11680" / "202402.json").exists()
     assert calls == [("11680", "202401"), ("11680", "202402")]
+
+
+def test_public_data_success_codes_include_current_api_format(monkeypatch):
+    root = ET.fromstring("<response><header><resultCode>000</resultCode></header><body><totalCount>0</totalCount></body></response>")
+
+    class Response:
+        def read(self):
+            return ET.tostring(root)
+
+    monkeypatch.setattr(real_trade.urllib.request, "urlopen", lambda *args, **kwargs: Response())
+    assert real_trade.fetch_month("11680", "202508", "key") == {
+        "lawd": "11680", "ym": "202508", "transactions": 0, "median_ppy": None, "api_total": 0,
+    }
