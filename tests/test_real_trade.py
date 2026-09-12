@@ -27,10 +27,26 @@ def test_collect_resumes_cache_and_does_not_cache_failures(tmp_path, monkeypatch
     monkeypatch.setattr(real_trade, "fetch_month", fake_fetch)
     stats = real_trade.collect(["11680"], ["202401", "202402"], "key", tmp_path, workers=1)
 
-    assert stats == {"cached": 0, "fetched": 1, "failed": 1, "requested": 2, "total": 2}
+    assert stats == {"cached": 0, "fetched": 1, "failed": 1, "retried": 2, "requested": 2, "total": 2}
     assert (tmp_path / "11680" / "202401.json").exists()
     assert not (tmp_path / "11680" / "202402.json").exists()
-    assert calls == [("11680", "202401"), ("11680", "202402")]
+    assert calls == [("11680", "202401"), ("11680", "202402"), ("11680", "202402"), ("11680", "202402")]
+
+
+def test_collect_retries_transient_month_without_marking_it_failed(tmp_path, monkeypatch):
+    calls = []
+
+    def flaky_fetch(lawd, ym, key):
+        calls.append((lawd, ym))
+        return None if len(calls) == 1 else {"lawd": lawd, "ym": ym, "transactions": 1, "median_ppy": 100.0}
+
+    monkeypatch.setattr(real_trade, "fetch_month", flaky_fetch)
+    monkeypatch.setattr(real_trade.time, "sleep", lambda seconds: None)
+
+    stats = real_trade.collect(["11680"], ["202401"], "key", tmp_path, workers=1, retries=2)
+
+    assert stats == {"cached": 0, "fetched": 1, "failed": 0, "retried": 1, "requested": 1, "total": 1}
+    assert len(calls) == 2
 
 
 def test_public_data_success_codes_include_current_api_format(monkeypatch):

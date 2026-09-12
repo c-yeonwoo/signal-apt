@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 import statistics
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Callable
 
 _TRADE_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
 _PYEONG_M2 = 3.3058
@@ -86,27 +88,44 @@ def _cache_path(cache_dir: Path, lawd: str, ym: str) -> Path:
     return cache_dir / lawd / f"{ym}.json"
 
 
-def collect(lawds: list[str], months: list[str], key: str, cache_dir: Path, workers: int = 4) -> dict:
+def _fetch_with_retry(lawd: str, ym: str, key: str, retries: int) -> tuple[dict | None, int]:
+    """일시적인 국토부 게이트웨이 실패만 제한적으로 재시도한다."""
+    for attempt in range(retries + 1):
+        result = fetch_month(lawd, ym, key)
+        if result is not None:
+            return result, attempt
+        if attempt < retries:
+            time.sleep(0.25 * (2 ** attempt))
+    return None, retries
+
+
+def collect(
+    lawds: list[str], months: list[str], key: str, cache_dir: Path, workers: int = 4,
+    retries: int = 2, progress: Callable[[int, int], None] | None = None,
+) -> dict:
     """미수집 월만 병렬 수집한다. 중단해도 다음 실행이 이어받는다."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     pending = [(lawd, ym) for lawd in lawds for ym in months if not _cache_path(cache_dir, lawd, ym).exists()]
     stats = {"cached": len(lawds) * len(months) - len(pending), "fetched": 0, "failed": 0,
-             "requested": len(pending), "total": len(lawds) * len(months)}
+             "retried": 0, "requested": len(pending), "total": len(lawds) * len(months)}
     if not pending:
         return stats
     with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        futures = {executor.submit(fetch_month, lawd, ym, key): (lawd, ym) for lawd, ym in pending}
-        for future in as_completed(futures):
+        futures = {executor.submit(_fetch_with_retry, lawd, ym, key, retries): (lawd, ym) for lawd, ym in pending}
+        for completed, future in enumerate(as_completed(futures), start=1):
             lawd, ym = futures[future]
             try:
-                result = future.result()
+                result, attempts = future.result()
             except Exception:  # noqa: BLE001
-                result = None
+                result, attempts = None, retries
+            stats["retried"] += attempts
             if result is None:
                 stats["failed"] += 1
-                continue
-            path = _cache_path(cache_dir, lawd, ym)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-            stats["fetched"] += 1
+            else:
+                path = _cache_path(cache_dir, lawd, ym)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                stats["fetched"] += 1
+            if progress and (completed % 100 == 0 or completed == len(pending)):
+                progress(stats["cached"] + completed, stats["total"])
     return stats
