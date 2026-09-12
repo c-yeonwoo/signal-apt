@@ -183,7 +183,10 @@ async def _auto_refresh_loop():
                 log.warning("주간 digest 실행 (send=%s)", send)
                 stats = await asyncio.to_thread(lambda: dig.run_digest(send=send, quiet=True))
                 db.kv_set("last_digest_run", time.time())
-                log.warning("digest 완료: %s", stats)
+                # 결과를 남긴다 — 로그로만 흘리면 'dry-run 이 5주째' 인 걸 아무도 모른다
+                from realty_signal.services import notify_status as ns
+                ns.record_digest_run(stats, sent=send)
+                log.warning("digest 완료(send=%s): %s", send, stats)
         except Exception as e:
             log.error("digest 실패: %s", e)
         try:  # 회원·리포트 보존 — S3 백업(env 설정 시). 매일 1회.
