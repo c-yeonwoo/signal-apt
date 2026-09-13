@@ -50,6 +50,7 @@
   .dash-more > summary::after { content:' ▾'; color:var(--dim); font-weight:400; }
   .dash-more[open] > summary::after { content:' ▴'; }
   .dash-more-body { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+  .dash-col > .dash-more > .dash-more-body > * + * { margin-top:12px; }
   /* 청약 필터·자격 */
   .ps-toolbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:0 0 14px;
     padding:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
@@ -1680,7 +1681,7 @@ async function loadDashboard(){
   const nm=(_userEmail||'').split('@')[0]||'회원';
   document.getElementById('dashHello').textContent=`${nm}님, 이번 주`;
   const sub=document.getElementById('dashSub');
-  if(sub) sub.textContent='할 일·후보와 주간 동향';
+  if(sub) sub.textContent='지금 할 일부터 보고, 필요할 때 후보와 근거를 펼쳐보세요.';
   const favR=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
   const favRows=favR.map(r=>(allSignals||[]).find(s=>s.region===r)).filter(Boolean);
   let favH=_dashH('관심 동네');
@@ -1725,26 +1726,37 @@ async function loadDashboard(){
     ${link('mymap','내 맵')}${link('about','성적표')}
     <span onclick="askNick('지금 내 관심지역과 예산 기준으로 매수 타이밍을 근거와 함께 알려줘.')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500">닉에게</span>
   </div>`;
-  // 좌: 할 일·후보 · 우: 주간 동향
+  // 초보 구매자는 첫 화면에서 행동 하나·예산 후보·주간 변화만 보면 된다.
+  // 관심 단지·시장 근거는 같은 데이터를 유지하되 필요할 때만 펼친다.
   body.innerHTML=`<div id="dashComeback"></div><div id="dashNotify"></div><div class="dash-layout">
     <div class="dash-col dash-col-me">
-      <div class="dash-col-label">할 일 · 후보</div>
+      <div class="dash-col-label">지금 할 일</div>
+      <div id="dashPlanWrap"></div>
       <div id="dashPowerWrap"></div>
       <div id="dashBudgetNewWrap"></div>
-      <div id="dashCxWrap"></div>
-      <div id="dashPlanWrap"></div>
-      <div id="dashShortlistWrap"></div>
-      ${_dashCard(favH)}
-      ${_dashCard(_dashH('예산 안 BUY+')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
-      <div id="dashFeedWrap"></div>
+      <details class="dash-more" id="dashExtra">
+        <summary>관심 동네·후보 더 보기</summary>
+        <div class="dash-more-body">
+          <div id="dashCxWrap"></div>
+          <div id="dashShortlistWrap"></div>
+          ${_dashCard(favH)}
+          ${_dashCard(_dashH('예산 안 BUY+')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
+          <div id="dashFeedWrap"></div>
+        </div>
+      </details>
     </div>
     <div class="dash-col dash-col-market">
       <div class="dash-col-label">주간 동향</div>
       <div id="dashWeeklyWrap"></div>
-      <div id="dashNearWrap"></div>
-      ${_dashCard(regimeH)}
-      <div id="dashIssuesWrap"></div>
-      ${_dashCard(_dashH('바로가기')+moreLinks)}
+      <details class="dash-more" id="dashMarketExtra">
+        <summary>시장 근거·이슈 더 보기</summary>
+        <div class="dash-more-body">
+          <div id="dashNearWrap"></div>
+          ${_dashCard(regimeH)}
+          <div id="dashIssuesWrap"></div>
+          ${_dashCard(_dashH('바로가기')+moreLinks)}
+        </div>
+      </details>
     </div>
   </div>`;
   _loadBuyingPower();
