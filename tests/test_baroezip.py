@@ -94,6 +94,15 @@ def test_fetch_market_passes_scope_query():
     assert "scope=all" in seen["url"]
 
 
+def test_fetch_market_with_status_keeps_source_error_distinct_from_empty_rows():
+    with patch("realty_signal.ingest.baroezip.urllib.request.urlopen",
+               side_effect=TimeoutError("upstream timeout")):
+        rows, error = baroezip.fetch_market_with_status(1, 2, 3, 4)
+
+    assert rows == []
+    assert error and "TimeoutError" in error
+
+
 def test_listing_timing_certified_bonus():
     from realty_signal.signals.timing import listing_timing
     r = listing_timing("찐매물", {"급매갭": -10}, "BUY", "B", asof="2026-07-14")

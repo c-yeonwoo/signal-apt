@@ -198,10 +198,16 @@ async def _auto_refresh_loop():
         try:  # 급매·찐매물 — 하루 1회(캐시 mtime/버전 기준)
             if _quicksale_stale():
                 log.warning("급매 캐시 만료 — 일일 스캔")
-                await asyncio.to_thread(lambda: quicksale_refresh({}))
+                result = await asyncio.to_thread(lambda: quicksale_refresh({}))
+                if not result["ok"]:
+                    log.error("급매 일일 스캔 보류: %s", result["scan"].get("error"))
+                    retry_soon = True
             if _certified_stale():
                 log.warning("찐매물 캐시 만료 — 일일 스캔")
-                await asyncio.to_thread(lambda: certified_refresh({}))
+                result = await asyncio.to_thread(lambda: certified_refresh({}))
+                if not result["ok"]:
+                    log.error("찐매물 일일 스캔 보류: %s", result["scan"].get("error"))
+                    retry_soon = True
         except Exception as e:
             log.error("급매/찐매물 일일 갱신 실패: %s", e)
         # 실패했으면 하루를 기다리지 않는다 — 일시적 장애로 한 주를 통째로 잃지 않도록
@@ -221,13 +227,15 @@ def _seed_if_missing():
             store.build_localities()
         except Exception as e:  # noqa: BLE001
             log.error("localities 시딩 실패: %s", e)
-    if pk and _quicksale_stale():                        # 급매 레이더 (없거나 1일 경과·옛 버전)
+    # 바로집 원천은 공공데이터 키를 쓰지 않는다. 키 유무로 막으면 빈 볼륨 배포에서
+    # 급매 캐시가 영구히 생성되지 않는다.
+    if _quicksale_stale():                               # 급매 레이더 (없거나 1일 경과·옛 버전)
         try:
             log.warning("quicksale 없음/만료 — 급매 레이더 스캔 중…")
             quicksale_refresh({})
         except Exception as e:  # noqa: BLE001
             log.error("quicksale 시딩 실패: %s", e)
-    if pk and _certified_stale():                        # 찐매물(내집등록) — 급매와 동일 주기
+    if _certified_stale():                               # 찐매물(내집등록) — 급매와 동일 주기
         try:
             log.warning("certified 없음/만료 — 찐매물 스캔 중…")
             certified_refresh({})
@@ -1383,8 +1391,8 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
 
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
 CERTIFIED_FILE = store.CACHE_DIR / "certified.json"
-_QUICKSALE_SCAN_VER = 3   # 스캔 로직 버전 — 올리면 배포 후 부팅 시 자동 재스캔(3=BUY+∪관심지역 커버리지 확대)
-_CERTIFIED_SCAN_VER = 1   # 1=scope=all + has_certified 찐매물
+_QUICKSALE_SCAN_VER = 4   # 4=원천 장애를 빈 캐시로 덮어쓰지 않고 상태를 노출
+_CERTIFIED_SCAN_VER = 2   # 2=위 원천 장애 보호 적용
 _RADAR_MAX_AGE = 86400     # 급매·찐매물 캐시 TTL(1일)
 
 
@@ -1409,6 +1417,37 @@ def _quicksale_stale() -> bool:
 def _certified_stale() -> bool:
     """찐매물 캐시가 없거나 옛 버전·1일 경과면 True."""
     return _radar_cache_stale(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
+
+
+def _radar_refresh_file(path):
+    """마지막 레이더 갱신 결과. 본 캐시와 분리해 실패해도 직전 결과를 보존한다."""
+    return path.with_name(f"{path.stem}_refresh.json")
+
+
+def _radar_refresh_status(path) -> dict:
+    try:
+        return json.loads(_radar_refresh_file(path).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _record_radar_refresh(path, status: dict) -> None:
+    _radar_refresh_file(path).write_text(
+        json.dumps(status, ensure_ascii=False), encoding="utf-8")
+
+
+def _radar_cached_response(path, min_ver: int) -> dict:
+    """캐시와 마지막 갱신 건강 상태를 API 응답으로 합친다."""
+    refresh = _radar_refresh_status(path)
+    if path.exists():
+        try:
+            out = json.loads(path.read_text(encoding="utf-8"))
+            out["stale"] = _radar_cache_stale(path, min_ver)
+            out["refresh"] = refresh
+            return out
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ready": False, "listings": [], "regions": [], "refresh": refresh}
 
 
 
@@ -2447,23 +2486,32 @@ def _sigungu_at(lat, lng) -> str | None:
     return None
 
 
-def _radar_scan(regions: list[str], *, kind: str = "급매") -> list[dict]:
+def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tuple[list[dict], dict]:
     """baroezip spatialmarket 스캔 → 급매 또는 찐매물 + 지역 시그널.
 
     kind='급매': 기본 피드(is_urgent). kind='찐매물': scope=all + has_certified.
     bbox 스캔은 인접 구를 덮으므로, 매물 좌표로 시군구를 역판정해 지역·급지 오분류를 막는다.
+    원천 요청이 전부 실패했을 때 ``빈 결과``와 구분할 수 있도록 요청 커버리지를 남긴다.
     """
-    from realty_signal.ingest.baroezip import bbox_around, fetch_market
+    from realty_signal.ingest.baroezip import bbox_around, fetch_market_with_status
 
     scope = "all" if kind == "찐매물" else None
     sig = _signal_map()
     seen, out = set(), []
+    queryable, succeeded, failures, skipped = 0, 0, [], 0
     for region in regions:
         code = _code_of(region)
         c = _region_centroid(region, code)
         if not c:
+            skipped += 1
             continue
-        for m in fetch_market(*bbox_around(c[0], c[1]), scope=scope):
+        queryable += 1
+        rows, error = fetch_market_with_status(*bbox_around(c[0], c[1]), scope=scope)
+        if error:
+            failures.append({"region": region, "error": error})
+            continue
+        succeeded += 1
+        for m in rows:
             if kind == "급매" and not m.get("급매"):
                 continue
             if kind == "찐매물" and not m.get("찐매물"):
@@ -2477,7 +2525,26 @@ def _radar_scan(regions: list[str], *, kind: str = "급매") -> list[dict]:
             m["시그널"] = sig.get(actual, "")
             out.append(m)
     out.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
-    return out
+    # 단일 지역 수동 갱신은 한 번의 성공으로 충분하고, 전체 갱신은 절반 이상 원천 응답을
+    # 받아야 기존의 유효 캐시를 불완전한 결과로 바꾸지 않는다.
+    required = max(1, (queryable + 1) // 2)
+    status = {
+        "requested_regions": len(regions),
+        "queryable_regions": queryable,
+        "successful_requests": succeeded,
+        "failed_requests": len(failures),
+        "skipped_regions": skipped,
+        "required_successes": required,
+        "usable": succeeded >= required,
+        "failures": failures[:10],
+    }
+    return out, status
+
+
+def _radar_scan(regions: list[str], *, kind: str = "급매") -> list[dict]:
+    """급매/찐매물 목록만 필요한 기존 호출자용 호환 래퍼."""
+    listings, _ = _radar_scan_with_status(regions, kind=kind)
+    return listings
 
 
 _SIG_BONUS = {"STRONG_BUY": 25, "BUY": 15, "WATCH": 5, "NEUTRAL": 0, "SELL_RISK": -20}
@@ -2656,16 +2723,12 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
 
 def quicksale():
     """급매 레이더 결과 (캐시). 개인용 — baroezip 공개 API 기반."""
-    if QUICKSALE_FILE.exists():
-        return json.loads(QUICKSALE_FILE.read_text(encoding="utf-8"))
-    return {"ready": False, "listings": [], "regions": []}
+    return _radar_cached_response(QUICKSALE_FILE, _QUICKSALE_SCAN_VER)
 
 
 def certified():
     """찐매물(내집등록·인증) 레이더 결과 (캐시). scope=all + has_certified."""
-    if CERTIFIED_FILE.exists():
-        return json.loads(CERTIFIED_FILE.read_text(encoding="utf-8"))
-    return {"ready": False, "listings": [], "regions": []}
+    return _radar_cached_response(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
 
 
 
@@ -2687,20 +2750,35 @@ def _scan_regions() -> list[str]:
 
 def quicksale_refresh(data: dict = Body(default={})):
     """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
+    import time
     regions = data.get("regions") or _scan_regions()
-    listings = _radar_scan(regions, kind="급매")
+    listings, scan = _radar_scan_with_status(regions, kind="급매")
+    status = {"attempted_at": time.time(), "ok": bool(scan["usable"]), **scan}
+    if not scan["usable"]:
+        status["error"] = ("스캔 가능한 지역이 없습니다." if not scan["queryable_regions"]
+                           else "원천 응답 부족으로 기존 급매 결과를 유지했습니다.")
+        _record_radar_refresh(QUICKSALE_FILE, status)
+        return {"ok": False, "count": 0, "regions": len(regions), "scan": status}
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
     QUICKSALE_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
-    return {"ok": True, "count": len(listings), "regions": len(regions)}
+    _record_radar_refresh(QUICKSALE_FILE, status)
+    return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}
 
 
 def certified_refresh(data: dict = Body(default={})):
     """찐매물 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
+    import time
     regions = data.get("regions") or _scan_regions()
-    listings = _radar_scan(regions, kind="찐매물")
+    listings, scan = _radar_scan_with_status(regions, kind="찐매물")
+    status = {"attempted_at": time.time(), "ok": bool(scan["usable"]), **scan}
+    if not scan["usable"]:
+        status["error"] = ("스캔 가능한 지역이 없습니다." if not scan["queryable_regions"]
+                           else "원천 응답 부족으로 기존 찐매물 결과를 유지했습니다.")
+        _record_radar_refresh(CERTIFIED_FILE, status)
+        return {"ok": False, "count": 0, "regions": len(regions), "scan": status}
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
     CERTIFIED_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
-    return {"ok": True, "count": len(listings), "regions": len(regions)}
-
+    _record_radar_refresh(CERTIFIED_FILE, status)
+    return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}

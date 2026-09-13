@@ -2857,7 +2857,18 @@ async function loadRedevZones(){
     tb.appendChild(tr);
   });
 }
-let _qsList=[], _qsCertList=[], _qsMode='급매';
+let _qsList=[], _qsCertList=[], _qsMode='급매', _qsData={급매:null,찐매물:null};
+function qsStatusText(data){
+  const n=data?.count||(data?.listings||[]).length, refresh=data?.refresh||{};
+  if(!data?.ready){
+    return refresh.error ? `스캔 실패: ${refresh.error}` : '아직 스캔 안 됨 — 자동 스캔 대기 중';
+  }
+  let text=`${n}건 (스캔 지역 ${data.regions?.length||0}곳) · 참고용`;
+  if(refresh.error) text+=` · 최근 갱신 보류: ${refresh.error}`;
+  else if(refresh.failed_requests) text+=` · 일부 지역 응답 실패 ${refresh.failed_requests}곳`;
+  else if(data.stale) text+=' · 지난 결과 표시 중, 자동 갱신 대기';
+  return text;
+}
 function qsMode(mode){
   _qsMode = mode==='찐매물' ? '찐매물' : '급매';
   document.querySelectorAll('[data-qstab]').forEach(b=>b.classList.toggle('on', b.dataset.qstab===_qsMode));
@@ -2868,9 +2879,9 @@ function qsMode(mode){
   const gl=document.getElementById('qsGapLabel');
   if(gl) gl.firstChild.textContent=_qsMode==='찐매물'?'최소 시세갭 ':'최소 급매갭 ';
   if(_qsMode==='찐매물' && +document.getElementById('qsGap').value===-5) document.getElementById('qsGap').value='0';
-  const n=_qsMode==='찐매물'?_qsCertList.length:_qsList.length;
   const st=document.getElementById('qsStatus');
-  if(st && n) st.textContent=`${n}건 · 하루 1회 캐시 · 참고용`;
+  const data=_qsData[_qsMode];
+  if(st && data) st.textContent=qsStatusText(data);
   renderQuicksale();
 }
 
@@ -2891,10 +2902,9 @@ async function loadQuicksale(){
   ]);
   _qsList = d.listings||[];
   _qsCertList = c.listings||[];
+  _qsData={급매:d,찐매물:c};
   const cur=_qsMode==='찐매물'?c:d;
-  document.getElementById('qsStatus').textContent = cur.ready
-    ? `${cur.count||(cur.listings||[]).length}건 (스캔 지역 ${cur.regions?.length||0}곳) · 참고용`
-    : '아직 스캔 안 됨 — 관리자 스캔이 필요합니다';
+  document.getElementById('qsStatus').textContent = qsStatusText(cur);
   renderQuicksale();
 }
 async function refreshQuicksale(){
@@ -2904,10 +2914,11 @@ async function refreshQuicksale(){
   try{
     const body = region ? {regions:[region]} : {};
     const hdr={'Content-Type':'application/json'};
-    await Promise.all([
+    const results=await Promise.all([
       fetch('/api/quicksale/refresh',{method:'POST',headers:hdr,body:JSON.stringify(body)}),
       fetch('/api/certified/refresh',{method:'POST',headers:hdr,body:JSON.stringify(body)}),
     ]);
+    if(results.some(r=>!r.ok)) throw new Error('스캔 요청 권한 또는 원천 응답을 확인해 주세요.');
     await loadQuicksale();
   }catch(e){ document.getElementById('qsStatus').textContent='스캔 실패: '+e; }
   btn.disabled=false; btn.textContent=o;

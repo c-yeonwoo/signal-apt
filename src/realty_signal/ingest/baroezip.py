@@ -20,9 +20,12 @@ _HDR = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebK
         "Accept": "application/json"}
 
 
-def fetch_market(lat1: float, lng1: float, lat2: float, lng2: float,
-                 *, scope: str | None = None) -> list[dict]:
-    """bbox 내 매물 목록(개별 호가). 단지별 market_data를 평탄화.
+def fetch_market_with_status(lat1: float, lng1: float, lat2: float, lng2: float,
+                             *, scope: str | None = None) -> tuple[list[dict], str | None]:
+    """매물과 원천 호출 상태를 함께 반환한다.
+
+    빈 매물은 정상 응답일 수 있으므로, 네트워크·응답 형식 오류와 구분해야 한다.
+    레이더 갱신에서 전체 원천 장애를 새 ``0건`` 캐시로 덮어쓰지 않기 위해 쓴다.
 
     scope=None/urgent → 급매 위주 피드.
     scope='all' → 급매+찐매물(has_certified) 혼합. 찐매물만 쓰려면 호출 측에서 필터.
@@ -38,8 +41,10 @@ def fetch_market(lat1: float, lng1: float, lat2: float, lng2: float,
             urllib.request.Request(
                 f"{_URL}?{urllib.parse.urlencode(q)}", headers=_HDR), timeout=25).read()
         data = jsonx.loads(raw).get("data", [])
-    except Exception:
-        return []
+        if not isinstance(data, list):
+            return [], "응답 data가 목록 형식이 아님"
+    except Exception as e:  # noqa: BLE001 - 호출자는 원천 장애를 표시해야 한다
+        return [], f"{type(e).__name__}: {str(e)[:160]}"
 
     out = []
     for grp in data:
@@ -73,7 +78,14 @@ def fetch_market(lat1: float, lng1: float, lat2: float, lng2: float,
                 "lng": al.get("longitude") or m.get("longitude"),
                 "naver_id": m.get("original"),               # 네이버 매물 id
             })
-    return out
+    return out, None
+
+
+def fetch_market(lat1: float, lng1: float, lat2: float, lng2: float,
+                 *, scope: str | None = None) -> list[dict]:
+    """bbox 내 매물 목록(개별 호가). 기존 호출자용 호환 래퍼."""
+    rows, _ = fetch_market_with_status(lat1, lng1, lat2, lng2, scope=scope)
+    return rows
 
 
 def bbox_around(lat: float, lng: float, dlat: float = 0.05, dlng: float = 0.06) -> tuple:
