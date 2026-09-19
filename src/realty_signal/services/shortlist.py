@@ -103,7 +103,7 @@ def _diversify(scored: list[dict], limit: int) -> list[dict]:
 
 
 def _candidate_regions(favs: list[str], signal_map: dict, loc: dict) -> list[str]:
-    """★ 관심지역 우선 → BUY+ 를 시그널 강도, 그 다음 저평가도 순으로 채운다."""
+    """관심지역 우선, 다음은 낮은 지역 평단부터 제한 범위를 탐색한다."""
     out = [r for r in favs if r in signal_map]
     buyplus = [r for r in signal_map if r not in out]
     buyplus.sort(key=lambda r: (loc.get(r, {}).get("price") or float("inf"), r))
@@ -122,7 +122,7 @@ def _weights(has_work: bool, override: dict | None = None) -> dict:
 
 
 def build(profile: dict, budget: float, *, limit: int = 3,
-          weight_override: dict | None = None) -> dict:
+          weight_override: dict | None = None, budget_is_ceiling: bool = True) -> dict:
     """예산 안에서 라이프스타일 적합도 상위 단지 + 탈락 사유 집계."""
     from realty_signal import api as app_api
 
@@ -147,6 +147,8 @@ def build(profile: dict, budget: float, *, limit: int = 3,
         if not grades:
             rejected["데이터없음"] += 1
             continue
+        rp = buying_power.params_for_region(params, region, app_api._sido_of(region))
+        region_budget = budget if budget_is_ceiling else buying_power.max_purchase(rp)[0]
         sig = signal_map.get(region, "")
         commute = _region_commute(region, work)
         cmin = commute.get("min") if commute else None
@@ -166,16 +168,15 @@ def build(profile: dict, budget: float, *, limit: int = 3,
             if not ppy:
                 continue
             est = round(ppy * pyeong)
-            if est > budget:
+            if budget_is_ceiling and est > budget:
                 rejected["예산초과"] += 1
                 continue
-            rp = buying_power.params_for_region(params, region, app_api._sido_of(region))
             finance = buying_power.for_price(est, rp)
             if params.capital > 0 and not finance["가능"] and not finance["확인필요"]:
                 rejected["예산초과"] += 1
                 continue
             p = dict(parts)
-            p["예산"] = _budget_score(est / budget if budget else 0)
+            p["예산"] = _budget_score(est / region_budget) if region_budget else 0
             p["급지"] = _grade_score(g.get("상위"))
             scored.append({
                 "단지": g["단지"], "region": region, "시그널": sig,
@@ -183,14 +184,15 @@ def build(profile: dict, budget: float, *, limit: int = 3,
                 "상위": g.get("상위"), "중앙대비": g.get("중앙대비"),
                 "가격출처": "단지평단추정", "예산확인필요": True,
                 "판단": "호가·동호수 확인 필요", "자금": finance,
+                "지역예산": region_budget,
                 "통근출처": "지역중심점 추정" if commute else "미확인",
                 "저평가도": uv, "입지점수": lr.get("입지점수"),
                 "통근": commute, "점수": round(sum(w[k] * p[k] for k in w if k in p), 1),
                 "분해": {k: round(v) for k, v in p.items()},
             })
 
-    # 점수 동률이면 예산을 더 쓴 쪽(= 같은 조건에서 더 좋은 물건)을 앞에
-    scored.sort(key=lambda c: (c["점수"], -c["예상가"]), reverse=True)
+    # 미확인 자금은 확인된 가정 내 후보보다 앞세우지 않는다.
+    scored.sort(key=lambda c: (c["자금"]["가능"], c["점수"], -c["예상가"]), reverse=True)
     top = _diversify(scored, limit)
     for c in top:
         # 규제지역이면 LTV·절대한도·스트레스금리가 달라진다 — 후보 지역 기준으로 다시 본다.
@@ -199,9 +201,12 @@ def build(profile: dict, budget: float, *, limit: int = 3,
         c["자금"] = buying_power.for_price(c["예상가"], rp)
         c["규제지역"] = bool(rp.regulated)
         c["근거"] = _reason(c)
+        from realty_signal.services.buyer_decision import build as decision
+        c.update(decision(c, rp))
 
     return {
         "ready": bool(top),
+        "message": None if top else "조회한 범위에서 후보를 정하지 못했습니다. 데이터 누락·조건 초과 사유를 확인하거나 관심지역을 바꿔보세요.",
         "budget": round(budget),
         "pyeong": pyeong,
         "candidates": top,

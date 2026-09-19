@@ -2267,7 +2267,7 @@ async function _loadBuyingPower(){
   }
   const confirmed=!!d['확정'];
   const g=d['가정']||{};
-  const stale=confirmed && Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01);
+  const stale=confirmed && (d['재확인필요'] || Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01));
   const tag=(confirmed && !stale) ? '가정 저장됨 · 승인 전' : (stale ? '가정 재확인 필요' : '가정 미저장');
   const tagCol=(confirmed && !stale) ? 'var(--dim)' : '#b45309';
   const conclusion=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
@@ -2331,6 +2331,7 @@ function bpPreview(){
     const p=_bpParams(), el=document.getElementById('bpPreview');
     if(!p.capital){ el.textContent='가용자본을 입력하세요.'; return; }
     const q=new URLSearchParams(Object.entries(p).filter(([,v])=>v!=null&&v!==''));
+    if(p.monthly_budget==null) q.set('clear_monthly_budget','true');
     try{
       const d=await (await fetch('/api/buying-power?'+q)).json();
       if(generation!==_bpGeneration) return;
@@ -2339,6 +2340,7 @@ function bpPreview(){
       const bg=d['방공제']||0;
       el.innerHTML=`<div style="color:var(--txt);font-size:15px;font-weight:700;margin-bottom:6px">${_eok(d['최대매수가'])}까지 · 월 ${(d['월상환']||0).toLocaleString()}만</div>
         ${_bpRegBadge(d['규제'])}
+        <div style="color:var(--warn);margin:6px 0">규제·세율의 최신 적용은 별도 확인이 필요합니다. 은행 승인 전 참고 계산입니다.</div>
         대출 ${_eok(d['대출'])}${bg?` <span style="color:var(--dim)">(승인 ${_eok(d['승인액'])} − 방공제 ${_eok(bg)})</span>`:''}
         (LTV ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%)${d['DSR']!=null?` · DSR ${d['DSR']}%`:''} · 제약 ${d['제약']}<br>
         필요현금 ${_eok(d['필요현금'])} — 취득세 ${(c['취득세']||0).toLocaleString()}만 · 중개 ${(c['중개비']||0).toLocaleString()}만 · 법무 ${(c['법무비']||0).toLocaleString()}만 · 등기·채권 ${((c['등록면허세']||0)+(c['국민주택채권']||0)).toLocaleString()}만 · 이사 ${(c['이사비']||0).toLocaleString()}만
@@ -4999,6 +5001,9 @@ async function openComplex(name, region){
   let d; try{ d=await (await fetch(`/api/complex/${encodeURIComponent(region)}/${encodeURIComponent(name)}`)).json(); }
   catch(e){ body.innerHTML='<div style="color:#dc2626">불러오기 실패</div>'; return; }
   if(d['지원안함']){ body.innerHTML='<div style="color:var(--dim)">이 지역은 실거래 단지 조회를 지원하지 않습니다. (수도권 시군구 위주)</div>'; return; }
+  if(d.status==='ambiguous'||d.status==='failed'){
+    body.innerHTML=`<p>${esc(d.message||'자료를 확인하지 못했습니다. 거래가 없다는 뜻은 아닙니다.')}</p>`; return;
+  }
   if(d['거래없음']||!(d['평형별']||[]).length){ body.innerHTML='<div style="color:var(--dim)">최근 2년 실거래가 없는 단지입니다. (신축 분양·소규모 단지일 수 있음)</div>'; return; }
   const tr=d['매매추이']||[];
   const rows=d['평형별'].map(p=>`<tr style="border-bottom:1px solid var(--line)">
@@ -5016,7 +5021,7 @@ async function openComplex(name, region){
       <b>${vsPct>0?'+':''}${vsPct??'–'}%</b>${vsLbl?` · ${vsLbl}`:''}
       ${d['지역저평가도']!=null?`<span style="color:var(--dim)"> (동네 자체는 ${uvVerdict(d['지역저평가도']).label})</span>`:''}
     </div>`:'';
-  body.innerHTML=`${d['단지시그널']?_cxSigBanner(d['단지시그널']):''}<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
+  body.innerHTML=`${d.degraded?'<p style="color:var(--warn)">수집이 지연되어 이전 자료를 표시합니다. 최신 실거래 여부를 확인하세요.</p>':''}${d['단지시그널']?_cxSigBanner(d['단지시그널']):''}<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
       <div><div style="font-size:12px;color:var(--dim)">최근 평단가</div>
         <div style="font-size:24px;font-weight:800;line-height:1.1">${(d['최근평단가']||0).toLocaleString()}<span style="font-size:13px">만/평</span></div>
         ${vsLine}</div>
@@ -5032,7 +5037,7 @@ async function openComplex(name, region){
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">평형</th><th style="text-align:right;padding:6px">최근매매</th><th style="text-align:right;padding:6px">평단가</th><th style="text-align:right;padding:6px">최근전세</th><th style="text-align:right;padding:6px">전세가율</th><th style="text-align:right;padding:6px">갭</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 기준 · 전세가율=최근 전세보증금÷최근 매매가 · 갭=매매−전세 (실투자금 가늠)${d['cached']?' · 캐시(7일)':''}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 집계 · 전용면적 반올림 일치, 거래월 차이 3개월 이내만 전세가율·차액 비교. 층·상태 미통제. 갭은 필요현금·실투자금이 아닙니다${d['cached']?' · 캐시(7일)':''}</div>
     <div id="cxTxCosts" style="margin-top:12px"></div>
     <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">
       <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)">더 보기 · 건축물대장 · 대출 시나리오</summary>

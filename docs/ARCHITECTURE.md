@@ -1,9 +1,10 @@
-# Signal APT — Architecture (Engine v1)
+# Signal APT — Architecture
 
-> KB 주간 시계열 기반 아파트 매수·매도 **타이밍** 의사결정 엔진.  
-> 최종 갱신: 2026-07 · **Timing v1** · **Brain Phase 0–5**
+> 2026-09-19: 구매자 자금·후보·확인 행동 중심으로 변경했다.
+> 최신 구조·운영 설정·검증 범위는 [구현 인계서](IMPLEMENTATION-2026-09-19.md)를 우선한다.
+> 아래 v1 섹션은 기존 모듈 배경과 호환 API의 설명이다.
 
-브랜드 한 줄: **「근거가 증명되는 매수 타이밍」** — [DESIGN.md](../DESIGN.md) 톤·UI 토큰은 별도.
+브랜드 한 줄: **「내 조건으로 비교하는 주택 구매」** — [DESIGN.md](../DESIGN.md) 톤·UI 토큰은 별도.
 
 ---
 
@@ -105,7 +106,7 @@ Signal APT는 **4계층**으로 구성된다. MVP(룰 엔진 + SPA)에서 **진�
 ### 3.4 백테스트
 
 `backtest_summary()` — 과거 시그널 구간 vs 12주 가격 방향 적중률.  
-Nick `get_backtest`, region `TimingScore`에 **조건부 확률** 근거로 사용.
+Nick `get_backtest`는 발생 후 달력 12주가 성숙한 과거 연구용 집계다. 현재 매물의 상승 확률로 사용하지 않으며 `TimingScore`의 수치 가중치에서 제외했다.
 
 ---
 
@@ -211,7 +212,7 @@ SQLite `events` — whitelist:
 | `get_policy` | 정책 KB (BM25) |
 | … | listings, presale, redev, news, freshness |
 
-원칙: 확신형 예측·매수 지시 금지 → **조건부·확률·근거**.
+원칙: 확신형 예측·매수 지시 금지 → **입력 가정·근거·미확인 조건**. 통계적으로 교정되지 않은 확률 생성 금지.
 
 ### 6.5 Outcome 라벨링 (Phase 2)
 

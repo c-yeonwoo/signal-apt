@@ -101,12 +101,16 @@ def rank_listings(
             if finance_of and not s["예산확인필요"]:
                 finance = finance_of(s, s["추정가"])
                 s["자금"] = finance
-                s["예산내"] = bool(s["예산내"] and finance["가능"])
+                # A global indicative budget must not override region-specific lending rules.
+                s["예산내"] = bool(finance["가능"])
                 s["예산확인필요"] = bool(finance.get("확인필요"))
                 s["판단"] = "자금확인필요" if s["예산확인필요"] else "가정내가능" if s["예산내"] else "조건초과"
+                capital = (finance.get("필요현금") or 0) + (finance.get("잔여현금") or 0)
+                if capital > 0:
+                    s["_score"] = round(100 * max(0, (finance.get("잔여현금") or 0) - (finance.get("비상자금") or 0)) / capital, 1)
             scored.append(s)
     # 정렬 우선순위: ① 예산 내  ② 가격을 아는가  ③ 점수(시그널 지배)
-    scored.sort(key=lambda x: (x["예산내"], not x["예산확인필요"], x["_score"]), reverse=True)
+    scored.sort(key=lambda x: (x["예산내"], x["예산확인필요"], x["_score"]), reverse=True)
 
     # 한 동네가 목록을 독식하지 않게 — 숏리스트(MAX_PER_REGION=2)와 같은 이유다.
     # 실측에서 노원구 하나가 상위 40건 중 11건(27%)을 차지했다. 같은 동네 11개를 보여주는 건
@@ -114,7 +118,7 @@ def rank_listings(
     if max_per_region and max_per_region > 0:
         diversified = []
         # 지역 다양성은 같은 자금 판단 그룹 안에서만 적용한다.
-        for tier in ((True, False), (False, False), (False, True)):
+        for tier in ((True, False), (False, True), (False, False)):
             group = [x for x in scored if (x["예산내"], x["예산확인필요"]) == tier]
             seen: dict[str, int] = {}
             capped, overflow = [], []
