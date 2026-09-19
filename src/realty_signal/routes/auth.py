@@ -125,7 +125,9 @@ def report_ai(request: Request, data: dict = Body(...)):
         wk = md.kb().last_date.strftime("%G-W%V")
     except Exception:  # noqa: BLE001
         wk = "na"
-    sig = hashlib.md5(json.dumps([profile, summary, favorites, tier], ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
+    from realty_signal.services.buyer_decision import cache_payload, fingerprint
+    news = db.news_recent_for_ai(12)
+    sig = fingerprint(cache_payload([profile, summary, favorites, news, model, "buyer-explanation-v3"]))
     ckey = f"aireport:{uid}:{wk}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
@@ -133,7 +135,6 @@ def report_ai(request: Request, data: dict = Body(...)):
     ok, ust = deps.usage_reserve(uid, "report", unlimited=unlimited)
     if not ok:
         return {"available": False, "reason": "limit", "usage": ust}
-    news = db.news_recent_for_ai(12)
     report = ai_report.generate(profile, summary, news=news, favorites=favorites, model=model, uid=uid)
     if not report:
         return {"available": False}

@@ -47,7 +47,8 @@ def buying_power_get(request: Request, capital: float | None = None, income: flo
                      apply_bangongje: bool | None = None,
                      ltv: float | None = None, rate: float | None = None,
                      rate_type: str | None = None, years: int | None = None,
-                     reserve_cash: float | None = None, monthly_budget: float | None = None):
+                     reserve_cash: float | None = None, monthly_budget: float | None = None,
+                     clear_monthly_budget: bool = False):
     from realty_signal import api as app_api
     return app_api.buying_power_statement(
         request, capital=capital, income=income, existing_debt_annual=existing_debt_annual,
@@ -55,7 +56,7 @@ def buying_power_get(request: Request, capital: float | None = None, income: flo
         dispose=dispose, temp_two_home=temp_two_home, big_area=big_area,
         apply_bangongje=apply_bangongje,
         ltv=ltv, rate=rate, rate_type=rate_type, years=years,
-        reserve_cash=reserve_cash, monthly_budget=monthly_budget)
+        reserve_cash=reserve_cash, monthly_budget=monthly_budget, clear_monthly_budget=clear_monthly_budget)
 
 
 @router.get("/api/buying-power/scenario")

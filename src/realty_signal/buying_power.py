@@ -339,6 +339,7 @@ def for_price(price: float, p: Params) -> dict:
         "총월상환": round(total_monthly),
         "계산버전": MODEL_VERSION,
         "판단범위": "입력 가정 기반 추정이며 금융기관 승인 및 매물 권리 확인이 필요합니다",
+        "정책검증": reg.policy_manifest(),
         "제약": lim["제약"],
         "자격": lim["자격"],
         "비용": {k: round(v) for k, v in cash.items()},
@@ -464,6 +465,7 @@ def statement(p: Params) -> dict:
                  "국민주택채권", "이사비", "수리비")
     out = {
         "계산버전": MODEL_VERSION,
+        "정책검증": reg.policy_manifest(),
         "상태": "가정기반" if p.income else "소득확인필요",
         "비상자금": round(p.reserve_cash),
         "최대매수가": price,
@@ -523,6 +525,8 @@ def statement(p: Params) -> dict:
         annual = detail["월상환"] * 12 + max(0.0, p.existing_debt_annual or 0.0)
         out["DSR"] = round(annual / p.income * 100, 1)
         out["월소득대비"] = round(detail["월상환"] / (p.income / 12) * 100, 1)
+    from realty_signal.services.buyer_decision import finance_fingerprint
+    out["가정버전"] = finance_fingerprint(p)
     return out
 
 

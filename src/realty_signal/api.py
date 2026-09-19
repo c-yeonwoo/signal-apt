@@ -551,7 +551,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
         if not d or d.get("거래없음"):
             return {"error": f"{region} {nm} 의 최근 실거래를 찾지 못했습니다."}
         keep = {k: d.get(k) for k in ("단지명", "최근평단가", "추세pct", "총거래", "기간",
-                "급지", "시그널", "단지시그널", "공시대비") if d.get(k) is not None}
+                "급지", "시그널", "단지시그널", "공시대비", "status", "message", "degraded", "identity_status") if d.get(k) is not None}
         keep["평형별"] = (d.get("평형별") or [])[:6]
         m = _main_flat_metrics(d)
         keep["주력"] = {k: m[k] for k in ("주력평형", "전세가율", "갭", "최근매매", "최근전세") if m.get(k) is not None}
@@ -563,6 +563,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
     if name == "get_backtest":
         bt = _backtest()
         return {"by_signal": bt.get("by_signal"), "설명": bt.get("설명"),
+                "research_only": True, "주의": bt.get("주의"), "protocol": bt.get("protocol"),
                 "data_age_days": round(_data_age_days() or 0, 1)}
     if name == "get_timing":
         layer = (args.get("layer") or "region").strip()
@@ -991,13 +992,17 @@ def buying_power_statement(request: Request, **override):
     if not override.get("region"):
         override["region"] = _default_region(request, profile)
     override.setdefault("sido", _sido_of(override.get("region")))
+    clear_monthly = override.pop("clear_monthly_budget", False)
     p = _buyer_params(profile, **override)
+    if clear_monthly:
+        p.monthly_budget = None
     if p.capital <= 0:
         return {"ready": False, "reason": "no_capital",
                 "message": "가용자본을 입력하면 매수력을 확정할 수 있어요."}
     out = buying_power.statement(p)
     out["ready"] = True
     out["확정"] = (profile.get("매수력") or {}).get("최대매수가")
+    out["재확인필요"] = bool(out["확정"] and (profile.get("매수력") or {}).get("가정버전") != out["가정버전"])
     return out
 
 
@@ -1173,6 +1178,7 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     """이번 주 볼 단지 3곳 — 확정 매수력 × 라이프스타일 적합도."""
     from realty_signal.services import shortlist as sl
 
+    explicit_budget = budget is not None
     uid = _uid(request)
     profile = dict(db.profile_get(uid) or {})
     if uid:
@@ -1186,7 +1192,7 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     if not budget:
         return {"ready": False, "reason": "no_budget",
                 "message": "매수력을 먼저 확정해 주세요."}
-    out = sl.build(profile, budget, limit=max(1, min(10, limit)))
+    out = sl.build(profile, budget, limit=max(1, min(10, limit)), budget_is_ceiling=explicit_budget)
     out["확정예산"] = bool((profile.get("매수력") or {}).get("최대매수가"))
     return out
 
@@ -1260,13 +1266,24 @@ def conclusion(request: Request | None = None, capital: float | None = None,
             locmap[r["region"]] = r
 
     raw = _build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+    def candidate_finance(row, price):
+        from dataclasses import replace
+        rp = buying_power.params_for_region(p, row.get("지역"), _sido_of(row.get("지역")))
+        area = row.get("전용면적") or row.get("area")
+        if area is not None:
+            try:
+                rp = replace(rp, big_area=float(area) > 85)
+            except (TypeError, ValueError):
+                pass
+        return buying_power.for_price(price, rp)
+
     listings = rec.rank_listings(
         raw, budget=budget, pyeong=py,
         loc_price_of=lambda region: (locmap.get(region) or {}).get("price"),
         prefer_strong=prefer_strong, limit=40,
-        finance_of=lambda row, price: buying_power.for_price(price,
-            buying_power.params_for_region(p, row.get("지역"), _sido_of(row.get("지역")))),
+        finance_of=candidate_finance,
     )
+    from realty_signal.services import buyer_decision
     # 응답 경량화 — 프론트·AI에 필요한 필드만
     slim = []
     for L in listings:
@@ -1280,6 +1297,7 @@ def conclusion(request: Request | None = None, capital: float | None = None,
             "가격출처": L.get("가격출처"), "예산확인필요": L.get("예산확인필요"),
             "판단": L.get("판단"), "자금": L.get("자금"), "판단버전": L.get("판단버전"),
             "ref": L.get("ref"), "_score": L.get("_score"),
+            **buyer_decision.build(L, p, uid=_uid(request) if request else None),
         })
     cards = rec.aggregate_regions(listings, locmap=locmap, budget=budget, pyeong=py)
     return {
@@ -1821,6 +1839,8 @@ def complex_detail(region: str, name: str):
 
     def deco(d):   # 급지·시그널·공시가격·단지시그널·지역대비는 응답 시점에 부착(각자 캐시)
         out = {**d, "region": region, "급지": grade, "시그널": signal}
+        if d.get("status") in {"ambiguous", "failed"}:
+            return out
         ratio = None
         try:                                                     # 공시가격 먼저 → 단지시그널 가격 성분에 사용
             g = _gongsi_for(region, name)
@@ -1843,7 +1863,7 @@ def complex_detail(region: str, name: str):
     lawd5 = code[:5]
     ckey = f"complex:{lawd5}:{name}"
     cached = db.kv_get(ckey, max_age=_COMPLEX_TTL)
-    if cached is not None:
+    if cached is not None and cached.get("schema_version") == 2:
         return deco({**cached, "cached": True})
     from realty_signal.ingest import complex as cx
     config.load_env()
@@ -2084,9 +2104,9 @@ def compare_recommend_api(request: Request, data: dict = Body(...)):
     opus = _is_opus_user(request)
     model = ai_report.OPUS if opus else ai_report.SONNET   # 추천은 다인자 종합 → Sonnet 이상
     tier = "opus" if opus else "sonnet"
-    sig_src = sorted(f"{c.get('단지명')}|{c.get('최근평단가')}|{c.get('전세가율')}|{c.get('갭')}|{c.get('추세pct')}|{c.get('총거래')}" for c in complexes)
-    sig = hashlib.md5(json.dumps([sorted(criteria), sig_src, tier], ensure_ascii=False).encode()).hexdigest()[:16]
-    ckey = f"cmpreco:v2:{_uid(request)}:{sig}"
+    from realty_signal.services.buyer_decision import cache_payload, fingerprint
+    sig = fingerprint(cache_payload([sorted(criteria), complexes, model, "buyer-explanation-v3"]))
+    ckey = f"cmpreco:v3:{_uid(request)}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True}
@@ -2109,9 +2129,9 @@ def compare_insight_api(request: Request, data: dict = Body(...)):
     model = ai_report.OPUS if opus else ai_report.HAIKU   # 화이트리스트=Opus, 그 외=Haiku(단순 태스크)
     tier = "opus" if opus else "haiku"
     # 캐시: 기준 + 단지 시그니처(이름·핵심수치) + 티어 → 반복 클릭 재과금 방지
-    sig_src = sorted(f"{c.get('단지명')}|{c.get('최근평단가')}|{c.get('전세가율')}|{c.get('갭')}|{c.get('추세pct')}|{c.get('총거래')}" for c in complexes)
-    sig = hashlib.md5(json.dumps([criterion, sig_src, tier], ensure_ascii=False).encode()).hexdigest()[:16]
-    ckey = f"cmpins:v2:{_uid(request)}:{sig}"
+    from realty_signal.services.buyer_decision import cache_payload, fingerprint
+    sig = fingerprint(cache_payload([criterion, complexes, model, "buyer-explanation-v3"]))
+    ckey = f"cmpins:v3:{_uid(request)}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True}

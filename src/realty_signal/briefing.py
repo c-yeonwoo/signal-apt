@@ -227,7 +227,7 @@ def plan(uid: int) -> dict:
     watch = set(profile["_favs"])
     if budget:
         try:
-            cands = (sl.build(profile, float(budget), limit=3) or {}).get("candidates") or []
+            cands = (sl.build(profile, float(budget), limit=3, budget_is_ceiling=False) or {}).get("candidates") or []
         except Exception as e:  # noqa: BLE001 — 후보가 없어도 나머지 할 일은 나와야 한다
             log.warning("액션플랜 숏리스트 실패 uid=%s: %s", uid, e)
         watch |= {c["region"] for c in cands}
@@ -254,7 +254,7 @@ def build(uid: int, *, force: bool = False) -> dict:
     if not budget:
         return {"send": False, "reason": "no_budget"}
 
-    data = sl.build(profile, float(budget), limit=3)
+    data = sl.build(profile, float(budget), limit=3, budget_is_ceiling=False)
     cands = data.get("candidates") or []
     from realty_signal import api as app_api
     signal_map = app_api._signal_map()

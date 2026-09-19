@@ -18,6 +18,25 @@ from __future__ import annotations
 
 AS_OF = "2026-07-01"
 
+
+def policy_manifest():
+    """Machine-readable verification gaps; an as-of label is NOT verification.
+
+    Source/effectivity metadata is intentionally absent until an operator checks
+    the underlying official provisions. Do not manufacture verification dates.
+    """
+    from hashlib import sha256
+    import json
+    values = {"ltv": LTV, "caps": LOAN_CAP_BRACKETS, "stress": [STRESS_BASE, STRESS_RATIO],
+              "regions": sorted(SEOUL_GU | REGULATED_GYEONGGI), "deduction": BANGONGJE,
+              "eligibility": [SPECIAL_INCOME_CAP, SPECIAL_PRICE_CAP, MAX_YEARS_METRO, MOVE_IN_MONTHS, DISPOSE_MONTHS]}
+    version = sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
+    return {"version": version, "declared_asof": AS_OF, "status": "unverified",
+            "rules": [{"id": key, "sources": [], "effective_from": None, "effective_until": None,
+                       "verified_at": None, "review_due": AS_OF, "status": "unverified"}
+                      for key in (*values, "acquisition_tax", "transaction_costs")],
+            "note": "저장된 규제·세율의 최신성은 미검증입니다. 참고 계산이며 은행·세무 확인이 필요합니다."}
+
 METRO_SIDO = ("서울", "경기", "인천")
 
 # 서울은 25개 구 전역이 규제지역.

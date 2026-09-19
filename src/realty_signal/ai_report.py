@@ -25,10 +25,10 @@ _SYSTEM = (
     "그 사람에게 맞는 매수 전략을 제시합니다.\n"
     "- 한국어로 구체적으로. 엔진의 판단·가격출처·확인필요·자금 조건을 그대로 설명하며 결론을 뒤집지 않는다. 추정 가격은 호가가 아니고 대출 계산은 승인 확정이 아니다.\n"
     "- 구조: ①한줄 요약 ②자금(매수가=대출+자기자본, 실효LTV·제약) ③추천 매물 유형별 해석"
-    "(전체의 약 70%) ④관심목록 심화 또는 신규 STRONG_BUY 후보(약 20%) ⑤리스크 ⑥다음 행동.\n"
+    "(전체의 약 70%) ④관심목록·미확인 조건 비교(약 20%) ⑤리스크 ⑥다음 행동.\n"
     "- '추천매물'이 있으면 지역 평균가가 아니라 그 매물(유형·단지·호가·시그널)을 중심에 둔다. "
     "시장 시그널보다 자금·생활 조건을 먼저 본다. 확인되지 않은 가격·자격은 확인 필요로 남긴다.\n"
-    "- '관심목록'이 있으면 그 지역·단지를 깊게 다루고, 목록 밖 후보는 추천매물·STRONG_BUY에서만 고른다.\n"
+    "- '관심목록'이 있으면 그 지역·단지를 깊게 다루고, 목록 밖 후보는 서버 제공 후보에서만 고른다. decision의 feasibility·unknowns·next_action을 보존하고 숫자의 evidence 출처를 확인한다.\n"
     "- '최근 뉴스'가 있으면 정책·규제·금리를 전략에 반영.\n"
     "- 마크다운 헤더(##)와 굵게(**)를 적절히 사용. 900자 내외.\n"
     "- 투자 권유가 아닌 데이터 해석임을 마지막에 한 줄로 고지."
@@ -52,7 +52,18 @@ def generate(profile: dict, summary: dict, news: list | None = None,
     except ImportError:
         log.warning("anthropic SDK 미설치 — AI 리포트 폴백")
         return None
-    payload = {"프로필": profile, "분석결과": summary}
+    # Keep the engine's top candidates intact; bound context instead of serializing
+    # forty copies of identical policy metadata and exhausting the gateway limit.
+    compact = dict(summary)
+    compact["listings"] = []
+    for row in (summary.get("listings") or [])[:6]:
+        candidate = dict(row)
+        if candidate.get("자금"):
+            candidate["자금"] = {k: v for k, v in candidate["자금"].items() if k != "정책검증"}
+        compact["listings"].append(candidate)
+    compact["cards"] = (summary.get("cards") or [])[:6]
+    compact["제공범위"] = "서버 정렬 상위 후보 최대 6개. 전체 매물 비교가 아님. 규제·세율 최신성은 별도 확인."
+    payload = {"프로필": profile, "분석결과": compact}
     if favorites and (favorites.get("관심지역") or favorites.get("관심단지")):
         payload["관심목록"] = favorites
     if news:

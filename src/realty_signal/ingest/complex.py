@@ -95,8 +95,24 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     cn = _canon(apt_name)
     if not cn:
         return {}
+    def matched(base, months):
+        rows = [it for it in _items_parallel(base, lawd5, key, _recent_yms(months))
+                if _match(it.findtext("aptNm") or "", cn)]
+        exact = [it for it in rows if _canon(it.findtext("aptNm") or "") == cn]
+        return exact or rows
+
+    trade_items = matched(_TRADE, trade_months)
+    rent_items = matched(_RENT, rent_months)
+    identities = {(it.findtext("aptSeq") or "").strip() for it in trade_items}
+    identities.discard("")
+    addresses = {((it.findtext("umdNm") or "").strip(), (it.findtext("jibun") or "").strip())
+                 for it in trade_items + rent_items if it.findtext("umdNm") and it.findtext("jibun")}
+    if len(identities) > 1 or len(addresses) > 1:
+        return {"단지명": apt_name, "status": "ambiguous", "identity_status": "ambiguous",
+                "message": "같은 이름에 여러 단지·주소가 연결됩니다. 정확한 주소를 확인하기 전 가격을 합치지 않습니다.",
+                "매매추이": [], "평형별": [], "schema_version": 2}
     trades: list[dict] = []
-    for it in _items_parallel(_TRADE, lawd5, key, _recent_yms(trade_months)):
+    for it in trade_items:
         if not _match(it.findtext("aptNm") or "", cn):
             continue
         area, amt = _amt(it, "excluUseAr"), _amt(it, "dealAmount")
@@ -105,7 +121,7 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
         trades.append({"ym": _ym_of(it), "area": area, "amt": amt,
                        "pyeong": round(area / _PYEONG), "ppy": amt / (area / _PYEONG)})
     rents: list[dict] = []
-    for it in _items_parallel(_RENT, lawd5, key, _recent_yms(rent_months)):
+    for it in rent_items:
         if not _match(it.findtext("aptNm") or "", cn):
             continue
         mr = _amt(it, "monthlyRent") or 0
@@ -129,26 +145,39 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     def _recent(rows, kk):
         return sorted(rows, key=lambda r: r["ym"])[-1][kk] if rows else None
 
-    pys = sorted({t["pyeong"] for t in trades})
+    areas = sorted({round(t["area"], 1) for t in trades})
     평형별 = []
-    for py in pys:
-        ts = [t for t in trades if t["pyeong"] == py]
-        rs = [r for r in rents if r["pyeong"] == py]
+    for area in areas:
+        py = round(area / _PYEONG)
+        ts = [t for t in trades if round(t["area"], 1) == area]
+        rs = [r for r in rents if round(r["area"], 1) == area]
         recent_amt = _recent(ts, "amt")
         recent_dep = _recent(rs, "deposit")
+        def month_index(ym):
+            year, month = map(int, ym.split("-"))
+            return year * 12 + month
+        trade_ym = max((t["ym"] for t in ts), default="")
+        rent_ym = max((r["ym"] for r in rs), default="")
+        comparable = bool(trade_ym and rent_ym and abs(month_index(trade_ym)-month_index(rent_ym)) <= 3)
+        if not comparable:
+            recent_dep = None
         jeonse_ratio = round(recent_dep / recent_amt * 100) if (recent_amt and recent_dep) else None
         평형별.append({
             "평형": py, "전용㎡": round(sum(t["area"] for t in ts) / len(ts), 1),
             "최근매매": recent_amt and round(recent_amt), "평단가": round(sum(t["ppy"] for t in ts) / len(ts)),
             "매매건수": len(ts), "최근전세": recent_dep and round(recent_dep),
             "전세가율": jeonse_ratio, "갭": (recent_amt and recent_dep) and round(recent_amt - recent_dep),
+            "비교기준": "전용면적 0.1㎡ 반올림 일치·최근 거래월 차이 3개월 이내; 층·상태는 미통제",
+            "비교가능": comparable, "매매기준월": trade_ym, "전세기준월": rent_ym,
         })
     평형별.sort(key=lambda x: x["평형"])
 
     last = 추이[-1]["평단가"] if 추이 else None
     first = 추이[0]["평단가"] if 추이 else None
     return {
-        "단지명": apt_name, "매매추이": 추이, "평형별": 평형별,
+        "단지명": apt_name, "매매추이": 추이, "평형별": 평형별, "schema_version": 2,
+        "identity_status": "single_observed" if identities or addresses else "unverified",
+        "source_id": "molit_aggregate",
         "최근평단가": last, "총거래": len(trades),
         "추세pct": round((last / first - 1) * 100, 1) if (first and last) else None,
         "기간": f"{추이[0]['ym']}~{추이[-1]['ym']}" if 추이 else None,
