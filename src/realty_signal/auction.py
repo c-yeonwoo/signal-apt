@@ -343,14 +343,8 @@ def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str):
     best = None
     cn = _norm(core)
     for ym in _recent_yms(6):
-        url = f"{base}?serviceKey={key}&LAWD_CD={lawd5}&DEAL_YMD={ym}&numOfRows=600&pageNo=1"
-        try:
-            root = ET.fromstring(urllib.request.urlopen(  # noqa: S310
-                urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"}),
-                timeout=30).read())
-        except Exception:
-            continue
-        for it in root.iter("item"):
+        from realty_signal.ingest.complex import _items
+        for it in _items(base, lawd5, key, ym):
             apt = (it.findtext("aptNm") or "").strip()
             umd = (it.findtext("umdNm") or "").strip()
             if dong and umd and dong not in umd and umd not in dong:

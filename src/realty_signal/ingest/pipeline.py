@@ -19,7 +19,7 @@ from realty_signal.signals.strength import market_strength
 
 STRENGTH_FILE = store.CACHE_DIR / "market_strength.json"
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
-_STALE_DAYS = {"long": 14, "volume": 45, "quicksale": 21, "supply": 21}
+_STALE_DAYS = {"long": 14, "volume": 45, "quicksale": 1, "supply": 21}
 
 
 def _age_days(path: Path) -> float | None:
@@ -109,7 +109,8 @@ def build_market_strength(
         "ts": int(time.time()),
     }
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    from realty_signal.storage import atomic_json
+    atomic_json(out, payload)
     return payload
 
 

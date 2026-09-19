@@ -78,7 +78,8 @@ def summarize(topic: str | None, items: list[dict], detail: bool = False) -> str
         return None
     scope = f"'{topic}' 테마" if (topic and topic != "전체") else "부동산 전반"
     try:
-        client = anthropic.Anthropic()
+        from realty_signal import llm
+        client = llm.client("news")
         resp = client.messages.create(
             model=MODEL, max_tokens=1600 if detail else 1200,
             system=_SUM_SYS_DETAIL if detail else _SUM_SYS,

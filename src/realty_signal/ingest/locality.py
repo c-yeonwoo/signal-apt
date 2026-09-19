@@ -55,12 +55,8 @@ def price_per_pyeong(lawd_cd: str, ym_list: list[str]) -> float | None:
     base = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
     ppp = []
     for ym in ym_list:
-        url = f"{base}?serviceKey={key}&LAWD_CD={lawd_cd}&DEAL_YMD={ym}&numOfRows=500&pageNo=1"
-        try:
-            root = ET.fromstring(_fetch(url))
-        except Exception:
-            continue
-        for it in root.iter("item"):
+        from realty_signal.ingest.complex import _items
+        for it in _items(base, lawd_cd, key, ym):
             try:
                 amt = float(it.findtext("dealAmount", "").replace(",", "").strip())  # 만원
                 area = float(it.findtext("excluUseAr", "").strip())                  # ㎡

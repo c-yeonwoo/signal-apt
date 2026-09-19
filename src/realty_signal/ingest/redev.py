@@ -75,13 +75,8 @@ def _trade_complexes(lawd5: str, key: str, months: int = 6) -> list[dict]:
     """시군구 단지별 {단지명, 연식, 평단가, 지번} — 국토부 실거래 집계."""
     agg: dict = {}
     for ym in _recent_yms(months):
-        url = f"{_RTMS}?serviceKey={key}&LAWD_CD={lawd5}&DEAL_YMD={ym}&numOfRows=900&pageNo=1"
-        try:
-            root = ET.fromstring(urllib.request.urlopen(  # noqa: S310
-                urllib.request.Request(url, headers=_HDR), timeout=30).read())
-        except Exception:
-            continue
-        for it in root.iter("item"):
+        from realty_signal.ingest.complex import _items
+        for it in _items(_RTMS, lawd5, key, ym):
             nm = (it.findtext("aptNm") or "").strip()
             nn = _norm(nm)
             try:

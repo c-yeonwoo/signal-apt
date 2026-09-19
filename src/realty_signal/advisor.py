@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import logging
 
+from realty_signal import llm
+
 log = logging.getLogger("realty_signal")
 
 OPUS = "claude-opus-4-8"
@@ -20,7 +22,7 @@ SYSTEM = (
     "Signal APT 앱이 수집·산출한 데이터(지역 시그널, 국면, 실거래, 급매·경매·청약·재건축, 공시가격, 뉴스, 백테스트 적중률)를 근거로 답합니다.\n"
     "\n원칙(반드시 준수):\n"
     "1. 근거 없는 단정 금지. 수치·판단이 필요하면 반드시 제공된 tool 로 조회한 결과만 사용한다. 조회로 확인되지 않으면 '데이터에 없다'고 솔직히 말한다.\n"
-    "2. 미래 가격을 확신형으로 예측하지 않는다. 방향성은 get_backtest 의 적중률(과거 확률)과 현재 국면·시그널 근거로 '확률·조건부'로만 말한다. '오른다/사라'가 아니라 '이 국면에서 역사적으로 상승 확률 X%'.\n"
+    "2. 미래 가격을 예측하거나 상승 확률을 만들지 않는다. 백테스트 적중률은 단순화된 과거 규칙의 집계이며 현재 지역·매물의 조건부 확률이 아니다. confidence는 휴리스틱이지 통계 확률이 아니다.\n"
     "3. 개별 단지의 매수·매도를 지시하지 않는다. 정보 제공·의사결정 보조이며, 최종 판단·실거래 확인은 이용자 책임임을 필요 시 덧붙인다. (유사투자자문 아님)\n"
     "4. 한국어로 간결하고 구체적으로. 표·불릿 남발 없이 핵심부터. 근거가 된 데이터의 기준일이 오래됐으면 그 점을 밝힌다.\n"
     "5. 여러 지표가 필요하면 tool 을 여러 번 호출해 종합한다. 사용자가 지역/단지를 명시하지 않으면 되묻거나 list_signal_regions 로 후보를 제시한다.\n"
@@ -209,16 +211,29 @@ def available() -> bool:
 def _to_blocks(messages: list) -> list:
     """프론트의 {role, text} 히스토리 → anthropic messages(content=text)."""
     out = []
-    for m in messages:
+    for m in messages[-12:]:
+        if not isinstance(m, dict):
+            raise ValueError("invalid_message")
         role = "assistant" if m.get("role") == "assistant" else "user"
-        text = (m.get("text") or m.get("content") or "").strip()
+        text = m.get("text") or m.get("content") or ""
+        if not isinstance(text, str) or len(text) > 8000:
+            raise ValueError("message_size_limit")
+        text = text.strip()
         if text:
             out.append({"role": role, "content": text})
     return out
 
 
+def tool_payload(out):
+    encoded = json.dumps(out, ensure_ascii=False, default=str)
+    if len(encoded) <= 8000:
+        return encoded
+    return json.dumps({"truncated": True, "warning": "결과 일부입니다. 조회 범위를 좁혀 주세요.",
+                       "preview": encoded[:7000]}, ensure_ascii=False)
+
+
 def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6,
-                system: str | None = None) -> dict:
+                system: str | None = None, uid: int | None = None) -> dict:
     """tool-use 루프 실행. messages=[{role,text}...]. tool_exec(name, input)->dict.
 
     반환 {"answer": str, "used": [tool 이름들], "rounds": n}. 실패 시 answer=None.
@@ -235,8 +250,8 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
     sys_prompt = system or SYSTEM
     used: list[str] = []
     try:
-        client = anthropic.Anthropic()
-        for _ in range(max_rounds):
+        client = llm.client("advisor", uid)
+        for _ in range(min(max_rounds, 6)):
             resp = client.messages.create(
                 model=model, max_tokens=1500, system=sys_prompt, tools=TOOLS, messages=convo,
             )
@@ -246,6 +261,8 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
                 for block in resp.content:
                     if getattr(block, "type", None) != "tool_use":
                         continue
+                    if len(used) >= 12:
+                        return {"answer": None, "used": sorted(set(used)), "reason": "tool_limit"}
                     used.append(block.name)
                     try:
                         out = tool_exec(block.name, dict(block.input or {}))
@@ -253,7 +270,7 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
                         log.warning("advisor tool %s 실패: %s", block.name, e)
                         out = {"error": "조회 실패"}
                     results.append({"type": "tool_result", "tool_use_id": block.id,
-                                    "content": json.dumps(out, ensure_ascii=False, default=str)[:8000]})
+                                    "content": tool_payload(out)})
                 convo.append({"role": "user", "content": results})
                 continue
             # 최종 답변
@@ -267,7 +284,7 @@ def run_advisor(messages: list, tool_exec, model: str = SONNET, max_rounds: int 
 
 
 def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_rounds: int = 6,
-                       system: str | None = None):
+                       system: str | None = None, uid: int | None = None):
     """tool-use 루프를 스트리밍으로. 이벤트 dict 를 yield:
        {"type":"status","tool":name} · {"type":"delta","text":...} · {"type":"done","used":[...]} · {"type":"error"}.
     """
@@ -286,8 +303,8 @@ def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_round
     sys_prompt = system or SYSTEM
     used: list[str] = []
     try:
-        client = anthropic.Anthropic()
-        for _ in range(max_rounds):
+        client = llm.client("advisor", uid)
+        for _ in range(min(max_rounds, 6)):
             with client.messages.stream(
                 model=model, max_tokens=1500, system=sys_prompt, tools=TOOLS, messages=convo,
             ) as stream:
@@ -301,6 +318,9 @@ def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_round
                 for block in final.content:
                     if getattr(block, "type", None) != "tool_use":
                         continue
+                    if len(used) >= 12:
+                        yield {"type": "error", "message": "tool_limit"}
+                        return
                     used.append(block.name)
                     yield {"type": "status", "tool": block.name}
                     try:
@@ -309,12 +329,12 @@ def run_advisor_stream(messages: list, tool_exec, model: str = SONNET, max_round
                         log.warning("advisor(stream) tool %s 실패: %s", block.name, e)
                         out = {"error": "조회 실패"}
                     results.append({"type": "tool_result", "tool_use_id": block.id,
-                                    "content": json.dumps(out, ensure_ascii=False, default=str)[:8000]})
+                                    "content": tool_payload(out)})
                 convo.append({"role": "user", "content": results})
                 continue
             yield {"type": "done", "used": sorted(set(used))}
             return
-        yield {"type": "done", "used": sorted(set(used))}
+        yield {"type": "error", "message": "round_limit", "used": sorted(set(used))}
     except Exception as e:  # noqa: BLE001
         log.warning("advisor(stream) 실패: %s", e)
         yield {"type": "error", "message": "failed", "used": sorted(set(used))}

@@ -12,7 +12,7 @@ import statistics
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 from typing import Callable
 
@@ -53,6 +53,9 @@ def monthly_summary(items: list[ET.Element]) -> dict:
     """거래 구성 변화에 민감한 평균 대신 거래별 평단가 중앙값을 쓴다."""
     ppys = []
     for item in items:
+        from realty_signal.ingest.transaction_source import cancelled
+        if cancelled(item):
+            continue
         amount, area = _number(item, "dealAmount"), _number(item, "excluUseAr")
         if amount and amount > 0 and area and area > 0:
             ppys.append(amount / (area / _PYEONG_M2))
@@ -61,27 +64,12 @@ def monthly_summary(items: list[ET.Element]) -> dict:
 
 def fetch_month(lawd: str, ym: str, key: str, timeout: int = 30) -> dict | None:
     """한 시군구·월을 페이지 끝까지 읽어 월별 집계를 반환한다. 장애면 None."""
-    page, items = 1, []
-    total = None
-    while True:
-        url = f"{_TRADE_URL}?serviceKey={key}&LAWD_CD={lawd}&DEAL_YMD={ym}&numOfRows=999&pageNo={page}"
-        try:
-            request = urllib.request.Request(url, headers={"User-Agent": "realty-signal/1.0"})
-            root = ET.fromstring(urllib.request.urlopen(request, timeout=timeout).read())  # noqa: S310
-        except Exception:  # noqa: BLE001 - failed months must remain eligible for a later retry
-            return None
-        result_code = root.findtext(".//resultCode")
-        if result_code and result_code not in {"00", "000"}:
-            return None
-        if total is None:
-            raw_total = root.findtext(".//totalCount")
-            total = int(raw_total) if raw_total and raw_total.isdigit() else 0
-        batch = list(root.iter("item"))
-        items.extend(batch)
-        if not batch or len(items) >= total:
-            break
-        page += 1
-    return {"lawd": lawd, "ym": ym, **monthly_summary(items), "api_total": total}
+    from realty_signal.ingest.transaction_source import fetch_items
+    result = fetch_items(_TRADE_URL, lawd, key, ym, timeout=timeout)
+    if result["status"] != "ok":
+        return None
+    return {"lawd": lawd, "ym": ym, **monthly_summary(result["items"]), "api_total": result["api_total"],
+            "fetched_at": result["fetched_at"], "schema_version": result["schema_version"]}
 
 
 def _cache_path(cache_dir: Path, lawd: str, ym: str) -> Path:
@@ -94,6 +82,9 @@ def _fetch_with_retry(lawd: str, ym: str, key: str, retries: int) -> tuple[dict 
         result = fetch_month(lawd, ym, key)
         if result is not None:
             return result, attempt
+        from realty_signal.ingest.transaction_source import quota_blocked
+        if quota_blocked(key):
+            return None, attempt
         if attempt < retries:
             time.sleep(0.25 * (2 ** attempt))
     return None, retries
@@ -105,15 +96,34 @@ def collect(
 ) -> dict:
     """미수집 월만 병렬 수집한다. 중단해도 다음 실행이 이어받는다."""
     cache_dir.mkdir(parents=True, exist_ok=True)
-    pending = [(lawd, ym) for lawd in lawds for ym in months if not _cache_path(cache_dir, lawd, ym).exists()]
+    from datetime import datetime
+    def fresh(lawd, ym):
+        path = _cache_path(cache_dir, lawd, ym)
+        if not path.exists():
+            return False
+        recent = (datetime.now()-datetime.strptime(ym, "%Y%m")).days < 100
+        return time.time()-path.stat().st_mtime < (6*3600 if recent else 30*86400)
+    pending = [(lawd, ym) for lawd in lawds for ym in months if not fresh(lawd, ym)]
     stats = {"cached": len(lawds) * len(months) - len(pending), "fetched": 0, "failed": 0,
              "retried": 0, "requested": len(pending), "total": len(lawds) * len(months)}
     if not pending:
         return stats
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        futures = {executor.submit(_fetch_with_retry, lawd, ym, key, retries): (lawd, ym) for lawd, ym in pending}
-        for completed, future in enumerate(as_completed(futures), start=1):
-            lawd, ym = futures[future]
+    def bounded(executor):
+        todo = iter(pending)
+        futures = {}
+        def submit():
+            item = next(todo, None)
+            if item:
+                futures[executor.submit(_fetch_with_retry, *item, key, retries)] = item
+        for _ in range(max(1, min(8, workers))):
+            submit()
+        while futures:
+            done, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                yield futures.pop(future), future
+                submit()
+    with ThreadPoolExecutor(max_workers=max(1, min(8, workers))) as executor:
+        for completed, ((lawd, ym), future) in enumerate(bounded(executor), start=1):
             try:
                 result, attempts = future.result()
             except Exception:  # noqa: BLE001
@@ -124,7 +134,8 @@ def collect(
             else:
                 path = _cache_path(cache_dir, lawd, ym)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                from realty_signal.storage import atomic_json
+                atomic_json(path, result)
                 stats["fetched"] += 1
             if progress and (completed % 100 == 0 or completed == len(pending)):
                 progress(stats["cached"] + completed, stats["total"])

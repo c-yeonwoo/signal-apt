@@ -100,7 +100,8 @@ def synthesize(name: str, transcripts: list[str], blogs: list[dict]) -> str | No
     if not corpus.strip():
         return None
     try:
-        client = anthropic.Anthropic()
+        from realty_signal import llm
+        client = llm.client("imjang")
         resp = client.messages.create(
             model=MODEL, max_tokens=1500, system=_SYS,
             messages=[{"role": "user", "content": f"단지: {name}\n\n다음 외부 후기들을 종합해 임장 리포트를 작성하세요.\n\n{corpus[:18000]}"}])

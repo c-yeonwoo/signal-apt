@@ -148,70 +148,63 @@ async def _briefing_loop():
 
 
 async def _auto_refresh_loop():
-    """데이터 신선도 자동 유지 — 마지막 수집 후 7일 경과 시 재수집(매일 점검).
-
-    KB 주간 데이터는 측정일이 발표보다 ~1주 지연 → '데이터 날짜'가 아닌 '마지막 수집 시각'
-    기준으로 주 1회만 받아, 매 기동 재수집을 방지하면서 새 주차 발표를 빠르게 반영.
-    주간 digest도 동일 루프에서 7일마다 시도(SMTP 없으면 dry-run 카운트만).
-    """
+    """Independent due times: a failing source never delays other source jobs."""
+    from realty_signal import jobs, backup, digest as dig
     import asyncio
     import time
-    while True:
-        retry_soon = False
+
+    def kb_job():
+        last = db.kv_get("last_kb_fetch") or 0
+        if store.CACHE_FILE.exists() and time.time()-last < _REFRESH_EVERY_DAYS*86400:
+            return
+        db.kv_set(_KB_LAST_ATTEMPT, time.time())
         try:
-            last = db.kv_get("last_kb_fetch")
-            age_days = (time.time() - last) / 86400 if last else 999
-            if age_days >= _REFRESH_EVERY_DAYS:
-                log.warning("마지막 수집 %.1f일 경과 — 자동 갱신 시작", age_days)
-                db.kv_set(_KB_LAST_ATTEMPT, time.time())
-                await asyncio.to_thread(_do_refresh)
-                db.kv_set(_KB_LAST_ERROR, None)      # 성공했으니 실패 기록을 지운다
-                log.warning("자동 갱신 완료")
-        except Exception as e:  # 갱신 실패해도 루프 유지 — 단 **조용히 실패하지 않는다**
+            result = _do_refresh()
+            db.kv_set(_KB_LAST_ERROR, None)
+            return result
+        except Exception as exc:
             prev = db.kv_get(_KB_LAST_ERROR) or {}
-            n = int(prev.get("consecutive") or 0) + 1
-            db.kv_set(_KB_LAST_ERROR, {"ts": time.time(), "message": str(e)[:300],
-                                       "consecutive": n})
-            retry_soon = True
-            log.error("자동 갱신 실패(%d회 연속): %s", n, e)
-        try:
-            from realty_signal import digest as dig
-            last_d = db.kv_get("last_digest_run")
-            d_age = (time.time() - last_d) / 86400 if last_d else 999
-            if d_age >= _DIGEST_EVERY_DAYS:
-                send = dig.smtp_configured()
-                log.warning("주간 digest 실행 (send=%s)", send)
-                stats = await asyncio.to_thread(lambda: dig.run_digest(send=send, quiet=True))
-                db.kv_set("last_digest_run", time.time())
-                # 결과를 남긴다 — 로그로만 흘리면 'dry-run 이 5주째' 인 걸 아무도 모른다
-                from realty_signal.services import notify_status as ns
-                ns.record_digest_run(stats, sent=send)
-                log.warning("digest 완료(send=%s): %s", send, stats)
-        except Exception as e:
-            log.error("digest 실패: %s", e)
-        try:  # 회원·리포트 보존 — S3 백업(env 설정 시). 매일 1회.
-            from realty_signal import backup
-            if backup.enabled():
-                await asyncio.to_thread(backup.run_backup)
-        except Exception as e:
-            log.error("백업 실패: %s", e)
-        try:  # 급매·찐매물 — 하루 1회(캐시 mtime/버전 기준)
-            if _quicksale_stale():
-                log.warning("급매 캐시 만료 — 일일 스캔")
-                result = await asyncio.to_thread(lambda: quicksale_refresh({}))
-                if not result["ok"]:
-                    log.error("급매 일일 스캔 보류: %s", result["scan"].get("error"))
-                    retry_soon = True
-            if _certified_stale():
-                log.warning("찐매물 캐시 만료 — 일일 스캔")
-                result = await asyncio.to_thread(lambda: certified_refresh({}))
-                if not result["ok"]:
-                    log.error("찐매물 일일 스캔 보류: %s", result["scan"].get("error"))
-                    retry_soon = True
-        except Exception as e:
-            log.error("급매/찐매물 일일 갱신 실패: %s", e)
-        # 실패했으면 하루를 기다리지 않는다 — 일시적 장애로 한 주를 통째로 잃지 않도록
-        await asyncio.sleep(_REFRESH_RETRY_HOURS * 3600 if retry_soon else 86400)
+            db.kv_set(_KB_LAST_ERROR, {"ts": time.time(), "message": type(exc).__name__,
+                                      "consecutive": int(prev.get("consecutive") or 0)+1})
+            raise
+
+    def digest_job():
+        from realty_signal.services import notify_status as ns
+        last = db.kv_get("last_digest_run") or 0
+        if time.time()-last < _DIGEST_EVERY_DAYS*86400:
+            return
+        send = dig.smtp_configured()
+        stats = dig.run_digest(send=send, quiet=True)
+        db.kv_set("last_digest_run", time.time())
+        ns.record_digest_run(stats, sent=send)
+
+    def locality_job():
+        if config.public_data_key() and not store.LOCALITY_FILE.exists():
+            store.build_localities()
+
+    specs = [
+        ("kb", kb_job, 6*3600),
+        ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
+        ("certified", lambda: certified_refresh({}) if _certified_stale() else None, 3600),
+        ("localities", locality_job, 86400),
+        ("digest", digest_job, 6*3600),
+        ("backup", lambda: backup.run_backup() if backup.enabled() else None, 86400),
+    ]
+    # Each loop owns a renewable lease and its own retry/due clock.
+    async def serve(name, fn, interval):
+        while True:
+            try:
+                await asyncio.to_thread(jobs.run, name, fn, interval=interval, retry=3600)
+            except Exception:
+                log.error("job state failure: %s", name)
+            await asyncio.sleep(60)
+    tasks = [asyncio.create_task(serve(*spec)) for spec in specs]
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _seed_if_missing():
@@ -260,29 +253,8 @@ def _seed_if_missing():
 
 
 async def _startup_bg():
-    """초기 수집·시딩·스냅샷을 백그라운드로 — 헬스체크(/)가 데이터를 기다리지 않도록.
-
-    신규 배포 첫 부팅의 KB 수집은 수십 초 걸려, 동기 실행 시 lifespan이 막혀
-    healthcheck 윈도우 내에 서버가 응답하지 못한다(배포 실패). '/'는 정적 SPA라
-    데이터와 무관하므로, 수집은 별도 스레드에서 돌리고 서버는 즉시 뜬다.
-    """
-    import asyncio
-    if not store.CACHE_FILE.exists():
-        log.warning("캐시 없음 — KB 데이터허브에서 최초 수집 중(백그라운드)…")
-        try:
-            await asyncio.to_thread(store.fetch)
-        except Exception as e:  # 수집 실패해도 서버는 기동(이후 갱신으로 재시도)
-            log.error("초기 수집 실패: %s", e)
-    try:
-        await asyncio.to_thread(_seed_if_missing)   # 저평가·급매·재건축 자동 시딩(무거움)
-    except Exception as e:  # noqa: BLE001
-        log.error("자동 시딩 실패: %s", e)
-    try:  # 시그널 스냅샷 초기화(최초 1회) — 이후 변동 감지 기준점
-        if not db.kv_get("signal_snapshot"):
-            _snapshot_signals(str(_kb().last_date.date()))
-    except Exception as e:
-        log.error("시그널 스냅샷 초기화 실패: %s", e)
-    await _auto_refresh_loop()  # 백그라운드 자동 갱신(무한 루프)
+    """Serve immediately; each source starts independently under a durable lease."""
+    await _auto_refresh_loop()
 
 
 @asynccontextmanager
@@ -293,6 +265,7 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
     brief.cancel()
+    await asyncio.gather(task, brief, return_exceptions=True)
 
 
 class SafeJSONResponse(JSONResponse):
@@ -807,7 +780,6 @@ def signals(only: str | None = None):
 _GRADES_TTL = 7 * 86400   # 국토부 실거래 6개월치 — 주 1회면 충분
 
 
-@lru_cache(maxsize=256)
 def _region_grades(region: str):
     """시군구 단지별 급지 랭킹 (국토부 실거래 평단가 순위).
 
@@ -823,7 +795,11 @@ def _region_grades(region: str):
     if cached is not None:
         return cached
     config.load_env()
-    out = region_grades(code[:5], config.public_data_key())
+    from realty_signal.ingest.complex import SourceUnavailable
+    try:
+        out = region_grades(code[:5], config.public_data_key())
+    except SourceUnavailable:
+        return [{**row, "데이터상태": "stale"} for row in (db.kv_get(ckey) or [])]
     if out:
         db.kv_set(ckey, out)
     return out
@@ -1444,8 +1420,8 @@ def _radar_refresh_status(path) -> dict:
 
 
 def _record_radar_refresh(path, status: dict) -> None:
-    _radar_refresh_file(path).write_text(
-        json.dumps(status, ensure_ascii=False), encoding="utf-8")
+    from realty_signal.storage import atomic_json
+    atomic_json(_radar_refresh_file(path), status)
 
 
 def _radar_cached_response(path, min_ver: int) -> dict:
@@ -1835,7 +1811,7 @@ def complex_detail(region: str, name: str):
     signal = _signal_map().get(region)
 
     def deco(d):   # 급지·시그널·공시가격·단지시그널·지역대비는 응답 시점에 부착(각자 캐시)
-        out = {**d, "급지": grade, "시그널": signal}
+        out = {**d, "region": region, "급지": grade, "시그널": signal}
         ratio = None
         try:                                                     # 공시가격 먼저 → 단지시그널 가격 성분에 사용
             g = _gongsi_for(region, name)
@@ -1865,7 +1841,13 @@ def complex_detail(region: str, name: str):
     pk = config.public_data_key()
     if not pk:
         return deco({"단지명": name, "지원안함": True, "평형별": [], "매매추이": []})
-    data = cx.fetch_complex(lawd5, name, pk)
+    try:
+        data = cx.fetch_complex(lawd5, name, pk)
+    except cx.SourceUnavailable:
+        previous = db.kv_get(ckey)
+        return deco({**(previous or {"단지명": name, "평형별": [], "매매추이": []}),
+                     "status": "stale" if previous else "failed", "degraded": True,
+                     "message": "원천 조회 실패 — 거래 0건을 의미하지 않습니다"})
     data["region"] = region
     db.kv_set(ckey, data)
     return deco(data)
@@ -2061,12 +2043,30 @@ def _recommend_rule(criteria: list, ranked: list) -> str:
     return msg
 
 
+def _verified_comparison(data):
+    from fastapi import HTTPException
+    raw = data.get("complexes") or []
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 5:
+        raise HTTPException(422, "비교 단지는 1~5곳만 선택해 주세요")
+    out = []
+    for row in raw:
+        if not isinstance(row, dict):
+            raise HTTPException(422, "단지 식별자가 필요합니다")
+        region, name = row.get("region") or row.get("지역"), row.get("단지명")
+        if not isinstance(region, str) or not isinstance(name, str) or not region or not name or len(region) > 60 or len(name) > 100:
+            raise HTTPException(422, "지역과 단지명을 확인해 주세요")
+        detail = complex_detail(region, name)
+        main = max(detail.get("평형별") or [{}], key=lambda x: x.get("매매건수") or 0)
+        out.append({**detail, "전세가율": main.get("전세가율"), "갭": main.get("갭")})
+    return out
+
+
 def compare_recommend_api(request: Request, data: dict = Body(...)):
     """비교 단지(2+) + 중시가치(복수) → 종합점수 순위 + 추천 단지·해설(Claude, 없으면 규칙기반)."""
     from realty_signal import ai_report
     config.load_env()
     criteria = [c for c in (data.get("criteria") or []) if c in _CMP_CRIT]
-    complexes = data.get("complexes") or []
+    complexes = _verified_comparison(data)
     if not criteria or len(complexes) < 2:
         return {"ok": False, "reason": "need_criteria_and_2_complexes"}
     ranked, used = _compare_score(criteria, complexes)
@@ -2077,11 +2077,11 @@ def compare_recommend_api(request: Request, data: dict = Body(...)):
     tier = "opus" if opus else "sonnet"
     sig_src = sorted(f"{c.get('단지명')}|{c.get('최근평단가')}|{c.get('전세가율')}|{c.get('갭')}|{c.get('추세pct')}|{c.get('총거래')}" for c in complexes)
     sig = hashlib.md5(json.dumps([sorted(criteria), sig_src, tier], ensure_ascii=False).encode()).hexdigest()[:16]
-    ckey = f"cmpreco:{sig}"
+    ckey = f"cmpreco:v2:{_uid(request)}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True}
-    text = ai_report.compare_recommend(criteria, complexes, ranked, model=model)
+    text = ai_report.compare_recommend(criteria, complexes, ranked, model=model, uid=_uid(request))
     out = {"ok": True, "추천": ranked[0]["단지명"], "순위": ranked,
            "해설": text or _recommend_rule(criteria, ranked), "ai": bool(text)}
     if text:
@@ -2095,18 +2095,18 @@ def compare_insight_api(request: Request, data: dict = Body(...)):
     from realty_signal import ai_report
     config.load_env()
     criterion = data.get("criterion") or "가격"
-    complexes = data.get("complexes") or []
+    complexes = _verified_comparison(data)
     opus = _is_opus_user(request)
     model = ai_report.OPUS if opus else ai_report.HAIKU   # 화이트리스트=Opus, 그 외=Haiku(단순 태스크)
     tier = "opus" if opus else "haiku"
     # 캐시: 기준 + 단지 시그니처(이름·핵심수치) + 티어 → 반복 클릭 재과금 방지
     sig_src = sorted(f"{c.get('단지명')}|{c.get('최근평단가')}|{c.get('전세가율')}|{c.get('갭')}|{c.get('추세pct')}|{c.get('총거래')}" for c in complexes)
     sig = hashlib.md5(json.dumps([criterion, sig_src, tier], ensure_ascii=False).encode()).hexdigest()[:16]
-    ckey = f"cmpins:{sig}"
+    ckey = f"cmpins:v2:{_uid(request)}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True}
-    text = ai_report.compare_insight(criterion, complexes, model=model)
+    text = ai_report.compare_insight(criterion, complexes, model=model, uid=_uid(request))
     out = {"해설": text or _compare_rule(criterion, complexes), "ai": bool(text)}
     if text:   # 규칙기반 폴백은 무료·즉시 → 캐시 불필요
         db.kv_set(ckey, out)
@@ -2511,6 +2511,7 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
     sig = _signal_map()
     seen, out = set(), []
     queryable, succeeded, failures, skipped = 0, 0, [], 0
+    successful_regions = []
     for region in regions:
         code = _code_of(region)
         c = _region_centroid(region, code)
@@ -2523,6 +2524,7 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
             failures.append({"region": region, "error": error})
             continue
         succeeded += 1
+        successful_regions.append(region)
         for m in rows:
             if kind == "급매" and not m.get("급매"):
                 continue
@@ -2534,6 +2536,9 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
             seen.add(key)
             actual = _sigungu_at(m.get("lat"), m.get("lng")) or region   # 좌표 우선, 실패 시 스캔 지역
             m["지역"] = actual
+            import time
+            m["fetched_at"] = time.time()
+            m["source"] = "baroezip"
             m["시그널"] = sig.get(actual, "")
             out.append(m)
     out.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
@@ -2544,6 +2549,7 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
         "requested_regions": len(regions),
         "queryable_regions": queryable,
         "successful_requests": succeeded,
+        "successful_regions": successful_regions,
         "failed_requests": len(failures),
         "skipped_regions": skipped,
         "required_successes": required,
@@ -2668,6 +2674,14 @@ def _build_listings(want: set[str]) -> list[dict]:
                # 급매·찐매물은 naver_id 가 2,127건 전부 고유해서 그대로 쓴다.
                "key": _listing_key(kind, raw, ref, name, region)}
         row.update(tr.to_dict())
+        if kind in ("급매", "찐매물"):
+            import time
+            path = QUICKSALE_FILE if kind == "급매" else CERTIFIED_FILE
+            fetched = raw.get("fetched_at") or path.stat().st_mtime
+            row.update(source="baroezip", fetched_at=fetched,
+                       stale=bool(raw.get("stale") or time.time()-fetched > 86400),
+                       degraded=bool(raw.get("degraded")), price_kind="asking",
+                       published_at=None, spatial_grain="listing")
         out.append(row)
 
     if "경매" in want:
@@ -2760,6 +2774,22 @@ def _scan_regions() -> list[str]:
     return out
 
 
+def _preserve_unscanned(path, listings, scan):
+    if not path.exists() or "successful_regions" not in scan:
+        return listings
+    try:
+        previous = jsonx.loads(path.read_text(encoding="utf-8")).get("listings", [])
+    except Exception:
+        return listings
+    successful = set(scan["successful_regions"])
+    def identity(row):
+        return row.get("naver_id") or (row.get("complex_no"), row.get("지역"), row.get("평형"), row.get("층"))
+    current = {identity(row) for row in listings}
+    old = [{**row, "stale": True, "fetched_at": row.get("fetched_at") or path.stat().st_mtime}
+           for row in previous if row.get("지역") not in successful and identity(row) not in current]
+    return listings + old
+
+
 def quicksale_refresh(data: dict = Body(default={})):
     """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
     import time
@@ -2771,9 +2801,11 @@ def quicksale_refresh(data: dict = Body(default={})):
                            else "원천 응답 부족으로 기존 급매 결과를 유지했습니다.")
         _record_radar_refresh(QUICKSALE_FILE, status)
         return {"ok": False, "count": 0, "regions": len(regions), "scan": status}
+    listings = _preserve_unscanned(QUICKSALE_FILE, listings, scan)
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
-    QUICKSALE_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
+    from realty_signal.storage import atomic_json
+    atomic_json(QUICKSALE_FILE, jsonx.loads(jsonx.dumps(result)))
     _record_radar_refresh(QUICKSALE_FILE, status)
     return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}
 
@@ -2789,8 +2821,10 @@ def certified_refresh(data: dict = Body(default={})):
                            else "원천 응답 부족으로 기존 찐매물 결과를 유지했습니다.")
         _record_radar_refresh(CERTIFIED_FILE, status)
         return {"ok": False, "count": 0, "regions": len(regions), "scan": status}
+    listings = _preserve_unscanned(CERTIFIED_FILE, listings, scan)
     result = {"ready": True, "listings": listings, "regions": regions,
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
-    CERTIFIED_FILE.write_text(jsonx.dumps(result), encoding="utf-8")
+    from realty_signal.storage import atomic_json
+    atomic_json(CERTIFIED_FILE, jsonx.loads(jsonx.dumps(result)))
     _record_radar_refresh(CERTIFIED_FILE, status)
     return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}
