@@ -92,13 +92,8 @@ def apply_engagement_bonus(
             if base is None:
                 base = row.get("기회도")
             if base is not None and bonus:
-                new = min(100, int(base) + bonus)
-                row["타이밍점수"] = new
-                row["기회도"] = new
                 row["engagement_bonus"] = bonus
-                why = row.get("타이밍근거") or row.get("기회도근거") or ""
-                extra = f"관심도(+{bonus})"
-                row["타이밍근거"] = f"{why} · {extra}" if why else extra
-                row["기회도근거"] = row["타이밍근거"]
+                row["선호점수"] = bonus
+                row["선호근거"] = "조회 관심도 — 시장 전망이나 매수 적합도와 무관"
         out.append(row)
     return out

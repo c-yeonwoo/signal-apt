@@ -997,13 +997,21 @@ def _default_region(request: Request, profile: dict) -> str | None:
     return None
 
 
+def _buyer_params(profile, **override):
+    from fastapi import HTTPException
+    try:
+        return buying_power.params_from_profile(profile, **override)
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(422, "자금·소득·금리·만기 입력 범위를 확인해 주세요") from None
+
+
 def buying_power_statement(request: Request, **override):
     """매수력 확정서 — 프로필 기본값 + 화면 입력 override."""
     profile = db.profile_get(_uid(request)) or {}
     if not override.get("region"):
         override["region"] = _default_region(request, profile)
     override.setdefault("sido", _sido_of(override.get("region")))
-    p = buying_power.params_from_profile(profile, **override)
+    p = _buyer_params(profile, **override)
     if p.capital <= 0:
         return {"ready": False, "reason": "no_capital",
                 "message": "가용자본을 입력하면 매수력을 확정할 수 있어요."}
@@ -1022,11 +1030,12 @@ def buying_power_confirm(request: Request, data: dict):
     kw = {k: data.get(k) for k in ("capital", "income", "existing_debt_annual", "homes",
                                    "first_time", "temp_two_home", "big_area",
                                    "apply_bangongje", "region", "regulated", "dispose",
-                                   "ltv", "rate", "rate_type", "years")}
+                                   "ltv", "rate", "rate_type", "years", "reserve_cash",
+                                   "monthly_budget", "moving_cost", "repair_cost")}
     if not kw.get("region"):
         kw["region"] = _default_region(request, profile)
     kw["sido"] = _sido_of(kw.get("region"))
-    p = buying_power.params_from_profile(profile, **kw)
+    p = _buyer_params(profile, **kw)
     if p.capital <= 0:
         return JSONResponse({"ok": False, "error": "가용자본을 입력해 주세요."}, status_code=400)
     from datetime import date
@@ -1035,8 +1044,9 @@ def buying_power_confirm(request: Request, data: dict):
     profile["매수력"] = st
     if p.capital:
         profile["가용자본"] = round(p.capital)
-    if p.income:
-        profile["연소득"] = round(p.income)
+    profile["연소득"] = round(p.income or 0)
+    profile["비상자금"] = p.reserve_cash
+    profile["월상환한도"] = p.monthly_budget
     profile["기대출연원리금"] = round(p.existing_debt_annual or 0)
     profile["주택수"] = int(p.homes or 0)
     profile["생애최초"] = 1 if p.first_time else 0
@@ -1183,15 +1193,11 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     if uid:
         profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
     if budget is None:
-        confirmed = (profile.get("매수력") or {}).get("최대매수가")
-        if confirmed:
-            budget = float(confirmed)
-        else:
-            p = buying_power.params_from_profile(profile)
-            if p.capital <= 0:
-                return {"ready": False, "reason": "no_budget",
-                        "message": "가용자본을 입력하고 매수력을 확정하면 후보를 좁혀 드려요."}
-            budget = float(buying_power.max_purchase(p)[0])
+        p = _buyer_params(profile)
+        if p.capital <= 0:
+            return {"ready": False, "reason": "no_budget",
+                    "message": "가용자본을 입력하면 후보를 좁혀 드려요."}
+        budget = float(buying_power.max_purchase(p)[0])
     if not budget:
         return {"ready": False, "reason": "no_budget",
                 "message": "매수력을 먼저 확정해 주세요."}
@@ -1231,7 +1237,7 @@ def conclusion(request: Request | None = None, capital: float | None = None,
             or profile.get("매수지역")
         )
     override.setdefault("sido", _sido_of(override.get("region")))
-    p = buying_power.params_from_profile(profile, **override)
+    p = _buyer_params(profile, **override)
     py = float(pyeong) if pyeong is not None else buying_power.pyeong_of(profile.get("관심평수"))
 
     if p.capital <= 0:
@@ -1273,6 +1279,8 @@ def conclusion(request: Request | None = None, capital: float | None = None,
         raw, budget=budget, pyeong=py,
         loc_price_of=lambda region: (locmap.get(region) or {}).get("price"),
         prefer_strong=prefer_strong, limit=40,
+        finance_of=lambda row, price: buying_power.for_price(price,
+            buying_power.params_for_region(p, row.get("지역"), _sido_of(row.get("지역")))),
     )
     # 응답 경량화 — 프론트·AI에 필요한 필드만
     slim = []
@@ -1284,6 +1292,8 @@ def conclusion(request: Request | None = None, capital: float | None = None,
             "지표라벨": L.get("지표라벨"), "지표값": L.get("지표값"),
             "지표단위": L.get("지표단위"), "기회도": L.get("기회도"),
             "예산내": L.get("예산내"), "예산비율": L.get("예산비율"),
+            "가격출처": L.get("가격출처"), "예산확인필요": L.get("예산확인필요"),
+            "판단": L.get("판단"), "자금": L.get("자금"), "판단버전": L.get("판단버전"),
             "ref": L.get("ref"), "_score": L.get("_score"),
         })
     cards = rec.aggregate_regions(listings, locmap=locmap, budget=budget, pyeong=py)

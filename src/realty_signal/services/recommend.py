@@ -40,11 +40,10 @@ def score_listing(row: dict, *, budget: float, pyeong: float,
     이제 가격 미상은 `예산확인필요` 로 분리하고 예산 적합도는 0 이다.
     """
     sig = row.get("시그널") or ""
-    if sig not in _SIG_RANK:
-        return None
     est, est_src = _est_total(row, loc_price, pyeong)
-    unknown_price = est is None
-    affordable = bool(est is not None and budget > 0 and est <= budget)
+    unknown_price = (est_src != "매물가" or row.get("유형") not in ("급매", "찐매물")
+                     or row.get("stale") is True or row.get("degraded") is True)
+    affordable = bool(not unknown_price and est is not None and budget > 0 and est <= budget)
     ratio = (est / budget) if (affordable and est and budget) else 0.0
     budget_fit = sl._budget_score(ratio) if affordable else 0.0
     opp = row.get("기회도") or row.get("타이밍점수") or 0
@@ -53,12 +52,7 @@ def score_listing(row: dict, *, budget: float, pyeong: float,
     gap = row.get("지표값") if row.get("유형") in ("급매", "찐매물") else None
     gap_b = min(12.0, max(0.0, -(float(gap) if gap is not None else 0))) if gap is not None else 0.0
     score = (
-        _SIG_RANK[sig] * 10000
-        + (1000 if affordable else 0)
-        + budget_fit * 50
-        + float(opp) * 5
-        + kind_b * 10
-        + gap_b * 8
+        budget_fit
     )
     out = dict(row)
     out.update({
@@ -66,6 +60,8 @@ def score_listing(row: dict, *, budget: float, pyeong: float,
         "가격출처": est_src,
         "예산내": affordable,
         "예산확인필요": unknown_price,
+        "판단": "가격확인필요" if unknown_price else "호가예산내" if affordable else "예산초과",
+        "판단버전": "buyer-evidence-v2",
         "예산비율": round(ratio, 3) if affordable and est else None,
         "_score": round(score, 1),
     })
@@ -81,6 +77,7 @@ def rank_listings(
     prefer_strong: bool = True,
     limit: int = 40,
     max_per_region: int = 3,
+    finance_of: Callable[[dict, float], dict] | None = None,
 ) -> list[dict]:
     """통합 매물 → 점수순. **예산이 1차 정렬 기준이고 시그널은 그 다음이다.**
 
@@ -99,6 +96,14 @@ def rank_listings(
         s = score_listing(r, budget=budget, pyeong=pyeong,
                           loc_price=loc_price_of(region))
         if s:
+            if prefer_strong:
+                s["_score"] += _SIG_RANK.get(s.get("시그널"), 0) * 0.01
+            if finance_of and not s["예산확인필요"]:
+                finance = finance_of(s, s["추정가"])
+                s["자금"] = finance
+                s["예산내"] = bool(s["예산내"] and finance["가능"])
+                s["예산확인필요"] = bool(finance.get("확인필요"))
+                s["판단"] = "자금확인필요" if s["예산확인필요"] else "가정내가능" if s["예산내"] else "조건초과"
             scored.append(s)
     # 정렬 우선순위: ① 예산 내  ② 가격을 아는가  ③ 점수(시그널 지배)
     scored.sort(key=lambda x: (x["예산내"], not x["예산확인필요"], x["_score"]), reverse=True)
@@ -107,18 +112,22 @@ def rank_listings(
     # 실측에서 노원구 하나가 상위 40건 중 11건(27%)을 차지했다. 같은 동네 11개를 보여주는 건
     # 후보를 넓히는 게 아니라 같은 후보를 반복하는 것이다.
     if max_per_region and max_per_region > 0:
-        seen: dict[str, int] = {}
-        capped, overflow = [], []
-        for x in scored:
-            region = x.get("지역") or ""
-            n = seen.get(region, 0)
-            if n < max_per_region:
-                seen[region] = n + 1
-                capped.append(x)
-            else:
-                overflow.append(x)
-        # 상한 때문에 자리가 남으면 넘친 것으로 채운다(빈손보다 낫다)
-        scored = capped + overflow
+        diversified = []
+        # 지역 다양성은 같은 자금 판단 그룹 안에서만 적용한다.
+        for tier in ((True, False), (False, False), (False, True)):
+            group = [x for x in scored if (x["예산내"], x["예산확인필요"]) == tier]
+            seen: dict[str, int] = {}
+            capped, overflow = [], []
+            for x in group:
+                region = x.get("지역") or ""
+                n = seen.get(region, 0)
+                if n < max_per_region:
+                    seen[region] = n + 1
+                    capped.append(x)
+                else:
+                    overflow.append(x)
+            diversified.extend(capped + overflow)
+        scored = diversified
     return scored[:limit]
 
 
@@ -141,12 +150,12 @@ def aggregate_regions(listings: list[dict], *, locmap: dict,
             if _SIG_RANK.get(s, 0) > _SIG_RANK.get(sig, 0):
                 sig = s
         in_budget = [x for x in items if x.get("예산내")]
-        affordable = bool(in_budget) or bool(est and est <= budget)
+        affordable = bool(in_budget)
         ratio = (est / budget) if (est and budget and est <= budget) else None
         kinds = defaultdict(list)
         for x in items:
             kinds[x.get("유형") or ""].append(x)
-        best = max(items, key=lambda x: x.get("_score") or 0)
+        best = max(in_budget or items, key=lambda x: x.get("_score") or 0)
         cards.append({
             "region": region, "시그널": sig,
             "평단가": price, "예상매수가": est,
@@ -170,7 +179,8 @@ def aggregate_regions(listings: list[dict], *, locmap: dict,
             "청약건수": len(kinds.get("청약", [])),
             "매물수": len(items),
             "대표매물": {"유형": best.get("유형"), "단지명": best.get("단지명"),
-                      "총액": best.get("추정가") or best.get("총액")},
+                      "총액": best.get("총액"), "가격출처": best.get("가격출처"),
+                      "판단": best.get("판단")},
             "_score": best.get("_score") or 0,
         })
     cards.sort(key=lambda c: (c["예산내"], c["_score"]), reverse=True)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Request, Query
 
 router = APIRouter(tags=["personal"])
 
@@ -46,14 +46,28 @@ def buying_power_get(request: Request, capital: float | None = None, income: flo
                      temp_two_home: bool | None = None, big_area: bool | None = None,
                      apply_bangongje: bool | None = None,
                      ltv: float | None = None, rate: float | None = None,
-                     rate_type: str | None = None, years: int | None = None):
+                     rate_type: str | None = None, years: int | None = None,
+                     reserve_cash: float | None = None, monthly_budget: float | None = None):
     from realty_signal import api as app_api
     return app_api.buying_power_statement(
         request, capital=capital, income=income, existing_debt_annual=existing_debt_annual,
         homes=homes, first_time=first_time, region=region, regulated=regulated,
         dispose=dispose, temp_two_home=temp_two_home, big_area=big_area,
         apply_bangongje=apply_bangongje,
-        ltv=ltv, rate=rate, rate_type=rate_type, years=years)
+        ltv=ltv, rate=rate, rate_type=rate_type, years=years,
+        reserve_cash=reserve_cash, monthly_budget=monthly_budget)
+
+
+@router.get("/api/buying-power/scenario")
+def price_scenario(request: Request, price: float = Query(ge=0, le=5_000_000),
+                   region: str | None = None, ltv: float | None = Query(None, ge=0, le=1),
+                   rate: float = Query(0.04, ge=0, le=1), years: int = Query(30, ge=1, le=50)):
+    from realty_signal import api as app_api, buying_power, db
+    profile = db.profile_get(app_api._uid(request)) or {}
+    p = app_api._buyer_params(profile, region=region, ltv=ltv, rate=rate, years=years,
+                             sido=app_api._sido_of(region))
+    return {**buying_power.for_price(price, p), "ready": p.capital > 0,
+            "안내": buying_power.notes(p, price)}
 
 
 @router.post("/api/buying-power/confirm")

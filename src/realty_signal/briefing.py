@@ -219,10 +219,8 @@ def plan(uid: int) -> dict:
     profile = dict(db.profile_get(uid) or {})
     profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
     confirmed = bool((profile.get("매수력") or {}).get("최대매수가"))
-    budget = (profile.get("매수력") or {}).get("최대매수가")
-    if not budget:
-        p = buying_power.params_from_profile(profile)
-        budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
+    p = buying_power.params_from_profile(profile)
+    budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
 
     cands: list[dict] = []
     qs: list[dict] = []
@@ -251,10 +249,8 @@ def build(uid: int, *, force: bool = False) -> dict:
 
     profile = dict(db.profile_get(uid) or {})
     profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
-    budget = (profile.get("매수력") or {}).get("최대매수가")
-    if not budget:
-        p = buying_power.params_from_profile(profile)
-        budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
+    p = buying_power.params_from_profile(profile)
+    budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
     if not budget:
         return {"send": False, "reason": "no_budget"}
 

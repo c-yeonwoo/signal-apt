@@ -72,8 +72,8 @@ def test_region_average_estimate_is_labelled():
                             loc_price_of=lambda r: 1_000)
     assert out[0]["가격출처"] == "지역평단추정"
     assert out[0]["추정가"] == 25_700
-    assert out[0]["예산내"] is True          # 근사라도 값이 있으면 예산 판정은 한다
-    assert out[0]["예산확인필요"] is False
+    assert out[0]["예산내"] is False
+    assert out[0]["예산확인필요"] is True
 
 
 def test_buy_pool_is_never_discarded_wholesale():

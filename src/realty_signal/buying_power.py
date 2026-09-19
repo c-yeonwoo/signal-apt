@@ -20,8 +20,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from math import floor, isfinite, ceil
 
 from realty_signal import regulation as reg
+
+MODEL_VERSION = "buyer-cashflow-v2"
 
 DEFAULTS = {
     "금리": 0.04,            # 연 이자율
@@ -74,7 +77,9 @@ class Params:
     """매수력 입력. 만원 단위, 비율은 소수(0.7 = 70%)."""
 
     capital: float                      # 가용 자기자본
-    income: float | None = None         # 연소득 (없으면 DSR 미적용)
+    income: float | None = None         # 미입력 시 대출을 가정하지 않는 현금 기준
+    reserve_cash: float = 0.0           # 매수 후 남길 비상자금
+    monthly_budget: float | None = None # 기존 대출 포함 월 상환 상한
     existing_debt_annual: float = 0.0   # 기대출 연 원리금
     homes: int = 0                      # 보유 주택수 (0 무주택 / 1 / 2+ 다주택)
     first_time: bool = False            # 생애최초 주택구입
@@ -97,6 +102,21 @@ class Params:
     extras: dict = field(default_factory=dict)
 
     def __post_init__(self):
+        for key in ("capital", "income", "reserve_cash", "monthly_budget", "existing_debt_annual",
+                    "moving_cost", "repair_cost", "stress_bp"):
+            v = getattr(self, key)
+            if v is not None and (not isfinite(float(v)) or float(v) < 0):
+                raise ValueError(f"{key}: 유한한 0 이상의 값이 필요합니다")
+            if v is not None:
+                setattr(self, key, float(v))
+        for key in ("ltv", "rate", "dsr_limit"):
+            v = getattr(self, key)
+            if v is not None and (not isfinite(float(v)) or not 0 <= float(v) <= 1):
+                raise ValueError(f"{key}: 0~1 범위가 필요합니다")
+            if v is not None:
+                setattr(self, key, float(v))
+        if not 1 <= self.years <= 50 or not 0 <= self.homes <= 100:
+            raise ValueError("만기 또는 주택수 범위가 올바르지 않습니다")
         if self.region:
             c = reg.classify(self.region, self.sido)
             self.regulated = c["규제지역"]
@@ -221,7 +241,7 @@ def monthly_payment(loan: float, rate: float, years: int) -> float:
 def dsr_loan_cap(p: Params) -> float:
     """DSR 한도 대출액(만원). 기대출 원리금 차감 + 스트레스 가산금리 적용."""
     if not p.income or p.income <= 0:
-        return float("inf")
+        return 0.0
     available = p.income * p.dsr_limit - max(0.0, p.existing_debt_annual or 0.0)
     if available <= 0:
         return 0.0
@@ -275,20 +295,50 @@ def cash_needed(price: float, p: Params, loan: float) -> dict:
     }
 
 
+def required_loan(price: float, p: Params) -> float:
+    """부대비용·비상자금을 포함해 필요한 최소 대출(인지세 구간 고정점)."""
+    available = max(0, p.capital - p.reserve_cash)
+    loan = 0.0
+    for _ in range(len(STAMP_BRACKETS) + 2):
+        needed = max(0.0, cash_needed(price, p, loan)["합계"] + loan - available)
+        if abs(needed - loan) < 1e-7:
+            break
+        loan = needed
+    return loan
+
+
 def for_price(price: float, p: Params) -> dict:
     """특정 가격을 살 때의 대출·월상환·필요현금. 예산 초과 여부 포함."""
+    if not isfinite(price) or price < 0:
+        raise ValueError("매수가 범위가 올바르지 않습니다")
     lim = loan_for(price, p)
-    loan = lim["대출"]
+    needed = required_loan(price, p)
+    loan = min(needed, lim["대출"])
     cash = cash_needed(price, p, loan)
     m = monthly_payment(loan, p.rate, p.term())
+    available = max(0, p.capital - p.reserve_cash)
+    possible = cash["합계"] <= available + 1e-6
+    unknown = not p.income and needed > 0
+    total_monthly = m + p.existing_debt_annual / 12
+    if p.monthly_budget is not None and total_monthly > p.monthly_budget + 1e-6:
+        possible = False
     out = {
         "매수가": round(price),
         "대출": round(loan),
         "실효LTV": round(loan / price, 3) if price else 0.0,
         "월상환": round(m),
         "필요현금": round(cash["합계"]),
-        "부족": round(max(0.0, cash["합계"] - p.capital)),
-        "가능": cash["합계"] <= p.capital + 1,
+        "부족": ceil(max(0.0, cash["합계"] - available)),
+        "가능": possible,
+        "상태": "확인필요" if unknown else "가정내가능" if possible else "조건초과",
+        "확인필요": unknown,
+        "필요대출": ceil(needed),
+        "대출가능상한": floor(lim["대출"]),
+        "비상자금": round(p.reserve_cash),
+        "잔여현금": round(p.capital - cash["합계"]),
+        "총월상환": round(total_monthly),
+        "계산버전": MODEL_VERSION,
+        "판단범위": "입력 가정 기반 추정이며 금융기관 승인 및 매물 권리 확인이 필요합니다",
         "제약": lim["제약"],
         "자격": lim["자격"],
         "비용": {k: round(v) for k, v in cash.items()},
@@ -301,15 +351,23 @@ def for_price(price: float, p: Params) -> dict:
 
 
 def _max_price_where(p: Params, ok) -> float:
-    """조건 ok(price) 를 만족하는 최대 가격(만원) — 이분탐색."""
-    lo, hi = 0.0, float(DEFAULTS["탐색상한"])
-    for _ in range(48):
-        mid = (lo + hi) / 2
-        if ok(mid):
-            lo = mid
-        else:
-            hi = mid
-    return lo
+    """요율·자격 경계 양쪽을 별도로 탐색해 구간 불연속을 보존한다."""
+    boundaries = [0, 5_000, 20_000, 30_000, 60_000, 80_000, 90_000,
+                  120_000, 150_000, 250_000, DEFAULTS["탐색상한"]]
+    best = 0
+    for lower, upper in zip(boundaries, boundaries[1:]):
+        lo, hi = lower, upper - 1
+        if not ok(lo):
+            continue
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if ok(mid):
+                lo = mid
+            else:
+                hi = mid - 1
+        best = max(best, lo)
+    # 경계에서만 우대가 적용되는 경우도 포함한다.
+    return max([best] + [v for v in boundaries if ok(v)])
 
 
 def max_purchase(p: Params) -> tuple[float, dict]:
@@ -319,18 +377,18 @@ def max_purchase(p: Params) -> tuple[float, dict]:
     필요현금은 단조 증가하므로 이분탐색이 성립한다.
     """
     def affordable(price: float) -> bool:
-        return cash_needed(price, p, loan_for(price, p)["대출"])["합계"] <= p.capital
+        return for_price(price, p)["가능"]
 
     price = round(_max_price_where(p, affordable))
     lim = loan_for(price, p)
-    loan = round(lim["대출"])
+    loan = min(required_loan(price, p), lim["대출"])
     cash = cash_needed(price, p, loan)
     # 최대가에서는 현금이 항상 소진되므로, 남은 정보는 '대출을 무엇이 막았나'다.
     constraint = lim["제약"] if (price > 0 and loan > 0) else "자본"
     cost_keys = ("취득세", "중개비", "법무비", "인지세", "등록면허세",
                  "국민주택채권", "이사비", "수리비")
     detail = {
-        "대출": loan,
+        "대출": round(loan),
         "승인액": round(lim["승인액"]),
         "방공제": round(lim["방공제"]),
         **{k: round(cash[k]) for k in cost_keys},
@@ -350,13 +408,13 @@ def safe_purchase(p: Params) -> dict | None:
     """월 상환액이 월소득의 '안전상환비율' 이내인 최대 매수가. 소득 없으면 None."""
     if not p.income or p.income <= 0:
         return None
-    ceiling = p.income / 12 * DEFAULTS["안전상환비율"]
+    ceiling = p.monthly_budget if p.monthly_budget is not None else p.income / 12 * DEFAULTS["안전상환비율"]
 
     def ok(price: float) -> bool:
-        loan = loan_for(price, p)["대출"]
-        if cash_needed(price, p, loan)["합계"] > p.capital:
+        loan = required_loan(price, p)
+        if loan > loan_for(price, p)["대출"] + 1e-6:
             return False
-        return monthly_payment(loan, p.rate, p.term()) <= ceiling
+        return monthly_payment(loan, p.rate, p.term()) + p.existing_debt_annual / 12 <= ceiling
 
     price = round(_max_price_where(p, ok))
     if price <= 0:
@@ -366,7 +424,9 @@ def safe_purchase(p: Params) -> dict | None:
 
 def notes(p: Params, price: float) -> list[str]:
     """규제 때문에 숫자가 이렇게 나온 이유 — 확정서에 그대로 붙는다."""
-    out = []
+    out = ["금액은 입력 가정에 따른 추정치이며 대출 승인·세금 확정 금액이 아닙니다."]
+    if not p.income:
+        out.append("소득 미입력: 대출 가능액을 확정할 수 없어 현금 기준으로만 계산했습니다.")
     tier = p.tier(price)
     if not p.region:
         out.append("매수 지역을 아직 안 정해서 수도권 규제지역(LTV·절대한도·스트레스)으로 보수 계산했어요. 지역을 넣으면 맞춰 드려요.")
@@ -403,6 +463,9 @@ def statement(p: Params) -> dict:
     cost_keys = ("취득세", "중개비", "법무비", "인지세", "등록면허세",
                  "국민주택채권", "이사비", "수리비")
     out = {
+        "계산버전": MODEL_VERSION,
+        "상태": "가정기반" if p.income else "소득확인필요",
+        "비상자금": round(p.reserve_cash),
         "최대매수가": price,
         "대출": detail["대출"],
         "승인액": detail["승인액"],
@@ -435,6 +498,10 @@ def statement(p: Params) -> dict:
             "자기자본": round(p.capital),
             "연소득": round(p.income) if p.income else None,
             "기대출연원리금": round(p.existing_debt_annual or 0),
+            "비상자금": p.reserve_cash,
+            "월상환한도": p.monthly_budget,
+            "이사비": p.moving_cost,
+            "수리비": p.repair_cost,
             "주택수": int(p.homes or 0),
             "생애최초": bool(p.first_time),
             "일시적2주택": bool(p.temp_two_home),
@@ -495,8 +562,11 @@ def params_from_profile(profile: dict | None, **override) -> Params:
 
     base = {
         "capital": float(pick("가용자본", "자기자본", 0) or 0),
-        "income": float(p["연소득"]) if p.get("연소득") else (
-            float(conf["연소득"]) if conf.get("연소득") else None),
+        "income": float(pick("연소득", "연소득", 0) or 0),
+        "reserve_cash": float(pick("비상자금", "비상자금", 0) or 0),
+        "monthly_budget": pick("월상환한도", "월상환한도"),
+        "moving_cost": conf.get("이사비", DEFAULTS["이사비"]),
+        "repair_cost": conf.get("수리비", DEFAULTS["수리비"]),
         "existing_debt_annual": float(pick("기대출연원리금", "기대출연원리금", 0) or 0),
         "homes": int(pick("주택수", "주택수", 0) or 0),
         "first_time": bool(pick("생애최초", "생애최초", False)),
