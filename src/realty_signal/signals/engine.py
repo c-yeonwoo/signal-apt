@@ -192,7 +192,7 @@ def interpret(signal: str, jeonse_state: str, bs: float, demand_state: str,
 
     # 2) 매수심리 + 가격 모멘텀
     if idx_strong and sale_mom == "상승":
-        parts.append("자체 기준상 수급과 가격 흐름이 함께 개선되고 있습니다. 향후 가격 상승이나 개별 매물의 적정성을 보장하지 않습니다")
+        parts.append("자체 기준상 수급과 가격 흐름이 함께 개선되지만 향후 가격 상승이나 개별 매물의 적정성을 보장하지 않습니다")
     elif idx_strong:
         parts.append("매수우위지수가 자체 관찰 기준을 넘었습니다. 매수자가 매도자보다 많다는 공식 기준은 100 초과입니다")
     elif sale_mom == "상승" and not parts:
