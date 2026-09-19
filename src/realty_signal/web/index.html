@@ -4856,7 +4856,7 @@ function pickCmpCrit(k){ _cmpCrits.has(k)?_cmpCrits.delete(k):_cmpCrits.add(k); 
 function _cmpLoaded(){
   const main=d=>{ const p=(d&&d['평형별']||[]); if(!p.length) return null; return p.slice().sort((u,v)=>(v['매매건수']||0)-(u['매매건수']||0))[0]; };
   return cmpList().map(x=>_cmpData[_cmpKey(x)]).filter(d=>d&&!d['지원안함']).map(d=>{ const m=main(d)||{};
-    return {단지명:d['단지명'], 급지:d['급지'], 시그널:d['시그널'], 최근평단가:d['최근평단가'], 추세pct:d['추세pct'], 전세가율:m['전세가율'], 갭:m['갭'], 총거래:d['총거래']}; });
+    return {region:d.region, 단지명:d['단지명'], 급지:d['급지'], 시그널:d['시그널'], 최근평단가:d['최근평단가'], 추세pct:d['추세pct'], 전세가율:m['전세가율'], 갭:m['갭'], 총거래:d['총거래']}; });
 }
 async function loadCmpReco(){
   const box=document.getElementById('cmpInsight'); if(!box) return;

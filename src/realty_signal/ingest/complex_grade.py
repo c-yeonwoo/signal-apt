@@ -21,13 +21,8 @@ def _collect(lawd5: str, key: str, months: int = 6) -> list[tuple[str, float]]:
     """(대표 단지명, 평균 평단가) — 평단가 내림차순. 표기차는 정규화로 병합."""
     agg: dict[str, list] = {}  # norm → [대표명, [평단가들]]
     for ym in _recent_yms(months):
-        url = f"{_BASE}?serviceKey={key}&LAWD_CD={lawd5}&DEAL_YMD={ym}&numOfRows=900&pageNo=1"
-        try:
-            root = ET.fromstring(urllib.request.urlopen(  # noqa: S310
-                urllib.request.Request(url, headers=_HDR), timeout=30).read())
-        except Exception:
-            continue
-        for it in root.iter("item"):
+        from realty_signal.ingest.complex import _items
+        for it in _items(_BASE, lawd5, key, ym):
             try:
                 area = float(it.findtext("excluUseAr"))
                 amt = float(it.findtext("dealAmount").replace(",", "").strip())

@@ -57,6 +57,9 @@ def test_public_data_success_codes_include_current_api_format(monkeypatch):
             return ET.tostring(root)
 
     monkeypatch.setattr(real_trade.urllib.request, "urlopen", lambda *args, **kwargs: Response())
-    assert real_trade.fetch_month("11680", "202508", "key") == {
+    result = real_trade.fetch_month("11680", "202508", "key")
+    assert result.pop("fetched_at") > 0
+    assert result.pop("schema_version") == "molit-v2"
+    assert result == {
         "lawd": "11680", "ym": "202508", "transactions": 0, "median_ppy": None, "api_total": 0,
     }

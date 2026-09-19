@@ -11,6 +11,33 @@ from realty_signal.services import market_data as md
 
 router = APIRouter(tags=["market"])
 
+
+@router.get("/live")
+def live():
+    return {"live": True}
+
+
+@router.get("/ready")
+def ready():
+    try:
+        c = db.conn()
+        c.execute("SELECT 1")
+        c.close()
+        fresh = md.data_age_days()
+        ok = store.CACHE_FILE.exists() and fresh is not None and fresh <= 14
+        return JSONResponse({"ready": ok}, status_code=200 if ok else 503)
+    except Exception:
+        return JSONResponse({"ready": False}, status_code=503)
+
+
+@router.get("/api/operations")
+def operations(request: Request):
+    if err := deps.require_admin(request):
+        return err
+    from realty_signal import jobs, llm
+    from realty_signal.ingest.pipeline import cache_health
+    return {"jobs": jobs.status(), "llm": llm.usage_summary(), "sources": cache_health()}
+
 _METRIC_LABEL = {
     "jeonse_supply": "전세수급지수",
     "buyer_demand": "매수세우위",

@@ -77,7 +77,7 @@ def auction_parse(request: Request, data: dict = Body(...)):
         return {"ok": bool(parsed), "parsed": parsed, "source": "rule",
                 "reason": None if parsed else "no_ai"}
     model = ai_report.OPUS if deps.is_opus_user(request) else ai_report.SONNET
-    ai = ai_report.parse_auction(text, model=model) or {}
+    ai = ai_report.parse_auction(text, model=model, uid=deps.uid(request)) or {}
     merged = {**parsed, **{k: v for k, v in ai.items() if v not in (None, "", 0)}}
     return {"ok": bool(merged), "parsed": merged, "source": "ai" if ai else "rule"}
 

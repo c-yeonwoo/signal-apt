@@ -114,14 +114,12 @@ def report_ai(request: Request, data: dict = Body(...)):
         return {"available": False}
     opus = deps.is_opus_user(request)
     unlimited = opus or deps.is_admin(request)
-    ok, ust = deps.usage_allow(uid, "report", unlimited=unlimited)
-    if not ok:
-        return {"available": False, "reason": "limit", "usage": ust,
-                "message": f"이번 주 AI 심층 리포트 한도({ust['limit']}회)에 도달했습니다. 규칙기반 리포트는 계속 이용할 수 있습니다."}
+    ust = deps.usage_status(uid, "report", unlimited=unlimited)
     model = ai_report.OPUS if opus else ai_report.SONNET
     tier = "opus" if opus else "sonnet"
     profile = db.profile_get(uid)
-    summary = data.get("summary") or {}
+    from realty_signal import api as app_api
+    summary = app_api.conclusion(request)  # 클라이언트가 조작한 금융·시장 수치를 근거로 쓰지 않는다.
     favorites = deps.fav_context(uid)
     try:
         wk = md.kb().last_date.strftime("%G-W%V")
@@ -132,11 +130,13 @@ def report_ai(request: Request, data: dict = Body(...)):
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True, "usage": ust}
+    ok, ust = deps.usage_reserve(uid, "report", unlimited=unlimited)
+    if not ok:
+        return {"available": False, "reason": "limit", "usage": ust}
     news = db.news_recent_for_ai(12)
-    report = ai_report.generate(profile, summary, news=news, favorites=favorites, model=model)
+    report = ai_report.generate(profile, summary, news=news, favorites=favorites, model=model, uid=uid)
     if not report:
         return {"available": False}
-    db.usage_inc(uid, "report")
     ust = deps.usage_status(uid, "report", unlimited=unlimited)
     out = {"available": True, "report": report, "news_used": len(news), "tier": tier, "usage": ust}
     db.kv_set(ckey, {k: v for k, v in out.items() if k != "usage"})

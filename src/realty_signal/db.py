@@ -410,10 +410,25 @@ def usage_get(uid: int, kind: str) -> int:
 
 def usage_inc(uid: int, kind: str) -> int:
     """주간 사용량 +1 후 현재값."""
+    return usage_reserve(uid, kind, None)[1]
+
+
+def usage_reserve(uid: int, kind: str, limit: int | None) -> tuple[bool, int]:
+    """원자적 확인+선차감. 실패·취소에도 이미 발생한 호출 비용은 반환하지 않는다."""
     key = f"usage:{kind}:{uid}:{_iso_week()}"
-    n = usage_get(uid, kind) + 1
-    kv_set(key, n)
-    return n
+    c = conn()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT v FROM kv WHERE k=?", (key,)).fetchone()
+        n = int(json.loads(row[0])) if row else 0
+        if limit is not None and n >= limit:
+            return False, n
+        n += 1
+        c.execute("INSERT OR REPLACE INTO kv VALUES(?,?,?)", (key, json.dumps(n), int(time.time())))
+        c.commit()
+        return True, n
+    finally:
+        c.close()
 
 
 # ---------- 동네 리포트 스냅샷 (주간 diff·비교) ----------

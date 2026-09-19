@@ -24,14 +24,9 @@ def _yms(n: int) -> list[str]:
 
 def monthly_count(lawd5: str, ym: str, key: str) -> int | None:
     base = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
-    url = f"{base}?serviceKey={key}&LAWD_CD={lawd5}&DEAL_YMD={ym}&numOfRows=1&pageNo=1"
-    try:
-        root = ET.fromstring(urllib.request.urlopen(  # noqa: S310
-            urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=30).read())
-    except Exception:
-        return None
-    tc = root.findtext(".//totalCount")
-    return int(tc) if tc and tc.isdigit() else None
+    from realty_signal.ingest.transaction_source import fetch_items
+    result = fetch_items(base, lawd5, key, ym)
+    return len(result["items"]) if result["status"] == "ok" else None
 
 
 def build_volumes(codes: dict, key: str, months: int = 24) -> dict:

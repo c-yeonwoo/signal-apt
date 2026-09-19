@@ -9,6 +9,8 @@ import json
 import logging
 import os
 
+from realty_signal import llm
+
 log = logging.getLogger("realty_signal")
 
 # 모델 티어 — 화이트리스트=프리미엄(Opus), 기본=저가. 리포트는 복잡→Sonnet, 해설은 단순→Haiku.
@@ -21,11 +23,11 @@ _SYSTEM = (
     "당신은 한국 부동산 매수 전략 애널리스트입니다. 사용자의 프로필·매수력(자금 분해)과 "
     "통합 매물 추천(유형: 급매·경매·찐매물·청약·재건축, 시그널·호가·기회도)을 바탕으로 "
     "그 사람에게 맞는 매수 전략을 제시합니다.\n"
-    "- 한국어로, 신뢰감 있고 구체적으로. 데이터에 근거해 단정적으로 말하되 과장 금지.\n"
+    "- 한국어로 구체적으로. 엔진의 판단·가격출처·확인필요·자금 조건을 그대로 설명하며 결론을 뒤집지 않는다. 추정 가격은 호가가 아니고 대출 계산은 승인 확정이 아니다.\n"
     "- 구조: ①한줄 요약 ②자금(매수가=대출+자기자본, 실효LTV·제약) ③추천 매물 유형별 해석"
     "(전체의 약 70%) ④관심목록 심화 또는 신규 STRONG_BUY 후보(약 20%) ⑤리스크 ⑥다음 행동.\n"
     "- '추천매물'이 있으면 지역 평균가가 아니라 그 매물(유형·단지·호가·시그널)을 중심에 둔다. "
-    "STRONG_BUY가 있는데 BUY 외곽만 밀어주지 말 것. 예산 밖 STRONG_BUY는 '참고'로만.\n"
+    "시장 시그널보다 자금·생활 조건을 먼저 본다. 확인되지 않은 가격·자격은 확인 필요로 남긴다.\n"
     "- '관심목록'이 있으면 그 지역·단지를 깊게 다루고, 목록 밖 후보는 추천매물·STRONG_BUY에서만 고른다.\n"
     "- '최근 뉴스'가 있으면 정책·규제·금리를 전략에 반영.\n"
     "- 마크다운 헤더(##)와 굵게(**)를 적절히 사용. 900자 내외.\n"
@@ -38,7 +40,7 @@ def available() -> bool:
 
 
 def generate(profile: dict, summary: dict, news: list | None = None,
-             favorites: dict | None = None, model: str = MODEL) -> str | None:
+             favorites: dict | None = None, model: str = MODEL, uid: int | None = None) -> str | None:
     """프로필 + 결론 요약 (+최근 뉴스, +관심목록) → Claude 심층 리포트(markdown). 불가 시 None.
 
     favorites: {"관심지역": [...], "관심단지": [...]} — 있으면 리포트 80% 를 이 목록 중심으로.
@@ -59,7 +61,7 @@ def generate(profile: dict, summary: dict, news: list | None = None,
             "이 사람을 위한 개인화 매수 전략 리포트를 작성하세요.\n\n"
             + json.dumps(payload, ensure_ascii=False, indent=2))
     try:
-        client = anthropic.Anthropic()
+        client = llm.client("report", uid)
         resp = client.messages.create(
             model=model,
             max_tokens=2000,
@@ -79,7 +81,7 @@ _CMP_SYSTEM = (
 )
 
 
-def compare_insight(criterion: str, complexes: list, model: str = HAIKU) -> str | None:
+def compare_insight(criterion: str, complexes: list, model: str = HAIKU, uid: int | None = None) -> str | None:
     """비교 단지 목록 + 가치기준 → 2~3문장 해설(markdown 없음). 불가 시 None(규칙기반 폴백)."""
     if not available() or not complexes:
         return None
@@ -92,7 +94,7 @@ def compare_insight(criterion: str, complexes: list, model: str = HAIKU) -> str 
             "이 가치 기준에서 어느 단지가 유리한지 근거와 함께 짧게 해설하세요.\n\n"
             + json.dumps(payload, ensure_ascii=False, indent=2))
     try:
-        client = anthropic.Anthropic()
+        client = llm.client("compare_insight", uid)
         resp = client.messages.create(
             model=model, max_tokens=400, system=_CMP_SYSTEM,
             messages=[{"role": "user", "content": user}],
@@ -112,7 +114,7 @@ _CMP_RECO_SYSTEM = (
 )
 
 
-def compare_recommend(criteria: list, complexes: list, ranked: list, model: str = SONNET) -> str | None:
+def compare_recommend(criteria: list, complexes: list, ranked: list, model: str = SONNET, uid: int | None = None) -> str | None:
     """중시가치(복수) + 비교단지 + 계산된 순위 → 추천 단지·근거 3~4문장. 불가 시 None(규칙기반 폴백)."""
     if not available() or not complexes or not criteria:
         return None
@@ -125,7 +127,7 @@ def compare_recommend(criteria: list, complexes: list, ranked: list, model: str 
             "그리고 그 가치들로 계산된 종합점수 순위입니다. 순위 1위를 우선 추천하되 근거를 데이터로 설명하세요.\n\n"
             + json.dumps(payload, ensure_ascii=False, indent=2))
     try:
-        client = anthropic.Anthropic()
+        client = llm.client("compare_recommend", uid)
         resp = client.messages.create(
             model=model, max_tokens=600, system=_CMP_RECO_SYSTEM,
             messages=[{"role": "user", "content": user}],
@@ -150,7 +152,7 @@ _AUCTION_PARSE_SYSTEM = (
 )
 
 
-def parse_auction(text: str, model: str = SONNET) -> dict | None:
+def parse_auction(text: str, model: str = SONNET, uid: int | None = None) -> dict | None:
     """붙여넣은 법원경매 물건 텍스트 → 구조화 필드(JSON). 불가 시 None."""
     if not available() or not (text or "").strip():
         return None
@@ -159,7 +161,7 @@ def parse_auction(text: str, model: str = SONNET) -> dict | None:
     except ImportError:
         return None
     try:
-        client = anthropic.Anthropic()
+        client = llm.client("auction_parse", uid)
         resp = client.messages.create(
             model=model, max_tokens=600, system=_AUCTION_PARSE_SYSTEM,
             messages=[{"role": "user", "content": text[:6000]}],

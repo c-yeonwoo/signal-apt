@@ -64,3 +64,12 @@ def test_quicksale_seed_does_not_require_public_data_key(monkeypatch):
     api._seed_if_missing()
 
     assert calls == ["급매", "찐매물"]
+
+
+def test_partial_refresh_keeps_unscanned_regions_with_stale_flag(tmp_path):
+    from realty_signal.storage import atomic_json
+    path = tmp_path / "quicksale.json"
+    atomic_json(path, {"listings": [{"지역": "A", "naver_id": "a"}, {"지역": "B", "naver_id": "b"}]})
+    out = api._preserve_unscanned(path, [{"지역": "A", "naver_id": "new-a"}], {"successful_regions": ["A"]})
+    assert {row["naver_id"] for row in out} == {"new-a", "b"}
+    assert out[1]["stale"] is True

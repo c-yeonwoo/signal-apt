@@ -20,23 +20,25 @@ _HDR = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
 _PYEONG = 3.3058
 
 
+class SourceUnavailable(RuntimeError):
+    pass
+
+
 def _items_parallel(base: str, lawd5: str, key: str, yms: list[str]) -> list:
     """여러 월(ym)의 실거래를 병렬 조회 — 순차 36콜(수십초)을 몇 초로 단축."""
     out: list = []
-    with ThreadPoolExecutor(max_workers=12) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         for items in ex.map(lambda ym: _items(base, lawd5, key, ym), yms):
             out.extend(items)
     return out
 
 
 def _items(base: str, lawd5: str, key: str, ym: str) -> list:
-    url = f"{base}?serviceKey={key}&LAWD_CD={lawd5}&DEAL_YMD={ym}&numOfRows=900&pageNo=1"
-    try:
-        root = ET.fromstring(urllib.request.urlopen(  # noqa: S310
-            urllib.request.Request(url, headers=_HDR), timeout=12).read())
-    except Exception:
-        return []
-    return list(root.iter("item"))
+    from realty_signal.ingest.transaction_source import fetch_items
+    result = fetch_items(base, lawd5, key, ym)
+    if result["status"] != "ok":
+        raise SourceUnavailable(result["error"])
+    return result["items"]
 
 
 # 국토부 구표기 ↔ 통용 표기 철자 통일(정규화로 흡수 → 별개 단지 오매칭 없이 변형만 일치)

@@ -16,6 +16,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: pip install -e '.[dev]'
+      - run: pip install -c requirements.lock -e '.[dev]'
       - run: pytest -q
       - run: node --test tests/ui_runtime.test.cjs
