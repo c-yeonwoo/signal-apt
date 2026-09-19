@@ -27,6 +27,7 @@ LOCALITY = {
 
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
+    monkeypatch.setattr(app_api, "_sido_of", lambda r: "서울")
     monkeypatch.setattr(app_api, "_signal_map", lambda: dict(SIGNALS))
     monkeypatch.setattr(app_api, "_region_grades", lambda r: list(GRADES.get(r, [])))
     monkeypatch.setattr(sl, "_locality_map", lambda: dict(LOCALITY))

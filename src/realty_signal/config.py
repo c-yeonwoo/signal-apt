@@ -39,10 +39,10 @@ def opus_whitelist() -> set[str]:
 
 
 def admin_whitelist() -> set[str]:
-    """관리자(데이터 운영) 계정 이메일(소문자). 미설정 시 Opus 화이트리스트로 폴백."""
+    """관리자 권한은 모델 이용 권한과 독립적이다. 미설정 시 권한 없음."""
     raw = os.environ.get("ADMIN_EMAILS", "")
     ids = {e.strip().lower() for e in raw.split(",") if e.strip()}
-    return ids or opus_whitelist()
+    return ids
 
 
 def student_allowlist() -> set[str]:
