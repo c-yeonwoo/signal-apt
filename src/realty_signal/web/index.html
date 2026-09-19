@@ -353,7 +353,12 @@
     .uv-row-sub { gap:10px; }
     /* 2열 폼 → 1열 */
     .grid2 { grid-template-columns:1fr; }
+    #view-dashboard { padding:16px !important; }
+    .dash-col { min-width:0; }
+    .tabs .tab { flex:1; padding:9px 6px; }
+    dialog { max-width:calc(100vw - 24px); box-sizing:border-box; }
   }
+  button:focus-visible, [role="button"]:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 </style>
 </head>
 <body class="tab-signal">
@@ -373,10 +378,10 @@
     <span>Signal APT</span>
   </h1>
   <div class="tabs">
-    <button class="tab on" data-group="home" onclick="switchTab('dashboard')" title="오늘의 국면·관심지역·기회 요약">홈</button>
-    <button class="tab" data-group="market" onclick="switchTab('signal')" title="경기 국면·지역 성적표·저평가 랭킹">시장·지역</button>
-    <button class="tab" data-group="listings" onclick="switchTab('all')" title="경매·급매·청약·재건축·갈아타기 — 실제 매물">매물</button>
-    <button class="tab" data-group="find" onclick="switchTab('mymap')" title="내 시그널 지도 · 개인화 AI 리포트">내 집찾기</button>
+    <button class="tab on" data-group="home" onclick="switchTab('dashboard')" title="다음 할 일과 확인할 후보">홈</button>
+    <button class="tab" data-group="criteria" onclick="switchTab('mypage')" title="예산·출퇴근·주거 조건">내 조건</button>
+    <button class="tab" data-group="find" onclick="switchTab('mymap')" title="저장한 동네·단지와 비교">내 후보</button>
+    <button class="tab" data-group="browse" onclick="switchTab('all')" title="매물 탐색과 시장 참고 자료">더 찾아보기</button>
   </div>
   <div class="right">
     <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">가이드</button>
@@ -716,7 +721,7 @@
         <circle cx="60" cy="14" r="6" fill="#22c55e"/></svg>
       <h2 style="margin:0;font-size:24px">시그널 APT란?</h2>
     </div>
-    <p style="color:var(--txt);font-size:17px;line-height:1.55;margin:6px 0 8px;font-weight:700;letter-spacing:-.2px">근거가 증명되는 매수 타이밍.</p>
+    <p style="color:var(--txt);font-size:17px;line-height:1.55;margin:6px 0 8px;font-weight:700;letter-spacing:-.2px">내 조건으로 비교하는 주택 구매.</p>
     <p style="color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 20px">Signal APT는 데이터로 증명하는 내 집 마련의 나침반입니다. KB 주간지수·국토부 실거래 등 공개 데이터로 <b>매수/매도 시그널</b>을 내고, 감이 아니라 <b>과거 구간으로 검증된 적중률</b>로 말합니다. 매물 검색은 포털에 맡기고, 여기서는 <b>언제·어디를 볼지</b>를 좁힙니다.</p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
@@ -992,7 +997,7 @@
       </svg>
       <div>
         <div style="font-size:22px;font-weight:800;letter-spacing:-.3px">Signal APT</div>
-        <div style="color:var(--dim);font-size:12.5px;margin-top:1px">근거가 증명되는 매수 타이밍</div>
+        <div style="color:var(--dim);font-size:12.5px;margin-top:1px">내 조건으로 비교하는 주택 구매</div>
       </div>
     </div>
     <div class="auth-points">
@@ -1482,15 +1487,15 @@ function renderMtFilter(hostId, rerender){
 // ===== 4탭 IA — 상단 그룹 → 하위 뷰 =====
 const _GROUPS={
   home:     ['dashboard'],
-  market:   ['signal','undervalued'],
-  listings: ['all','quicksale','presale','auction','redev','tradeup'],  // 전체 순서(라우팅용)
-  find:     ['mymap','report'],
+  criteria: ['mypage'],
+  browse:   ['all','quicksale','presale','signal','undervalued','report','auction','redev','tradeup'],
+  find:     ['mymap'],
 };
 // 매물 2단: 기본(실거주) / 더보기(투자·특수)
 const _LISTING_PRIMARY=['all','quicksale','presale'];
-const _LISTING_MORE=['auction','redev','tradeup'];
+const _LISTING_MORE=['signal','undervalued','report','auction','redev','tradeup'];
 let _listingMoreOpen=false;
-const _GROUP_LABEL={market:'시장 분석', listings:'매물 발견', find:'내 집찾기'};
+const _GROUP_LABEL={browse:'후보 탐색', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
   signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'저평가',d:'지역 랭킹'},
   all:{l:'전체',d:'기회도순'}, quicksale:{l:'급매',d:'급매·찐매물'},
@@ -1498,7 +1503,7 @@ const _SUBMETA={
   redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
   mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
 };
-const _LISTING=_GROUPS.listings;                 // 매물 그룹(하위탭)
+const _LISTING=['all','quicksale','presale','auction','redev','tradeup'];
 const _ALLVIEWS=['dashboard','signal','undervalued','all','auction','quicksale','presale','redev','tradeup','mymap','report','glossary','about','mypage'];
 function _groupOf(v){ for(const g in _GROUPS) if(_GROUPS[g].includes(v)) return g; return null; }
 let _listingSub='all';
@@ -1526,19 +1531,19 @@ function toggleListingMore(ev){
   if(ev) ev.stopPropagation();
   _listingMoreOpen=!_listingMoreOpen;
   // 더보기 닫을 때 더보기 탭에 있으면 기본(전체)로
-  const cur=_listingSub;
+  const cur=location.hash.slice(1)||_listingSub;
   if(!_listingMoreOpen && _LISTING_MORE.includes(cur)){ switchTab('all'); return; }
-  renderGroupSubnav('listings', cur);
+  renderGroupSubnav('browse', cur);
 }
 function renderGroupSubnav(grp, active){
   document.getElementById('groupSubLabel').textContent=_GROUP_LABEL[grp]||'';
   const tabs=document.getElementById('groupSubTabs');
-  if(grp==='listings'){
+  if(grp==='browse'){
     const inMore=_LISTING_MORE.includes(active);
     if(inMore) _listingMoreOpen=true;
     let h=_LISTING_PRIMARY.map(v=>_subBtn(v, active)).join('');
     const open=_listingMoreOpen;
-    h+=`<button class="subtab more${open?' open':''}" type="button" onclick="toggleListingMore(event)" title="경매·재건축·갈아타기">더보기<small>${open?'접기':'경매·재건축·갈아타기'}</small></button>`;
+    h+=`<button class="subtab more${open?' open':''}" type="button" onclick="toggleListingMore(event)" aria-expanded="${open}" title="시장 분석·AI·경매·재건축">분석·특수 매물<small>${open?'접기':'필요할 때 펼치기'}</small></button>`;
     if(open){
       h+=`<span class="submore">${_LISTING_MORE.map(v=>_subBtn(v, active)).join('')}</span>`;
     }
@@ -1546,8 +1551,8 @@ function renderGroupSubnav(grp, active){
   } else {
     tabs.innerHTML=_GROUPS[grp].map(v=>_subBtn(v, active)).join('');
   }
-  const lf=document.getElementById('listingFocus'); if(lf) lf.style.display=(grp==='listings'&&_focusRegion)?'':'none';
-  if(grp==='listings') renderListingFocus();
+  const lf=document.getElementById('listingFocus'); if(lf) lf.style.display=(grp==='browse'&&_focusRegion)?'':'none';
+  if(grp==='browse') renderListingFocus();
 }
 const _LOAD={
   dashboard:()=>loadDashboard(),
@@ -1558,9 +1563,10 @@ const _LOAD={
   report:()=>{applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion();},
   glossary:()=>renderGlossary(), mypage:()=>fillMyPage(),
 };
-function switchTab(t){
+function switchTab(t, fromHistory=false){
   // 그룹 alias — 상단 메인탭 클릭 시 그룹 기본 뷰로
-  if(t==='market') t='signal'; else if(t==='listings') t='all'; else if(t==='find') t='mymap';
+  if(t==='market') t='signal'; else if(t==='listings') t='all'; else if(t==='find') t='mymap'; else if(t==='home') t='dashboard';
+  if(!_ALLVIEWS.includes(t)) return;
   const grp=_groupOf(t);
   if(_LISTING.includes(t)) _listingSub=t;   // 매물 하위탭 기억(포커스 헬퍼 호환)
   document.body.className='tab-'+t;
@@ -1577,19 +1583,21 @@ function switchTab(t){
   (_LOAD[t]||(()=>{}))();
   if(typeof updateCmpFab==='function') updateCmpFab();
   // URL 해시 동기화 — 새로고침 시 현재 탭 유지
-  if(location.hash.slice(1)!==t) history.replaceState(null, '', '#'+t);
+  if(location.hash.slice(1)!==t) history[fromHistory?'replaceState':'pushState'](null, '', '#'+t);
 }
 const _ROUTES=[..._ALLVIEWS, 'market','listings','find','home'];
 // 없앤 탭의 옛 링크·북마크는 후속 화면으로 보낸다. 뉴스는 이제 홈 '이번 주 이슈'가 대신한다.
 const _GONE={news:'dashboard'};
 function routeFromHash(){
-  const h=decodeURIComponent(location.hash.slice(1));
+  let h; try{ h=decodeURIComponent(location.hash.slice(1)); }catch(e){ return false; }
+  if(!h){ switchTab('dashboard', true); return true; }
   if(h==='auction-paste'){ switchTab('auction'); openPasteFromClipboard(); return true; }
-  if(_GONE[h]){ switchTab(_GONE[h]); return true; }
-  if(_ROUTES.includes(h)){ switchTab(h); return true; }
+  if(_GONE[h]){ switchTab(_GONE[h], true); return true; }
+  if(_ROUTES.includes(h)){ switchTab(h, true); return true; }
   return false;
 }
 // ===== 대시보드 홈 — 좌:할 일·후보 / 우:주간 동향 =====
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;${extra}">${inner}</div>`;
 const _dashH=t=>`<div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:-0.01em">${t}</div>`;
 // 요청 성공만으로 '읽음' 처리하면 모바일에서 화면 아래에 있던 변화가 사라진다.
@@ -1675,6 +1683,11 @@ function _regimeEvidenceHtml(rg, compact){
   return h;
 }
 let _weeklyOpenSent=false;
+function _onFirstExpand(id, load){
+  const el=document.getElementById(id); if(!el) return;
+  let loaded=false;
+  el.addEventListener('toggle', ()=>{ if(el.open&&!loaded){ loaded=true; load(); } });
+}
 async function loadDashboard(){
   const body=document.getElementById('dashBody'); if(!body) return;
   // 주 1회 갱신 제품의 북극성 후보. 탭을 오갈 때마다 세면 방문 수가 아니라 클릭 수가 된다 —
@@ -1699,6 +1712,8 @@ async function loadDashboard(){
   } else {
     favH+=`<div style="color:var(--dim);font-size:13px;padding:4px 0">아직 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시장·지역에서 추가</span></div>`;
   }
+  const loadRegime=async()=>{
+  const target=document.getElementById('dashRegimeWrap');
   let regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
   try{ const rg=await (await fetch('/api/regime')).json();
     if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
@@ -1722,6 +1737,8 @@ async function loadDashboard(){
         +_dashMore('근거 보기', _regimeEvidenceHtml(rg,false)+(rg.desc?`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55">${rg.desc}</div>`:'')); }
     else regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
   }catch(e){ regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
+  if(target) target.innerHTML=_dashCard(regimeH);
+  };
   const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
   const moreLinks=`<div style="display:flex;flex-wrap:wrap;gap:6px 0;padding:2px 0">
     ${link('signal','시장·지역')}${link('all','매물')}${link('report','AI 리포트')}
@@ -1735,14 +1752,14 @@ async function loadDashboard(){
       <div class="dash-col-label">지금 할 일</div>
       <div id="dashPlanWrap"></div>
       <div id="dashPowerWrap"></div>
+      <div id="dashShortlistWrap"></div>
       <div id="dashBudgetNewWrap"></div>
       <details class="dash-more" id="dashExtra">
         <summary>관심 동네·후보 더 보기</summary>
         <div class="dash-more-body">
           <div id="dashCxWrap"></div>
-          <div id="dashShortlistWrap"></div>
           ${_dashCard(favH)}
-          ${_dashCard(_dashH('예산 안 BUY+')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
+          ${_dashCard(_dashH('가격대별 동네 참고')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
           <div id="dashFeedWrap"></div>
         </div>
       </details>
@@ -1754,7 +1771,7 @@ async function loadDashboard(){
         <summary>시장 근거·이슈 더 보기</summary>
         <div class="dash-more-body">
           <div id="dashNearWrap"></div>
-          ${_dashCard(regimeH)}
+          <div id="dashRegimeWrap"></div>
           <div id="dashIssuesWrap"></div>
           ${_dashCard(_dashH('바로가기')+moreLinks)}
         </div>
@@ -1763,15 +1780,12 @@ async function loadDashboard(){
   </div>`;
   _loadBuyingPower();
   _loadBudgetWatch();
-  _loadComplexWatch();
   _loadPlan();
   _loadShortlist();
   _loadWeekly();
-  _loadNear();
   _loadNotifyStatus();
-  _loadDashBudget();
-  _loadDashFeed();
-  _loadIssues();
+  _onFirstExpand('dashExtra', ()=>{ _loadComplexWatch(); _loadDashBudget(); _loadDashFeed(); });
+  _onFirstExpand('dashMarketExtra', ()=>{ _loadNear(); loadRegime(); _loadIssues(); });
 }
 // ===== 이번 주 변화 — 지난주 KB 대비 =====
 // 위치: 홈 **우열(`주간 동향`) 첫 카드**. 좌열(`할 일 · 후보`) 첫 카드는 매수력이다.
@@ -2049,7 +2063,7 @@ async function _loadPlan(){
         ${top.urgent?'<span style="margin-left:6px;font-size:11px;font-weight:800;color:#dc2626">지금</span>':''}</div>
       ${acts.length>1?`<div style="font-size:13px;color:var(--dim);margin-top:6px">외 ${acts.length-1}건</div>`:''}
     </div>
-    <span class="btn primary" style="padding:7px 14px;white-space:nowrap" onclick="_planGo('${top.key}','${top.tab}')">${top.cta}</span>
+    <button class="btn primary" style="padding:7px 14px;white-space:nowrap" onclick="_planGo('${top.key}','${top.tab}')">${esc(top.cta)}</button>
   </div>`;
   const detail=acts.map((a,i)=>`<div style="display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-top:${i?'1px solid var(--line)':'none'}">
     <span style="flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -2254,10 +2268,10 @@ async function _loadBuyingPower(){
   const confirmed=!!d['확정'];
   const g=d['가정']||{};
   const stale=confirmed && Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01);
-  const tag=(confirmed && !stale) ? '확정' : (stale ? '재확정 필요' : '미확정');
+  const tag=(confirmed && !stale) ? '가정 저장됨 · 승인 전' : (stale ? '가정 재확인 필요' : '가정 미저장');
   const tagCol=(confirmed && !stale) ? 'var(--dim)' : '#b45309';
   const conclusion=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
-      <span style="font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">${_eok(d['최대매수가'])}</span>
+      <span style="font-size:26px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">상한 추정 ${_eok(d['최대매수가'])}</span>
       <span style="font-size:12px;color:${tagCol}">${tag}</span></div>
     <div style="font-size:13.5px;color:var(--dim);margin-top:6px;line-height:1.5">월 ${(d['월상환']||0).toLocaleString()}만 · 필요현금 ${_eok(d['필요현금'])}</div>`;
   const detail=`<div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])}${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
@@ -2309,15 +2323,17 @@ function _bpParams(){
     ltv:n('bp_ltv')!=null?n('bp_ltv')/100:null,
     rate:(n('bp_rate')??4)/100, years:n('bp_years')||30};
 }
-let _bpTimer=null;
+let _bpTimer=null, _bpGeneration=0;
 function bpPreview(){
   clearTimeout(_bpTimer);
+  const generation=++_bpGeneration;
   _bpTimer=setTimeout(async ()=>{
     const p=_bpParams(), el=document.getElementById('bpPreview');
     if(!p.capital){ el.textContent='가용자본을 입력하세요.'; return; }
-    const q=Object.entries(p).filter(([,v])=>v!=null&&v!=='').map(([k,v])=>`${k}=${v}`).join('&');
+    const q=new URLSearchParams(Object.entries(p).filter(([,v])=>v!=null&&v!==''));
     try{
       const d=await (await fetch('/api/buying-power?'+q)).json();
+      if(generation!==_bpGeneration) return;
       if(!d.ready){ el.textContent=d.message||'계산할 수 없습니다.'; return; }
       const c=d['비용']||{};
       const bg=d['방공제']||0;
@@ -2326,9 +2342,9 @@ function bpPreview(){
         대출 ${_eok(d['대출'])}${bg?` <span style="color:var(--dim)">(승인 ${_eok(d['승인액'])} − 방공제 ${_eok(bg)})</span>`:''}
         (LTV ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%)${d['DSR']!=null?` · DSR ${d['DSR']}%`:''} · 제약 ${d['제약']}<br>
         필요현금 ${_eok(d['필요현금'])} — 취득세 ${(c['취득세']||0).toLocaleString()}만 · 중개 ${(c['중개비']||0).toLocaleString()}만 · 법무 ${(c['법무비']||0).toLocaleString()}만 · 등기·채권 ${((c['등록면허세']||0)+(c['국민주택채권']||0)).toLocaleString()}만 · 이사 ${(c['이사비']||0).toLocaleString()}만
-        ${d['안정매수가']?`<br>소득 30% 기준 안정선 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만)`:''}
+        ${d['안정매수가']?`<br>월 상환 한도 기준 <b style="color:var(--txt)">${_eok(d['안정매수가'])}</b> (월 ${(d['안정월상환']||0).toLocaleString()}만) · 생활비 별도 확인`:''}
         ${(d['안내']||[]).length?`<ul style="margin:8px 0 0;padding-left:16px;font-size:11px;line-height:1.7">${d['안내'].map(n=>`<li>${n}</li>`).join('')}</ul>`:''}`;
-    }catch(e){ el.textContent='계산에 실패했습니다.'; }
+    }catch(e){ if(generation===_bpGeneration) el.textContent='계산에 실패했습니다.'; }
   }, 250);
 }
 async function bpConfirm(){
@@ -2339,7 +2355,7 @@ async function bpConfirm(){
   if(!d.ok){ toast(d.error||'확정에 실패했습니다'); return; }
   _profile['매수력']=d['매수력'];
   if(p.capital) _profile['가용자본']=p.capital;
-  if(p.income) _profile['연소득']=p.income;
+  _profile['연소득']=p.income||0;
   document.getElementById('bpDlg').close();
   toast('매수력을 확정했습니다');
   // V1(타이밍) → V2(매물) 파이프가 실제로 이어지는지 재는 유일한 지점
@@ -2350,7 +2366,8 @@ async function bpConfirm(){
 async function _loadShortlist(){
   const wrap=document.getElementById('dashShortlistWrap'); if(!wrap) return;
   wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>');
-  let d; try{ d=await (await fetch('/api/shortlist')).json(); }catch(e){ wrap.innerHTML=''; return; }
+  let d; try{ const r=await fetch('/api/shortlist'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
+    wrap.innerHTML=_dashCard(_dashH('확인할 단지 후보')+'<p>후보 데이터를 불러오지 못했습니다. 후보가 없다는 뜻은 아닙니다.</p><button class="btn" onclick="_loadShortlist()">다시 시도</button>'); return; }
   if(!d.ready){
     wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')
       +`<div style="color:var(--dim);font-size:13px;line-height:1.6">${d.message||'예산 안에서 볼 만한 단지를 찾지 못했습니다.'}
@@ -2360,25 +2377,29 @@ async function _loadShortlist(){
   }
   const conclusion=d.candidates.map((c,i)=>`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:${i?10:0}px 0 0;${i?'border-top:1px solid var(--line);margin-top:10px':''}">
       <span style="font-size:12px;color:var(--dim)">${i+1}</span>
-      <b style="font-size:15px;font-weight:600">${c['단지']}</b>${badge(c['시그널'])}
-      <span style="margin-left:auto;font-size:15px;font-weight:600">${_eok(c['예상가'])}</span>
+      <b style="font-size:15px;font-weight:600">${esc(c['단지'])}</b>
+      <span style="margin-left:auto;font-size:15px;font-weight:600">추정 ${_eok(c['예상가'])}</span>
+      <div style="width:100%;font-size:12px;color:var(--dim);line-height:1.7">${esc(c.region)} · 실거래 평단 기반, 현재 호가 아님<br>
+        필요현금 ${_eok(c['자금']?.['필요현금'])} · 기존 대출 포함 월 ${c['자금']?.['총월상환']!=null?Number(c['자금']['총월상환']).toLocaleString()+'만':'미확인'}<br>
+        호가·동호수·대출 승인 확인 필요</div>
+      <button type="button" class="btn" data-candidate="${i}">단지·실거래 확인</button>
     </div>`).join('');
   const detail=d.candidates.map((c,i)=>{
     const z=c['자금']||{};
     return `<div style="padding:${i?14:0}px 0 0;margin-top:${i?12:0}px;border-top:${i?'1px solid var(--line)':'none'}">
-      <b style="font-size:14px">${c['단지']}</b>
-      <div style="font-size:13px;color:var(--dim);margin-top:6px;line-height:1.5">${c['근거']||''}</div>
+      <b style="font-size:14px">${esc(c['단지'])}</b>
+      <div style="font-size:13px;color:var(--dim);margin-top:6px;line-height:1.5">${esc(c['근거']||'')}</div>
       <div style="font-size:12px;color:var(--dim);margin-top:4px">현금 ${_eok(z['필요현금'])} · 월 ${(z['월상환']||0).toLocaleString()}만</div>
       <div style="margin-top:8px;display:flex;gap:8px">
-        <span class="btn" style="padding:5px 12px;font-size:12px" onclick="openComplex('${c['단지'].replace(/'/g,'')}','${c['region']}')">단지</span>
-        <span class="btn" style="padding:5px 12px;font-size:12px" onclick="openNbhd('${c['region']}')">동네</span>
+        <button class="btn" data-candidate="${i}">단지</button>
       </div></div>`;
   }).join('')
     +`<div style="margin-top:12px;font-size:12.5px;color:var(--dim)">${_slRejectLine(d)}</div>`;
   const sub=`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">${d.pyeong}평 · 예산 ${_eok(d.budget)}${d['확정예산']?'':' · 잠정'}</div>`;
-  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+sub+conclusion
-    +`<div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openImjang()">임장 코스</span></div>`
+  wrap.innerHTML=_dashCard(_dashH('확인할 단지 후보')+sub+conclusion
+    +`<div style="margin-top:14px"><button class="btn" onclick="openImjang()">현장 방문 계획</button></div>`
     +_dashMore('근거 · 탈락 사유', detail));
+  wrap.querySelectorAll('[data-candidate]').forEach(b=>b.onclick=()=>{ const c=d.candidates[Number(b.dataset.candidate)]; openComplex(c['단지'],c.region); });
 }
 // ===== 임장 코스 — 후보 3곳을 시각이 박힌 반나절 일정으로 =====
 let _imj=null, _imjMarks={};
@@ -3083,7 +3104,7 @@ function renderAllListings(){
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
       return `<div class="kv"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
-        ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">신뢰도 ${Math.round(x.confidence*100)}%</div>`:''}
+        ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">자료 확인 필요 · 규칙 기반 참고 점수</div>`:''}
         ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
         <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
@@ -3140,11 +3161,13 @@ function renderMsList(mapId, indices){
     const det=document.createElement('div'); det.className='ms-detail'; det.style.display='none';
     row.onclick=()=>selectMsRow(mapId, i);
     row.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); selectMsRow(mapId, i); } };
+    det.onkeydown=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); selectMsRow(mapId,i); } };
     listEl.appendChild(row); listEl.appendChild(det);
   });
 }
 function applyViewportFilter(mapId, opts){
   const st=_ms[mapId]; if(!st||!st.map||!st.items) return;
+  st._selectionGen=(st._selectionGen||0)+1;
   opts=opts||{};
   st._vpApplying=true;
   if(opts.lock) st._vpLocked=true;   // CTA 클릭 시에만 잠금 — 이후 fitBounds 로 화면이 되돌아가지 않음
@@ -3185,6 +3208,7 @@ async function selectMsRow(mapId, i){
       const mk=st.markers[i];
       if(mk){ mk.closePopup(); const pin=mk.getElement()?.querySelector('.mpin'); pin&&pin.classList.remove('sel'); }
       if(st.sel===i) st.sel=null;
+      row.focus?.({preventScroll:true});
       return;
     }
     listEl.querySelectorAll('.ms-detail').forEach(d=>d.style.display='none');
@@ -3934,7 +3958,7 @@ function uvRow(r, idx, total, gd){
       <span>34평 기준 <b style="color:var(--txt);font-size:13.5px">약 ${_uvEok(r.price)}</b>
         <span style="color:#9ca3af">(평당 ${won(r.price)})</span></span>
       <span title="교통·학군·환경을 0~100으로 점수화. 높을수록 살기 편한 입지">입지 <b style="color:var(--txt)">${ipji}점</b> ${bar}</span>
-      <span title="이 정도 입지면 보통 이 가격이라는 계산값(교통·학군·환경만 반영)">비슷한 입지 평균 평당 ${won(r['적정가'])}</span>
+      <span title="교통·학군·환경 점수를 이용한 모형 추정이며 감정평가가 아닙니다">입지 모형 추정 평당 ${won(r['적정가'])}</span>
     </div>
     <div class="uv-cx" style="display:none"></div>
   </div>`;
@@ -6325,7 +6349,7 @@ async function startApp(needOnboard){
 
 <footer style="border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim);background:var(--panel)">
   <b style="color:var(--txt)">Signal APT</b>
-  <span style="color:var(--txt)">근거가 증명되는 매수 타이밍</span>
+  <span style="color:var(--txt)">내 조건으로 비교하는 주택 구매</span>
   <span onclick="switchTab('about')" style="cursor:pointer;color:var(--accent)">시그널 APT란?</span>
   <span onclick="openScoreboard()" style="cursor:pointer;color:var(--accent)">시그널 성적표</span>
   <a href="/legal/terms" target="_blank" rel="noopener" style="color:var(--accent)">이용약관</a>

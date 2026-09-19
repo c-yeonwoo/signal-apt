@@ -19,3 +19,6 @@ jobs:
       - run: pip install -c requirements.lock -e '.[dev]'
       - run: pytest -q
       - run: node --test tests/ui_runtime.test.cjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: node tests/ui_browser.cjs

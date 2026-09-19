@@ -171,7 +171,7 @@ def test_old_news_link_lands_on_home():
     """없앤 탭의 옛 북마크가 아무 데도 못 가면 안 된다."""
     html = INDEX.read_text(encoding="utf-8")
     assert "_GONE={news:'dashboard'}" in html
-    assert "if(_GONE[h]){ switchTab(_GONE[h]); return true; }" in html
+    assert "if(_GONE[h]){ switchTab(_GONE[h], true); return true; }" in html
 
 
 def test_home_renders_the_three_new_cards():

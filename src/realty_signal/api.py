@@ -182,13 +182,17 @@ async def _auto_refresh_loop():
         if config.public_data_key() and not store.LOCALITY_FILE.exists():
             store.build_localities()
 
+    def backup_job():
+        if backup.enabled() and backup.run_backup() is None:
+            raise RuntimeError("backup_failed")
+
     specs = [
         ("kb", kb_job, 6*3600),
         ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
         ("certified", lambda: certified_refresh({}) if _certified_stale() else None, 3600),
         ("localities", locality_job, 86400),
         ("digest", digest_job, 6*3600),
-        ("backup", lambda: backup.run_backup() if backup.enabled() else None, 86400),
+        ("backup", backup_job, 86400),
     ]
     # Each loop owns a renewable lease and its own retry/due clock.
     async def serve(name, fn, interval):
@@ -1007,7 +1011,12 @@ def buying_power_confirm(request: Request, data: dict):
                                    "first_time", "temp_two_home", "big_area",
                                    "apply_bangongje", "region", "regulated", "dispose",
                                    "ltv", "rate", "rate_type", "years", "reserve_cash",
-                                   "monthly_budget", "moving_cost", "repair_cost")}
+                                   "monthly_budget", "moving_cost", "repair_cost") if k in data}
+    # Explicit null clears the optional cap; omitted values preserve saved inputs.
+    if "monthly_budget" in data and data["monthly_budget"] is None:
+        profile["월상환한도"] = None
+        if profile.get("매수력"):
+            profile["매수력"].get("가정", {}).pop("월상환한도", None)
     if not kw.get("region"):
         kw["region"] = _default_region(request, profile)
     kw["sido"] = _sido_of(kw.get("region"))
