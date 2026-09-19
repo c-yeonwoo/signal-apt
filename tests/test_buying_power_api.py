@@ -53,6 +53,15 @@ def test_confirm_persists_to_profile(client):
     assert again["확정"] == d["매수력"]["최대매수가"]
 
 
+def test_explicit_null_clears_monthly_budget_but_omission_preserves_it(client):
+    client.post("/api/buying-power/confirm", json={"capital": 50000, "income": 8000, "monthly_budget": 100})
+    saved = client.post("/api/buying-power/confirm", json={"capital": 50000}).json()
+    assert saved["매수력"]["가정"]["월상환한도"] == 100
+    cleared = client.post("/api/buying-power/confirm", json={"monthly_budget": None}).json()
+    assert cleared["매수력"]["가정"]["월상환한도"] is None
+    assert client.get("/api/buying-power").json()["가정"]["월상환한도"] is None
+
+
 def test_confirmed_assumptions_survive_reload(client):
     """규제지역·생애최초·금리는 프로필 필드가 없다 — 확정 가정이 유일한 기억."""
     client.post("/api/buying-power/confirm", json={

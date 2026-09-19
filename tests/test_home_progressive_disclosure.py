@@ -17,7 +17,8 @@ def test_dashboard_keeps_primary_actions_before_optional_cards():
     power = markup.index('id="dashPowerWrap"')
     budget = markup.index('id="dashBudgetNewWrap"')
     extra = markup.index('id="dashExtra"')
-    assert plan < power < budget < extra
+    shortlist = markup.index('id="dashShortlistWrap"')
+    assert plan < power < shortlist < budget < extra
     assert '관심 동네·후보 더 보기' in markup
 
 
