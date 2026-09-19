@@ -90,7 +90,10 @@ def brain_calibration_apply(request: Request, data: dict = Body(...)):
         base[s["param"]] = s["to"]
         params = base
         note = note or s.get("reason", "")
-    applied = config_store.apply_config(version, params, note=note)
+    try:
+        applied = config_store.apply_config(version, params, note=note, validation_id=data.get("validation_id"))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=422)
     md.clear_caches()
     try:
         from realty_signal import api

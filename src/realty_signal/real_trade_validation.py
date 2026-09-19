@@ -35,6 +35,11 @@ def _prices(cache_dir: Path, lawd: str, min_transactions: int) -> dict[str, floa
     for path in sorted((cache_dir / lawd).glob("*.json")):
         try:
             row = json.loads(path.read_text(encoding="utf-8"))
+            ym = str(row.get("ym") or path.stem)
+            # 신고·수정 지연을 위한 보수적 최소 대기. 당시 원본 확보를 대체하지 않는다.
+            cutoff = (pd.Timestamp.now()-pd.Timedelta(days=45)).strftime("%Y%m")
+            if ym >= cutoff:
+                continue
             price, n = row.get("median_ppy"), row.get("transactions", 0)
             if price is not None and int(n or 0) >= min_transactions:
                 out[str(row.get("ym") or path.stem)] = float(price)
@@ -96,7 +101,7 @@ def summary(
         except Exception:  # noqa: BLE001 - 한 지역 이력 오류가 전체 감사 결과를 숨기면 안 된다
             continue
         for interval in intervals:
-            signal, end = interval.get("signal"), interval.get("end")
+            signal, end = interval.get("signal"), interval.get("start")
             if signal not in {"STRONG_BUY", "BUY", "SELL"} or not end:
                 continue
             start_ym = next_month_of(str(end))
@@ -131,6 +136,8 @@ def summary(
 
     return {
         "ready": bool(by_signal),
+        "research_only": True,
+        "protocol": "onset-next-month-v2",
         "by_signal": by_signal,
         "coverage": {
             "가격시계열지역수": len(price_by_region),
@@ -139,7 +146,8 @@ def summary(
             "min_transactions": min_transactions,
         },
         "notes": [
-            "시그널 종료 다음 달부터의 월별 실거래 중위 평단가만 사용해 룩어헤드를 피했습니다.",
+            "시그널 발생 다음 달을 기준으로 합니다. 당시 공표 원본·신고 지연을 완전히 재현하지 못해 룩어헤드 제거를 보증하지 않습니다.",
+            "월별 중위 평단은 거래 구성에 민감합니다. 동일 주택 수익률이나 거래비용 차감 성과가 아닙니다.",
             "신호 적중률은 같은 시작월의 관측 가능 시군구 시장평균과 함께 봐야 합니다.",
             "평가수는 지역×시그널 구간 행 수이며, 독립 표본 수나 투자 성과 보장이 아닙니다.",
         ],

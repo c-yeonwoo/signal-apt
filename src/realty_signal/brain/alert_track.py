@@ -36,8 +36,8 @@ def _direction(frm: str | None, to: str | None) -> str | None:
 def score_change(kb: KBWeekly, change: dict, horizon_weeks: int = HORIZON_WEEKS) -> dict | None:
     """알림 1건(signal_changes 엔트리)을 이후 N주 가격 변화로 채점.
 
-    backtest_summary 와 동일하게 "발생일 이후 N번째 관측치"라는 위치 기반 방식을
-    쓴다(달력 주 수가 아니라 실제 데이터 행 수 기준 — 결측주 보정).
+    발생일부터 달력 기준 N주 뒤의 정확한 관측치를 사용한다.
+    결측주를 다음/이전 관측치로 대체해 기간을 줄이지 않는다.
     데이터가 아직 N주치 안 쌓였으면 pending, 방향(up/down) 판정이 안 되면 None.
     """
     region = change.get("region")
@@ -62,19 +62,19 @@ def score_change(kb: KBWeekly, change: dict, horizon_weeks: int = HORIZON_WEEKS)
         "region": region, "from": change.get("from"), "to": change.get("to"),
         "date": date_s, "direction": direction, "horizon_weeks": horizon_weeks,
     }
-    after = idx[idx.index > asof]
-    if len(after) < horizon_weeks:
+    target = asof + pd.Timedelta(weeks=horizon_weeks)
+    if target not in idx.index:
         out["pending"] = True
         return out
 
-    a = after.iloc[horizon_weeks - 1]
+    a = idx.loc[target]
     if pd.isna(a) or not i0:
         out["pending"] = True
         return out
 
     pct = round((a / i0 - 1) * 100, 2)
     up = pct > 0
-    hit = up if direction == "up" else not up
+    hit = up if direction == "up" else pct < 0
     out.update({"pending": False, "pct": pct, "hit": bool(hit)})
     return out
 

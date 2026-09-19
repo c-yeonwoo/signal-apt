@@ -83,6 +83,8 @@ def build_proposal(kb: KBWeekly) -> dict:
     suggestions.sort(key=lambda s: s.get("delta_pp") or 0, reverse=True)
     meta = active_meta()
     return {
+        "research_only": True,
+        "promotion_ready": False,
         "generated_at": str(kb.last_date.date()),
         "generated_ts": int(time.time()),
         "active_version": meta.get("version", "v1"),
@@ -92,7 +94,7 @@ def build_proposal(kb: KBWeekly) -> dict:
         "baseline_params": base_dict,
         "swept_params": sorted(_SWEEPS),
         "suggestions": suggestions[:12],
-        "disclaimer": "제안만 생성됩니다. apply API 또는 CLI로 수동 승인 후 반영.",
+        "disclaimer": "동일 이력 탐색은 연구용 제안입니다. 별도의 시점외·보류셋 검증을 통과하기 전에는 수동 승인으로도 승격할 수 없습니다.",
     }
 
 

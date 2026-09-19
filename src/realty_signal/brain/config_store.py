@@ -42,13 +42,16 @@ def active_config() -> SignalConfig:
     return SignalConfig()
 
 
-def apply_config(version: str, params: dict, *, note: str = "") -> dict:
+def apply_config(version: str, params: dict, *, note: str = "", validation_id: str | None = None) -> dict:
     """새 config 버전 적용 + history append."""
     clean = config_to_dict(config_from_dict(params))
+    from realty_signal.brain.evaluation import require_promotion
+    require_promotion(validation_id, clean)
     entry = {
         "version": version,
         "params": clean,
         "note": note,
+        "validation_id": validation_id,
         "applied_ts": int(time.time()),
     }
     db.kv_set(ACTIVE_KEY, entry)

@@ -25,7 +25,8 @@ def test_region_timing_with_backtest():
     r = region_timing("STRONG_BUY", asof="2026-07-14", backtest_up_pct=68.0)
     assert r.score >= 70
     assert r.layer == "region"
-    assert "12주 적중률" in r.reasons_text
+    assert r.score == region_timing("STRONG_BUY").score
+    assert r.to_dict()["confidence_kind"] == "heuristic_not_probability"
 
 
 def test_listing_timing_no_signal():

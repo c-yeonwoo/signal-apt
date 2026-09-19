@@ -7,6 +7,8 @@ N주 후 실거래/KB 증감과 join 해 적중률·가중치 보정에 사용(�
 from __future__ import annotations
 
 import time
+import json
+from hashlib import sha256
 from typing import Any
 
 import pandas as pd
@@ -22,7 +24,8 @@ LABEL_HORIZONS = (4, 12, 26)
 
 
 def append_region_snapshot(asof: str, rows: list[dict], *, source: str = "kb_weekly") -> dict:
-    """지역별 feature 한 주차 분 저장. 중복 asof 는 덮어쓰기."""
+    """Immutable evidence revisions; KV is only the backward-compatible latest view."""
+    from realty_signal.brain.config_store import active_meta
     features: dict[str, Any] = {}
     for r in rows:
         region = r.get("region")
@@ -37,7 +40,19 @@ def append_region_snapshot(asof: str, rows: list[dict], *, source: str = "kb_wee
             "공급압력": r.get("공급압력"),
             "급지": r.get("급지"),
         }
-    entry = {"asof": asof, "source": source, "ts": int(time.time()), "regions": features}
+    meta = active_meta()
+    identity = {"asof": asof, "source": source, "regions": features, "config": meta}
+    snapshot_id = sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    entry = {"asof": asof, "source": source, "ts": int(time.time()), "regions": features,
+             "snapshot_id": snapshot_id, "config_version": meta["version"], "config": meta["params"],
+             "observed_at": asof, "published_at": None, "vintage_verified": False}
+    c = db.conn()
+    try:
+        c.execute("CREATE TABLE IF NOT EXISTS outcome_revisions(id TEXT PRIMARY KEY, asof TEXT, ts INTEGER, data TEXT)")
+        c.execute("INSERT OR IGNORE INTO outcome_revisions VALUES(?,?,?,?)", (snapshot_id, asof, entry["ts"], json.dumps(entry, ensure_ascii=False)))
+        c.commit()
+    finally:
+        c.close()
     log: list = db.kv_get(KV_KEY) or []
     log = [e for e in log if e.get("asof") != asof]
     log.insert(0, entry)
@@ -49,6 +64,17 @@ def list_snapshots(limit: int = 12) -> list[dict]:
     log: list = db.kv_get(KV_KEY) or []
     return [{"asof": e.get("asof"), "regions": len((e.get("regions") or {})), "source": e.get("source")}
             for e in log[:limit]]
+
+
+def list_revisions(limit: int = 100) -> list[dict]:
+    c = db.conn()
+    try:
+        exists = c.execute("SELECT 1 FROM sqlite_master WHERE name='outcome_revisions'").fetchone()
+        if not exists:
+            return []
+        return [json.loads(row[0]) for row in c.execute("SELECT data FROM outcome_revisions ORDER BY ts DESC,id LIMIT ?", (max(1, min(1000, limit)),))]
+    finally:
+        c.close()
 
 
 def _price_label(pct: float) -> str:
@@ -87,9 +113,9 @@ def label_from_kb(kb: KBWeekly, *, horizons: tuple[int, ...] = LABEL_HORIZONS) -
             }
             for w in horizons:
                 target = asof + pd.Timedelta(weeks=w)
-                if target > idx.index.max():
+                if target not in idx.index:
                     continue
-                i1 = idx.asof(target)
+                i1 = idx.loc[target]
                 if pd.isna(i1) or not i1:
                     continue
                 pct = round((i1 / i0 - 1) * 100, 2)

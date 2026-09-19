@@ -49,7 +49,10 @@ def test_evaluate_payload():
 def test_config_store_apply(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "c.db")
     db._migrated[0] = False
-    applied = config_store.apply_config("v2-test", {"demand_buy": 18}, note="test")
+    from realty_signal.brain.evaluation import params_hash
+    params = config_store.config_to_dict(config_store.config_from_dict({"demand_buy": 18}))
+    db.kv_set("evaluation:synthetic", {"promotable": True, "config_hash": params_hash(params)})
+    applied = config_store.apply_config("v2-test", params, note="test", validation_id="synthetic")
     assert applied["version"] == "v2-test"
     assert config_store.active_config().demand_buy == 18
     assert config_store.list_history()[0]["version"] == "v2-test"
@@ -81,4 +84,3 @@ def test_outcome_snapshot(tmp_path, monkeypatch):
     ])
     assert r["regions"] == 1
     assert outcomes.list_snapshots()[0]["asof"] == "2026-07-14"
-
