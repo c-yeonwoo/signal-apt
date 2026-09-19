@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-VERSION = "v1"
+VERSION = "v2-context-only"
 
 _SIG_BONUS = {"STRONG_BUY": 25, "BUY": 15, "WATCH": 5, "NEUTRAL": 0, "SELL_RISK": -20}
 _GRADE_BONUS = {"A": 8, "B": 4, "C": 0, "D": -4}
@@ -34,6 +34,8 @@ class TimingResult:
             "타이밍점수": self.score,
             "타이밍근거": self.reasons_text,
             "confidence": round(self.confidence, 2),
+            "confidence_kind": "heuristic_not_probability",
+            "decision_scope": "시장 맥락 참고용 — 개인 매수 적합도·수익 확률 아님",
             "source": self.source,
             "asof": self.asof,
             "layer": self.layer,
@@ -143,9 +145,7 @@ def region_timing(
         if sale_momentum == "상승":
             conf = min(0.92, conf + 0.05)
     if backtest_up_pct is not None:
-        why.append(f"12주 적중률 {backtest_up_pct:.0f}%")
-        base = _clamp(round(base * 0.7 + backtest_up_pct * 0.3))
-        conf = min(0.9, conf + 0.04)
+        why.append("백테스트는 별도 연구 통계이며 현재 점수에 합산하지 않음")
     if market_strength is not None:
         why.append(f"시장강도 {market_strength}")
         # 시장강도는 ±8점 보정 (과적합 방지)

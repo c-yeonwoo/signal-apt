@@ -68,6 +68,7 @@ def test_backtest_is_public_but_other_apis_are_not():
 def test_public_backtest_has_no_region_level_data():
     """공개 응답에 지역별·개인별 데이터가 섞여 나가면 안 된다."""
     body = TestClient(app).get("/api/backtest").json()
-    assert set(body) <= {"기준일", "by_signal", "표본", "주의", "설명", "data_age_days"}
+    assert set(body) <= {"기준일", "by_signal", "표본", "주의", "설명", "data_age_days",
+                        "protocol", "research_only", "probability_calibrated"}
     for s in body["by_signal"]:
         assert "region" not in s and "지역" not in s

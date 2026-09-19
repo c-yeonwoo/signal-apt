@@ -192,9 +192,9 @@ def interpret(signal: str, jeonse_state: str, bs: float, demand_state: str,
 
     # 2) 매수심리 + 가격 모멘텀
     if idx_strong and sale_mom == "상승":
-        parts.append("매수우위지수가 높고 가격도 오르고 있어 매수세가 몰리며 단기 추가 상승 가능성이 높습니다")
+        parts.append("자체 기준상 수급과 가격 흐름이 함께 개선되고 있습니다. 향후 가격 상승이나 개별 매물의 적정성을 보장하지 않습니다")
     elif idx_strong:
-        parts.append("매수세가 매도세를 앞서 매수자 우위 시장으로 전환되는 신호입니다")
+        parts.append("매수우위지수가 자체 관찰 기준을 넘었습니다. 매수자가 매도자보다 많다는 공식 기준은 100 초과입니다")
     elif sale_mom == "상승" and not parts:
         parts.append("가격이 상승 중이나 수급·심리 지표가 약해 추세 지속 여부는 관찰이 필요합니다")
     elif sale_mom == "하락":
@@ -281,20 +281,21 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
             state = "SELL"
         else:
             state = None
-        kind = "SELL" if state == "SELL" else ("BUY" if state else None)  # 같은 종류끼리 연결
+        kind = state  # 강세 전환을 과거 BUY 시작점에 소급하지 않는다.
         if state and cur is None:
             cur = {"start": str(d.date()), "signal": sig if state != "SELL" else "SELL",
                    "_kind": kind, "근거": _hist_reason(kind, jv, bv, dv, mom_lbl, c)}
         elif state and cur["_kind"] == kind:
-            if state == "STRONG_BUY":
-                cur["signal"] = "STRONG_BUY"
+            pass
         elif cur is not None:
             cur["end"] = str(dates[i - 1].date())
+            cur["closed"] = True
             intervals.append(cur)
             cur = {"start": str(d.date()), "signal": sig if state != "SELL" else "SELL",
                    "_kind": kind, "근거": _hist_reason(kind, jv, bv, dv, mom_lbl, c)} if state else None
     if cur is not None:
         cur["end"] = str(dates[-1].date())
+        cur["closed"] = False
         intervals.append(cur)
     for iv in intervals:
         iv.pop("_kind", None)
@@ -305,22 +306,22 @@ def signal_history(kb: KBWeekly, region: str, config: SignalConfig | None = None
         i0, i1 = idx.asof(s), idx.asof(e)
         if pd.notna(i0) and pd.notna(i1) and i0:
             iv["during_pct"] = round((i1 / i0 - 1) * 100, 1)
-        after = idx[idx.index > e]
-        a = after.iloc[min(11, len(after) - 1)] if len(after) else None
-        if a is not None and pd.notna(i1) and i1:
-            iv["after12w_pct"] = round((a / i1 - 1) * 100, 1)
+        iv["onset12w_pct"] = _forward_pct(idx, s)
+        iv["after12w_pct"] = _forward_pct(idx, e) if iv["closed"] else None
+        iv["evaluation_basis"] = "onset_calendar_12w_reconstructed"
     return intervals
 
 
 def _forward_pct(idx: "pd.Series", at, weeks: int = 12) -> float | None:
     """`at` 시점 지수 대비 `weeks` 주 뒤 변화율(%). signal_history 와 동일 산식."""
-    i1 = idx.asof(at)
+    at = pd.Timestamp(at)
+    target = at + pd.Timedelta(weeks=weeks)
+    if at not in idx.index or target not in idx.index:
+        return None
+    i1 = idx.loc[at]
     if pd.isna(i1) or not i1:
         return None
-    after = idx[idx.index > at]
-    if not len(after):
-        return None
-    a = after.iloc[min(weeks - 1, len(after) - 1)]
+    a = idx.loc[target]
     return None if pd.isna(a) else round((a / i1 - 1) * 100, 1)
 
 
@@ -335,7 +336,9 @@ def _kb_key(kb: KBWeekly) -> tuple:
     """캐시 키. **호출 비용이 있으니 루프 안에서 부르지 마라** —
     `kb.latest()` 는 전체 long 프레임을 groupby·pivot 한다.
     (한 번 그렇게 만들었다가 백테스트가 12초 → 89초가 됐다.)"""
-    return (str(kb.last_date), len(list(kb.latest().index)))
+    from hashlib import sha256
+    fingerprint = sha256(pd.util.hash_pandas_object(kb.long, index=True).values.tobytes()).hexdigest()
+    return (str(kb.last_date), len(list(kb.latest().index)), fingerprint)
 
 
 def _price_index_map(kb: KBWeekly, key: tuple) -> dict:
@@ -350,13 +353,13 @@ def _price_index_map(kb: KBWeekly, key: tuple) -> dict:
     return cached
 
 
-def _market_up_rate_fn(kb: KBWeekly, key: tuple):
+def _market_up_rate_fn(kb: KBWeekly, key: tuple, *, down=False):
     """`at → 상승 비율(0~1)` 클로저. 키·지수맵을 한 번만 풀고 memo 는 프로세스 전역에 남긴다."""
     idx_of = _price_index_map(kb, key)
     memo = _MKT_BASELINE.setdefault(key, {})
 
     def rate(at) -> float | None:
-        dkey = str(at)
+        dkey = (str(at), down)
         if dkey in memo:
             return memo[dkey]
         up = tot = 0
@@ -365,7 +368,7 @@ def _market_up_rate_fn(kb: KBWeekly, key: tuple):
             if f is None:
                 continue
             tot += 1
-            if f > 0:
+            if (f < 0 if down else f > 0):
                 up += 1
         memo[dkey] = (up / tot) if tot else None
         return memo[dkey]
@@ -398,6 +401,7 @@ def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
     c = config or SignalConfig()
     mkey = _kb_key(kb)                       # 루프 밖에서 한 번만
     _mkt = _market_up_rate_fn(kb, mkey)
+    _mkt_down = _market_up_rate_fn(kb, mkey, down=True)
     agg: dict = {}
     for region in kb.latest().index:
         try:
@@ -413,16 +417,16 @@ def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
             a["n"] += 1
             if iv.get("during_pct") is not None:
                 a["during"].append(iv["during_pct"])
-            if iv.get("after12w_pct") is not None:
-                a["after"].append(iv["after12w_pct"])
+            if iv.get("onset12w_pct") is not None:
+                a["after"].append(iv["onset12w_pct"])
                 a["neval"] += 1
-                up = iv["after12w_pct"] > 0
-                if (t in ("STRONG_BUY", "BUY") and up) or (t == "SELL" and not up):
+                up = iv["onset12w_pct"] > 0
+                if (t in ("STRONG_BUY", "BUY") and up) or (t == "SELL" and iv["onset12w_pct"] < 0):
                     a["hit"] += 1
-                # 같은 날짜의 시장 기준선 — 매도는 하락 비율이 기준이라 1에서 뺀다
-                m = _mkt(pd.Timestamp(iv["end"]))
+                # 같은 발생 날짜의 시장 기준선. 보합은 상승도 하락도 아니다.
+                m = (_mkt_down if t == "SELL" else _mkt)(pd.Timestamp(iv["start"]))
                 if m is not None:
-                    a["mkt"].append(m if t != "SELL" else 1 - m)
+                    a["mkt"].append(m)
 
     def _avg(xs):
         return round(sum(xs) / len(xs), 1) if xs else None
@@ -448,9 +452,13 @@ def backtest_summary(kb: KBWeekly, config: SignalConfig | None = None) -> dict:
 
     return {
         "기준일": str(kb.last_date.date()),
+        "protocol": "onset-calendar-12w-v2",
+        "research_only": True,
+        "probability_calibrated": False,
         "by_signal": by,
         "표본": {"지역수": total, "원본지표보유": own, "광역상속": total - own},
         "주의": [
+            "발생 시점부터 달력 기준 12주가 완성된 관측만 평가합니다. 과거 공표 시점 원본이 없어 연구용 재구성이며 현재 매물의 상승 확률이 아닙니다.",
             "적중률은 같은 기간 전체 지역이 얻은 값(시장평균)과 함께 봐야 의미가 있습니다.",
             f"전세수급·매수우위를 직접 조사하는 지역은 {own}곳이고 나머지 {total - own}곳은 "
             "상위 광역 값을 상속합니다. 상속 지역은 시그널이 함께 움직여 "
