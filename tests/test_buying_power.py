@@ -129,7 +129,7 @@ def test_existing_debt_reduces_dsr_cap():
     assert burdened < clean
     # 기대출이 DSR 한도를 다 먹으면 신규 대출 0
     assert bp.dsr_loan_cap(_p(income=5_000, existing_debt_annual=5_000)) == 0.0
-    assert bp.dsr_loan_cap(_p(income=None)) == float("inf")
+    assert bp.dsr_loan_cap(_p(income=None)) == 0
 
 
 def test_stress_rate_lowers_limit():

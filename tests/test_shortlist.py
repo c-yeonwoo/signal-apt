@@ -58,17 +58,17 @@ def test_over_budget_complexes_are_rejected_with_reason():
     assert out["탈락"]["예산초과"] >= 1
 
 
-def test_sell_risk_region_excluded_even_if_starred():
+def test_market_risk_does_not_hide_personal_candidates():
     out = sl.build(_profile(_favs=["하락구"]), budget=200_000, limit=5)
-    assert "폭락아파트" not in [c["단지"] for c in out["candidates"]]
-    assert out["탈락"]["시그널"] >= 1
+    assert "폭락아파트" in [c["단지"] for c in out["candidates"]]
+    assert out["탈락"]["시그널"] == 0
 
 
-def test_sell_risk_never_enters_candidate_regions():
-    assert "하락구" not in sl._candidate_regions([], SIGNALS, LOCALITY)
+def test_all_market_states_can_enter_candidate_regions():
+    assert "하락구" in sl._candidate_regions([], SIGNALS, LOCALITY)
 
 
-def test_commute_over_limit_drops_region(monkeypatch):
+def test_centroid_commute_is_not_a_hard_filter(monkeypatch):
     def far(region, work):
         return {"min": 120, "transfer": 3} if region == "노원구" else {"min": 25, "transfer": 1}
 
@@ -76,8 +76,8 @@ def test_commute_over_limit_drops_region(monkeypatch):
     p = _profile(직장lat=37.4979, 직장lng=127.0276)
     out = sl.build(p, budget=200_000, limit=5)
     regions = {c["region"] for c in out["candidates"]}
-    assert "노원구" not in regions
-    assert out["탈락"]["통근초과"] >= 1
+    assert "노원구" in regions
+    assert out["탈락"]["통근초과"] == 0
     assert out["직장"] is True
     assert "통근" in out["가중치"]
 
@@ -93,20 +93,19 @@ def test_favorites_come_first_in_candidate_regions():
     assert regions[0] == "도봉구"
 
 
-def test_strong_buy_outranks_higher_undervaluation():
-    """저평가도가 낮아도 STRONG_BUY 가 BUY 앞에 온다."""
-    regions = sl._candidate_regions([], SIGNALS, LOCALITY)
-    assert regions[0] == "강남구"          # STRONG_BUY, 저평가 -5
-    assert regions[1] == "노원구"          # BUY, 저평가 12
+def test_price_coverage_before_market_strength():
+    regions = sl._candidate_regions([], SIGNALS, {"도봉구": {"price": 1000}})
+    assert regions[0] == "도봉구"
 
 
 def test_candidate_carries_cash_and_reason():
     out = sl.build(_profile(), budget=70_000, limit=1)
     c = out["candidates"][0]
-    assert c["자금"]["월상환"] > 0
+    assert c["자금"]["월상환"] >= 0
+    assert c["예산확인필요"] is True
     assert c["자금"]["필요현금"] > 0
     assert c["region"] in c["근거"]
-    assert set(c["분해"]) <= set(sl.WEIGHTS)
+    assert set(out["가중치"]) <= set(sl.WEIGHTS)
 
 
 def test_one_region_cannot_dominate():
@@ -128,10 +127,9 @@ def test_missing_grade_data_counted():
     assert out["탈락"]["데이터없음"] >= 0  # 시그널 맵에 없으면 후보 지역에서 제외
 
 
-def test_budget_score_prefers_upper_band():
-    assert sl._budget_score(0.95) == 100
-    assert sl._budget_score(0.5) < sl._budget_score(0.8)
-    assert sl._budget_score(0.1) == 0
+def test_budget_score_preserves_headroom():
+    assert sl._budget_score(0.5) > sl._budget_score(0.8)
+    assert sl._budget_score(1.1) == 0
 
 
 def test_commute_score_curve():

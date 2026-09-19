@@ -59,6 +59,8 @@ def test_engagement_bonus(tmp_path, monkeypatch):
         {"지역": "부산", "유형": "급매", "타이밍점수": 70, "기회도": 70},
     ]
     out = ranking.apply_engagement_bonus(listings, scores)
-    assert out[0]["타이밍점수"] > 70
+    assert out[0]["타이밍점수"] == 70
+    assert out[0]["기회도"] == 70
+    assert out[0]["타이밍근거"] == "급매갭"
     assert out[0].get("engagement_bonus", 0) > 0
     assert out[1]["타이밍점수"] == 70

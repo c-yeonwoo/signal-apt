@@ -18,7 +18,7 @@ COMMUTE_BEST_MIN = 20    # 이하면 통근 만점
 COMMUTE_TTL = 30 * 86400
 FETCH_WORKERS = 5        # 지역별 실거래 조회 병렬도
 
-WEIGHTS = {"통근": 0.30, "예산": 0.20, "시그널": 0.18, "저평가": 0.17, "급지": 0.15}
+WEIGHTS = {"통근": 0.5, "예산": 0.5}
 SIGNAL_SCORE = {"STRONG_BUY": 100, "BUY": 80, "WATCH": 55, "NEUTRAL": 40, "SELL_RISK": 10}
 BUDGET_SWEET_LOW = 0.80  # 예산의 80~100% 구간이 만점(너무 싸면 급지를 낮춘 것)
 
@@ -34,9 +34,7 @@ def _commute_score(minutes: int | None) -> float | None:
 
 
 def _budget_score(ratio: float) -> float:
-    if ratio >= BUDGET_SWEET_LOW:
-        return 100.0
-    return _clamp(100 - (BUDGET_SWEET_LOW - ratio) * 250)
+    return _clamp(100 * (1 - ratio)) if 0 <= ratio <= 1 else 0.0
 
 
 def _grade_score(top_pct) -> float:
@@ -107,10 +105,8 @@ def _diversify(scored: list[dict], limit: int) -> list[dict]:
 def _candidate_regions(favs: list[str], signal_map: dict, loc: dict) -> list[str]:
     """★ 관심지역 우선 → BUY+ 를 시그널 강도, 그 다음 저평가도 순으로 채운다."""
     out = [r for r in favs if r in signal_map]
-    buyplus = [r for r, s in signal_map.items()
-               if s in ("STRONG_BUY", "BUY") and r not in out]
-    buyplus.sort(key=lambda r: (SIGNAL_SCORE.get(signal_map.get(r, ""), 0),
-                                loc.get(r, {}).get("저평가도") or 0), reverse=True)
+    buyplus = [r for r in signal_map if r not in out]
+    buyplus.sort(key=lambda r: (loc.get(r, {}).get("price") or float("inf"), r))
     out.extend(buyplus)
     return out[:MAX_REGIONS]
 
@@ -154,14 +150,7 @@ def build(profile: dict, budget: float, *, limit: int = 3,
         sig = signal_map.get(region, "")
         commute = _region_commute(region, work)
         cmin = commute.get("min") if commute else None
-        if cmin is not None and cmin > MAX_COMMUTE_MIN:
-            rejected["통근초과"] += len(grades)
-            checked += len(grades)
-            continue
-        if sig == "SELL_RISK":
-            rejected["시그널"] += len(grades)
-            checked += len(grades)
-            continue
+        # 지역 중심점 통근은 단지 통근이 아니다. 단정적인 탈락 기준으로 쓰지 않는다.
         lr = loc.get(region, {})
         uv = lr.get("저평가도") or 0
         parts = {
@@ -180,6 +169,11 @@ def build(profile: dict, budget: float, *, limit: int = 3,
             if est > budget:
                 rejected["예산초과"] += 1
                 continue
+            rp = buying_power.params_for_region(params, region, app_api._sido_of(region))
+            finance = buying_power.for_price(est, rp)
+            if params.capital > 0 and not finance["가능"] and not finance["확인필요"]:
+                rejected["예산초과"] += 1
+                continue
             p = dict(parts)
             p["예산"] = _budget_score(est / budget if budget else 0)
             p["급지"] = _grade_score(g.get("상위"))
@@ -187,13 +181,16 @@ def build(profile: dict, budget: float, *, limit: int = 3,
                 "단지": g["단지"], "region": region, "시그널": sig,
                 "평단가": ppy, "예상가": est, "급지": g.get("급지"),
                 "상위": g.get("상위"), "중앙대비": g.get("중앙대비"),
+                "가격출처": "단지평단추정", "예산확인필요": True,
+                "판단": "호가·동호수 확인 필요", "자금": finance,
+                "통근출처": "지역중심점 추정" if commute else "미확인",
                 "저평가도": uv, "입지점수": lr.get("입지점수"),
                 "통근": commute, "점수": round(sum(w[k] * p[k] for k in w if k in p), 1),
                 "분해": {k: round(v) for k, v in p.items()},
             })
 
     # 점수 동률이면 예산을 더 쓴 쪽(= 같은 조건에서 더 좋은 물건)을 앞에
-    scored.sort(key=lambda c: (c["점수"], c["예상가"]), reverse=True)
+    scored.sort(key=lambda c: (c["점수"], -c["예상가"]), reverse=True)
     top = _diversify(scored, limit)
     for c in top:
         # 규제지역이면 LTV·절대한도·스트레스금리가 달라진다 — 후보 지역 기준으로 다시 본다.
@@ -212,6 +209,8 @@ def build(profile: dict, budget: float, *, limit: int = 3,
         "통과": len(scored),
         "탈락": rejected,
         "지역": regions,
+        "탐색범위": {"조회지역수": len(regions), "전체지역수": len(signal_map),
+                    "제한": MAX_REGIONS, "안내": "선택 지역의 실거래 추정 후보이며 전체 매물 검색 결과가 아닙니다"},
         "가중치": {k: round(v, 2) for k, v in w.items()},
         "직장": bool(work),
     }
@@ -222,7 +221,7 @@ def _reason(c: dict) -> str:
     bits = [f"{c['region']}"]
     if c.get("급지"):
         bits.append(f"구 내 급지{c['급지']}(상위 {c.get('상위')}%)")
-    sig_label = {"STRONG_BUY": "적극매수", "BUY": "매수", "WATCH": "관망",
+    sig_label = {"STRONG_BUY": "시장지표 강세", "BUY": "시장지표 개선", "WATCH": "관망",
                  "NEUTRAL": "중립"}.get(c.get("시그널") or "", "")
     if sig_label:
         bits.append(f"지역 {sig_label}")
