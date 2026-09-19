@@ -529,14 +529,16 @@ def _adv_region_row(r: dict) -> dict:
     return out
 
 
-_ADVISOR_UID: int | None = None  # tool 실행 중 현재 유저 (get_user_context)
+def advisor_tools(uid: int):
+    """Bind identity once per request; never read process-global user state."""
+    from functools import partial
+    return partial(_advisor_tool, uid=uid)
 
 
-def _advisor_tool(name: str, args: dict) -> dict:
+def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
     """자문 에이전트 tool 실행 — 기존 데이터 함수로 위임(server-side)."""
     if name == "get_user_context":
         from realty_signal.brain import memory as nick_mem
-        uid = _ADVISOR_UID
         if not uid:
             return {"error": "login_required"}
         fav = _fav_context(uid)
