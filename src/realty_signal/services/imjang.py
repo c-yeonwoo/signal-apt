@@ -93,16 +93,20 @@ def _move_min(a: tuple[float, float] | None, b: tuple[float, float] | None) -> i
     if km < WALK_KM:      # 같은 동네면 대중교통이 더 느리다 — 도보로 잡고 API도 아낀다
         return max(5, round(km * WALK_MIN_PER_KM))
     ckey = f"imjang_leg:{round(a[0], 3)},{round(a[1], 3)}>{round(b[0], 3)},{round(b[1], 3)}"
-    cached = db.kv_get(ckey, max_age=30 * 86400)
-    if cached:
-        return int(cached)
+    from realty_signal import config
+    cache_ok = config.odsay_analysis_approved() and config.odsay_cache_approved()
+    if cache_ok:
+        cached = db.kv_get(ckey, max_age=30 * 86400)
+        if cached:
+            return int(cached)
     from realty_signal.ingest import locality
     try:
-        r = locality.transit_between(a[1], a[0], b[1], b[0])   # sx=경도, sy=위도
+        r = locality.transit_between(a[1], a[0], b[1], b[0], purpose="analysis")
     except Exception:  # noqa: BLE001
         r = None
     m = int(r["min"]) if r and r.get("min") else max(10, round(_haversine(a, b) * 4))
-    db.kv_set(ckey, m)
+    if cache_ok:
+        db.kv_set(ckey, m)
     return m
 
 

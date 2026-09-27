@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from realty_signal import buying_power, db, store
+from realty_signal import buying_power, config, db, store
 
 MAX_REGIONS = 5          # 국토부 실거래 호출 비용 상한
 MAX_PER_REGION = 2       # 한 동네가 상위를 독식하지 않도록
@@ -53,26 +53,28 @@ def _locality_map() -> dict:
 
 
 def _region_commute(region: str, work: tuple[float, float] | None) -> dict | None:
-    """지역 중심 → 직장 대중교통 소요(분). 30일 캐시. 키 없으면 None."""
-    if not work:
+    """지역 중심 → 직장 경로. 분석·저장 허가가 확인된 범위에서만 사용."""
+    if not work or not config.odsay_analysis_approved():
         return None
     from realty_signal import api as app_api
     from realty_signal.ingest import locality
 
     wlat, wlng = work
     ckey = f"shortlist_commute:{region}:{round(wlat, 3)},{round(wlng, 3)}"
-    cached = db.kv_get(ckey, max_age=COMMUTE_TTL)
-    if cached is not None:
-        return cached or None
+    if config.odsay_cache_approved():
+        cached = db.kv_get(ckey, max_age=COMMUTE_TTL)
+        if cached is not None:
+            return cached or None
     c = app_api._region_centroid(region, app_api._code_of(region))
     if not c:
         return None
     try:
-        r = locality.transit_between(c[1], c[0], wlng, wlat)  # sx=경도, sy=위도
+        r = locality.transit_between(c[1], c[0], wlng, wlat, purpose="analysis")
     except Exception:  # noqa: BLE001
         return None
     if r and r.get("min"):
-        db.kv_set(ckey, r)
+        if config.odsay_cache_approved():
+            db.kv_set(ckey, r)
         return r
     return None
 
@@ -160,8 +162,8 @@ def build(profile: dict, budget: float, *, limit: int = 3,
             "저평가": _clamp(50 + uv * 2.5),
         }
         cs = _commute_score(cmin)
-        if "통근" in w:
-            parts["통근"] = cs if cs is not None else 50.0
+        if "통근" in w and cs is not None:
+            parts["통근"] = cs
         for g in grades:
             checked += 1
             ppy = g.get("평단가")
@@ -178,6 +180,9 @@ def build(profile: dict, budget: float, *, limit: int = 3,
             p = dict(parts)
             p["예산"] = _budget_score(est / region_budget) if region_budget else 0
             p["급지"] = _grade_score(g.get("상위"))
+            available_w = {k: v for k, v in w.items() if k in p}
+            weight_total = sum(available_w.values()) or 1.0
+            actual_w = {k: v / weight_total for k, v in available_w.items()}
             scored.append({
                 "단지": g["단지"], "region": region, "시그널": sig,
                 "평단가": ppy, "예상가": est, "급지": g.get("급지"),
@@ -186,9 +191,11 @@ def build(profile: dict, budget: float, *, limit: int = 3,
                 "판단": "호가·동호수 확인 필요", "자금": finance,
                 "지역예산": region_budget,
                 "통근출처": "지역중심점 추정" if commute else "미확인",
+                "직장입력": bool(work),
                 "저평가도": uv, "입지점수": lr.get("입지점수"),
-                "통근": commute, "점수": round(sum(w[k] * p[k] for k in w if k in p), 1),
+                "통근": commute, "점수": round(sum(actual_w[k] * p[k] for k in actual_w), 1),
                 "분해": {k: round(v) for k, v in p.items()},
+                "적용가중치": {k: round(v, 2) for k, v in actual_w.items()},
             })
 
     # 미확인 자금은 확인된 가정 내 후보보다 앞세우지 않는다.
@@ -218,6 +225,7 @@ def build(profile: dict, budget: float, *, limit: int = 3,
                     "제한": MAX_REGIONS, "안내": "선택 지역의 실거래 추정 후보이며 전체 매물 검색 결과가 아닙니다"},
         "가중치": {k: round(v, 2) for k, v in w.items()},
         "직장": bool(work),
+        "비교범위": "예산만" if work and all(c["통근"] is None for c in top) else "예산·통근" if work else "예산",
     }
 
 
@@ -234,4 +242,6 @@ def _reason(c: dict) -> str:
         bits.append(f"저평가 {c['저평가도']}")
     if c.get("통근") and c["통근"].get("min"):
         bits.append(f"직장 {c['통근']['min']}분")
+    elif c.get("직장입력") and c.get("통근출처") == "미확인":
+        bits.append("직장 경로 미확인")
     return " · ".join(bits)

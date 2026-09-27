@@ -82,6 +82,15 @@ def test_centroid_commute_is_not_a_hard_filter(monkeypatch):
     assert "통근" in out["가중치"]
 
 
+def test_missing_commute_does_not_receive_fake_neutral_score():
+    out = sl.build(_profile(직장lat=37.4979, 직장lng=127.0276), budget=100_000)
+    assert out["비교범위"] == "예산만"
+    for c in out["candidates"]:
+        assert "통근" not in c["분해"]
+        assert c["적용가중치"] == {"예산": 1.0}
+        assert "직장 경로 미확인" in c["근거"]
+
+
 def test_weights_drop_commute_without_work():
     out = sl.build(_profile(), budget=100_000)
     assert "통근" not in out["가중치"]

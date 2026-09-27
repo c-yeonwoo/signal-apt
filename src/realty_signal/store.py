@@ -20,6 +20,7 @@ CACHE_FILE = CACHE_DIR / "long.parquet"
 SUPPLY_FILE = CACHE_DIR / "supply.parquet"
 CODES_FILE = CACHE_DIR / "codes.json"
 LOCALITY_FILE = CACHE_DIR / "locality.parquet"
+LOCALITY_MODEL_VERSION = "locality-complete-v2"
 MACRO_FILE = CACHE_DIR / "macro.json"
 VOLUME_FILE = CACHE_DIR / "volume.json"
 V2_REAL_TRADE_DIR = CACHE_DIR / "v2_real_trade"
@@ -42,17 +43,28 @@ def _recent_months(n: int = 3) -> list[str]:
 def build_localities(out: Path = LOCALITY_FILE) -> "pd.DataFrame":
     """수도권 시군구 입지·가격 수집 → 저평가 랭킹 캐시 (느림: 수 분, 외부 API)."""
     config.load_env()
+    if not (config.odsay_analysis_approved() and config.odsay_cache_approved()):
+        return pd.DataFrame()  # 경로 분석·결과 저장 허가 전에는 새 캐시를 만들지 않는다
     codes = json.loads(CODES_FILE.read_text(encoding="utf-8")) if CODES_FILE.exists() else {}
     sg = {r: c for r, c in codes.items() if c and c.isdigit() and c[:2] in ("11", "41", "28")}
     rows = locality.build_localities(sg, _recent_months(3))
     df = pd.DataFrame(rows)
+    if df.empty:
+        return df  # 일시 장애로 기존 정상 캐시를 덮어쓰지 않는다
+    df["자료검증버전"] = LOCALITY_MODEL_VERSION
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False)
     return df
 
 
 def load_localities(cache: Path = LOCALITY_FILE) -> "pd.DataFrame":
-    return pd.read_parquet(cache) if cache.exists() else pd.DataFrame()
+    if not cache.exists() or not (config.odsay_analysis_approved() and config.odsay_cache_approved()):
+        return pd.DataFrame()
+    df = pd.read_parquet(cache)
+    if "자료검증버전" not in df or "accessibility" not in df:
+        return pd.DataFrame()  # 구 버전의 999분·0개 대체 점수는 표시하지 않는다
+    return df[(df["자료검증버전"] == LOCALITY_MODEL_VERSION)
+              & df["accessibility"].notna() & (df["accessibility"] > -900)]
 
 
 def load_macro(cache: Path = MACRO_FILE) -> dict:

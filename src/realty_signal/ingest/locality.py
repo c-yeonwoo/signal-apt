@@ -3,7 +3,7 @@
 데이터 소스:
   - 가격(시군구 평단가): 국토부 실거래가 API (PUBLIC_DATA_KEY)        [키]
   - 업무지구 접근성: ODsay 대중교통 소요시간 (ODSAY_KEY)              [키]
-  - 학군(학원 밀도): 소상공인 상가정보 API (PUBLIC_DATA_KEY)          [키]
+  - 학원 접근(교육업종 점포수): 소상공인 상가정보 API (PUBLIC_DATA_KEY) [키]
   - 주거환경(공원·하천·마트): OSM Overpass                            [키 불필요]
 
 핵심 엔진 score_undervaluation 은 데이터 소스와 무관하게 순수 함수로 분리해
@@ -71,6 +71,8 @@ def price_per_pyeong(lawd_cd: str, ym_list: list[str]) -> float | None:
 def transit_min(lat: float, lng: float) -> tuple[int, str] | tuple[None, None]:
     """(최단 대중교통 분, 최단 업무지구명). 강남·광화문·여의도 중 가장 가까운 곳."""
     key = config.odsay_key()
+    if not key or not config.odsay_analysis_approved():
+        return None, None
     best, best_hub = None, None
     for name, (hlat, hlng) in HUBS.items():
         url = ("https://api.odsay.com/v1/api/searchPubTransPathT?apiKey="
@@ -78,7 +80,9 @@ def transit_min(lat: float, lng: float) -> tuple[int, str] | tuple[None, None]:
                + f"&SX={lng}&SY={lat}&EX={hlng}&EY={hlat}")
         try:
             j = jsonx.loads(_fetch(url))
-            t = j["result"]["path"][0]["info"]["totalTime"]
+            t = int(j["result"]["path"][0]["info"]["totalTime"])
+            if t <= 0:
+                continue
             if best is None or t < best:
                 best, best_hub = t, name
         except Exception:
@@ -87,8 +91,11 @@ def transit_min(lat: float, lng: float) -> tuple[int, str] | tuple[None, None]:
     return (best, best_hub)
 
 
-def transit_between(sx: float, sy: float, ex: float, ey: float) -> dict | None:
-    """두 지점(경도 x, 위도 y) 간 대중교통 최단경로 요약. 키 없거나 실패 시 None."""
+def transit_between(sx: float, sy: float, ex: float, ey: float,
+                    *, purpose: str = "direct") -> dict | None:
+    """직접 경로조회만 기본 허용. 추천·일괄 분석은 사전 협의가 필요하다."""
+    if purpose != "direct" and not config.odsay_analysis_approved():
+        return None
     key = config.odsay_key()
     if not key:
         return None
@@ -126,8 +133,8 @@ _OVERPASS = ["https://overpass-api.de/api/interpreter",
              "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
 
 
-def osm_environment(lat: float, lng: float, radius: int = 2000) -> dict:
-    """반경 내 공원·물(하천/호수)·대형마트 개수. 장애 시 미러 재시도, 끝내 실패하면 0."""
+def osm_environment(lat: float, lng: float, radius: int = 2000) -> dict | None:
+    """반경 내 시설 수. 모든 미러가 실패하면 0개가 아닌 미확인(None)."""
     q = f"""[out:json][timeout:25];
     ( way["leisure"="park"](around:{radius},{lat},{lng});
       way["natural"="water"](around:{radius},{lat},{lng});
@@ -138,7 +145,9 @@ def osm_environment(lat: float, lng: float, radius: int = 2000) -> dict:
     for base in _OVERPASS:
         try:
             els = jsonx.loads(_fetch(f"{base}?data={data}",
-                             {"User-Agent": _UA, "Accept": "application/json"}, timeout=50)).get("elements", [])
+                             {"User-Agent": _UA, "Accept": "application/json"}, timeout=50)).get("elements")
+            if not isinstance(els, list):
+                raise ValueError("Overpass response missing elements")
             return {
                 "공원": sum(1 for e in els if e.get("tags", {}).get("leisure") == "park"),
                 "물": sum(1 for e in els if e.get("tags", {}).get("natural") == "water"),
@@ -146,7 +155,7 @@ def osm_environment(lat: float, lng: float, radius: int = 2000) -> dict:
             }
         except Exception:
             time.sleep(1.0)
-    return {"공원": 0, "물": 0, "대형마트": 0}
+    return None
 
 
 # ---------- 저평가 엔진 (순수 함수, 키 불필요) ----------
@@ -173,9 +182,10 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
     입지점수 = 가중합(정규화), 적정가 = 입지점수 회귀 예측, 저평가도 = (적정가-실제가)/적정가.
     저평가도 높은 순 정렬.
     """
-    rows = [r for r in rows if r.get("price")]
+    required = ("accessibility", "school", "env")
+    rows = [r for r in rows if r.get("price") and all(r.get(k) is not None for k in required)]
     if len(rows) < 3:
-        return rows
+        return []  # 모형 표본이 부족하면 저평가 수치를 만들지 않는다
     acc = _minmax([r["accessibility"] for r in rows])
     sch = _minmax([r["school"] for r in rows])
     env = _minmax([r["env"] for r in rows])
@@ -201,7 +211,7 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
 
 def _interpret_locality(r: dict) -> str:
     """지역별 저평가 해설 — 입지 강점 + 가격 위치를 1~2문장으로."""
-    comps = [("업무지구 접근성", r["_acc"]), ("학군(학원 밀도)", r["_sch"]), ("주거환경", r["_env"])]
+    comps = [("업무지구 접근성", r["_acc"]), ("학원 점포 접근", r["_sch"]), ("주거환경", r["_env"])]
     comps.sort(key=lambda x: x[1], reverse=True)
     strong, weak = comps[0], comps[-1]
     tmin, hub = r.get("transit_min"), r.get("최단업무지구")
@@ -254,10 +264,12 @@ def build_localities(codes: dict, ym_list: list[str], limit: int | None = None) 
         sch = school_count(lat, lng)
         env = osm_environment(lat, lng)
         time.sleep(0.4)
+        if acc is None or sch is None or env is None:
+            continue  # 호출 실패/키 없음은 999분·0개로 대체하지 않는다
         rows.append({
             "region": region, "price": price,
-            "transit_min": acc, "최단업무지구": hub, "accessibility": -(acc if acc is not None else 999),
-            "school": sch or 0,
+            "transit_min": acc, "최단업무지구": hub, "accessibility": -acc,
+            "school": sch,
             "공원": env["공원"], "물": env["물"], "대형마트": env["대형마트"],
             "env": env["공원"] + env["물"] * 0.5 + env["대형마트"],
         })

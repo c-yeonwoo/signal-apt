@@ -179,7 +179,8 @@ async def _auto_refresh_loop():
         ns.record_digest_run(stats, sent=send)
 
     def locality_job():
-        if config.public_data_key() and not store.LOCALITY_FILE.exists():
+        if (config.public_data_key() and config.odsay_analysis_approved()
+                and config.odsay_cache_approved() and store.load_localities().empty):
             store.build_localities()
 
     def backup_job():
@@ -218,7 +219,8 @@ def _seed_if_missing():
     신규 배포/볼륨 리셋 시 통합 매물·급지가 비어 보이는 것을 방지한다.
     """
     pk = config.public_data_key()
-    if pk and not store.LOCALITY_FILE.exists():          # 저평가·급지
+    if (pk and config.odsay_analysis_approved() and config.odsay_cache_approved()
+            and store.load_localities().empty):          # 저평가·급지
         try:
             log.warning("localities 없음 — 저평가·급지 빌드 중(수 분)…")
             store.build_localities()
@@ -820,7 +822,9 @@ def undervalued():
     """수도권 시군구 저평가 랭킹 (입지 대비 가격). 시그널 등급 병합."""
     df = store.load_localities()
     if df.empty:
-        return {"ready": False, "listings": []}
+        permitted = config.odsay_analysis_approved() and config.odsay_cache_approved()
+        return {"ready": False, "listings": [],
+                "reason": "insufficient_verified_data" if permitted else "source_permission_required"}
     sig = _signal_map()
     recs = json.loads(df.to_json(orient="records", force_ascii=False))
     for r in recs:
@@ -1601,16 +1605,17 @@ def mapconfig():
 
 
 def transit_ep(sx: float, sy: float, ex: float, ey: float):
-    """두 좌표 간 대중교통 최단경로(분·환승·요금). 좌표 라운딩 키로 kv 캐시(30일)."""
+    """두 좌표 간 직접 경로조회. 저장 허가가 없으면 응답을 캐시하지 않는다."""
     from realty_signal import db
     from realty_signal.ingest import locality
     ck = f"transit:{sx:.3f},{sy:.3f}->{ex:.3f},{ey:.3f}"
-    cached = db.kv_get(ck, max_age=30 * 86400)
-    if cached is not None:
-        return {**cached, "cached": True}
+    if config.odsay_cache_approved():
+        cached = db.kv_get(ck, max_age=30 * 86400)
+        if cached is not None:
+            return {**cached, "cached": True}
     r = locality.transit_between(sx, sy, ex, ey)
     out = {"available": r is not None, "route": r}
-    if r:
+    if r and config.odsay_cache_approved():
         db.kv_set(ck, out)
     return out
 
@@ -2202,7 +2207,7 @@ def _nbhd_commute(lat: float, lng: float) -> dict:
     out = {}
     for name, jlat, jlng in _JOB_HUBS:
         try:
-            r = locality.transit_between(lng, lat, jlng, jlat)   # sx=경도, sy=위도
+            r = locality.transit_between(lng, lat, jlng, jlat, purpose="analysis")
             if r and r.get("min"):
                 out[name] = {"min": r["min"], "transfer": r.get("transfer")}
         except Exception:  # noqa: BLE001
@@ -2324,13 +2329,15 @@ def neighborhood(request: Request, region: str):
             infra = _nbhd_infra(c[0], c[1], kkey)
             if infra:
                 db.kv_set(ck, infra)
-    # 업무지구 통근(ODsay, 30일 캐시)
+    # 업무지구 경로는 분석 허가 전 조회하지 않고, 저장 허가 전 캐시하지 않는다.
     cmk = f"nbhd_commute:{region}"
-    commute = db.kv_get(cmk, max_age=30 * 86400)
-    if commute is None and c:
-        config.load_env()
+    config.load_env()
+    analysis_ok = config.odsay_analysis_approved()
+    cache_ok = analysis_ok and config.odsay_cache_approved()
+    commute = db.kv_get(cmk, max_age=30 * 86400) if cache_ok else None
+    if commute is None and c and analysis_ok:
         commute = _nbhd_commute(c[0], c[1])
-        if commute:
+        if commute and cache_ok:
             db.kv_set(cmk, commute)
     asof = str(_kb().last_date.date())
     week = _nbhd_week()
@@ -2354,7 +2361,8 @@ def neighborhood(request: Request, region: str):
         "외부확인": pl.ext_links(region),
         "임장체크항목": pl.IMJANG_CHECKS,
         "생활인프라": infra or {}, "인프라기준": "구 중심 반경 1.5km · 카카오 로컬(참고용)",
-        "통근": commute or {}, "통근기준": "구 중심 → 업무지구 대중교통(ODsay·참고용)",
+        "통근": commute or {}, "통근기준": ("구 중심 → 업무지구 대중교통(ODsay·참고용)"
+                                            if analysis_ok else "교통 데이터 분석 이용범위 확인 전"),
         "기준일": asof, "week": week,
     }
     try:
