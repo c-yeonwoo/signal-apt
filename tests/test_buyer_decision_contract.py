@@ -42,6 +42,7 @@ def test_auction_rights_pending_remains_unknown():
     result = decision.build(row, bp.Params(capital=50000))
     assert result["decision"]["feasibility"] == "unknown"
     assert any("경매" in s for s in result["decision"]["unknowns"])
+    assert "권리" in result["decision"]["next_action"]
 
 
 def test_auction_missing_status_fails_closed():

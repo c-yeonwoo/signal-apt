@@ -1220,11 +1220,11 @@
     </select></label>
     <label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="ccStrongOnly" checked> STRONG_BUY 우선</label>
     <button class="btn" onclick="loadConclusion()" style="background:var(--accent);color:#fff;font-weight:700">분석</button>
-    <span class="btn" onclick="openBuyingPower()" style="font-size:12px">매수력 확정</span>
+    <span class="btn" onclick="openBuyingPower()" style="font-size:12px">매수력 계산</span>
   </div>
   <div id="ccBudget" style="color:var(--dim);font-size:13px;line-height:1.6;margin:-4px 0 12px;padding:10px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:10px"></div>
   <p style="color:var(--dim);font-size:11px;margin:-4px 0 14px">예산은 매수력 엔진(규제 LTV·DSR·절대한도·방공제·취득세·중개 등) 정본입니다. 추천은 통합 매물(급매·경매·찐·청약·재건축)에서 STRONG_BUY를 우선합니다.</p>
-  <h3 style="font-size:14px;margin:0 0 10px;color:var(--dim)">추천 매물</h3>
+  <h3 id="ccListingsTitle" style="font-size:14px;margin:0 0 10px;color:var(--dim)">내 조건 후보</h3>
   <div id="ccListings" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:22px"></div>
   <h3 style="font-size:14px;margin:0 0 10px;color:var(--dim)">지역 요약</h3>
   <div id="ccCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px"></div>
@@ -3522,15 +3522,15 @@ function renderAiReport(d, eok){
   const lines=[];
   const _szOn=(Array.isArray(p['관심평수'])?p['관심평수'].length:!!p['관심평수']);
   const who=[own, p['거주지']?`${p['거주지']} 거주`:null, _szOn?_sizeLabel(p['관심평수'])+' 관심':null].filter(Boolean).join(' · ');
-  lines.push(`<b>${who||'회원님'}</b> 기준, 매수가능 <b style="color:var(--accent)">${eok(d.budget)}</b>`
+  lines.push(`<b>${esc(who||'회원님')}</b> 기준, 입력 가정상 매수 상한 <b style="color:var(--accent)">${eok(d.budget)}</b>`
     + ` = 대출 ${eok(z['대출']??dt['대출'])}(실효 LTV ${Math.round(((z['실효LTV']??dt['실효LTV'])||0)*100)}%) + 자기자본 ${eok(z['자기자본투입']??dt['자기자본투입'])}.`);
   if(topL.length){
-    lines.push(`통합 매물에서 고른 후보 ${listings.length}건 — 상위: `
-      + topL.map(L=>`<b>${L['단지명']}</b>(${L['유형']}·${L['시그널']==='STRONG_BUY'?'강력매수':'매수'}·${_priceLabel(L, eok)})`).join(', ') + `.`);
+    lines.push(`입력 자금 가정에서 검토할 호가 후보 ${listings.length}건 — 예: `
+      + topL.map(L=>`<b>${esc(L['단지명'])}</b>(${esc(L['유형'])}·지역 신호 ${L['시그널']==='STRONG_BUY'?'강함':'관심'}·${_priceLabel(L, eok)})`).join(', ') + `. 가격·대출·매물 상태는 별도 확인이 필요합니다.`);
   } else if(top3.length){
-    lines.push(`지역 요약 상위: ` + top3.map(c=>`<b>${c.region}</b>(${c['시그널']==='STRONG_BUY'?'강력매수':'매수'})`).join(', ') + `.`);
+    lines.push(`지역 탐색 후보: ` + top3.map(c=>`<b>${esc(c.region)}</b>(지역 신호 ${c['시그널']==='STRONG_BUY'?'강함':'관심'})`).join(', ') + `. 지역평균 가격이며 실제 매물 호가는 아닙니다.`);
   }
-  if(homeCard) lines.push(`거주지 <b>${p['거주지']}</b>는 현재 ${badge(homeCard['시그널']||'')} — ${homeCard['예산내']?'예산 내 매수 검토 가능':'예산 초과(자본·대출 점검 필요)'}.`);
+  if(homeCard) lines.push(`거주지 <b>${esc(p['거주지'])}</b>는 현재 ${badge(homeCard['시그널']||'')} — ${homeCard['예산내']?'지역평균 추정가는 가정 예산 범위':'지역평균 추정가는 가정 예산 초과'}. 개별 매물은 별도 확인이 필요합니다.`);
   if(danghae) lines.push(`추천 지역 청약 <b>${danghae}건</b>이 진행/예정입니다.`);
   if(quick) lines.push(`추천 지역 급매·찐매물 <b>${quick}건</b>이 포착됐습니다.`);
   lines.push(`<span style="color:var(--dim)">다음 행동: 추천 매물·지역에서 ★ 즐겨찾기 → 통합 매물·매수력으로 조건을 고정하세요.</span>`);
@@ -3637,30 +3637,43 @@ function _ccBudgetHtml(d, eok){
   const tax=dt['취득세']||0, br=dt['중개비']||0;
   const need=z['필요현금']??dt['필요현금'];
   const hopeNote = hope!=null && cap && hope>cap ? ` · 희망 LTV ${hope}% → 상한 ${cap}%` : (cap?` · LTV 상한 ${cap}%`:'');
-  return `<div><b style="color:var(--txt);font-size:15px">매수가능 ${eok(d.budget)}</b>`
+  return `<div><b style="color:var(--txt);font-size:15px">가정상 매수가 상한 ${eok(d.budget)}</b>`
     + ` <span style="color:var(--dim)">= 대출 ${eok(loan)} <span style="opacity:.85">(실효 LTV ${eff}%${hopeNote})</span> + 자기자본 ${eok(eq)}</span></div>`
     + `<div style="margin-top:4px;font-size:12px">필요현금 <b style="color:var(--txt)">${eok(need)}</b>`
     + ` <span style="color:var(--dim)">(취득세 ${(tax||0).toLocaleString()}만 · 중개 ${(br||0).toLocaleString()}만`
     + `${bg?` · 방공제 차감 ${eok(bg)}`:''}${dt['제약']?` · 제약 ${dt['제약']}`:''})</span>`
     + ` · 기준 ${d.pyeong||_ccPyeong}평</div>`;
 }
-function _ccListingCard(L, eok, rank){
+function _ccListingCard(L, eok){
   const kind=L['유형']||'';
   const col={급매:'#c2410c',경매:'#4f46e5',찐매물:'#0f766e',청약:'#0e7490',재건축:'#15803d'}[kind]||'#64748b';
   const price=L['추정가']??L['총액'];
   const metric=(L['지표라벨']&&L['지표값']!=null)?`${L['지표라벨']} ${L['지표값']}${L['지표단위']||''}`:'';
   const tab={급매:'quicksale',경매:'auction',찐매물:'quicksale',청약:'presale',재건축:'signal'}[kind]||'all';
-  return `<div onclick="switchTab('${tab}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
-      <span style="font-weight:700">${rank!=null?`#${rank} `:''}${L['단지명']||'–'}</span>
-      <span class="pill" style="color:${col};border-color:${col}44">${kind}</span>
+  const d=L['decision']||{};
+  const held=kind==='경매'&&L['입찰상태']!=='conditional_bid';
+  const status=held?'입찰 보류':d.feasibility==='infeasible'?'조건 불가':L['예산내']?'호가 예산 내 · 확인 필요':L['예산확인필요']?'가격·자금 확인 필요':'조건 초과';
+  const priceLabel=kind==='경매'?'최저매각가 · 취득비용 별도':L['가격출처']==='매물가'?'원천 호가 · 유효성 확인':L['가격출처']==='지역평단추정'?'지역평단 추정 · 매물가 아님':'가격 확인 필요';
+  const issues=[...(d.blocking_reasons||[]),...(d.unknowns||[])].slice(0,5);
+  return `<details class="cc-listing" style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff">
+    <summary style="cursor:pointer;list-style:none">
+      <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <b>${esc(L['단지명']||'–')}</b><span class="pill" style="color:${col};border-color:${col}44">${esc(kind)}</span>
+      </span>
+      <span style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;align-items:center">
+        <span style="color:var(--dim)">${esc(L['지역']||'')}</span><b style="margin-left:auto">${eok(price)}</b>
+      </span>
+      <span style="display:block;font-size:11px;color:var(--dim);margin-top:4px">${priceLabel}</span>
+      <span style="display:block;font-size:12px;color:${held||d.feasibility==='infeasible'?'#b45309':'var(--accent)'};margin-top:7px;font-weight:700">${status} · 상세 보기 ▾</span>
+    </summary>
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:12px;line-height:1.55">
+      ${metric?`<div>비교 지표: ${esc(metric)} <span style="color:var(--dim)">(매수·매도 수익 보장 아님)</span></div>`:''}
+      ${L['예산비율']!=null?`<div>호가/예산 비율: ${Math.round(L['예산비율']*100)}%</div>`:''}
+      ${issues.length?`<div style="margin-top:6px;color:var(--dim)">확인할 것: ${issues.map(esc).join(' · ')}</div>`:''}
+      <div style="margin-top:6px">다음 행동: ${esc(d.next_action||'가격·권리·자금 확인')}</div>
+      <button type="button" class="btn" style="margin-top:8px" onclick="switchTab('${tab}')">${esc(kind)} 화면에서 확인 →</button>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;align-items:center">
-      ${badge(L['시그널'])}<span style="color:var(--dim)">${L['지역']||''}</span>
-      <b style="margin-left:auto">${eok(price)}</b>
-    </div>
-    <div style="margin-top:6px;font-size:11px;color:var(--dim)">${metric}${L['예산비율']!=null?` · 예산 ${Math.round(L['예산비율']*100)}%`:''}${L['기회도']!=null?` · 기회도 ${L['기회도']}`:''}${L['예산내']?'':' · <span style="color:#b45309">예산초과·참고</span>'}</div>
-  </div>`;
+  </details>`;
 }
 async function loadConclusion(){
   const capital = +document.getElementById('ccCapital').value || 0;
@@ -3687,11 +3700,12 @@ async function loadConclusion(){
   const listings = d.listings||[];
   const inList = listings.filter(x=>x['예산내']);
   if(listBox){
-    listBox.innerHTML = (inList.length?inList:listings).slice(0,12).map((L,i)=>_ccListingCard(L,eok,i+1)).join('')
+    document.getElementById('ccListingsTitle').textContent=inList.length?'내 자금 가정상 호가 예산 내 후보':'가격·자금 확인이 필요한 탐색 후보';
+    listBox.innerHTML = (inList.length?inList:listings).slice(0,12).map(L=>_ccListingCard(L,eok)).join('')
       || '<div style="color:var(--dim);font-size:13px">조건에 맞는 통합 매물이 없습니다. 급매 스캔·경매 등록을 확인하세요.</div>';
   }
   const inb = (d.cards||[]).filter(c=>c['예산내']);
-  empty.textContent = (inList.length||inb.length) ? '' : '예산 내 STRONG_BUY 매물이 없습니다. BUY 포함 해제 여부·자본·평형을 조정해보세요.';
+  empty.textContent = (inList.length||inb.length) ? '' : '입력 가정에서 확인된 호가 후보가 없습니다. 자본·평형을 조정하거나 가격·자금 확인이 필요한 탐색 후보를 살펴보세요.';
   renderAiReport(d, eok);
   let rankN=0;
   (d.cards||[]).forEach((c)=>{

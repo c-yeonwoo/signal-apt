@@ -90,3 +90,23 @@ test('data reload invalidates in-flight map selection', async () => {
   await first;
   assert.equal(h.opened(), 0);
 });
+
+test('buyer candidate card distinguishes inquiry from infeasibility and expands in place', () => {
+  const ctx = vm.createContext({esc: s => String(s ?? '').replace(/</g, '&lt;')});
+  vm.runInContext(extract('function _ccListingCard(', 'async function loadConclusion(){'), ctx);
+  const eok = n => n == null ? '–' : `${n}만`;
+  const auction = ctx._ccListingCard({유형: '경매', 단지명: '시험단지', 지역: '노원구',
+    총액: 50000, 입찰상태: 'needs_review', 예산확인필요: true,
+    decision: {feasibility: 'unknown', unknowns: ['권리 확인'], next_action: '권리 확인 후 검토'}}, eok);
+  assert.match(auction, /<details class="cc-listing"/);
+  assert.match(auction, /입찰 보류/);
+  assert.match(auction, /최저매각가 · 취득비용 별도/);
+  assert.doesNotMatch(auction, /예산초과·참고|<div onclick="switchTab/);
+
+  const estimated = ctx._ccListingCard({유형: '재건축', 단지명: '<가짜>', 지역: '노원구',
+    추정가: 60000, 가격출처: '지역평단추정', 예산확인필요: true,
+    decision: {feasibility: 'unknown', unknowns: ['현장 확인']}}, eok);
+  assert.match(estimated, /가격·자금 확인 필요/);
+  assert.match(estimated, /지역평단 추정 · 매물가 아님/);
+  assert.match(estimated, /&lt;가짜>/);
+});
