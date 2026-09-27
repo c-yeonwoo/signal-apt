@@ -116,7 +116,8 @@ def comparison_evidence(trades: list[dict], *, asof: date | None = None) -> dict
     if not usable:
         return {"상태": "직거래만" if direct else "최근거래없음", "건수": 0,
                 "중앙값": None, "최저": None, "최고": None,
-                "직거래제외": len(direct), "층미통제": True, "기준일": today.isoformat()}
+                "직거래제외": len(direct), "층미통제": True, "층별표본": [],
+                "기준일": today.isoformat()}
     prices = [t["amt"] for t in usable]
     floors = [t["floor"] for t in usable if t.get("floor") is not None]
     return {"상태": "표본적음" if len(usable) < 3 else "관측",
@@ -125,6 +126,8 @@ def comparison_evidence(trades: list[dict], *, asof: date | None = None) -> dict
             "거래월범위": f"{min(t['ym'] for t in usable)}~{max(t['ym'] for t in usable)}",
             "층범위": [min(floors), max(floors)] if floors else None,
             "층미상건수": len(usable) - len(floors), "층미통제": True,
+            "층별표본": [{"층": t["floor"], "가격": t["amt"], "거래월": t["ym"]}
+                     for t in usable if t.get("floor") is not None],
             "거래유형미상건수": sum(not t.get("dealing") for t in usable),
             "직거래제외": len(direct), "기준일": today.isoformat()}
 
@@ -150,7 +153,7 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     if len(identities) > 1 or len(addresses) > 1:
         return {"단지명": apt_name, "status": "ambiguous", "identity_status": "ambiguous",
                 "message": "같은 이름에 여러 단지·주소가 연결됩니다. 정확한 주소를 확인하기 전 가격을 합치지 않습니다.",
-                "매매추이": [], "평형별": [], "schema_version": 3}
+                "매매추이": [], "평형별": [], "schema_version": 4}
     identity_confirmed = bool(identities or addresses)
     trades: list[dict] = []
     for it in trade_items:
@@ -181,7 +184,7 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
         rents.append({"ym": _ym_of(it), "area": area, "pyeong": round(area / _PYEONG), "deposit": dep})
     if not trades:
         return {"단지명": apt_name, "매매추이": [], "평형별": [], "거래없음": True,
-                "schema_version": 3, "source_id": "molit_aggregate"}
+                "schema_version": 4, "source_id": "molit_aggregate"}
 
     # 월별 평균 평단가(전체 추이)
     by_ym: dict = {}
@@ -226,7 +229,7 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     last = 추이[-1]["평단가"] if 추이 else None
     first = 추이[0]["평단가"] if 추이 else None
     return {
-        "단지명": apt_name, "매매추이": 추이, "평형별": 평형별, "schema_version": 3,
+        "단지명": apt_name, "매매추이": 추이, "평형별": 평형별, "schema_version": 4,
         "identity_status": "single_observed" if identity_confirmed else "unverified",
         "source_id": "molit_aggregate",
         "최근평단가": last, "총거래": len(trades),

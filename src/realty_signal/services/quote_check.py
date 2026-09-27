@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 from math import isfinite
+from statistics import median as median_of
 
 
 def validate_input(asking: float, exclusive_m2: float) -> tuple[float, float]:
@@ -21,13 +22,28 @@ def validate_input(asking: float, exclusive_m2: float) -> tuple[float, float]:
     return asking, exclusive_m2
 
 
-def assess(detail: dict, *, asking: float, exclusive_m2: float) -> dict:
+def validate_floor(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        floor = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("층은 1 이상의 정수로 입력해 주세요") from None
+    if not isfinite(floor) or floor != int(floor) or not 1 <= floor <= 200:
+        raise ValueError("층은 1~200 사이의 정수로 입력해 주세요")
+    return int(floor)
+
+
+def assess(detail: dict, *, asking: float, exclusive_m2: float, floor: int | None = None) -> dict:
     """표본 3건 미만·오래된/불명확한 근거는 비교 수치 없이 보류한다."""
     asking, exclusive_m2 = validate_input(asking, exclusive_m2)
+    floor = validate_floor(floor)
 
     base = {"입력호가": round(asking), "전용㎡": round(exclusive_m2, 1),
             "source_id": "molit_aggregate", "price_kind": "user_entered_asking",
-            "비교기준": "동일 단지·전용면적 0.1㎡·최근 6개월 신고거래; 층·상태·시점 미보정",
+            "비교기준": "동일 단지·전용면적 0.1㎡·최근 6개월 신고거래; 층·상태·시점 미보정" if floor is None
+                    else "동일 단지·전용면적 0.1㎡·최근 6개월·입력 층 ±2층; 상태·시점 미보정",
+            "입력층": floor,
             "안내": ["호가는 사용자가 입력한 값이며 공공 실거래에 섞지 않습니다.",
                    "거래가격 차이는 할인율·적정가·실투자금·매수 권고가 아닙니다."]}
 
@@ -53,13 +69,24 @@ def assess(detail: dict, *, asking: float, exclusive_m2: float) -> dict:
         return hold("비교거래의 산정 기준일을 확인할 수 없습니다.")
     if not 0 <= (date.today() - asof).days <= 7:
         return hold("비교거래 근거가 갱신되지 않았습니다.")
-    median = comp.get("중앙값")
+    observed = comp
+    if floor is not None:
+        rows = [t for t in comp.get("층별표본") or []
+                if isinstance(t.get("층"), int) and abs(t["층"] - floor) <= 2
+                and isinstance(t.get("가격"), (int, float)) and isfinite(t["가격"]) and t["가격"] > 0]
+        if len(rows) < 3:
+            return {**hold("입력 층 ±2층의 최근 비교거래가 3건 미만입니다. 전체 층 결과로 대신하지 않습니다."),
+                    "표본수": len(rows)}
+        prices = [t["가격"] for t in rows]
+        observed = {"중앙값": median_of(prices), "최저": min(prices), "최고": max(prices),
+                    "건수": len(rows), "거래월범위": f"{min(t['거래월'] for t in rows)}~{max(t['거래월'] for t in rows)}"}
+    median = observed.get("중앙값")
     if not isinstance(median, (int, float)) or not isfinite(median) or median <= 0:
         return hold("비교거래 중앙값이 유효하지 않습니다.")
     diff = asking - median
     return {**base, "상태": "관측비교", "이유": None,
-            "중앙값": round(median), "범위": [comp.get("최저"), comp.get("최고")],
-            "표본수": comp["건수"], "거래월범위": comp.get("거래월범위"),
+            "중앙값": round(median), "범위": [observed.get("최저"), observed.get("최고")],
+            "표본수": observed["건수"], "거래월범위": observed.get("거래월범위"),
             "호가차액": round(diff), "호가차이율": round(diff / median * 100, 1),
             "층미통제": True, "거래유형미상건수": comp.get("거래유형미상건수") or 0,
             "비교기준일": comp["기준일"]}

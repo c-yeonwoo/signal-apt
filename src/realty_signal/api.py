@@ -1883,7 +1883,7 @@ def complex_detail(region: str, name: str):
     lawd5 = code[:5]
     ckey = f"complex:{lawd5}:{name}"
     cached = db.kv_get(ckey, max_age=_COMPLEX_TTL)
-    if cached is not None and cached.get("schema_version") == 3:
+    if cached is not None and cached.get("schema_version") == 4:
         return deco({**cached, "cached": True})
     from realty_signal.ingest import complex as cx
     config.load_env()
@@ -1911,9 +1911,10 @@ def complex_quote_check(region: str, name: str, data: dict):
         raise HTTPException(422, "호가와 전용면적을 입력해 주세요")
     try:
         asking, area = quote_check.validate_input(data.get("asking"), data.get("exclusive_m2"))
+        floor = quote_check.validate_floor(data.get("floor"))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    return quote_check.assess(complex_detail(region, name), asking=asking, exclusive_m2=area)
+    return quote_check.assess(complex_detail(region, name), asking=asking, exclusive_m2=area, floor=floor)
 
 
 
