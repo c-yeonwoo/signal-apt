@@ -95,6 +95,16 @@ def odsay_key() -> str | None:
     return os.environ.get("ODSAY_KEY")
 
 
+def odsay_analysis_approved() -> bool:
+    """공급사와 분석·일괄 경로조회 용도를 사전 협의한 경우에만 설정."""
+    return (os.environ.get("ODSAY_ANALYSIS_APPROVED") or "").strip().lower() in {"1", "true", "yes"}
+
+
+def odsay_cache_approved() -> bool:
+    """응답/파생 이동시간 저장에 대한 별도 허가가 확인된 경우에만 설정."""
+    return (os.environ.get("ODSAY_CACHE_APPROVED") or "").strip().lower() in {"1", "true", "yes"}
+
+
 def vworld_key() -> str | None:
     """VWorld(국토부) 지도 타일 키 — 있으면 한글 지도, 없으면 CartoDB 폴백."""
     return os.environ.get("VWORLD_KEY")
