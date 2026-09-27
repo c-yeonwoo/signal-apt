@@ -105,11 +105,14 @@ def _diversify(scored: list[dict], limit: int) -> list[dict]:
 
 
 def _candidate_regions(favs: list[str], signal_map: dict, loc: dict) -> list[str]:
-    """관심지역 우선, 다음은 낮은 지역 평단부터 제한 범위를 탐색한다."""
-    out = [r for r in favs if r in signal_map]
-    buyplus = [r for r in signal_map if r not in out]
-    buyplus.sort(key=lambda r: (loc.get(r, {}).get("price") or float("inf"), r))
-    out.extend(buyplus)
+    """관심지역 우선. 가격 근거 없는 지역을 가나다순으로 추천하지 않는다."""
+    out = list(dict.fromkeys(r for r in favs if r in signal_map))
+    priced = [r for r in signal_map if r not in out and (loc.get(r) or {}).get("price")]
+    priced.sort(key=lambda r: (loc[r]["price"], r))
+    out.extend(priced)
+    if len(signal_map) <= MAX_REGIONS:
+        # 전체 모집단을 빠짐없이 조회할 수 있다면 근거 없는 임의 상위 N 선택이 아니다.
+        out.extend(r for r in signal_map if r not in out)
     return out[:MAX_REGIONS]
 
 
@@ -130,9 +133,23 @@ def build(profile: dict, budget: float, *, limit: int = 3,
 
     signal_map = app_api._signal_map()
     loc = _locality_map()
-    uid_favs = profile.get("_favs") or []
+    uid_favs = list(profile.get("_favs") or [])
+    profile_region = (((profile.get("매수력") or {}).get("가정") or {}).get("지역")
+                      or profile.get("매수지역"))
+    if profile_region:
+        uid_favs.append(profile_region)
     regions = _candidate_regions(uid_favs, signal_map, loc)
     pyeong = buying_power.pyeong_of(profile.get("관심평수"))
+    if not regions:
+        return {
+            "ready": False, "reason": "needs_focus_regions",
+            "message": "입지 비교 자료를 확인할 수 없어 지역을 임의로 추천하지 않았습니다. 시장·지역에서 관심지역을 선택해 주세요.",
+            "budget": round(budget), "pyeong": pyeong, "candidates": [],
+            "검토": 0, "통과": 0, "탈락": {}, "지역": [],
+            "탐색범위": {"조회지역수": 0, "전체지역수": len(signal_map), "제한": MAX_REGIONS,
+                        "안내": "관심지역이나 검증된 가격 근거가 있어야 단지 후보를 조회합니다"},
+            "가중치": {}, "직장": False, "비교범위": "미실행",
+        }
     work = None
     if profile.get("직장lat") and profile.get("직장lng"):
         work = (float(profile["직장lat"]), float(profile["직장lng"]))
