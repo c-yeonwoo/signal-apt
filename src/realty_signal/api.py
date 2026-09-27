@@ -1456,17 +1456,32 @@ def _record_radar_refresh(path, status: dict) -> None:
 
 
 def _radar_cached_response(path, min_ver: int) -> dict:
-    """캐시와 마지막 갱신 건강 상태를 API 응답으로 합친다."""
+    """0건·필터·원천 실패·지난 결과를 화면에서 구분할 상태 계약."""
     refresh = _radar_refresh_status(path)
     if path.exists():
         try:
             out = json.loads(path.read_text(encoding="utf-8"))
-            out["stale"] = _radar_cache_stale(path, min_ver)
+            stale = _radar_cache_stale(path, min_ver)
+            count = len(out.get("listings") or [])
+            if refresh.get("ok") is False:
+                state = "stale_failed"
+            elif stale:
+                state = "stale"
+            elif refresh.get("ok") is not True:
+                state = "unverified"
+            elif refresh.get("failed_requests"):
+                state = "partial" if count else "partial_empty"
+            else:
+                state = "ready" if count else "empty"
+            out["stale"] = stale
+            out["state"] = state
+            out["last_success_at"] = path.stat().st_mtime
             out["refresh"] = refresh
             return out
         except Exception:  # noqa: BLE001
             pass
-    return {"ready": False, "listings": [], "regions": [], "refresh": refresh}
+    return {"ready": False, "state": "failed" if refresh.get("ok") is False else "never_scanned",
+            "listings": [], "regions": [], "last_success_at": None, "refresh": refresh}
 
 
 

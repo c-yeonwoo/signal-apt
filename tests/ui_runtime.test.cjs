@@ -19,6 +19,34 @@ test('opening quicksale reaches both APIs and renders', async () => {
   assert.equal(status.textContent, '0건');
 });
 
+test('quicksale status separates verified empty from upstream failure', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(extract('function qsStatusText(data){', 'function qsMode(mode){'), ctx);
+  const zero = {ready: true, state: 'empty', listings: [], regions: ['노원구'], last_success_at: 1};
+  assert.match(ctx.qsStatusText(zero), /해당 매물 없음/);
+  assert.match(ctx.qsStatusText({ready: false, state: 'failed', listings: [], refresh: {error: 'timeout'}}), /0건으로 판단할 수 없습니다/);
+  assert.match(ctx.qsStatusText({...zero, state: 'partial_empty', refresh: {failed_requests: 1}}), /0건 확정 불가/);
+});
+
+test('quicksale empty view names filter and source states separately', () => {
+  const empty = {textContent: ''}, gap = {value: '0'};
+  const ctx = vm.createContext({
+    document: {getElementById: id => id === 'qsGap' ? gap : empty},
+    renderMtFilter() {}, inFocus: () => true, _mtPass: () => true, mapSplit() {},
+    _qsMode: '급매', _qsList: [], _qsCertList: [], _qsData: {급매: {state: 'failed'}},
+  });
+  vm.runInContext(extract('function renderQuicksale(){', '// ===== 통합 매물('), ctx);
+  ctx.renderQuicksale();
+  assert.match(empty.textContent, /수집이 실패했습니다/);
+  ctx._qsData.급매 = {state: 'empty'};
+  ctx.renderQuicksale();
+  assert.match(empty.textContent, /조회에 성공한 지역/);
+  ctx._qsList = [{지역: '노원구', 급매갭: -2}];
+  gap.value = '-5';
+  ctx.renderQuicksale();
+  assert.match(empty.textContent, /필터에서 제외됐습니다/);
+});
+
 function selectionHarness() {
   const classes = (...init) => {
     const s = new Set(init);
