@@ -2671,12 +2671,12 @@ const _GLOSSARY=[
   ["판상형 / 타워형","일자 배치(채광·환기 좋음) vs 탑상형(조망·디자인). "],
 ]],
 ["가격·시세",[
-  ["실거래가","실제 계약·신고된 거래가격(국토부). 가장 객관적 시세."],
+  ["실거래가","국토부에 신고된 과거 계약가격. 면적·층·상태·거래 시점이 다르면 현재 매물 가격과 직접 비교하기 어렵습니다."],
   ["호가","집주인이 부르는 매도 희망가. 실거래가와 차이날 수 있음."],
   ["평단가","3.3㎡(1평)당 가격. 단지·지역 비교의 기준."],
-  ["전세가율","매매가 대비 전세가 비율. 높을수록 갭(투자금)이 작고 하방이 단단."],
-  ["갭 / 갭투자","매매가−전세가. 전세 낀 매수로 실투자금(갭)만으로 사는 방식."],
-  ["급매","시세보다 낮게 급히 내놓은 매물."],
+  ["전세가율","매매가 대비 전세가 비율. 높으면 매매-전세 차액은 작지만 보증금 반환 위험도 별도 확인해야 합니다."],
+  ["매매-전세 차액","같은 전용면적의 최근 매매가−전세가. 취득세·수리비·대출·보증금 반환 부담이 빠져 실제 필요현금이 아닙니다."],
+  ["급매","공급사가 급매로 표시한 호가. 같은 조건의 거래·매물 상태를 확인하기 전에는 실제 할인이라고 단정할 수 없습니다."],
 ]],
 ["대출·금리·자금",[
   ["LTV","담보인정비율 — 집값 대비 빌릴 수 있는 최대 비율.","앱"],
@@ -4828,20 +4828,20 @@ async function openCompare(){
       ${row('주력 평형', (d,m)=>m?`${m['평형']}평`:null)}
       ${row('최근 매매', (d,m)=>m&&m['최근매매']?_eok(m['최근매매']):null)}
       ${row('전세가율', (d,m)=>m&&m['전세가율']!=null?`<b style="color:${m['전세가율']>=70?'#16a34a':'var(--txt)'}">${m['전세가율']}%</b>`:null)}
-      ${row('갭(실투자금)', (d,m)=>m&&m['갭']!=null?_eok(m['갭']):null)}
+      ${row('매매-전세 차액', (d,m)=>m&&m['갭']!=null?_eok(m['갭']):null)}
       ${row('총 거래', d=>d&&d['총거래']?d['총거래']+'건':null)}
     </tbody></table>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
       <span class="btn" style="padding:6px 13px;background:var(--accent);color:#fff" onclick="document.getElementById('cmpDlg').close();openComplexFind()">＋ 단지 추가</span>
       ${cols.length>1?`<span onclick="cmpSave([]);document.getElementById('cmpDlg').close()" style="cursor:pointer;font-size:12px;color:#dc2626">전체 비우기</span>`:''}</div>
-    <div style="font-size:11px;color:var(--dim);margin-top:8px">주력 평형=최다 거래 평형. 단지마다 평형이 다를 수 있어 참고용.</div>`;
+    <div style="font-size:11px;color:var(--dim);margin-top:8px">주력 평형=최다 거래 평형. 매매-전세 차액은 취득비용·대출·보증금 반환이 빠진 값으로 실제 필요현금이 아닙니다. 단지마다 평형이 다를 수 있어 참고용입니다.</div>`;
 }
 // ===== 내 시그널맵 인라인 비교표 (동적 열 추가 + 지연 로드/캐시) =====
 let _cmpData={};   // region|name → 실거래 데이터(로드 완료). undefined = 대기중
 let _cmpCrits=new Set(); // 선택된 가치기준(복수) — 열 강조 + AI 추천
 function _cmpKey(x){ return x.region+'|'+x.name; }
 // 가치기준 → row key·비교방향(작을수록 유리?)
-const _CMP_CRIT=[['가격','저렴한 가격',true],['상승여력','상승 여력',false],['전세안정성','전세 안정성',false],['실투자금','적은 실투자금',true],['유동성','거래 활발',false]];
+const _CMP_CRIT=[['가격','낮은 거래 평단',true],['가격변화','2년 관측 변화',false],['전세차액','작은 매매-전세 차액',true],['거래활동','신고 거래 건수',false]];
 function updateCmpFab(){
   const btn=document.getElementById('cmpRun'); if(!btn) return;
   const n=cmpList().length, pend=cmpList().filter(x=>_cmpData[_cmpKey(x)]===undefined).length;
@@ -4860,6 +4860,9 @@ function renderCompareTable(){
   }
   const main=d=>{ const p=(d&&d['평형별']||[]); if(!p.length) return null; return p.slice().sort((u,v)=>(v['매매건수']||0)-(u['매매건수']||0))[0]; };
   const cols=a.map(x=>({x, d:_cmpData[_cmpKey(x)]}));   // d===undefined → 미로드
+  const areas=cols.map(c=>main(c.d)?.['전용㎡']);
+  const gapComparable=areas.length>1&&areas.every(v=>typeof v==='number'&&v>0)&&Math.max(...areas)-Math.min(...areas)<=1
+    &&cols.every(c=>{const m=main(c.d)||{}, s=m['비교거래']?.['상태']; return m['갭']!=null&&(s==='관측'||s==='표본적음');});
   const cell=(c,fn)=> c.d===undefined ? '<span style="color:var(--sig-neutral)">–</span>' : (fn(c.d,main(c.d))??'–');
   // rows: 급지·시그널(맥락) → 평단가 → 추세 → 전세가율 → 갭 → 주력평형 → 최근매매 → 총거래
   const rows=[
@@ -4867,12 +4870,12 @@ function renderCompareTable(){
     {crit:null, label:'지역 급지', get:d=>_cmpGradeTag(d&&d['급지'])},
     {crit:null, label:'시그널', get:d=>_cmpSigTag(d&&d['시그널'])},
     {crit:'가격', label:'최근 평단가', val:d=>d&&d['최근평단가'], get:d=>d&&d['최근평단가']?d['최근평단가'].toLocaleString()+'만':null},
-    {crit:'상승여력', label:'2년 추세', val:d=>d&&d['추세pct'], get:d=>d&&d['추세pct']!=null?`<span style="color:${d['추세pct']>=0?'var(--sig-buy)':'var(--danger)'}">${d['추세pct']>0?'+':''}${d['추세pct']}%</span>`:null},
-    {crit:'전세안정성', label:'전세가율', val:(d,m)=>m&&m['전세가율'], get:(d,m)=>m&&m['전세가율']!=null?`<b style="color:${m['전세가율']>=70?'var(--sig-buy)':'var(--txt)'}">${m['전세가율']}%</b>`:null},
-    {crit:'실투자금', label:'갭(실투자금)', val:(d,m)=>m&&m['갭'], get:(d,m)=>m&&m['갭']!=null?_eok(m['갭']):null},
+    {crit:'가격변화', label:'2년 관측 변화', val:d=>d&&d['추세pct'], get:d=>d&&d['추세pct']!=null?`<span style="color:${d['추세pct']>=0?'var(--sig-buy)':'var(--danger)'}">${d['추세pct']>0?'+':''}${d['추세pct']}%</span>`:null},
+    {crit:null, label:'전세가율', get:(d,m)=>m&&m['전세가율']!=null?`${m['전세가율']}%`:null},
+    {crit:gapComparable?'전세차액':null, label:'매매-전세 차액', val:(d,m)=>m&&m['갭'], get:(d,m)=>m&&m['갭']!=null?_eok(m['갭']):null},
     {crit:null, label:'주력 평형', get:(d,m)=>m?`${m['평형']}평`:null},
     {crit:null, label:'최근 매매', get:(d,m)=>m&&m['최근매매']?`${_eok(m['최근매매'])} <span style="color:var(--dim);font-weight:400;font-size:11px">${m['평형']}평</span>`:null},
-    {crit:'유동성', label:'총 거래', val:d=>d&&d['총거래'], get:d=>d&&d['총거래']?d['총거래']+'건':null},
+    {crit:'거래활동', label:'조회기간 신고거래', val:d=>d&&d['총거래'], get:d=>d&&d['총거래']?d['총거래']+'건':null},
   ];
   // 선택 기준의 1등 컬럼 인덱스(강조 테두리용)
   const bestIdx={};
@@ -4898,7 +4901,7 @@ function renderCompareTable(){
       + cols.map((c,ci)=>`<td style="padding:10px 12px;text-align:right;font-weight:600;border-top:1px solid var(--line);${ci===bi?'outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px':''}">${cell(c,r.get)}</td>`).join('')+`</tr>`; }).join('')}
     </tbody></table></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-      <span style="font-size:11px;color:var(--dim)">주력 평형=최다 거래 평형. 단지마다 달라 참고용. 급지·시그널은 지역 기준.</span>
+      <span style="font-size:11px;color:var(--dim)">주력 평형=최다 거래 평형. 매매-전세 차액은 주력 전용면적이 1㎡ 이내일 때만 순위 비교합니다. 차액은 필요현금이 아니며 과거 변화·거래 건수는 미래 수익·매도 속도가 아닙니다.</span>
       ${cols.length?`<span onclick="cmpSave([]);renderCompareTable()" style="cursor:pointer;font-size:12px;color:var(--danger)">전체 비우기</span>`:''}</div>`;
 }
 function renderCmpCrit(){
@@ -4912,7 +4915,7 @@ function pickCmpCrit(k){ _cmpCrits.has(k)?_cmpCrits.delete(k):_cmpCrits.add(k); 
 function _cmpLoaded(){
   const main=d=>{ const p=(d&&d['평형별']||[]); if(!p.length) return null; return p.slice().sort((u,v)=>(v['매매건수']||0)-(u['매매건수']||0))[0]; };
   return cmpList().map(x=>_cmpData[_cmpKey(x)]).filter(d=>d&&!d['지원안함']).map(d=>{ const m=main(d)||{};
-    return {region:d.region, 단지명:d['단지명'], 급지:d['급지'], 시그널:d['시그널'], 최근평단가:d['최근평단가'], 추세pct:d['추세pct'], 전세가율:m['전세가율'], 갭:m['갭'], 총거래:d['총거래']}; });
+    return {region:d.region, 단지명:d['단지명'], 급지:d['급지'], 시그널:d['시그널'], 최근평단가:d['최근평단가'], 추세pct:d['추세pct'], 전세가율:m['전세가율'], 갭:m['갭'], '전용㎡':m['전용㎡'], 총거래:d['총거래']}; });
 }
 async function loadCmpReco(){
   const box=document.getElementById('cmpInsight'); if(!box) return;
@@ -4922,10 +4925,11 @@ async function loadCmpReco(){
   if(cx.length<2){ box.style.display=''; box.innerHTML=`<span style="color:var(--dim)">중시가치 <b style="color:var(--accent)">${critLabel}</b> 선택됨 — 단지를 <b>2개 이상</b> 담고 <b>비교하기</b>를 누르면 AI가 추천해 드립니다.</span>`; return; }
   box.style.display=''; box.innerHTML='<span style="color:var(--dim)">추천 분석 중…</span>';
   try{ const r=await (await fetch('/api/compare-recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({criteria:crits,complexes:cx})})).json();
-    if(!r.ok){ box.innerHTML=`<span style="color:var(--dim)">비교 가능한 데이터가 부족합니다. 다른 가치를 선택하거나 단지를 더 담아보세요.</span>`; return; }
-    box.innerHTML=`<div style="margin-bottom:5px"><span style="font-size:11px;color:var(--dim)">중시가치 ${critLabel}</span> ${r.ai?'':'<span style="font-size:10px;color:var(--dim)">(규칙기반)</span>'}</div>`
-      +`<div style="font-size:14px"><b style="color:var(--accent)">추천 · ${r['추천']}</b></div>`
-      +`<div style="margin-top:4px">${(r['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')}</div>`;
+    if(!r.ok){ box.innerHTML=`<span style="color:var(--dim)">비교 가능한 데이터가 부족합니다. ${(r['제외기준']||[]).map(esc).join(' · ')||'다른 지표를 선택하거나 단지를 더 담아보세요.'}</span>`; return; }
+    box.innerHTML=`<div style="margin-bottom:5px"><span style="font-size:11px;color:var(--dim)">선택 지표 ${critLabel}</span> ${r.ai?'':'<span style="font-size:10px;color:var(--dim)">(규칙기반)</span>'}</div>`
+      +`<div style="font-size:14px"><b style="color:var(--accent)">선택 지표상 앞선 단지 · ${esc(r['추천'])}</b></div>`
+      +`<div style="margin-top:4px">${esc(r['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')}</div>`
+      +(r['제외기준']?.length?`<div style="font-size:11px;color:var(--warn);margin-top:5px">제외: ${r['제외기준'].map(esc).join(' · ')}</div>`:'');
   }catch(e){ box.style.display='none'; }
 }
 async function runCompare(){
