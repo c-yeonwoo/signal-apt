@@ -73,3 +73,29 @@ def test_partial_refresh_keeps_unscanned_regions_with_stale_flag(tmp_path):
     out = api._preserve_unscanned(path, [{"지역": "A", "naver_id": "new-a"}], {"successful_regions": ["A"]})
     assert {row["naver_id"] for row in out} == {"new-a", "b"}
     assert out[1]["stale"] is True
+
+
+def test_radar_response_distinguishes_verified_zero_from_failure(tmp_path):
+    path = tmp_path / "quicksale.json"
+    path.write_text(json.dumps({"ready": True, "listings": [], "regions": ["노원구"],
+                                "_scan_ver": api._QUICKSALE_SCAN_VER}), encoding="utf-8")
+    api._record_radar_refresh(path, {"ok": True, "failed_requests": 0})
+    empty = api._radar_cached_response(path, api._QUICKSALE_SCAN_VER)
+    assert empty["state"] == "empty" and empty["last_success_at"]
+
+    api._record_radar_refresh(path, {"ok": True, "failed_requests": 1})
+    assert api._radar_cached_response(path, api._QUICKSALE_SCAN_VER)["state"] == "partial_empty"
+
+    api._record_radar_refresh(path, {"ok": False, "error": "upstream error"})
+    assert api._radar_cached_response(path, api._QUICKSALE_SCAN_VER)["state"] == "stale_failed"
+
+    path.unlink()
+    failed = api._radar_cached_response(path, api._QUICKSALE_SCAN_VER)
+    assert failed["state"] == "failed" and failed["listings"] == []
+
+
+def test_radar_response_marks_unverified_legacy_cache(tmp_path):
+    path = tmp_path / "quicksale.json"
+    path.write_text(json.dumps({"ready": True, "listings": [], "regions": [],
+                                "_scan_ver": api._QUICKSALE_SCAN_VER}), encoding="utf-8")
+    assert api._radar_cached_response(path, api._QUICKSALE_SCAN_VER)["state"] == "unverified"
