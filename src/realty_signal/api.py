@@ -1883,7 +1883,7 @@ def complex_detail(region: str, name: str):
     lawd5 = code[:5]
     ckey = f"complex:{lawd5}:{name}"
     cached = db.kv_get(ckey, max_age=_COMPLEX_TTL)
-    if cached is not None and cached.get("schema_version") == 2:
+    if cached is not None and cached.get("schema_version") == 3:
         return deco({**cached, "cached": True})
     from realty_signal.ingest import complex as cx
     config.load_env()

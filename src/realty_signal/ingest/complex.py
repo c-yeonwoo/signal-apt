@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import difflib
 import re
+import statistics
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 
 from realty_signal.auction import _norm, _recent_yms
 
@@ -89,6 +91,44 @@ def _ym_of(it) -> str:
     return f"{y}-{int(m):02d}" if y and m.isdigit() else ""
 
 
+def _day_of(it) -> int:
+    try:
+        day = int((it.findtext("dealDay") or "").strip())
+        return day if 1 <= day <= 31 else 0
+    except ValueError:
+        return 0
+
+
+def comparison_evidence(trades: list[dict], *, asof: date | None = None) -> dict:
+    """같은 전용면적의 최근 6개월 신고거래 분포. 현재 호가나 미래 적정가가 아니다."""
+    today = asof or date.today()
+    anchor = today.year * 12 + today.month
+    recent = []
+    for t in trades:
+        try:
+            y, m = (int(x) for x in t["ym"].split("-"))
+        except (AttributeError, KeyError, ValueError):
+            continue
+        if 1 <= m <= 12 and 0 <= anchor - (y * 12 + m) < 6:
+            recent.append(t)
+    direct = [t for t in recent if t.get("dealing") == "직거래"]
+    usable = [t for t in recent if t.get("dealing") != "직거래"]
+    if not usable:
+        return {"상태": "직거래만" if direct else "최근거래없음", "건수": 0,
+                "중앙값": None, "최저": None, "최고": None,
+                "직거래제외": len(direct), "층미통제": True, "기준일": today.isoformat()}
+    prices = [t["amt"] for t in usable]
+    floors = [t["floor"] for t in usable if t.get("floor") is not None]
+    return {"상태": "표본적음" if len(usable) < 3 else "관측",
+            "건수": len(usable), "중앙값": round(statistics.median(prices)),
+            "최저": round(min(prices)), "최고": round(max(prices)),
+            "거래월범위": f"{min(t['ym'] for t in usable)}~{max(t['ym'] for t in usable)}",
+            "층범위": [min(floors), max(floors)] if floors else None,
+            "층미상건수": len(usable) - len(floors), "층미통제": True,
+            "거래유형미상건수": sum(not t.get("dealing") for t in usable),
+            "직거래제외": len(direct), "기준일": today.isoformat()}
+
+
 def fetch_complex(lawd5: str, apt_name: str, key: str,
                   trade_months: int = 24, rent_months: int = 12) -> dict:
     """단지 실거래 종합. {매매추이(월별 평단가)·평형별(매매·전세·전세가율·갭)·요약}."""
@@ -110,7 +150,8 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     if len(identities) > 1 or len(addresses) > 1:
         return {"단지명": apt_name, "status": "ambiguous", "identity_status": "ambiguous",
                 "message": "같은 이름에 여러 단지·주소가 연결됩니다. 정확한 주소를 확인하기 전 가격을 합치지 않습니다.",
-                "매매추이": [], "평형별": [], "schema_version": 2}
+                "매매추이": [], "평형별": [], "schema_version": 3}
+    identity_confirmed = bool(identities or addresses)
     trades: list[dict] = []
     for it in trade_items:
         if not _match(it.findtext("aptNm") or "", cn):
@@ -118,7 +159,14 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
         area, amt = _amt(it, "excluUseAr"), _amt(it, "dealAmount")
         if not area or area <= 0 or not amt:
             continue
-        trades.append({"ym": _ym_of(it), "area": area, "amt": amt,
+        try:
+            floor = int((it.findtext("floor") or "").strip())
+            if floor <= 0:
+                floor = None
+        except ValueError:
+            floor = None
+        trades.append({"ym": _ym_of(it), "day": _day_of(it), "area": area, "amt": amt,
+                       "floor": floor, "dealing": (it.findtext("dealingGbn") or "").strip(),
                        "pyeong": round(area / _PYEONG), "ppy": amt / (area / _PYEONG)})
     rents: list[dict] = []
     for it in rent_items:
@@ -132,7 +180,8 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
             continue
         rents.append({"ym": _ym_of(it), "area": area, "pyeong": round(area / _PYEONG), "deposit": dep})
     if not trades:
-        return {"단지명": apt_name, "매매추이": [], "평형별": [], "거래없음": True}
+        return {"단지명": apt_name, "매매추이": [], "평형별": [], "거래없음": True,
+                "schema_version": 3, "source_id": "molit_aggregate"}
 
     # 월별 평균 평단가(전체 추이)
     by_ym: dict = {}
@@ -143,7 +192,7 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
 
     # 평형별 집계 (최근 매매 + 전세 → 전세가율·갭)
     def _recent(rows, kk):
-        return sorted(rows, key=lambda r: r["ym"])[-1][kk] if rows else None
+        return sorted(rows, key=lambda r: (r["ym"], r.get("day", 0)))[-1][kk] if rows else None
 
     areas = sorted({round(t["area"], 1) for t in trades})
     평형별 = []
@@ -166,6 +215,8 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
             "평형": py, "전용㎡": round(sum(t["area"] for t in ts) / len(ts), 1),
             "최근매매": recent_amt and round(recent_amt), "평단가": round(sum(t["ppy"] for t in ts) / len(ts)),
             "매매건수": len(ts), "최근전세": recent_dep and round(recent_dep),
+            "비교거래": (comparison_evidence(ts) if identity_confirmed else
+                       {"상태": "단지미확인", "건수": 0, "중앙값": None, "층미통제": True}),
             "전세가율": jeonse_ratio, "갭": (recent_amt and recent_dep) and round(recent_amt - recent_dep),
             "비교기준": "전용면적 0.1㎡ 반올림 일치·최근 거래월 차이 3개월 이내; 층·상태는 미통제",
             "비교가능": comparable, "매매기준월": trade_ym, "전세기준월": rent_ym,
@@ -175,8 +226,8 @@ def fetch_complex(lawd5: str, apt_name: str, key: str,
     last = 추이[-1]["평단가"] if 추이 else None
     first = 추이[0]["평단가"] if 추이 else None
     return {
-        "단지명": apt_name, "매매추이": 추이, "평형별": 평형별, "schema_version": 2,
-        "identity_status": "single_observed" if identities or addresses else "unverified",
+        "단지명": apt_name, "매매추이": 추이, "평형별": 평형별, "schema_version": 3,
+        "identity_status": "single_observed" if identity_confirmed else "unverified",
         "source_id": "molit_aggregate",
         "최근평단가": last, "총거래": len(trades),
         "추세pct": round((last / first - 1) * 100, 1) if (first and last) else None,

@@ -5038,11 +5038,16 @@ async function openComplex(name, region){
   const tr=d['매매추이']||[];
   const rows=d['평형별'].map(p=>`<tr style="border-bottom:1px solid var(--line)">
     <td style="padding:8px 6px"><b>${p['평형']}평</b> <span style="color:var(--dim);font-size:11px">${p['전용㎡']}㎡</span></td>
-    <td style="padding:8px 6px;text-align:right">${p['최근매매']?_eok(p['최근매매']):'–'}</td>
+    <td style="padding:8px 6px;text-align:right">${p['최근매매']?_eok(p['최근매매']):'–'}<div style="font-size:10px;color:var(--dim)">${p['매매기준월']||'거래월 미상'} · 마지막 1건</div></td>
     <td style="padding:8px 6px;text-align:right;color:var(--dim)">${p['평단가']}만</td>
     <td style="padding:8px 6px;text-align:right">${p['최근전세']?_eok(p['최근전세']):'–'}</td>
     <td style="padding:8px 6px;text-align:right;font-weight:700;color:${p['전세가율']>=70?'#16a34a':'var(--txt)'}">${p['전세가율']!=null?p['전세가율']+'%':'–'}</td>
     <td style="padding:8px 6px;text-align:right">${p['갭']!=null?_eok(p['갭']):'–'}</td></tr>`).join('');
+  const compRows=d['평형별'].map(p=>{const c=p['비교거래']||{};
+    const price=c['중앙값']!=null?`중앙값 <b>${_eok(c['중앙값'])}</b> · 범위 ${_eok(c['최저'])}~${_eok(c['최고'])} · ${c['건수']}건`:
+      c['상태']==='직거래만'?'중개거래 표본 없음 (직거래만 확인)':c['상태']==='단지미확인'?'단지 식별 미확인 · 비교 보류':'최근 6개월 비교거래 없음';
+    return `<div style="padding:7px 0;border-top:1px solid var(--line)"><b>${p['전용㎡']}㎡</b> · ${price}
+      <div style="font-size:11px;color:var(--dim)">${c['거래월범위']||'거래월 없음'}${c['층범위']?' · 관측 '+c['층범위'][0]+'~'+c['층범위'][1]+'층':''} · 층/상태 미보정${c['상태']==='표본적음'?' · 표본 적음':''}${c['직거래제외']?' · 직거래 '+c['직거래제외']+'건 제외':''}${c['거래유형미상건수']?' · 거래유형 미상 '+c['거래유형미상건수']+'건':''}</div></div>`;}).join('');
   const nQ=name.replace(/'/g,"\\'"), rQ=region.replace(/'/g,"\\'");
   const vsPct=d['지역대비pct'], vsLbl=d['지역대비라벨']||'';
   const vsCol=vsPct==null?'var(--dim)':(vsPct<=-10?'#15803d':vsPct>=10?'#b45309':'var(--txt)');
@@ -5052,7 +5057,7 @@ async function openComplex(name, region){
       ${d['지역저평가도']!=null?`<span style="color:var(--dim)"> (동네 자체는 ${uvVerdict(d['지역저평가도']).label})</span>`:''}
     </div>`:'';
   body.innerHTML=`${d.degraded?'<p style="color:var(--warn)">수집이 지연되어 이전 자료를 표시합니다. 최신 실거래 여부를 확인하세요.</p>':''}${d['단지시그널']?_cxSigBanner(d['단지시그널']):''}<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
-      <div><div style="font-size:12px;color:var(--dim)">최근 평단가</div>
+      <div><div style="font-size:12px;color:var(--dim)">최근 거래월 평균 평단가 · 면적 혼합</div>
         <div style="font-size:24px;font-weight:800;line-height:1.1">${(d['최근평단가']||0).toLocaleString()}<span style="font-size:13px">만/평</span></div>
         ${vsLine}</div>
       <div style="text-align:right;font-size:12px;color:var(--dim)">${d['기간']||''} · ${d['총거래']}건<br>2년 추세 <b style="color:${d['추세pct']>=0?'#16a34a':'#dc2626'}">${d['추세pct']>0?'+':''}${d['추세pct']??'–'}%</b></div></div>
@@ -5065,8 +5070,12 @@ async function openComplex(name, region){
     </div>`:''}
     <div style="font-size:12px;font-weight:700;margin-bottom:6px">평형별 시세 · 전세가율 · 갭</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">평형</th><th style="text-align:right;padding:6px">최근매매</th><th style="text-align:right;padding:6px">평단가</th><th style="text-align:right;padding:6px">최근전세</th><th style="text-align:right;padding:6px">전세가율</th><th style="text-align:right;padding:6px">갭</th></tr></thead>
+      <thead><tr style="color:var(--dim);font-size:11px"><th style="text-align:left;padding:6px">평형</th><th style="text-align:right;padding:6px">마지막 매매</th><th style="text-align:right;padding:6px">조회기간 평균 평단</th><th style="text-align:right;padding:6px">최근전세</th><th style="text-align:right;padding:6px">전세가율</th><th style="text-align:right;padding:6px">갭</th></tr></thead>
       <tbody>${rows}</tbody></table>
+    <details style="margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:700">같은 전용면적 최근 6개월 거래 근거 보기</summary>
+      <div style="font-size:11px;color:var(--dim);margin:8px 0">국토부 신고 거래 · 같은 단지/전용면적 0.1㎡ 기준 · 취소·명시된 직거래 제외. 층·집 상태·거래 시점 보정 전 관측 분포이며 현재 적정가/호가가 아닙니다.</div>${compRows}
+    </details>
     <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 집계 · 전용면적 반올림 일치, 거래월 차이 3개월 이내만 전세가율·차액 비교. 층·상태 미통제. 갭은 필요현금·실투자금이 아닙니다${d['cached']?' · 캐시(7일)':''}</div>
     <div id="cxTxCosts" style="margin-top:12px"></div>
     <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">
