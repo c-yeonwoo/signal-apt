@@ -1708,8 +1708,7 @@ def cycle_history(region: str = "서울"):
     """지역 시기별 경기 국면 타임라인 — 시그널 차트 오버레이용 밴드."""
     from realty_signal.signals import cycle as cyc
     kb = _kb()
-    r = region if not kb.series(region, "sale_change").dropna().empty else "서울"
-    return {"region": r, "bands": cyc.cycle_history(kb, r)}
+    return {"region": region, "bands": cyc.cycle_history(kb, region)}
 
 
 
