@@ -1,4 +1,4 @@
-"""저평가 지역 분석 — 입지(접근성·학군·주거환경) 대비 가격의 헤도닉 잔차.
+"""지역 가격 탐색 — 제한된 입지 대리변수 대비 가격의 회귀 잔차.
 
 데이터 소스:
   - 가격(시군구 평단가): 국토부 실거래가 API (PUBLIC_DATA_KEY)        [키]
@@ -110,7 +110,7 @@ def transit_between(sx: float, sy: float, ex: float, ey: float,
         return None
 
 
-# ---------- 학군: 소상공인 상가정보, 반경 내 교육(P1) 점포수 ----------
+# ---------- 학원 접근 대리변수: 소상공인 상가정보, 반경 내 교육(P1) 점포수 ----------
 def school_count(lat: float, lng: float, radius: int = 1500) -> int | None:
     key = config.public_data_key()
     url = ("http://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
@@ -179,7 +179,8 @@ def _linfit(xs: list[float], ys: list[float]) -> tuple[float, float]:
 def score_undervaluation(rows: list[dict]) -> list[dict]:
     """rows: [{region, price(평단가), accessibility, school, env}] (원점수, 클수록 좋음).
 
-    입지점수 = 가중합(정규화), 적정가 = 입지점수 회귀 예측, 저평가도 = (적정가-실제가)/적정가.
+    입지점수 = 가중합(정규화), 적정가(호환 키) = 제한된 회귀모형의 예측값,
+    저평가도(호환 키) = (모형값-실제가)/모형값. 적정 가격이나 가치평가가 아니다.
     저평가도 높은 순 정렬.
     """
     required = ("accessibility", "school", "env")
@@ -194,7 +195,7 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
         r["입지점수"] = round(
             acc[i] * WEIGHTS["accessibility"] + sch[i] * WEIGHTS["school"] + env[i] * WEIGHTS["env"], 1)
 
-    # 가격은 곱셈적 → 로그가격 회귀(헤도닉 표준). 적정가 항상 양수.
+    # 가격은 곱셈적 → 로그가격 회귀. 이 예측값은 적정가가 아니다.
     import math
 
     xs = [r["입지점수"] for r in rows]
@@ -210,7 +211,7 @@ def score_undervaluation(rows: list[dict]) -> list[dict]:
 
 
 def _interpret_locality(r: dict) -> str:
-    """지역별 저평가 해설 — 입지 강점 + 가격 위치를 1~2문장으로."""
+    """지역별 입지 대리변수와 모형 가격 차이를 1~2문장으로 설명한다."""
     comps = [("업무지구 접근성", r["_acc"]), ("학원 점포 접근", r["_sch"]), ("주거환경", r["_env"])]
     comps.sort(key=lambda x: x[1], reverse=True)
     strong, weak = comps[0], comps[-1]
@@ -221,29 +222,28 @@ def _interpret_locality(r: dict) -> str:
     if strong[1] >= 60 and weak[1] <= 40:
         lead += f" (단, {weak[0]}은(는) 약함)"
 
-    # 가격 위치는 '적정가의 36%' 같은 비율 대신 방향을 말로 먼저 준다.
+    # 제한된 입지 대리변수의 설명 범위로만 해석한다. 실제 할인/프리미엄이 아니다.
     # 처음 보는 사람에게 "저평가 −47%" 류의 이중부정은 읽히지 않는다.
     uv = r["저평가도"]
     if uv >= 100:
-        tail = "입지 점수만으로는 설명이 안 될 만큼 쌉니다 — 개발제한·수요 부족 같은 다른 이유가 있는지 꼭 확인하세요"
+        tail = "모형 설명 범위 밖의 낮은 가격입니다 — 빠진 입지·주택 조건과 실제 거래를 확인하세요"
     elif uv >= 25:
-        tail = "**입지에 비해 많이 싼 편** — 같은 조건이면 가성비 후보입니다"
+        tail = "**제한된 입지 모형값보다 많이 낮습니다** — 저평가나 실제 할인으로 단정할 수 없습니다"
     elif uv >= 8:
-        tail = "입지에 비해 조금 싼 편입니다"
+        tail = "제한된 입지 모형값보다 조금 낮습니다"
     elif uv <= -100:
-        tail = ("교통·학군·환경만으로는 설명이 안 되는 가격대입니다 — "
-                "브랜드·재건축 기대 같은 프리미엄이 크게 붙은 곳이에요")
+        tail = "모형 설명 범위 밖의 높은 가격입니다 — 빠진 입지·주택 조건과 실제 거래를 확인하세요"
     elif uv <= -25:
-        tail = "**입지에 비해 많이 비싼 편** — 프리미엄이 이미 가격에 들어가 있습니다"
+        tail = "**제한된 입지 모형값보다 많이 높습니다** — 과대평가로 단정할 수 없습니다"
     elif uv <= -8:
-        tail = "입지에 비해 조금 비싼 편입니다"
+        tail = "제한된 입지 모형값보다 조금 높습니다"
     else:
-        tail = "입지에 걸맞은 시세입니다"
+        tail = "제한된 입지 모형값 근처입니다"
     return f"{lead}. {tail}."
 
 
 def build_localities(codes: dict, ym_list: list[str], limit: int | None = None) -> list[dict]:
-    """수도권 시군구별 가격·접근성·학군·환경 수집 후 저평가 랭킹.
+    """수도권 시군구별 가격·접근성·교육업종·환경 수집 후 모형 잔차 정렬.
 
     codes: {지역명: 법정동코드10}. 실거래 없는(집계/시 단위) 지역은 자동 제외.
     """

@@ -574,11 +574,11 @@
 <!-- 저평가 탭 -->
 <div id="view-undervalued" style="display:none">
   <div class="sec">
-    <h2 class="page-head">저평가 지역</h2>
-    <p class="page-sub">같은 가격대(급지) 안에서 입지 대비 싼 동네</p>
+    <h2 class="page-head">지역 가격 탐색</h2>
+    <p class="page-sub">제한된 입지 지표로 설명되지 않는 가격 차이를 살펴봅니다. 저평가·적정가 판정은 아닙니다.</p>
     <details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">보는 방법</summary>
       <div style="margin-top:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--dim);line-height:1.7">
-        급지 선택 → 「입지 대비 싼 편」지역부터 → 동네·단지로 드릴다운. 시군구 단위라 구 안 신축·구축 차이는 반영되지 않습니다.
+        가격대 선택 → 모형값보다 낮은 지역부터 → 동네·단지로 드릴다운. 통근 추정·교육업종 점포·환경 대리변수만 사용합니다. 학교 배정·단지 연식·층·브랜드 등은 반영되지 않아 실제 거래 비교가 필요합니다.
       </div></details>
   </div>
   <div class="uvsplit">
@@ -742,7 +742,7 @@
     <h3 style="font-size:16px;margin:26px 0 8px">이렇게 쓰세요</h3>
     <div style="display:flex;flex-direction:column;gap:8px">
       <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 가용자본을 넣고, 예산 안 매수 시그널 지역을 확인합니다.</div>
-      <div class="astep"><b style="color:var(--accent)">2</b> <b>시장·지역</b> — 시그널·저평가를 보고 <b>동네 리포트</b>로 임장 전 맥락을 파악한 뒤 ★로 관심 등록합니다.</div>
+      <div class="astep"><b style="color:var(--accent)">2</b> <b>시장·지역</b> — 시그널·지역 가격 탐색을 보고 <b>동네 리포트</b>로 임장 전 맥락을 파악한 뒤 ★로 관심 등록합니다.</div>
       <div class="astep"><b style="color:var(--accent)">3</b> <b>매물</b> — 전체·급매·청약에서 관심 동네를 좁힙니다. 경매·재건축·갈아타기는 더보기에서.</div>
       <div class="astep"><b style="color:var(--accent)">4</b> <b>내 집찾기</b> — 시그널맵·AI 리포트로 조건을 정리하고, 주간 변동을 추적합니다.</div>
     </div>
@@ -1415,22 +1415,22 @@ window.addEventListener('resize', () => {
 const SIG_KO={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도'};
 const badge = s => `<span class="badge ${s}">${SIG_KO[s]||s}</span>`;
 const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
-// 저평가도(+면 입지 대비 쌈, −면 비쌈)를 사람이 읽는 문장으로.
+// 호환 키 '저평가도'는 제한된 입지 회귀모형의 잔차. 실제 할인/적정가가 아니다.
 // "저평가 -47%" 는 이중부정이라 아무도 못 읽는다 — 방향은 단어로, 크기는 절대값으로 쓴다.
 // |값| 100 이상은 모델이 설명 못 하는 구간(브랜드·재건축 프리미엄 미반영)이라 숫자를 단정하지 않는다.
 function uvVerdict(uv){
-  if(uv==null || isNaN(uv)) return {label:'자료 없음', color:'#94a3b8', phrase:'입지 대비 가격을 아직 계산하지 못했습니다', beyond:false};
+  if(uv==null || isNaN(uv)) return {label:'자료 없음', color:'#94a3b8', phrase:'입지 모형의 가격 차이를 아직 계산하지 못했습니다', beyond:false};
   const a = Math.round(Math.abs(uv));
   if(a >= 100) return uv>0
-    ? {label:'설명 밖 (너무 쌈)', color:'#16a34a', beyond:true,
-       phrase:'입지 점수만으로는 설명이 안 되는 저가입니다 — 개발제한·수요 부족 같은 다른 이유를 꼭 확인하세요'}
-    : {label:'설명 밖 (프리미엄)', color:'#7c3aed', beyond:true,
-       phrase:'교통·학군·환경만으로는 설명이 안 되는 가격대입니다 — 브랜드·재건축 기대 같은 프리미엄이 붙은 곳이에요'};
-  if(a < 5)  return {label:'시세 수준', color:'#64748b', beyond:false, phrase:'입지에 걸맞은 시세입니다'};
-  if(uv > 0) return {label:`입지 대비 ${a}% 싼 편`, color:'#16a34a', beyond:false,
-                     phrase:`입지가 비슷한 지역들보다 ${a}% 저렴합니다`};
-  return {label:`입지 대비 ${a}% 비싼 편`, color:'#dc2626', beyond:false,
-          phrase:`입지가 비슷한 지역들보다 ${a}% 비쌉니다`};
+    ? {label:'모형 설명 밖 (낮음)', color:'#16a34a', beyond:true,
+       phrase:'제한된 입지 모형으로 설명되지 않는 낮은 가격입니다. 실제 할인으로 단정할 수 없습니다'}
+    : {label:'모형 설명 밖 (높음)', color:'#7c3aed', beyond:true,
+       phrase:'제한된 입지 모형으로 설명되지 않는 높은 가격입니다. 과대평가로 단정할 수 없습니다'};
+  if(a < 5)  return {label:'모형값 근처', color:'#64748b', beyond:false, phrase:'제한된 입지 모형값 근처입니다. 적정가 판정이 아닙니다'};
+  if(uv > 0) return {label:`모형보다 ${a}% 낮음`, color:'#16a34a', beyond:false,
+                     phrase:`제한된 입지 모형값보다 ${a}% 낮습니다. 실제 할인율은 아닙니다`};
+  return {label:`모형보다 ${a}% 높음`, color:'#dc2626', beyond:false,
+          phrase:`제한된 입지 모형값보다 ${a}% 높습니다. 과대평가 판정이 아닙니다`};
 }
 // 목록·요약에 쓰는 짧은 배지
 function uvPill(uv, extra){
@@ -1498,7 +1498,7 @@ const _LISTING_MORE=['signal','undervalued','report','auction','redev','tradeup'
 let _listingMoreOpen=false;
 const _GROUP_LABEL={browse:'후보 탐색', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
-  signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'저평가',d:'지역 랭킹'},
+  signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'가격 탐색',d:'지역 모형 차이'},
   all:{l:'전체',d:'기회도순'}, quicksale:{l:'급매',d:'급매·찐매물'},
   presale:{l:'청약',d:'신규 분양'}, auction:{l:'경매',d:'시세 이하 낙찰'},
   redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
@@ -2727,7 +2727,7 @@ const _GLOSSARY=[
   ["매수우위지수","매수·매도 심리(100 기준). 높으면 매수자가 많음.","앱"],
   ["전세수급지수","전세 수요/공급(100 기준). 높으면 전세난→매매 전이 압력.","앱"],
   ["주택구입부담지수","중위소득 가구의 중간가 주택 구입 부담. 높을수록 비쌈.","앱"],
-  ["저평가도","교통·학군·환경 점수로 계산한 '이 정도 입지면 보통 이 가격'과 실제 시세의 차이. +면 그보다 싼 편, −면 비싼 편. 브랜드·재건축 기대는 반영되지 않아 강남·과천처럼 프리미엄이 큰 곳은 크게 '비싼 편'으로 나온다.","앱"],
+  ["입지 모형 가격 차이","내부 호환 이름은 저평가도이지만 제한적 입지 회귀모형의 가격 잔차입니다. 통근 추정·교육업종 점포·환경 대리변수만 사용하며 학교 배정·단지/주택 조건은 반영하지 않습니다. 할인율·적정가 판정이 아닙니다.","앱"],
   ["급지","지역/단지 등급(입지·시세 순위). 시군구는 수도권 평단가 A~E, 단지는 지역 내 1~5.","앱"],
   ["경기 국면","KB 주간 매매증감률 26주 흐름을 회복·상승·후퇴·침체·관망으로 분류한 후행 지표.","앱"],
   ["입주물량","향후 입주 예정 물량. 많으면 공급과잉(가격 압력).","앱"],
@@ -3870,8 +3870,8 @@ async function loadUndervalued(){
   if(!d.ready || !d.listings.length){
     document.getElementById('uvGroups').innerHTML='';
     empty.textContent = d.reason==='source_permission_required'
-      ? '입지 기반 저평가 분석은 교통 데이터의 분석·저장 이용 범위 확인 전이라 표시하지 않습니다. 시세와 실제 거래는 다른 화면에서 확인할 수 있습니다.'
-      : '확인된 교통·교육업종·환경 자료가 부족해 저평가 수치를 만들지 않았습니다.';
+      ? '지역 가격 탐색은 교통 데이터의 분석·저장 이용 범위 확인 전이라 표시하지 않습니다. 시세와 실제 거래는 다른 화면에서 확인할 수 있습니다.'
+      : '확인된 교통·교육업종·환경 자료가 부족해 모형 가격 차이를 만들지 않았습니다.';
     if(uvChart) uvChart.clear(); return;
   }
   empty.textContent='';
@@ -3937,7 +3937,7 @@ let _uvGradeStats={};
 const _UV_PYEONG = 25.7;                    // 84㎡(34평) 전용 → 분양평형 환산 기준. 앱 공통값.
 const _uvOpen = {A:true, B:false, C:false, D:false, 기타:false};   // 급지 접기 상태(상급지만 펼친 채 시작)
 function toggleUvGrade(g){ _uvOpen[g] = !_uvOpen[g]; renderUvGroups(); }
-// 지역 급지별 그룹 → 각 급지 안에서 '입지 대비 싼 순' 추천. 급지를 접었다 펼치고, 지역에서 단지까지 내려간다.
+// 지역 가격대별 그룹 → 제한된 모형값 대비 낮은 순의 탐색용 정렬.
 function renderUvGroups(){
   const host=document.getElementById('uvGroups'); if(!host) return;
   const buyOnly=document.getElementById('uvBuyOnly')?.checked;
@@ -3962,7 +3962,7 @@ function renderUvGroups(){
            title="눌러서 이 가격대의 지역 목록을 펼치거나 접습니다">
         <span style="font-size:15px;font-weight:800;color:${gd.col}">${gd.label}</span>
         <span style="font-size:12px;color:var(--dim)">${meta}</span>
-        ${cheap?`<span class="uv-pill" style="background:#16a34a18;color:#16a34a;border:1px solid #16a34a44">입지 대비 싼 곳 ${cheap}</span>`:''}
+        ${cheap?`<span class="uv-pill" style="background:#16a34a18;color:#16a34a;border:1px solid #16a34a44">모형보다 낮은 곳 ${cheap}</span>`:''}
         <span class="uvg-caret">${open?'접기 ▲':'펼쳐보기 ▼'}</span></div>
       <div class="uvg-body" ${open?'':'hidden'}>${
         arr.map((r,i)=>uvRow(r, i, arr.length, gd)).join('')}</div></div>`;
@@ -3982,15 +3982,15 @@ function uvRow(r, idx, total, gd){
       <b style="font-size:15px">${r.region}</b>
       ${r['시그널']?badge(r['시그널']):''}
       ${uvPill(uv)}
-      <span style="font-size:11.5px;color:var(--dim)">같은 가격대 ${total}곳 중 <b style="color:var(--txt)">${idx+1}번째</b>로 저렴</span>
+      <span style="font-size:11.5px;color:var(--dim)">같은 가격대 ${total}곳 중 모형 차이 <b style="color:var(--txt)">${idx+1}번째</b> · 실제 저가 순위 아님</span>
       <button class="chip" style="margin-left:auto"
         onclick="event.stopPropagation();expandUvComplexes('${r.region}', this)">이 지역 단지 보기 ▾</button>
     </div>
     <div class="uv-row-sub">
       <span>34평 기준 <b style="color:var(--txt);font-size:13.5px">약 ${_uvEok(r.price)}</b>
         <span style="color:#9ca3af">(평당 ${won(r.price)})</span></span>
-      <span title="교통·학군·환경을 0~100으로 점수화. 높을수록 살기 편한 입지">입지 <b style="color:var(--txt)">${ipji}점</b> ${bar}</span>
-      <span title="교통·학군·환경 점수를 이용한 모형 추정이며 감정평가가 아닙니다">입지 모형 추정 평당 ${won(r['적정가'])}</span>
+      <span title="통근 추정·교육업종 점포·환경 대리변수를 0~100으로 점수화. 학군·생활 품질을 직접 측정하지 않습니다">입지 대리점수 <b style="color:var(--txt)">${ipji}점</b> ${bar}</span>
+      <span title="제한된 변수의 회귀모형값. 적정가·감정평가가 아닙니다">입지 모형값 평당 ${won(r['적정가'])}</span>
     </div>
     <div class="uv-cx" style="display:none"></div>
   </div>`;
@@ -4042,13 +4042,13 @@ function drawUvScatter(rows){
   const line = rows.map(r=>[r['입지점수'], r['적정가']]).sort((a,b)=>a[0]-b[0]);
   uvChart.setOption({
     tooltip:{formatter:p=> p.seriesType==='scatter'
-      ? `<b>${p.data.name}</b><br/>입지 ${p.data.value[0]}점 · 평당 ${won(p.data.value[1])} (34평 약 ${_uvEok(p.data.value[1])})`
+      ? `<b>${p.data.name}</b><br/>입지 대리점수 ${p.data.value[0]}점 · 평당 ${won(p.data.value[1])} (34평 약 ${_uvEok(p.data.value[1])})`
         + `<br/>${uvVerdict(p.data.uv).phrase}`
-      : '점선 = 이 정도 입지면 보통 이 가격'},
+      : '점선 = 제한된 입지 회귀모형값 (적정가 아님)'},
     grid:{left:64, right:24, top:44, bottom:44},
     graphic:[{type:'text', left:64, top:6, style:{
-      text:'점선보다 아래 = 입지에 비해 싼 편(초록) · 위 = 비싼 편(빨강)', fill:'#64748b', fontSize:11}}],
-    xAxis:{name:'살기 편한 정도(입지 점수) →', nameLocation:'middle', nameGap:26, type:'value', min:0, max:100, splitLine:{lineStyle:{opacity:.08}}},
+      text:'점선 아래 = 모형보다 낮음(초록) · 위 = 높음(빨강) · 할인 판정 아님', fill:'#64748b', fontSize:11}}],
+    xAxis:{name:'입지 대리점수 →', nameLocation:'middle', nameGap:26, type:'value', min:0, max:100, splitLine:{lineStyle:{opacity:.08}}},
     yAxis:{name:'평당 가격(만원)', type:'value', splitLine:{lineStyle:{opacity:.08}}},
     dataZoom:[ {type:'inside', xAxisIndex:0, filterMode:'none'},
                {type:'inside', yAxisIndex:0, filterMode:'none'} ],   // 스크롤/드래그로 확대·축소
@@ -4131,7 +4131,7 @@ function rowEl(r, lv){
 function gwonLabel(src){
   if(!src) return '';
   const s = src.replace('14개구','권').replace('11개구','권');
-  return ` <span class="gwon" title="KB는 전세수급·매수우위를 ${src} 단위로만 발표합니다. 이 두 지표는 ${s} 공통값이며, 구별 차별화는 매매모멘텀·입주물량·저평가·급지에서 나옵니다.">${s} 공통</span>`;
+  return ` <span class="gwon" title="KB는 전세수급·매수우위를 ${src} 단위로만 발표합니다. 이 두 지표는 ${s} 공통값이며, 구별 차별화는 매매모멘텀·입주물량·입지 모형 가격 차이·급지에서 나옵니다.">${s} 공통</span>`;
 }
 function header(cls, key, label, count, lv){
   const h = document.createElement('div'); h.className = cls;
@@ -4614,7 +4614,7 @@ async function openNbhd(region){
 function _nbSec(title, inner){ return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--dim);margin-bottom:7px">${title}</div>${inner}</div>`; }
 function _nbStat(label, val){ return `<div style="display:inline-flex;flex-direction:column;gap:1px;min-width:92px;padding:8px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px"><span style="font-size:11px;color:var(--dim)">${label}</span><span style="font-weight:700;font-size:14px">${val}</span></div>`; }
 function _nbDiffRow(it){
-  const lab={시그널:'시그널',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',평단가:'평단가',저평가도:'저평가도',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
+  const lab={시그널:'시그널',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',평단가:'평단가',저평가도:'입지 모형 차이',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
   const money=v=>v==null?'–':(typeof v==='number'&&v>=1000?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
   let arrow='', col='var(--dim)';
   if(it.key==='시그널' && it.delta!=null){ arrow=it.delta>0?' ▲':(it.delta<0?' ▼':''); col=it.delta>0?'var(--sig-buy)':(it.delta<0?'var(--sig-sell)':'var(--dim)'); }
@@ -4645,7 +4645,7 @@ function renderNbhd(d){
       ${(d['규제지역']||[]).map(x=>`<span class="pill" style="border-color:var(--danger);color:var(--danger)">${x}</span>`).join('')}</div>
      ${d['해설']?`<div style="font-size:12.5px;line-height:1.55;color:var(--txt)">${(d['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`:''}`);
   h+=_nbSec('가격 · 거래', `<div style="display:flex;gap:8px;flex-wrap:wrap">
-     ${_nbStat('평단가', money(d['평단가']))}${d['저평가도']!=null?_nbStat('입지 대비', uvVerdict(d['저평가도']).label):''}${d['공급압력']!=null?_nbStat('입주물량', d['공급압력']+'x'):''}
+     ${_nbStat('평단가', money(d['평단가']))}${d['저평가도']!=null?_nbStat('입지 모형 차이', uvVerdict(d['저평가도']).label):''}${d['공급압력']!=null?_nbStat('입주물량', d['공급압력']+'x'):''}
      ${vol['거래량비']!=null?_nbStat('거래량비', vol['거래량비']+'x'):''}</div>
      ${vol.spark&&vol.spark.length>=2?`<div style="margin-top:8px">${_spark(vol.spark)}</div><div style="font-size:10px;color:var(--dim);margin-top:4px">월별 매매 거래건수(최근)</div>`:''}`);
   const m=d['매물']||{};
@@ -4694,7 +4694,7 @@ function renderNbhd(d){
   h+=`<details style="margin:4px 0 14px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg)">
     <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)">더 보기 · 수급·입지·임장체크</summary>
     <div style="margin-top:12px">${more}</div></details>`;
-  h+=`<div style="border-top:1px solid var(--line);padding-top:12px"><span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.region} 동네 어때? 살기·교통·학군·투자관점 종합해서 근거로 알려줘.')">이 동네 닉에게 물어보기</span></div>`;
+  h+=`<div style="border-top:1px solid var(--line);padding-top:12px"><span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.region} 동네의 확인된 교통·교육업종·환경 근거와 투자 위험을 구분해 알려줘. 배정 학군 자료가 없으면 학군은 미확인이라고 말해줘.')">이 동네 닉에게 물어보기</span></div>`;
   b.innerHTML=h;
 }
 async function nbSaveCheck(region){
@@ -4712,7 +4712,7 @@ async function nbhdCompare(){
   catch(e){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교를 불러오지 못했습니다.</div>'; return; }
   if(!d.ok){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교할 지역을 찾지 못했습니다.</div>'; return; }
   const money=v=>v==null?'–':(typeof v==='number'&&v>=100?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
-  const lab={시그널:'시그널',급지:'급지',평단가:'평단가',저평가도:'저평가도',입지점수:'입지점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
+  const lab={시그널:'시그널',급지:'급지',평단가:'평단가',저평가도:'입지 모형 차이',입지점수:'입지 대리점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
   const rows=(d.rows||[]).map(r=>{
     const va=r.key==='시그널'?badge(r.a):(r.key==='평단가'?money(r.a):(r.a??'–'));
     const vb=r.key==='시그널'?badge(r.b):(r.key==='평단가'?money(r.b):(r.b??'–'));
@@ -5060,7 +5060,7 @@ async function openComplex(name, region){
   const vsLine=d['지역평단가']?`<div style="font-size:12px;margin-top:4px;color:${vsCol}">
       ${region} 중위 ${(d['지역평단가']||0).toLocaleString()}만/평 대비
       <b>${vsPct>0?'+':''}${vsPct??'–'}%</b>${vsLbl?` · ${vsLbl}`:''}
-      ${d['지역저평가도']!=null?`<span style="color:var(--dim)"> (동네 자체는 ${uvVerdict(d['지역저평가도']).label})</span>`:''}
+      ${d['지역저평가도']!=null?`<span style="color:var(--dim)"> (지역 모형 가격 차이 ${uvVerdict(d['지역저평가도']).label})</span>`:''}
     </div>`:'';
   body.innerHTML=`${d.degraded?'<p style="color:var(--warn)">수집이 지연되어 이전 자료를 표시합니다. 최신 실거래 여부를 확인하세요.</p>':''}${d['단지시그널']?_cxSigBanner(d['단지시그널']):''}<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
       <div><div style="font-size:12px;color:var(--dim)">최근 거래월 평균 평단가 · 면적 혼합</div>
@@ -5258,7 +5258,7 @@ function openSources(){
     ['주택구입부담지수 (구매력)','한국주택금융공사 K-HAI','분기'],
     ['기준금리 / 대출금리','한국은행','기준금리 수시 · 대출금리 월'],
     ['입주물량 (공급압력)','KB 데이터허브 공급 통계','월·연'],
-    ['저평가도·입지점수·급지','자체 산출 (헤도닉 회귀 + 국토부 실거래)','실거래 갱신 시'],
+    ['입지 모형 가격 차이·대리점수·가격 급지','자체 산출 (제한된 회귀모형 + 국토부 실거래; 적정가 아님)','실거래 갱신 시'],
     ['정비구역·재건축 단계','서울 열린데이터광장 (정비사업 현황·추진경과)','부정기 (지자체 고시)'],
     ['단지 전세가율·갭','국토부 실거래 (매매+전세)','수시'],
   ];
