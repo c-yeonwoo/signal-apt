@@ -256,7 +256,10 @@ def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) ->
         assumed = True
     else:
         assumed = False
-    if not bid:
+    if bid is None or bid <= 0:
+        if bid is not None and bid < 0:
+            return {"상태": "invalid_assumption", "사유": ["낙찰가가 0보다 커야 합니다."],
+                    "낙찰가": None, "총현금": None, "steps": []}
         return {"상태": rec["상태"], "사유": rec["사유"], "낙찰가": None,
                 "총현금": None, "steps": []}
     base_day = _date_of(lst.낙찰일) or _date_of(lst.입찰기일) or date.today()
@@ -264,10 +267,26 @@ def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) ->
     보증금 = round((lst.최저매각가 or lst.감정가 * _floor_rate(lst)) * BOND_RATE)
     등기비 = round(bid * pp["취득세율"] + pp["법무비"] / 10000)
     명도비 = round(lst.전용면적 * pp["㎡_평"] * pp["명도_평당"] / 10000)
-    대출 = round(bid * (lst.대출비율 if lst.대출비율 is not None else pp["대출비율"]))
+    from math import isfinite
+    try:
+        loan_ratio = float(lst.대출비율 if lst.대출비율 is not None else pp["대출비율"])
+    except (TypeError, ValueError):
+        loan_ratio = float("nan")
+    if not isfinite(loan_ratio) or not 0 <= loan_ratio <= 1:
+        return {"상태": "invalid_assumption", "사유": ["대출비율은 0~1 범위여야 합니다."],
+                "낙찰가": None, "총현금": None, "steps": []}
+    # 보증금은 이미 납부한 것으로 보고 잔금에서 쓸 수 있는 가정 대출만 표시한다.
+    대출 = min(round(bid * loan_ratio), max(0, round(bid - 보증금)))
     잔금 = max(0, round(bid - 보증금 - 대출))
-    money = {0: -보증금, 44: -(잔금 + 등기비), 75: -(명도비 + lst.미납관리비),
+    보유이자 = round(대출 * (lst.대출금리 if lst.대출금리 is not None else pp["대출금리"])
+                 / 12 * pp["보유개월"])
+    money = {0: -(보증금 + lst.대리입찰비), 44: -(잔금 + 등기비),
+             75: -(명도비 + lst.미납관리비),
              105: -round(lst.수리비)}
+    # 인수보증금 반환 시점과 보유이자 지급 시점은 사건·대출별로 달라 날짜를 단정하지 않는다.
+    undated = (round(lst.인수보증금) + 보유이자) if lst.인수보증금 is not None else None
+    assumed_cash = (sum(-x for x in money.values()) + undated) if undated is not None else None
+    no_loan_cash = (assumed_cash + 대출 - 보유이자) if assumed_cash is not None else None
     steps = []
     for d, title, todo in _STEPS:
         amt = money.get(d)
@@ -277,11 +296,17 @@ def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) ->
     return {
         "기준일": base_day.isoformat(), "낙찰가": round(bid), "추정입찰가": assumed,
         "보증금": 보증금, "경락잔금대출": 대출, "잔금": 잔금,
+        "대출상태": "미승인_가정", "대출확인필요": True, "대출비율가정": loan_ratio,
         "등기비": 등기비, "명도비": 명도비,
-        "총현금": (round(보증금 + 잔금 + 등기비 + 명도비 + lst.미납관리비 + lst.수리비
-                       + lst.인수보증금) if lst.인수보증금 is not None else None),
-        "사유": (["인수 보증금이 미확정이므로 총현금은 계산하지 않습니다."]
-               if lst.인수보증금 is None else []),
+        "대리입찰비": round(lst.대리입찰비), "보유이자": 보유이자,
+        "날짜미정현금": undated,
+        "가정시필요현금": assumed_cash, "무대출필요현금": no_loan_cash,
+        "총현금": assumed_cash,  # 기존 API 호환: 승인된 대출 기준의 확정 현금이 아님
+        "사유": (["대출비율은 승인액이 아닌 가정입니다. 입찰 전 은행 심사와 잔금일 자금 조달을 확인하세요."]
+               + (["인수 보증금이 미확정이므로 필요현금 합계를 계산하지 않습니다."]
+                  if lst.인수보증금 is None else [])
+               + (["인수보증금·보유이자는 지급 시점이 달라 일정표 밖 예비현금으로 표시합니다."]
+                  if undated else [])),
         "steps": steps,
     }
 

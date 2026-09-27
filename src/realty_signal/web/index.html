@@ -5624,9 +5624,10 @@ async function openPlan(id,name){
   const p=d.plan; if(!p){ body.innerHTML='<div style="color:var(--dim)">플랜을 만들지 못했습니다.</div>'; return; }
   if(!p.steps.length){ body.innerHTML=`<div style="color:#b45309;font-size:13px">입찰가를 제시할 수 없어 플랜을 만들지 않았습니다.<br>${(p['사유']||[]).join('<br>')}</div>`; return; }
   const sum=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-    ${[['낙찰가',p['낙찰가']],['보증금(10%)',p['보증금']],['경락잔금대출',p['경락잔금대출']],['잔금',p['잔금']],['총 현금',p['총현금']]]
+    ${[['낙찰가 가정',p['낙찰가']],['입찰 보증금',p['보증금']],['대출 가정액 · 미승인',p['경락잔금대출']],['대출 가정 잔금',p['잔금']],['대출 가정 필요현금',p['가정시필요현금']],['무대출 필요현금',p['무대출필요현금']]]
       .map(([t,v])=>`<div class="scard" style="min-width:106px"><div style="color:var(--dim);font-size:11px">${t}</div>
         <div style="font-size:16px;font-weight:700">${won(v)}</div></div>`).join('')}</div>
+    <div style="font-size:11px;color:#b45309;margin-bottom:10px">대출비율 ${Math.round((p['대출비율가정']||0)*100)}%는 예시일 뿐 승인액이 아닙니다. 필요현금에는 대리입찰비·보유이자·확인된 인수보증금이 포함되며, 날짜가 미정인 비용은 아래 일정에 배정하지 않았습니다.</div>
     ${p['추정입찰가']?'<div style="font-size:11px;color:#ea580c;margin-bottom:10px">아직 낙찰 전이라 검토용 상한으로 계산했습니다.</div>':''}
     ${(p['사유']||[]).length?`<div style="font-size:11px;color:#ea580c;margin-bottom:10px">${p['사유'].join('<br>')}</div>`:''}`;
   const steps=p.steps.map(s=>`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
