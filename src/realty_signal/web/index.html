@@ -5052,6 +5052,8 @@ async function openComplex(name, region){
       c['상태']==='직거래만'?'중개거래 표본 없음 (직거래만 확인)':c['상태']==='단지미확인'?'단지 식별 미확인 · 비교 보류':'최근 6개월 비교거래 없음';
     return `<div style="padding:7px 0;border-top:1px solid var(--line)"><b>${p['전용㎡']}㎡</b> · ${price}
       <div style="font-size:11px;color:var(--dim)">${c['거래월범위']||'거래월 없음'}${c['층범위']?' · 관측 '+c['층범위'][0]+'~'+c['층범위'][1]+'층':''} · 층/상태 미보정${c['상태']==='표본적음'?' · 표본 적음':''}${c['직거래제외']?' · 직거래 '+c['직거래제외']+'건 제외':''}${c['거래유형미상건수']?' · 거래유형 미상 '+c['거래유형미상건수']+'건':''}</div></div>`;}).join('');
+  const quoteOpts=d['평형별'].filter(p=>Number.isFinite(+p['전용㎡'])&&+p['전용㎡']>0)
+    .map(p=>`<option value="${p['전용㎡']}">전용 ${p['전용㎡']}㎡ · ${p['평형']}평</option>`).join('');
   const nQ=name.replace(/'/g,"\\'"), rQ=region.replace(/'/g,"\\'");
   const vsPct=d['지역대비pct'], vsLbl=d['지역대비라벨']||'';
   const vsCol=vsPct==null?'var(--dim)':(vsPct<=-10?'#15803d':vsPct>=10?'#b45309':'var(--txt)');
@@ -5080,6 +5082,16 @@ async function openComplex(name, region){
       <summary style="cursor:pointer;font-size:12px;font-weight:700">같은 전용면적 최근 6개월 거래 근거 보기</summary>
       <div style="font-size:11px;color:var(--dim);margin:8px 0">국토부 신고 거래 · 같은 단지/전용면적 0.1㎡ 기준 · 취소·명시된 직거래 제외. 층·집 상태·거래 시점 보정 전 관측 분포이며 현재 적정가/호가가 아닙니다.</div>${compRows}
     </details>
+    <details style="margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:700">내가 확인한 호가와 비교하기</summary>
+      <p style="font-size:11px;color:var(--dim);margin:7px 0">직접 확인한 호가만 입력하세요. 입력값은 저장하지 않으며 거래 표본에 섞지 않습니다.</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end">
+        <label style="font-size:11px">전용면적<br><select id="cxQuoteArea" class="ctrl">${quoteOpts}</select></label>
+        <label style="font-size:11px">호가(만원)<br><input id="cxQuoteAmount" type="number" min="1" step="100" inputmode="numeric" placeholder="예: 80000" style="width:120px"></label>
+        <button id="cxQuoteBtn" type="button" class="btn">거래 근거와 비교</button>
+      </div>
+      <div id="cxQuoteResult" role="status" aria-live="polite" style="font-size:12px;line-height:1.6;margin-top:8px"></div>
+    </details>
     <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 집계 · 전용면적 반올림 일치, 거래월 차이 3개월 이내만 전세가율·차액 비교. 층·상태 미통제. 갭은 필요현금·실투자금이 아닙니다${d['cached']?' · 캐시(7일)':''}</div>
     <div id="cxTxCosts" style="margin-top:12px"></div>
     <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">
@@ -5094,6 +5106,27 @@ async function openComplex(name, region){
       <div style="font-size:11px;color:var(--dim);margin-top:6px">유튜브·블로그를 모아 요약합니다. 누를 때만 불러오며 결과는 30일 캐시됩니다.</div>
     </div>
     <div id="cxAgents" style="margin-top:6px"></div>`;
+  body.querySelector('#cxQuoteBtn').onclick=async()=>{
+    const result=body.querySelector('#cxQuoteResult');
+    const asking=Number(body.querySelector('#cxQuoteAmount').value);
+    const exclusive_m2=Number(body.querySelector('#cxQuoteArea').value);
+    if(!Number.isFinite(asking)||asking<=0){result.textContent='0보다 큰 호가를 입력해 주세요.';return;}
+    result.textContent='비교 근거 확인 중…';
+    try{
+      const resp=await fetch(`/api/complex/${encodeURIComponent(region)}/${encodeURIComponent(name)}/quote-check`,
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asking,exclusive_m2})});
+      const q=await resp.json();
+      if(!resp.ok){result.textContent=q.detail||'입력값을 확인해 주세요.';return;}
+      if(q['상태']!=='관측비교'){
+        result.innerHTML=`<span style="color:#b45309">비교 보류 · ${esc(q['이유']||'근거 확인 필요')}</span>`;return;
+      }
+      const delta=q['호가차액'];
+      const dir=delta<0?'낮음':delta>0?'높음':'같음';
+      result.innerHTML=`입력 호가 <b>${_eok(q['입력호가'])}</b> · 같은 면적 거래 ${q['표본수']}건 중앙값 <b>${_eok(q['중앙값'])}</b><br>
+        산술 차이 <b>${Math.abs(delta).toLocaleString()}만 (${Math.abs(q['호가차이율'])}%) ${dir}</b> · 거래월 ${esc(q['거래월범위']||'미상')}<br>
+        <span style="color:var(--dim)">층·집 상태·시점·취득비용 미보정. 차이가 곧 할인율이나 매수 권고는 아닙니다.</span>`;
+    }catch(e){result.textContent='비교 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.';}
+  };
   loadComplexAgents(name, region);
   loadCxBuilding(name, region);
   loadCxLoanScen(d);
