@@ -1,6 +1,13 @@
 from realty_signal.auction import Listing, _p, breakdown, enrich, recommend, table
 
 
+def verified(lst):
+    lst.전용면적 = 59
+    lst.인수보증금 = 0
+    lst.권리분석 = {"조사완료": True, "분석": {"확인필요": False, "인수합계": 0}}
+    return lst
+
+
 def test_breakdown_matches_excel_model():
     # 시세 3.4억, 입찰가 2.8억, 전용 59㎡, 대출 70%/5%, 6개월 보유
     lst = Listing(단지명="t", region="서울", 감정가=340000000/10000, 시세=340000000/10000,
@@ -18,7 +25,7 @@ def test_breakdown_matches_excel_model():
 
 
 def test_table_spans_from_floor_rate():
-    lst = Listing(감정가=10000, 최저매각가=6400, 시세=12000, region="서울")
+    lst = verified(Listing(감정가=10000, 최저매각가=6400, 시세=12000, region="서울"))
     t = table(lst, _p(), span=0.30, step=0.01)
     assert abs(t[0]["낙찰가율"] - 64.0) < 0.01          # 최저가율 = 6400/10000
     assert t[0]["입찰가"] < t[-1]["입찰가"]              # 낮은→높은 입찰가
@@ -27,10 +34,11 @@ def test_table_spans_from_floor_rate():
 
 
 def test_recommend_picks_highest_bid_meeting_target():
-    lst = Listing(감정가=10000, 최저매각가=6400, 시세=12000, region="서울")
+    lst = verified(Listing(감정가=10000, 최저매각가=6400, 시세=12000, region="서울"))
     p = _p({"목표시세차익률": 0.10})
     rec = recommend(lst, p)
     assert rec["시세차익률"] >= 10.0
+    assert rec["상태"] == "conditional_bid"
     # 권장보다 1%p 높은 입찰가는 목표 미달이어야(=최대 입찰가)
     rows = table(lst, p)
     higher = [r for r in rows if r["입찰가"] > rec["입찰가"]]
@@ -40,10 +48,25 @@ def test_recommend_picks_highest_bid_meeting_target():
 def test_enrich_priority(tmp_path, monkeypatch):
     import realty_signal.auction as au
     monkeypatch.setattr(au, "AUCTION_FILE", tmp_path / "a.json")
-    a = Listing(단지명="A", region="서울", 감정가=10000, 최저매각가=6400, 시세=14000)
-    b = Listing(단지명="B", region="대구", 감정가=10000, 최저매각가=6400, 시세=14000)
+    a = verified(Listing(단지명="A", region="서울", 감정가=10000, 최저매각가=6400, 시세=14000))
+    b = verified(Listing(단지명="B", region="대구", 감정가=10000, 최저매각가=6400, 시세=14000))
     rows = enrich([b, a], {"서울": "STRONG_BUY", "대구": "BUY"})
     assert rows[0]["단지명"] == "A"  # STRONG_BUY 우선
+
+
+def test_no_bid_when_floor_misses_target():
+    lst = verified(Listing(감정가=100000, 최저매각가=90000, 시세=80000))
+    rec = recommend(lst, _p())
+    assert rec["상태"] == "no_bid" and rec["입찰가"] is None
+    assert rec["최저가시세차익률"] < 10
+
+
+def test_missing_evidence_does_not_use_appraisal_as_market():
+    lst = Listing(감정가=100000, 최저매각가=60000, 전용면적=59)
+    rec = recommend(lst, _p())
+    assert rec["상태"] == "needs_review" and rec["입찰가"] is None
+    assert any("시세" in reason for reason in rec["사유"])
+    assert table(lst, _p()) == []
 
 
 def test_import_csv(tmp_path, monkeypatch):

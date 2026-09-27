@@ -76,12 +76,15 @@ def _clean_tenants(rows: list[dict] | None) -> list[dict]:
     out = []
     for t in rows or []:
         moved = _d(t.get("전입일"))
-        deposit = float(t.get("보증금") or 0)
-        if not moved and not deposit:
+        deposit = float(t["보증금"]) if t.get("보증금") not in (None, "") else None
+        if not moved and deposit is None and not any(t.get(k) for k in ("이름", "점유", "월세")):
             continue
+        claim = t.get("배당요구")
+        if isinstance(claim, str):
+            claim = {"true": True, "false": False}.get(claim.strip().lower())
         out.append({
             "이름": (t.get("이름") or "")[:30], "전입일": moved,
-            "확정일자": _d(t.get("확정일자")), "배당요구": bool(t.get("배당요구")),
+            "확정일자": _d(t.get("확정일자")), "배당요구": claim if isinstance(claim, bool) else None,
             "보증금": deposit, "월세": float(t.get("월세") or 0),
             "점유": t.get("점유") is not False,
         })
@@ -119,7 +122,7 @@ def _judge_tenant(t: dict, base: dict | None) -> dict:
     """대항력 = 전입 다음날 0시 발생 → 전입일이 말소기준일보다 **앞서야** 한다."""
     out = dict(t)
     if base is None or not t["전입일"]:
-        out.update({"대항력": None, "판정": "확인필요", "인수금액": 0,
+        out.update({"대항력": None, "판정": "확인필요", "인수금액": None,
                     "사유": "말소기준권리나 전입일이 없어 대항력을 판단할 수 없습니다."})
         return out
     has = t["전입일"] < base["일자"]
@@ -129,16 +132,23 @@ def _judge_tenant(t: dict, base: dict | None) -> dict:
                     "사유": f"전입 {t['전입일']}이 말소기준({base['일자']}) 이후라 대항력이 없습니다. "
                             "배당에서 못 받아도 낙찰자가 인수하지 않습니다."})
         return out
-    if not t["배당요구"]:
+    if t["보증금"] is None:
+        out.update({"판정": "확인필요", "인수금액": None,
+                    "사유": "보증금이 없어 인수 부담을 계산할 수 없습니다."})
+        return out
+    if t["배당요구"] is False:
         out.update({"판정": "인수", "인수금액": round(t["보증금"]),
                     "사유": f"대항력 있는 임차인이 배당요구를 하지 않았습니다. 보증금 전액을 인수합니다."})
         return out
-    if not t["확정일자"]:
-        out.update({"판정": "확인필요", "인수금액": round(t["보증금"]),
-                    "사유": "대항력은 있으나 확정일자가 없어 우선변제를 못 받습니다. "
-                            "배당 잔액만큼 인수하게 되며, 사실상 전액 인수로 보는 것이 안전합니다."})
+    if t["배당요구"] is None:
+        out.update({"판정": "확인필요", "인수금액": None,
+                    "사유": "배당요구 여부가 확인되지 않아 인수 부담을 계산할 수 없습니다."})
         return out
-    out.update({"판정": "확인필요", "인수금액": 0,
+    if not t["확정일자"]:
+        out.update({"판정": "확인필요", "인수금액": None,
+                    "사유": "확정일자와 배당 결과를 확인해야 인수 부담을 알 수 있습니다."})
+        return out
+    out.update({"판정": "확인필요", "인수금액": None,
                 "사유": "대항력·확정일자 모두 있어 배당순위에 따라 회수됩니다. "
                         "배당표상 미회수액이 있으면 그만큼 인수하니 예상배당액을 확인하세요."})
     return out
@@ -158,7 +168,7 @@ def analyze(권리: list[dict] | None, 임차인: list[dict] | None) -> dict:
     jt = []
     for t in tenants:
         j = _judge_tenant(t, base)
-        assume += j["인수금액"]
+        assume += j["인수금액"] or 0
         jt.append({**j,
                    "전입일": t["전입일"].isoformat() if t["전입일"] else None,
                    "확정일자": t["확정일자"].isoformat() if t["확정일자"] else None})
@@ -176,35 +186,43 @@ def analyze(권리: list[dict] | None, 임차인: list[dict] | None) -> dict:
     for t in jt:
         if t["판정"] == "인수":
             risks.append(f"대항력 임차인 보증금 {round(t['보증금']):,}만 인수 — 배당요구 없음.")
-        elif t["판정"] == "확인필요" and t.get("대항력"):
-            risks.append(f"대항력 임차인({t.get('이름') or '성명미상'}) — 예상배당액 확인 필요.")
+        elif t["판정"] == "확인필요":
+            risks.append(f"임차인({t.get('이름') or '성명미상'}) — 전입·보증금·배당 결과 확인 필요.")
 
-    grade = "안전"
+    unknown = base is None or any(r["판정"] in ("확인필요", "인수") for r in judged) \
+        or any(t["판정"] == "확인필요" for t in jt)
+    grade = "주의" if unknown else "안전"
     if assume > 0 or any(r["판정"] == "인수" for r in judged):
         grade = "위험"
-    elif risks:
-        grade = "주의"
+    upper = round(assume + sum(t["보증금"] or 0 for t in jt if t["인수금액"] is None))
+    if base is None or any(r["판정"] in ("확인필요", "인수") for r in judged) or any(
+        t["판정"] == "확인필요" and t["보증금"] is None for t in jt
+    ):
+        upper = None
 
     return {
         "말소기준": ({"종류": base["종류"], "일자": base["일자"].isoformat(),
                    "금액": round(base["금액"]) or None} if base else None),
         "권리": judged, "임차인": jt,
-        "인수합계": round(assume),
+        "인수합계": None if unknown else round(assume),
+        "확정인수합계": round(assume), "인수상한": upper,
+        "확인필요": unknown,
         "위험": risks[:8], "등급": grade,
-        "결론": _conclusion(base, assume, judged, jt, grade),
+        "결론": _conclusion(base, assume, judged, jt, grade, unknown),
         "면책": DISCLAIMER,
     }
 
 
-def _conclusion(base, assume: float, rights: list[dict], tenants: list[dict], grade: str) -> str:
+def _conclusion(base, assume: float, rights: list[dict], tenants: list[dict], grade: str,
+                unknown: bool) -> str:
     if base is None:
         return "등기부를 입력하면 인수/소멸을 판정합니다."
     head = f"말소기준은 {base['종류']}({base['일자'].isoformat()})입니다."
     if grade == "안전":
-        return head + " 이후 권리는 모두 소멸하고, 인수할 보증금도 없습니다."
+        return head + " 입력된 권리·임차인 기준으로 확인된 인수금액이 없습니다. 원본 서류와 현장 점유를 확인하세요."
     bits = []
     if assume:
-        bits.append(f"보증금 {round(assume):,}만 인수")
+        bits.append(f"확정 입력 보증금 {round(assume):,}만")
     n_take = sum(1 for r in rights if r["판정"] == "인수")
     if n_take:
         bits.append(f"선순위 권리 {n_take}건 인수")
@@ -212,7 +230,9 @@ def _conclusion(base, assume: float, rights: list[dict], tenants: list[dict], gr
         + sum(1 for t in tenants if t["판정"] == "확인필요")
     if n_check:
         bits.append(f"확인필요 {n_check}건")
-    return head + " " + ", ".join(bits) + ". 인수금액은 입찰가 계산에 자동 반영됩니다."
+    tail = " 인수 부담은 미확정이며 입찰가 추천을 보류합니다." if unknown else \
+           " 확인된 인수금액만 입찰가 계산에 반영됩니다."
+    return head + " " + ", ".join(bits) + "." + tail
 
 
 def small_lease_note(region: str, deposit: float) -> str | None:

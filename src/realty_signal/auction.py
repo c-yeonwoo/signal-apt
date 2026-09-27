@@ -64,7 +64,7 @@ class Listing:
     매도가: float = 0.0          # 단기매도 예상가(만원)
     미납관리비: float = 0.0
     수리비: float = 0.0
-    인수보증금: float = 0.0      # 권리분석 인수합계가 들어온다(입찰가 계산에 반영)
+    인수보증금: float | None = None  # 미확인과 인수액 0을 구별한다
     대리입찰비: float = 0.0
     권리분석: dict = field(default_factory=dict)
     낙찰가: float | None = None   # 낙찰 후 플랜 기준가
@@ -95,11 +95,11 @@ def breakdown(lst: Listing, 입찰가: float, p: dict) -> dict:
     """주어진 입찰가에 대한 전체 비용·수익 분해."""
     loan_ratio = lst.대출비율 if lst.대출비율 is not None else p["대출비율"]
     rate = lst.대출금리 if lst.대출금리 is not None else p["대출금리"]
-    market = lst.시세 or lst.최근실거래가 or lst.감정가  # 시세 미입력 시 최근 실거래가 → 감정가 순
+    market = lst.시세 or lst.최근실거래가 or lst.감정가  # 단독 계산용 대체값; 추천에는 실거래/시세 필수
 
     등기비 = 입찰가 * p["취득세율"] + p["법무비"] / 10000  # 법무비는 원→만원
     명도비 = lst.전용면적 * p["㎡_평"] * p["명도_평당"] / 10000
-    부대 = 등기비 + 명도비 + lst.미납관리비 + lst.수리비 + lst.대리입찰비 + lst.인수보증금
+    부대 = 등기비 + 명도비 + lst.미납관리비 + lst.수리비 + lst.대리입찰비 + (lst.인수보증금 or 0)
     대출금 = 입찰가 * loan_ratio
     보유이자 = 대출금 * rate / 12 * p["보유개월"]
     경매총매입 = 입찰가 + 부대 + 보유이자
@@ -137,8 +137,28 @@ def _floor_rate(lst: Listing) -> float:
     return 0.7  # 최저가 미상 시 70% 가정
 
 
+def _bid_blockers(lst: Listing) -> list[str]:
+    """입력 누락을 저가 입찰 기회로 바꾸지 않는다."""
+    reasons = []
+    if lst.감정가 <= 0 or not lst.최저매각가 or lst.최저매각가 <= 0:
+        reasons.append("감정가·최저매각가 확인 필요")
+    if not (lst.시세 or lst.최근실거래가) or max(lst.시세 or 0, lst.최근실거래가 or 0) <= 0:
+        reasons.append("비교 가능한 시세·실거래가 확인 필요")
+    if lst.전용면적 <= 0:
+        reasons.append("전용면적 확인 필요")
+    saved = lst.권리분석 or {}
+    analysis = saved.get("분석") or {}
+    if not saved.get("조사완료"):
+        reasons.append("등기부·매각물건명세서·점유 확인 필요")
+    if analysis.get("확인필요") or lst.인수보증금 is None or analysis.get("인수합계") is None:
+        reasons.append("인수 권리·보증금 확인 필요")
+    return reasons
+
+
 def table(lst: Listing, p: dict, span: float = 0.30, step: float = 0.01) -> list[dict]:
     """낙찰가율(감정가 대비)별 민감도 표 (낮은 입찰가→높은 입찰가)."""
+    if _bid_blockers(lst):
+        return []
     floor = _floor_rate(lst)
     rows = []
     r = floor
@@ -150,12 +170,21 @@ def table(lst: Listing, p: dict, span: float = 0.30, step: float = 0.01) -> list
 
 
 def recommend(lst: Listing, p: dict) -> dict:
-    """목표 시세차익률을 만족하는 최대 입찰가(권장)와 그 분해."""
+    """검토용 상한. 권리·시세가 불명확하거나 목표 미달이면 금액을 내지 않는다."""
+    reasons = _bid_blockers(lst)
+    if reasons:
+        return {"상태": "needs_review", "입찰가": None, "사유": reasons}
     rows = table(lst, p)
+    if not rows:
+        return {"상태": "insufficient_evidence", "입찰가": None,
+                "사유": ["유효한 입찰가 구간이 없습니다. 최저매각가를 확인하세요."]}
     target = p["목표시세차익률"] * 100
     ok = [row for row in rows if row["시세차익률"] is not None and row["시세차익률"] >= target]
-    chosen = max(ok, key=lambda x: x["입찰가"]) if ok else rows[0]
-    return chosen
+    if not ok:
+        return {"상태": "no_bid", "입찰가": None,
+                "사유": [f"최저매각가에서도 목표 시세차익률 {target:g}%를 충족하지 못합니다."],
+                "최저가시세차익률": rows[0]["시세차익률"]}
+    return {**max(ok, key=lambda x: x["입찰가"]), "상태": "conditional_bid", "사유": []}
 
 
 # --- 저장소 ---
@@ -224,6 +253,9 @@ def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) ->
         assumed = True
     else:
         assumed = False
+    if not bid:
+        return {"상태": rec["상태"], "사유": rec["사유"], "낙찰가": None,
+                "총현금": None, "steps": []}
     base_day = _date_of(lst.낙찰일) or _date_of(lst.입찰기일) or date.today()
 
     보증금 = round((lst.최저매각가 or lst.감정가 * _floor_rate(lst)) * BOND_RATE)
@@ -243,7 +275,10 @@ def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) ->
         "기준일": base_day.isoformat(), "낙찰가": round(bid), "추정입찰가": assumed,
         "보증금": 보증금, "경락잔금대출": 대출, "잔금": 잔금,
         "등기비": 등기비, "명도비": 명도비,
-        "총현금": round(보증금 + 잔금 + 등기비 + 명도비 + lst.미납관리비 + lst.수리비),
+        "총현금": (round(보증금 + 잔금 + 등기비 + 명도비 + lst.미납관리비 + lst.수리비
+                       + lst.인수보증금) if lst.인수보증금 is not None else None),
+        "사유": (["인수 보증금이 미확정이므로 총현금은 계산하지 않습니다."]
+               if lst.인수보증금 is None else []),
         "steps": steps,
     }
 
@@ -474,17 +509,18 @@ def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | N
     for lst in listings:
         rec = recommend(lst, p)
         sig = signals.get(lst.region, "")
-        margin = rec["시세차익률"] or 0.0
-        score = _SIG_WEIGHT.get(sig, 0) * 10 + margin
-        if margin < p["목표시세차익률"] * 100:
-            score -= 100  # 목표 미달 매물은 후순위
+        margin = rec.get("시세차익률")
+        score = (_SIG_WEIGHT.get(sig, 0) * 10 + margin) if margin is not None else -100
+        if rec["상태"] != "conditional_bid":
+            score -= 100
         out.append({
             **asdict(lst), "지역시그널": sig, "권장입찰가": rec["입찰가"],
-            "예상낙찰가": rec["입찰가"], "시세차익": rec["시세차익"], "시세차익률": rec["시세차익률"],
-            "임대수익률": rec["임대수익률"], "매도수익률": rec["매도수익률"],
+            "예상낙찰가": None, "시세차익": rec.get("시세차익"), "시세차익률": margin,
+            "임대수익률": rec.get("임대수익률"), "매도수익률": rec.get("매도수익률"),
             "최저매각가": rec.get("최저매각가") or lst.최저매각가,
             "우선순위점수": round(score, 1),
-            "목표달성": margin >= p["목표시세차익률"] * 100,
+            "목표달성": rec["상태"] == "conditional_bid",
+            "입찰상태": rec["상태"], "확인할것": rec["사유"],
         })
     out.sort(key=lambda r: r["우선순위점수"], reverse=True)
     return out
