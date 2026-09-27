@@ -5087,6 +5087,7 @@ async function openComplex(name, region){
       <p style="font-size:11px;color:var(--dim);margin:7px 0">직접 확인한 호가만 입력하세요. 입력값은 저장하지 않으며 거래 표본에 섞지 않습니다.</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end">
         <label style="font-size:11px">전용면적<br><select id="cxQuoteArea" class="ctrl">${quoteOpts}</select></label>
+        <label style="font-size:11px">매물 층(선택)<br><input id="cxQuoteFloor" type="number" min="1" max="200" step="1" inputmode="numeric" placeholder="예: 12" style="width:85px"></label>
         <label style="font-size:11px">호가(만원)<br><input id="cxQuoteAmount" type="number" min="1" step="100" inputmode="numeric" placeholder="예: 80000" style="width:120px"></label>
         <button id="cxQuoteBtn" type="button" class="btn">거래 근거와 비교</button>
       </div>
@@ -5110,11 +5111,14 @@ async function openComplex(name, region){
     const result=body.querySelector('#cxQuoteResult');
     const asking=Number(body.querySelector('#cxQuoteAmount').value);
     const exclusive_m2=Number(body.querySelector('#cxQuoteArea').value);
+    const floorRaw=body.querySelector('#cxQuoteFloor').value.trim();
+    const floor=floorRaw===''?null:Number(floorRaw);
     if(!Number.isFinite(asking)||asking<=0){result.textContent='0보다 큰 호가를 입력해 주세요.';return;}
+    if(floor!==null&&(!Number.isInteger(floor)||floor<1||floor>200)){result.textContent='층은 1~200 사이의 정수로 입력해 주세요.';return;}
     result.textContent='비교 근거 확인 중…';
     try{
       const resp=await fetch(`/api/complex/${encodeURIComponent(region)}/${encodeURIComponent(name)}/quote-check`,
-        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asking,exclusive_m2})});
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asking,exclusive_m2,floor})});
       const q=await resp.json();
       if(!resp.ok){result.textContent=q.detail||'입력값을 확인해 주세요.';return;}
       if(q['상태']!=='관측비교'){
@@ -5122,9 +5126,10 @@ async function openComplex(name, region){
       }
       const delta=q['호가차액'];
       const dir=delta<0?'낮음':delta>0?'높음':'같음';
-      result.innerHTML=`입력 호가 <b>${_eok(q['입력호가'])}</b> · 같은 면적 거래 ${q['표본수']}건 중앙값 <b>${_eok(q['중앙값'])}</b><br>
+      const floorLabel=q['입력층']==null?'전체 층':`${q['입력층']}층 ±2층`;
+      result.innerHTML=`입력 호가 <b>${_eok(q['입력호가'])}</b> · 같은 면적·${floorLabel} 거래 ${q['표본수']}건 중앙값 <b>${_eok(q['중앙값'])}</b><br>
         산술 차이 <b>${Math.abs(delta).toLocaleString()}만 (${Math.abs(q['호가차이율'])}%) ${dir}</b> · 거래월 ${esc(q['거래월범위']||'미상')}<br>
-        <span style="color:var(--dim)">층·집 상태·시점·취득비용 미보정. 차이가 곧 할인율이나 매수 권고는 아닙니다.</span>`;
+        <span style="color:var(--dim)">${q['입력층']==null?'층·':'±2층 이외 층 차이·'}집 상태·거래 시점·취득비용 미보정. 차이가 곧 할인율이나 매수 권고는 아닙니다.</span>`;
     }catch(e){result.textContent='비교 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.';}
   };
   loadComplexAgents(name, region);

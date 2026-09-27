@@ -27,7 +27,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
           비교거래:{상태:'관측',건수:4,중앙값:50000,최저:45000,최고:55000,거래월범위:'2026-08~2026-09'}}],
         매매추이:[{ym:'2026-08',평단가:2000,건수:4}],최근평단가:2000,총거래:4,기간:'2026-08',추세pct:0};
-      if(decoded==='/api/complex/테스트구/테스트단지/quote-check') data={상태:'관측비교',입력호가:48000,
+      if(decoded==='/api/complex/테스트구/테스트단지/quote-check') data={상태:'관측비교',입력호가:48000,입력층:11,
         중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/shortlist') data={ready:true,budget:60000,pyeong:25,candidates:[
@@ -97,10 +97,12 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       await openComplex('테스트단지','테스트구');
     });
     await page.getByText('내가 확인한 호가와 비교하기',{exact:true}).click();
+    await page.locator('#cxQuoteFloor').fill('11');
     await page.locator('#cxQuoteAmount').fill('48000');
     await page.locator('#cxQuoteBtn').click();
     await page.getByText('산술 차이',{exact:false}).waitFor();
     assert.match(await page.locator('#cxQuoteResult').textContent(),/2,000만.*낮음/);
+    assert.match(await page.locator('#cxQuoteResult').textContent(),/11층 ±2층/);
     await page.keyboard.press('Escape');
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, Escape focus');

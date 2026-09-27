@@ -55,6 +55,7 @@ def test_recent_same_area_distribution_excludes_direct_and_marks_floor_uncontrol
     assert c["상태"] == "관측" and c["건수"] == 3
     assert (c["중앙값"], c["최저"], c["최고"]) == (55000, 50000, 60000)
     assert c["층범위"] == [3, 18] and c["층미상건수"] == 1 and c["층미통제"]
+    assert sorted(row["층"] for row in c["층별표본"]) == [3, 18]
     assert c["직거래제외"] == 1 and c["거래유형미상건수"] == 1
 
 
