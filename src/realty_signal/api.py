@@ -1300,6 +1300,7 @@ def conclusion(request: Request | None = None, capital: float | None = None,
             "예산내": L.get("예산내"), "예산비율": L.get("예산비율"),
             "가격출처": L.get("가격출처"), "예산확인필요": L.get("예산확인필요"),
             "판단": L.get("판단"), "자금": L.get("자금"), "판단버전": L.get("판단버전"),
+            "입찰상태": L.get("입찰상태"), "검토용상한": L.get("검토용상한"),
             "ref": L.get("ref"), "_score": L.get("_score"),
             **buyer_decision.build(L, p, uid=_uid(request) if request else None),
         })

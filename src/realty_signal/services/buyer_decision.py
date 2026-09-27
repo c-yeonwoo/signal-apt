@@ -77,7 +77,9 @@ def build(row, params, *, uid=None):
                 "blocking_reasons": reasons, "unknowns": unknowns,
                 "preference_breakdown": row.get("분해") or {"budget_headroom": row.get("_score")},
                 "next_action": "이 물건 입찰 보류" if auction_blocked else
-                               "가격·자금 조건 다시 설정" if blocked else "호가·전용면적과 은행 한도 확인",
+                               "가격·자금 조건 다시 설정" if finance_blocked else
+                               "권리·시세 근거 확인 후 입찰 검토" if kind == "경매" and auction_state != "conditional_bid" else
+                               "호가·전용면적과 은행 한도 확인",
                 "scope": "가정 기반 비교이며 구매 가능 확정이 아님"}
     decision["id"] = fingerprint(decision)
     decision["generated_at"] = datetime.now(timezone.utc).isoformat()
