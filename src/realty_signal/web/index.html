@@ -730,7 +730,7 @@
         <span>과거 구간으로 검증한 매수·매도 <b style="color:var(--sig-buy)">적중률</b>. "정말 맞나요?"의 답.</span></div>
       <div class="acard" onclick="openCycleGuide()">
         <b>경기 국면 가이드</b>
-        <span>회복·상승·후퇴·침체 4국면과 자산격차. 사이클 읽는 법.</span></div>
+        <span>회복·상승·후퇴·침체와 관망. 지역 가격 흐름 읽는 법.</span></div>
       <div class="acard" onclick="switchTab('glossary')">
         <b>용어사전</b>
         <span>전세가율·DSR·비례율 등 매매·투자에 꼭 필요한 개념.</span></div>
@@ -759,12 +759,12 @@
       <span class="btn" style="padding:2px 11px" onclick="document.getElementById('cycleGuideDlg').close()">✕</span>
     </div>
   </div>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 16px">벌집순환모형 4국면 — <b>가격 방향 × 매수심리 방향</b>으로 현재 위치를 추정합니다. (시그널 차트에서 <b>경기국면</b> 오버레이를 켜면 지역별 시기별 국면을 볼 수 있어요.)</p>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 16px">KB 주간 매매증감률의 26주 방향·변화로 지역 흐름을 추정합니다. 현재 표시와 시그널 차트의 국면 밴드는 같은 기준이며, 매수심리는 보조 정보입니다. 보합은 관망으로 표시합니다.</p>
   <div id="cycleGraph" style="margin-bottom:18px"></div>
   <div id="cycleNow"></div>
-  <div id="cyclePhases" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px"></div>
+  <div id="cyclePhases" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-top:18px"></div>
   <div id="cycleInsight" style="margin-top:20px"></div>
-  <p style="color:var(--dim);font-size:11px;margin-top:14px">※ KB 광역 주간 시리즈 기반 추정. 지역·단지별 국면은 다를 수 있으며 참고용입니다.</p>
+  <p style="color:var(--dim);font-size:11px;margin-top:14px">※ 국면은 KB 지역 주간 가격의 후행 분류이며 다음 가격을 예측하지 않습니다. 지역 평균과 개별 단지는 다를 수 있습니다.</p>
 </dialog>
 
 <dialog id="calcDlg" style="width:760px">
@@ -2729,7 +2729,7 @@ const _GLOSSARY=[
   ["주택구입부담지수","중위소득 가구의 중간가 주택 구입 부담. 높을수록 비쌈.","앱"],
   ["저평가도","교통·학군·환경 점수로 계산한 '이 정도 입지면 보통 이 가격'과 실제 시세의 차이. +면 그보다 싼 편, −면 비싼 편. 브랜드·재건축 기대는 반영되지 않아 강남·과천처럼 프리미엄이 큰 곳은 크게 '비싼 편'으로 나온다.","앱"],
   ["급지","지역/단지 등급(입지·시세 순위). 시군구는 수도권 평단가 A~E, 단지는 지역 내 1~5.","앱"],
-  ["벌집순환모형","회복→상승→후퇴→침체 4국면 부동산 경기 사이클.","앱"],
+  ["경기 국면","KB 주간 매매증감률 26주 흐름을 회복·상승·후퇴·침체·관망으로 분류한 후행 지표.","앱"],
   ["입주물량","향후 입주 예정 물량. 많으면 공급과잉(가격 압력).","앱"],
 ]],
 ];
@@ -2752,10 +2752,11 @@ function renderGlossary(){
 }
 // ===== 부동산 경기 사이클 국면 =====
 const _CYCLE=[
-  {k:'회복기', ic:'🌱', col:'#2563eb', tag:'매수 기회', 현상:['거래량이 먼저 살아남','급매 물량 소진 시작','전세가율 상승·전세난','바닥 다지기 심리']},
-  {k:'상승기', ic:'🔥', col:'#16a34a', tag:'상승 추세', 현상:['호가 상승·신고가 출현','매물 잠김(집주인 관망)','추격매수·낙관 과열','상급지→하급지 확산']},
-  {k:'후퇴기', ic:'⚠️', col:'#d97706', tag:'매도 신호', 현상:['거래량 급감(먼저 마름)','호가 정체·관망세','상급지부터 조정','급지역전(끝물) 경계']},
-  {k:'침체기', ic:'❄️', col:'#dc2626', tag:'하락·바닥', 현상:['급매·경매 물건 증가','매수 관망·공포 심리','전세 선호(매매 기피)','다음 회복 준비 구간']},
+  {k:'회복기', ic:'🌱', col:'#2563eb', tag:'약세 둔화', 현상:['실거래 반등 여부 확인','거래량 변화 확인','지역 안에서도 단지별 차이','예산·대출부터 점검']},
+  {k:'상승기', ic:'🔥', col:'#16a34a', tag:'가격 상승', 현상:['호가와 계약가 차이 확인','신고가 추격 주의','자금 부담 재검토','단지별 거래량 확인']},
+  {k:'후퇴기', ic:'⚠️', col:'#d97706', tag:'상승 둔화', 현상:['거래량 변화 확인','호가 정체 여부 확인','매도 시 유동성 점검','추격 매수 주의']},
+  {k:'침체기', ic:'❄️', col:'#dc2626', tag:'가격 약세', 현상:['급매의 실제 계약가 확인','추가 하락 가능성 점검','보유 현금 여력 확인','개별 권리·하자 확인']},
+  {k:'관망', ic:'⏸️', col:'#64748b', tag:'방향 불명확', 현상:['가격 변동폭이 작음','사이클 타이밍 단정 어려움','단지별 실거래·호가 확인','자금 여력부터 점검']},
 ];
 async function loadCycle(){
   const region=document.getElementById('cycleRegion').value;
@@ -2781,6 +2782,7 @@ async function loadCycle(){
 }
 // 순환주기 사인곡선 + 현재 위치 펄스
 function cycleGraph(phase, asof, col){
+  if(phase==='관망') return `<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;color:var(--dim);font-size:13px">현재는 가격 방향이 뚜렷하지 않아 순환 곡선 위의 한 지점으로 표시하지 않습니다. (${asof} 기준)</div>`;
   const W=920,H=300,padX=60,padT=40,padB=54, midY=(padT+(H-padB))/2, amp=(H-padT-padB)/2*0.8;
   const tpos={회복기:0.15, 상승기:0.35, 후퇴기:0.62, 침체기:0.85};
   const xOf=t=>padX+t*(W-2*padX), yOf=t=>midY+amp*Math.cos(2*Math.PI*t);
@@ -2798,19 +2800,19 @@ function cycleGraph(phase, asof, col){
     <circle cx="${cx}" cy="${cy}" r="9" fill="${col}" opacity=".25"><animate attributeName="r" values="9;20;9" dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity" values=".35;0;.35" dur="1.8s" repeatCount="indefinite"/></circle>
     <circle cx="${cx}" cy="${cy}" r="7" fill="${col}" stroke="#fff" stroke-width="2.5"/>
     <text x="${cx}" y="${padT-12}" text-anchor="middle" font-size="13" font-weight="800" fill="${col}">현재 · ${asof}</text>
-  </svg>`;
+  </svg><div style="font-size:11px;color:var(--dim);margin-top:6px">순환 곡선은 개념도이며 실제 국면의 길이·순서나 향후 가격을 예측하지 않습니다.</div>`;
 }
 function cycleInsight(phase){
-  const now = {회복기:'지금은 <b>무주택 실수요자의 진입 적기</b> — 격차가 벌어지기 전 올라타는 구간입니다.',
-    상승기:'지금은 <b>자산 격차가 가장 빠르게 벌어지는 국면</b> — 유주택·상급지일수록 유리, 무주택은 진입장벽이 높아집니다.',
-    후퇴기:'지금은 상승 피로가 쌓인 국면 — 상급지부터 조정될 수 있고, 무리한 추격매수는 격차 상단에서 물릴 위험이 있습니다.',
-    침체기:'지금은 <b>현금 보유자의 저가 매수 기회</b> — 이 시기의 매수가 다음 상승기 격차를 가릅니다.'}[phase]||'';
+  const now = {회복기:'약세가 둔화된 것으로 분류됩니다. 최근 계약가와 거래량이 실제로 회복하는지 확인하세요.',
+    상승기:'가격 상승이 이어졌습니다. 같은 면적·연식의 최근 계약가와 호가 차이, 대출 부담을 확인하세요.',
+    후퇴기:'상승 속도가 둔화된 것으로 분류됩니다. 최근 거래량과 매도 호가의 변화부터 살펴보세요.',
+    침체기:'가격 약세가 이어지는 구간입니다. 급매라도 거래 근거와 자금 여력을 따로 검증하세요.',
+    관망:'뚜렷한 방향이 없어 시기만으로 매수·매도를 판단하기 어렵습니다. 지역과 단지의 최근 실거래, 자금 부담을 함께 보세요.'}[phase]||'';
   return `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.7">
-    <div style="font-weight:800;font-size:14px;margin-bottom:6px">사이클과 자산 격차</div>
-    <p style="margin:0 0 8px">일반적으로 <b>상승기에 유주택·무주택 간 자산 격차가 가장 크게 벌어진다</b>고 봅니다. 집값이 오르면 유주택자의 순자산은 불어나는 반면(자산 인플레이션), 무주택자의 전세·현금 가치는 상대적으로 뒤처져 이른바 '벼락거지' 현상이 나타납니다. 상급지가 하급지보다 더 크게 오르며 자산가 내부의 격차도 확대됩니다.</p>
-    <p style="margin:0 0 8px">반대로 <b>하락·침체기</b>에는 고가·상급지 조정폭이 커 격차가 일시적으로 좁혀지지만, 현금 보유자가 급매·경매로 저가 매수하며 <b>다음 상승기 격차의 씨앗</b>이 됩니다. 결국 격차를 줄이는 열쇠는 <b>회복기 초입에 진입하는 타이밍</b>입니다.</p>
+    <div style="font-weight:800;font-size:14px;margin-bottom:6px">이 국면을 읽는 법</div>
+    <p style="margin:0 0 8px">국면은 지역 평균 가격의 후행 요약입니다. 개별 단지의 가격과 매수 타이밍을 보장하지 않습니다.</p>
     <div style="background:#fff;border-left:3px solid var(--accent);padding:8px 12px;border-radius:0 8px 8px 0;margin-top:4px">${now}</div>
-    <div style="font-size:11px;color:var(--dim);margin-top:8px">※ 우리 가계자산의 대부분이 부동산이라 집값 국면이 자산 불평등을 크게 좌우한다는 일반적 견해입니다(가계금융복지조사 등). 참고용 해석입니다.</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:8px">실거래 비교, 예산·월 상환액, 권리·하자 확인을 함께 마친 뒤 결정하세요.</div>
   </div>`;
 }
 function redevTab(name){
@@ -4270,9 +4272,9 @@ function drawChart(region, m, sig){
         {xAxis:h.end}]) }});
   }
 
-  // 경기 국면 오버레이 — 시기별 국면(회복/상승/후퇴/침체) 색 밴드
+  // 경기 국면 오버레이 — 시기별 국면(회복/상승/후퇴/침체/관망) 색 밴드
   if(_showCycle && _cycleCache[region]?.length){
-    const pc={회복기:'rgba(2,132,199,0.14)', 상승기:'rgba(22,163,74,0.15)', 후퇴기:'rgba(217,119,6,0.15)', 침체기:'rgba(220,38,38,0.13)'};
+    const pc={회복기:'rgba(2,132,199,0.14)', 상승기:'rgba(22,163,74,0.15)', 후퇴기:'rgba(217,119,6,0.15)', 침체기:'rgba(220,38,38,0.13)', 관망:'rgba(100,116,139,0.12)'};
     series.push({ name:'경기국면', type:'line', data:[], yAxisIndex:0, silent:true,
       markArea:{ data: _cycleCache[region].map(b=>[
         {xAxis:b.start, itemStyle:{color: pc[b.phase]||'rgba(148,163,184,.1)'},
@@ -4352,8 +4354,8 @@ function drawCycleMini(region, z0, last){
   el.style.display='block';
   if(!cycleMini) cycleMini=echarts.init(document.getElementById('cycleMiniChart'));
   cycleMini.resize();
-  const H={침체기:-1, 회복기:0, 상승기:1, 후퇴기:0};   // 사인 파형 높이(저점→중간→고점→중간)
-  const pc={회복기:'rgba(2,132,199,0.18)', 상승기:'rgba(22,163,74,0.18)', 후퇴기:'rgba(217,119,6,0.18)', 침체기:'rgba(220,38,38,0.16)'};
+  const H={침체기:-1, 회복기:0, 상승기:1, 후퇴기:0, 관망:0};   // 관망은 중립선에 표시
+  const pc={회복기:'rgba(2,132,199,0.18)', 상승기:'rgba(22,163,74,0.18)', 후퇴기:'rgba(217,119,6,0.18)', 침체기:'rgba(220,38,38,0.16)', 관망:'rgba(100,116,139,0.12)'};
   const mid=b=>{ const s=new Date(b.start).getTime(), e=new Date(b.end).getTime(); return new Date((s+e)/2).toISOString().slice(0,10); };
   const pts=[[z0, H[bands[0].phase]??0], ...bands.map(b=>[mid(b), H[b.phase]??0]), [last, H[bands[bands.length-1].phase]??0]];
   cycleMini.setOption({ animation:false, grid:{left:48, right:62, top:12, bottom:6},
