@@ -67,7 +67,40 @@ def test_plan_cash_adds_up(lst):
     assert p["보증금"] == round(54400 * auction.BOND_RATE)
     assert p["경락잔금대출"] == round(60000 * auction.DEFAULTS["대출비율"])
     assert p["잔금"] == 60000 - p["보증금"] - p["경락잔금대출"]
-    assert p["총현금"] == p["보증금"] + p["잔금"] + p["등기비"] + p["명도비"]
+    assert p["대출확인필요"] and p["대출상태"] == "미승인_가정"
+    assert p["가정시필요현금"] == p["총현금"]
+    assert p["총현금"] == p["보증금"] + p["잔금"] + p["등기비"] + p["명도비"] + p["보유이자"]
+    assert p["무대출필요현금"] == p["총현금"] + p["경락잔금대출"] - p["보유이자"]
+
+
+def test_plan_accounts_for_undated_liability_and_other_costs(lst):
+    auction.update(lst.id, {"인수보증금": 3000, "대리입찰비": 60,
+                            "미납관리비": 100, "수리비": 500})
+    p = auction.plan(auction.get(lst.id), 60000)
+    dated = sum(-s["금액"] for s in p["steps"] if s["금액"] is not None)
+    assert p["날짜미정현금"] == 3000 + p["보유이자"]
+    assert p["가정시필요현금"] == dated + p["날짜미정현금"]
+    assert p["대리입찰비"] == 60
+    assert p["무대출필요현금"] >= p["가정시필요현금"]
+
+
+def test_plan_uses_conservative_cap_for_illustrative_loan(lst):
+    p = auction.plan(lst, 60000, {"대출비율": 1})
+    assert p["경락잔금대출"] == 60000 - p["보증금"]
+    assert p["잔금"] == 0
+    assert p["무대출필요현금"] == 60000 + p["등기비"] + p["명도비"]
+
+
+def test_plan_does_not_claim_cash_total_with_unknown_inherited_deposit(client):
+    p = auction.plan(client.listing, 60000)
+    assert p["가정시필요현금"] is None and p["무대출필요현금"] is None
+    assert any("미확정" in reason for reason in p["사유"])
+
+
+def test_plan_rejects_invalid_loan_assumptions_without_server_error(lst):
+    for ratio in (-0.1, 1.1, "bad"):
+        p = auction.plan(lst, 60000, {"대출비율": ratio})
+        assert p["상태"] == "invalid_assumption" and p["steps"] == []
 
 
 def test_plan_dates_shift_to_win_date(lst):
