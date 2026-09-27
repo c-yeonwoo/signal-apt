@@ -89,6 +89,7 @@ def auction_rights_get(listing_id: str):
         raise HTTPException(404, "listing not found")
     saved = lst.권리분석 or {}
     return {"ok": True, "입력": saved.get("입력") or {"권리": [], "임차인": []},
+            "조사완료": saved.get("조사완료") is True,
             "분석": saved.get("분석"), "인수보증금": lst.인수보증금}
 
 
@@ -103,7 +104,7 @@ def auction_rights_preview(request: Request, data: dict = Body(default={})):
 
 @router.post("/api/auction/rights/{listing_id}")
 def auction_rights_save(request: Request, listing_id: str, data: dict = Body(default={})):
-    """판정 결과의 인수합계를 매물에 반영 — 입찰가 산정표가 그만큼 내려간다."""
+    """미확정 인수금액은 null로 보존해 입찰 판단을 보류한다."""
     if err := deps.require_admin(request):
         return err
     from realty_signal import auction_rights as ar
@@ -113,7 +114,7 @@ def auction_rights_save(request: Request, listing_id: str, data: dict = Body(def
     lst = auction.update(listing_id, {
         "인수보증금": result["인수합계"],
         "권리분석": {"입력": {"권리": data.get("권리") or [], "임차인": data.get("임차인") or []},
-                 "분석": result},
+                 "조사완료": data.get("조사완료") is True, "분석": result},
     })
     return {"ok": True, "분석": result, "listing": _asdict(lst)}
 

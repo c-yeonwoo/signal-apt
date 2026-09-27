@@ -69,7 +69,8 @@ def test_senior_tenant_without_fixed_date_is_treated_as_assumed():
         {"전입일": "2018-01-02", "보증금": 20000, "배당요구": True, "확정일자": None},
     ])
     assert a["임차인"][0]["판정"] == "확인필요"
-    assert a["인수합계"] == 20000       # 안전한 쪽으로 잡는다
+    assert a["인수합계"] is None and a["인수상한"] == 20000
+    assert a["확인필요"] is True
 
 
 def test_senior_tenant_with_fixed_date_needs_distribution_check():
@@ -77,7 +78,8 @@ def test_senior_tenant_with_fixed_date_needs_distribution_check():
         {"전입일": "2018-01-02", "확정일자": "2018-01-02", "보증금": 20000, "배당요구": True},
     ])
     t = a["임차인"][0]
-    assert t["대항력"] is True and t["판정"] == "확인필요" and t["인수금액"] == 0
+    assert t["대항력"] is True and t["판정"] == "확인필요" and t["인수금액"] is None
+    assert a["인수합계"] is None
     assert a["등급"] == "주의"
 
 
@@ -95,6 +97,18 @@ def test_no_baseline_is_reported_not_guessed():
     assert a["말소기준"] is None
     assert a["권리"][0]["판정"] == "확인필요"
     assert any("말소기준권리 없음" in w for w in a["위험"])
+    assert a["인수합계"] is None and a["인수상한"] is None
+
+
+def test_senior_tenant_unknown_claim_never_defaults_to_no_claim():
+    a = ar.analyze([MORTGAGE], [{"이름": "임차인", "전입일": "2018-01-01", "보증금": 20000}])
+    assert a["임차인"][0]["배당요구"] is None
+    assert a["인수합계"] is None and a["등급"] == "주의"
+
+
+def test_senior_right_cannot_be_priced_as_zero():
+    a = ar.analyze([MORTGAGE, {"종류": "지상권", "일자": "2017-01-01"}], [])
+    assert a["등급"] == "위험" and a["인수합계"] is None
 
 
 def test_senior_jeonse_right_is_flagged_not_decided():

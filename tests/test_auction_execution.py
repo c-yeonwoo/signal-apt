@@ -24,7 +24,8 @@ def lst(tmp_path, monkeypatch):
     monkeypatch.setattr(auction, "AUCTION_FILE", tmp_path / "auction.json")
     return auction.add({"단지명": "상계주공7", "region": "노원구", "감정가": 85000,
                         "최저매각가": 54400, "전용면적": 79.07, "시세": 82000,
-                        "입찰기일": "2026-08-20"})
+                        "입찰기일": "2026-08-20", "인수보증금": 0,
+                        "권리분석": {"조사완료": True, "분석": {"확인필요": False, "인수합계": 0}}})
 
 
 # ---------- 붙여넣기 파서 ----------
@@ -102,16 +103,17 @@ RIGHTS = {"권리": [{"종류": "근저당권", "일자": "2019-03-05", "금액"
 def test_rights_preview_does_not_touch_listing(client):
     d = client.post("/api/auction/rights/preview", json=RIGHTS).json()
     assert d["분석"]["인수합계"] == 30000
-    assert auction.get(client.listing.id).인수보증금 == 0
+    assert auction.get(client.listing.id).인수보증금 is None
 
 
 def test_rights_save_feeds_bid_calculation(client):
-    before = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]["입찰가"]
-    d = client.post(f"/api/auction/rights/{client.listing.id}", json=RIGHTS).json()
+    before = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]
+    assert before["상태"] == "needs_review" and before["입찰가"] is None
+    d = client.post(f"/api/auction/rights/{client.listing.id}", json={**RIGHTS, "조사완료": True}).json()
     assert d["분석"]["인수합계"] == 30000
     assert auction.get(client.listing.id).인수보증금 == 30000
-    after = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]["입찰가"]
-    assert after < before          # 인수금액만큼 낼 수 있는 값이 내려간다
+    after = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]
+    assert after["상태"] == "no_bid" and after["입찰가"] is None
 
 
 def test_rights_roundtrip_keeps_input(client):
@@ -135,7 +137,26 @@ def test_rights_404_for_unknown_listing(client):
 def test_plan_endpoint(client):
     d = client.get(f"/api/auction/plan/{client.listing.id}").json()
     assert d["ok"] and d["단지명"] == "상계주공7"
-    assert len(d["plan"]["steps"]) == 7
+    assert d["plan"]["steps"] == []
+    assert d["plan"]["상태"] == "needs_review"
+
+
+def test_unknown_tenant_saves_null_and_blocks_bid(client):
+    unknown = {"권리": RIGHTS["권리"], "임차인": [{"전입일": "2018-01-02", "보증금": 20000,
+                                              "배당요구": True}], "조사완료": True}
+    d = client.post(f"/api/auction/rights/{client.listing.id}", json=unknown).json()
+    assert d["분석"]["인수합계"] is None and d["분석"]["확인필요"]
+    assert auction.get(client.listing.id).인수보증금 is None
+    assert client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]["입찰가"] is None
+
+
+def test_clean_rights_still_need_source_attestation(client):
+    clean = {"권리": RIGHTS["권리"], "임차인": []}
+    client.post(f"/api/auction/rights/{client.listing.id}", json=clean)
+    assert client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]["입찰가"] is None
+    client.post(f"/api/auction/rights/{client.listing.id}", json={**clean, "조사완료": True})
+    rec = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]
+    assert rec["상태"] == "conditional_bid" and rec["입찰가"] > 0
 
 
 def test_won_records_and_replans(client):
