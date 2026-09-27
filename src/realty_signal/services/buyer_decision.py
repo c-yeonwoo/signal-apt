@@ -58,17 +58,26 @@ def build(row, params, *, uid=None):
         unknowns.append("전용면적·세금 가정 확인")
     if not row.get("통근"):
         unknowns.append("실제 출퇴근 경로 확인")
-    blocked = bool(finance and not finance.get("가능") and not finance.get("확인필요"))
-    reasons = ["입력한 자금 또는 월 부담 한도 초과"] if blocked else []
+    auction_state = row.get("입찰상태") if kind == "경매" else None
+    if kind == "경매" and auction_state != "conditional_bid":
+        unknowns.append("경매 입찰가·권리·시세 근거 확인")
+    finance_blocked = bool(finance and not finance.get("가능") and not finance.get("확인필요"))
+    auction_blocked = auction_state == "no_bid"
+    blocked = finance_blocked or auction_blocked
+    reasons = (["입력한 자금 또는 월 부담 한도 초과"] if finance_blocked else [])
+    if auction_blocked:
+        reasons.append("목표 총비용 우위율을 충족하는 입찰가 없음")
     unknown = (row.get("예산확인필요", price_kind != "asking") or finance.get("확인필요")
-               or not finance or price is None or evidence["status"] != "observed")
+               or not finance or price is None or evidence["status"] != "observed"
+               or (kind == "경매" and auction_state != "conditional_bid"))
     feasibility = "infeasible" if blocked else "unknown" if unknown else "conditional"
     decision = {"version": VERSION, "profile_version": fingerprint([uid, finance_fingerprint(params)]),
                 "policy_version": regulation.policy_manifest()["version"],
                 "evidence_ids": [evidence["id"]], "feasibility": feasibility,
                 "blocking_reasons": reasons, "unknowns": unknowns,
                 "preference_breakdown": row.get("분해") or {"budget_headroom": row.get("_score")},
-                "next_action": "가격·자금 조건 다시 설정" if blocked else "호가·전용면적과 은행 한도 확인",
+                "next_action": "이 물건 입찰 보류" if auction_blocked else
+                               "가격·자금 조건 다시 설정" if blocked else "호가·전용면적과 은행 한도 확인",
                 "scope": "가정 기반 비교이며 구매 가능 확정이 아님"}
     decision["id"] = fingerprint(decision)
     decision["generated_at"] = datetime.now(timezone.utc).isoformat()

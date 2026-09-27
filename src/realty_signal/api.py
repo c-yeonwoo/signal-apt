@@ -2724,6 +2724,9 @@ def _build_listings(want: set[str]) -> list[dict]:
                # 주간 비교("예산 안에 새로 들어온 매물")를 하려면 **호가와 무관한** 식별자가 필요하다.
                # 급매·찐매물은 naver_id 가 2,127건 전부 고유해서 그대로 쓴다.
                "key": _listing_key(kind, raw, ref, name, region)}
+        if kind == "경매":
+            row.update(입찰상태=raw.get("입찰상태"), 확인할것=raw.get("확인할것") or [],
+                       검토용상한=raw.get("권장입찰가"))
         row.update(tr.to_dict())
         if kind in ("급매", "찐매물"):
             import time
@@ -2738,7 +2741,7 @@ def _build_listings(want: set[str]) -> list[dict]:
     if "경매" in want:
         for r in auction.enrich(auction.load(), _signal_map(), {}):
             add("경매", r.get("단지명"), r.get("region"), r.get("지역시그널"),
-                "시세차익", r.get("시세차익률"), "%", r, r.get("lat"), r.get("lng"),
+                "총비용우위", r.get("총비용우위율"), "%", r, r.get("lat"), r.get("lng"),
                 {"id": r.get("id")}, total=r.get("최저매각가") or r.get("권장입찰가"))
     if "급매" in want and QUICKSALE_FILE.exists():
         for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):

@@ -530,7 +530,7 @@
   <details class="sec">
     <summary>입찰가 계산 기준 · 필터 <span class="pill">공식 조정 가능</span></summary>
     <div class="params" style="margin-top:10px">
-      <label>목표 시세차익률 % <input id="pMargin" type="number" value="10" step="1" oninput="loadAuction()"></label>
+      <label>목표 총비용 우위율 % <input id="pMargin" type="number" value="10" step="1" oninput="loadAuction()"></label>
       <label>대출비율 % <input id="pLoan" type="number" value="70" step="5" oninput="loadAuction()"></label>
       <label>대출금리 % <input id="pRate" type="number" value="5" step="0.1" oninput="loadAuction()"></label>
       <label>보유개월 <input id="pHold" type="number" value="6" step="1" oninput="loadAuction()"></label>
@@ -546,12 +546,12 @@
       <div style="padding:10px 4px;line-height:1.9">
         • <b>경매 총매입</b> = 입찰가 + 등기비(입찰가×취득세율+법무비) + 명도비(전용평×15만) + 미납관리비 + 수리비 + 보유이자(대출금×금리×개월/12)<br>
         • <b>일반매매 총매입</b> = 시세 + 취득세 + 중개수수료 + 법무비<br>
-        • <b>시세차익률</b> = (일반매매총매입 − 경매총매입) ÷ 경매총매입 &nbsp;<span style="color:#94a3b8">(낙찰받아 시세로 되팔 때 차익률)</span><br>
-        • <b>권장 입찰가</b> = 낙찰가율을 1%씩 올리며 만든 표에서 <b>목표 시세차익률을 만족하는 최대 입찰가</b><br>
+        • <b>총비용 우위율</b> = (시세로 일반매수한 가정 비용 − 경매 총매입비용) ÷ 경매 총매입비용. <b>매도 수익률이 아닙니다.</b><br>
+        • <b>검토용 입찰 상한</b> = 낙찰가율을 1%씩 올린 표에서 <b>목표 총비용 우위율을 만족하는 최대 입찰가</b><br>
         • <b>실투자금</b> = 경매총매입 − 대출금(입찰가×대출비율) &nbsp;|&nbsp;
           <b>임대수익률</b> = (월세×12 − 연이자) ÷ (실투자금 − 임대보증금) &nbsp;|&nbsp;
           <b>단기매도수익률</b> = (매도가 − 경매총매입 − 매도중개보수) ÷ 실투자금<br>
-        <span style="color:#94a3b8">※ 시세 미입력 시 감정가로 대체. 위 파라미터(목표차익률·대출·보유개월)를 바꾸면 즉시 재계산됩니다.</span>
+        <span style="color:#94a3b8">※ 시세·권리·면적이 미확인되면 상한을 계산하지 않습니다. 대출비율·세율·비용은 예시 가정이며 개인 승인/세후 이익이 아닙니다.</span>
       </div>
     </details>
   </details>
@@ -3735,7 +3735,7 @@ function renderSubListings(auc, ps, quick){
     h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">경매 ${auc.length}건</div>`
       + auc.slice(0,3).map(a=>line("switchTab('auction')",
           `${gradeBadge(a['단지급지'])} ${a['단지명']}`,
-          a['입찰상태']==='conditional_bid'?`검토용 상한 <b>${eok(a['권장입찰가'])}</b> <span style="color:#16a34a">차익 ${a['시세차익률']}%</span>`:'<span style="color:#d97706">입찰 판단 보류</span>')).join('');
+          a['입찰상태']==='conditional_bid'?`검토용 상한 <b>${eok(a['권장입찰가'])}</b> <span style="color:#16a34a">비용 우위 ${a['총비용우위율']}%</span>`:'<span style="color:#d97706">입찰 판단 보류</span>')).join('');
   }
   if(quick && quick.length){
     h += `<div style="margin-top:10px;font-size:11px;color:var(--dim)">급매 ${quick.length}건</div>`
@@ -5458,7 +5458,7 @@ function renderAuction(rows){
       const ready=r['입찰상태']==='conditional_bid';
       return {nm:`${r['단지명']||'–'} ${r['지역시그널']?badge(r['지역시그널']):''} ${ready?'':`<span class="pill">${r['입찰상태']==='no_bid'?'목표 미달':'확인 필요'}</span>`}`,
         right:_mtMetric(ready?'검토용 상한':'입찰 판단', ready?`<b style="color:#16a34a">${won(r['권장입찰가'])}</b>`:'<b style="color:#d97706">보류</b>'),
-        sub:`${r['region']||''}${_mtGradeTag(r['region'])?' · '+_mtGradeTag(r['region']):''}${ready?' · 차익 '+r['시세차익률']+'%':''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
+        sub:`${r['region']||''}${_mtGradeTag(r['region'])?' · '+_mtGradeTag(r['region']):''}${ready?' · 총비용 우위 '+r['총비용우위율']+'%':''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
     detail:r=>`<div class="kv">
       ${r['단지급지']?'<span>'+gradeBadge(r['단지급지'],r['급지상위'])+'</span>':''}
       <span>평형 ${r['전용면적']?Math.round(r['전용면적'])+'㎡('+(r['전용면적']/3.3058).toFixed(0)+'평)':'–'}</span>
@@ -5492,7 +5492,7 @@ function renderStrategy(rows){
     card('2주 내 입찰', wk2.length+'건', wk2.map(r=>r['단지명']).slice(0,3).join(', ')||'없음') +
     card('목표달성 매물', profit.length+'건', `전체 ${rows.length}건 중`) +
     card('최우선 단지', top?top['단지명']:'–',
-         top?`${top['region']} · 검토용 상한 ${won(top['권장입찰가'])} · 차익률 ${top['시세차익률']}%`:'조건을 충족한 매물이 없습니다');
+         top?`${top['region']} · 검토용 상한 ${won(top['권장입찰가'])} · 총비용 우위 ${top['총비용우위율']}%`:'조건을 충족한 매물이 없습니다');
 }
 
 async function openCalc(id, name){
@@ -5503,18 +5503,18 @@ async function openCalc(id, name){
   const bd = (t,v,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#1e293b'}">${v}</div></div>`;
   document.getElementById('calcBreak').innerHTML = ready ?
     bd('검토용 상한', won(rec['입찰가']), '#16a34a') + bd('경매 총매입', won(rec['경매총매입'])) +
-    bd('일반매매 총매입', won(rec['매매총매입'])) + bd('시세차익', won(rec['시세차익']), '#16a34a') +
-    bd('시세차익률', rec['시세차익률']+'%', '#16a34a') + bd('실투자금', won(rec['실투자금'])) +
+    bd('일반매매 가정 비용', won(rec['매매총매입'])) + bd('총비용 우위', won(rec['총비용우위']), '#16a34a') +
+    bd('총비용 우위율', rec['총비용우위율']+'%', '#16a34a') + bd('실투자금', won(rec['실투자금'])) +
     (rec['임대수익률']!=null?bd('임대수익률', rec['임대수익률']+'%'):'') +
     (rec['매도수익률']!=null?bd('단기매도수익률', rec['매도수익률']+'%'):'') :
     `<div style="color:#b45309;font-size:13px">${(rec['사유']||[]).join('<br>')}</div>`;
   const cols = [['낙찰가율','낙찰가율','%'],['입찰가','입찰가'],['경매총매입','경매총매입'],
-                ['시세차익','시세차익'],['시세차익률','시세차익률','%'],['임대수익률','임대수익률','%'],['실투자금','실투자금']];
+                ['총비용 우위','총비용우위'],['우위율','총비용우위율','%'],['임대수익률','임대수익률','%'],['실투자금','실투자금']];
   let h = '<thead><tr>'+cols.map(c=>`<th>${c[0]}</th>`).join('')+'</tr></thead><tbody>';
   d.table.forEach(row=>{
     const hit = row['입찰가']===rec['입찰가'];
     h += `<tr style="${hit?'background:#14532d55':''}">`+cols.map(c=>{
-      let v=row[c[1]]; if(v==null) v='–'; else if(c[2]==='%') v=v+'%'; else if(['입찰가','경매총매입','시세차익','실투자금'].includes(c[1])) v=won(v);
+      let v=row[c[1]]; if(v==null) v='–'; else if(c[2]==='%') v=v+'%'; else if(['입찰가','경매총매입','총비용우위','실투자금'].includes(c[1])) v=won(v);
       return `<td>${v}</td>`;
     }).join('')+'</tr>';
   });

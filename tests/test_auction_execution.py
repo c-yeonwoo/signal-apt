@@ -159,6 +159,21 @@ def test_clean_rights_still_need_source_attestation(client):
     assert rec["상태"] == "conditional_bid" and rec["입찰가"] > 0
 
 
+def test_integrated_listing_preserves_auction_hold_state(client, monkeypatch):
+    monkeypatch.setattr(app_api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(app_api, "_signal_map", lambda: {"노원구": "STRONG_BUY"})
+    pending = app_api._build_listings({"경매"})[0]
+    assert pending["입찰상태"] == "needs_review"
+    assert pending["검토용상한"] is None and pending["기회도"] == 0
+    assert pending["지표라벨"] == "총비용우위"
+
+    client.post(f"/api/auction/rights/{client.listing.id}",
+                json={**RIGHTS, "조사완료": True})
+    blocked = app_api._build_listings({"경매"})[0]
+    assert blocked["입찰상태"] == "no_bid"
+    assert blocked["검토용상한"] is None and blocked["기회도"] == 0
+
+
 def test_won_records_and_replans(client):
     d = client.post(f"/api/auction/won/{client.listing.id}",
                     json={"낙찰가": 60000, "낙찰일": "2026-09-01"}).json()

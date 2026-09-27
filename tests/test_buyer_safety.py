@@ -61,6 +61,14 @@ def test_auction_bid_is_not_move_in_purchase_price():
     assert row["예산확인필요"] and not row["예산내"]
 
 
+def test_auction_hold_is_not_promoted_as_affordable_candidate():
+    row = rec.score_listing({"유형": "경매", "총액": 10000, "입찰상태": "no_bid",
+                             "시그널": "STRONG_BUY"}, budget=20000, pyeong=25.7)
+    assert row["판단"] == "입찰보류" and row["_score"] < 0
+    missing = rec.score_listing({"유형": "경매", "총액": 10000}, budget=20000, pyeong=25.7)
+    assert missing["판단"] == "입찰보류"
+
+
 def test_finance_failure_overrides_attractive_signal_and_quote():
     out = rec.rank_listings([{"유형": "급매", "총액": 10000, "시그널": "STRONG_BUY"}],
         budget=20000, pyeong=25.7, loc_price_of=lambda _: None,
