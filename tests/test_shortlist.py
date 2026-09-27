@@ -18,10 +18,10 @@ GRADES = {
     "하락구": [{"단지": "폭락아파트", "평단가": 1000, "급지": 4, "상위": 80}],
 }
 LOCALITY = {
-    "강남구": {"region": "강남구", "저평가도": -5, "입지점수": 95},
-    "노원구": {"region": "노원구", "저평가도": 12, "입지점수": 55},
-    "도봉구": {"region": "도봉구", "저평가도": 8, "입지점수": 50},
-    "하락구": {"region": "하락구", "저평가도": 3, "입지점수": 40},
+    "강남구": {"region": "강남구", "price": 9000, "저평가도": -5, "입지점수": 95},
+    "노원구": {"region": "노원구", "price": 2300, "저평가도": 12, "입지점수": 55},
+    "도봉구": {"region": "도봉구", "price": 1900, "저평가도": 8, "입지점수": 50},
+    "하락구": {"region": "하락구", "price": 1000, "저평가도": 3, "입지점수": 40},
 }
 
 
@@ -105,6 +105,22 @@ def test_favorites_come_first_in_candidate_regions():
 def test_price_coverage_before_market_strength():
     regions = sl._candidate_regions([], SIGNALS, {"도봉구": {"price": 1000}})
     assert regions[0] == "도봉구"
+
+
+def test_no_price_evidence_does_not_pick_alphabetical_regions(monkeypatch):
+    monkeypatch.setattr(app_api, "_signal_map", lambda: {**SIGNALS, "마포구": "BUY", "은평구": "WATCH"})
+    monkeypatch.setattr(sl, "_locality_map", lambda: {})
+    monkeypatch.setattr(sl, "_fetch_grades", lambda regions: (_ for _ in ()).throw(AssertionError("network")))
+    out = sl.build(_profile(), budget=100_000)
+    assert out["ready"] is False and out["reason"] == "needs_focus_regions"
+    assert out["지역"] == [] and out["검토"] == 0
+
+
+def test_profile_region_still_provides_a_focused_candidate(monkeypatch):
+    monkeypatch.setattr(sl, "_locality_map", lambda: {})
+    out = sl.build(_profile(매수지역="노원구"), budget=100_000)
+    assert out["지역"][0] == "노원구"
+    assert out["ready"] is True
 
 
 def test_candidate_carries_cash_and_reason():
