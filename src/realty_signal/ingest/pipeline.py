@@ -37,7 +37,7 @@ def _status(path: Path, stale_days: float) -> SourceStatus:
     return "ok"
 
 
-def cache_health() -> dict[str, Any]:
+def cache_health(*, include_private: bool = True) -> dict[str, Any]:
     """소스별 ok/partial/stale/missing."""
     checks = {
         "kb_long": (store.CACHE_FILE, _STALE_DAYS["long"]),
@@ -47,6 +47,8 @@ def cache_health() -> dict[str, Any]:
         "macro": (store.MACRO_FILE, _STALE_DAYS["long"]),
         "codes": (store.CODES_FILE, 9999),
     }
+    if not include_private:
+        checks.pop("quicksale")
     sources = {}
     for key, (path, stale) in checks.items():
         st = _status(path, stale)
@@ -68,42 +70,25 @@ def cache_health() -> dict[str, Any]:
     return {"status": worst, "sources": sources, "ts": int(time.time())}
 
 
-def _quicksale_counts() -> dict[str, int]:
-    if not QUICKSALE_FILE.exists():
-        return {}
-    try:
-        listings = jsonx.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", [])
-    except Exception:  # noqa: BLE001
-        return {}
-    out: dict[str, int] = {}
-    for m in listings:
-        r = m.get("지역") or ""
-        if r:
-            out[r] = out.get(r, 0) + 1
-    return out
-
-
 def build_market_strength(
     signal_map: dict[str, str] | None = None,
     *,
     out: Path = STRENGTH_FILE,
 ) -> dict[str, Any]:
-    """전 지역 시장강도 프록시 → market_strength.json."""
+    """공유 시장강도는 공공 거래량·시그널만 사용한다(개인 외부 매물 제외)."""
     vols = store.load_volumes()
-    qs = _quicksale_counts()
     sig = signal_map or {}
-    regions = set(vols) | set(qs) | set(sig)
+    regions = set(vols) | set(sig)
     by_region: dict[str, Any] = {}
     for region in regions:
         vr = (vols.get(region) or {}).get("거래량비")
-        qc = qs.get(region)
-        if vr is None and qc is None and region not in sig:
+        if vr is None and region not in sig:
             continue
-        r = market_strength(volume_ratio=vr, quicksale_count=qc, signal=sig.get(region))
+        r = market_strength(volume_ratio=vr, quicksale_count=None, signal=sig.get(region))
         by_region[region] = r.to_dict()
     payload = {
         "asof": time.strftime("%Y-%m-%d"),
-        "source": "volume_quicksale_proxy",
+        "source": "volume_signal_proxy",
         "count": len(by_region),
         "regions": by_region,
         "ts": int(time.time()),
@@ -118,7 +103,8 @@ def load_market_strength(cache: Path = STRENGTH_FILE) -> dict[str, Any]:
     if not cache.exists():
         return {}
     try:
-        return jsonx.loads(cache.read_text(encoding="utf-8"))
+        payload = jsonx.loads(cache.read_text(encoding="utf-8"))
+        return payload if payload.get("source") == "volume_signal_proxy" else {}
     except Exception:  # noqa: BLE001
         return {}
 
@@ -132,7 +118,7 @@ def region_entity(
     """지역 Entity 조립 (캐시 기반)."""
     vols = store.load_volumes().get(region) or {}
     vr = vols.get("거래량비")
-    qc = _quicksale_counts().get(region, 0)
+    qc = None  # 개인 외부 매물 집계는 공유 시장강도/지역 응답에 섞지 않는다.
     strength_cache = (load_market_strength().get("regions") or {}).get(region)
     if strength_cache:
         ms, msl = strength_cache.get("시장강도"), strength_cache.get("시장강도라벨")
@@ -160,7 +146,7 @@ def region_entity(
         market_strength=ms, market_strength_label=msl,
         volume_ratio=vr, quicksale_count=qc, supply_pressure=sp,
         provenance=Provenance(
-            source="kb_weekly+volume+quicksale",
+            source="kb_weekly+volume",
             asof=asof,
             status="ok" if vr is not None else "partial",
             confidence=float(conf),

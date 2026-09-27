@@ -41,7 +41,9 @@ def alerts(request: Request):
     log_ = db.kv_get("signal_changes") or []
     seen = db.kv_get(f"alerts_seen:{uid}") or "" if uid else ""
     prefs = db.alert_prefs_get(uid) if uid else {}
-    listings = app_api._build_listings({"경매", "급매"}) if favs and prefs.get("high_timing", True) else []
+    listings = (app_api._build_listings({"경매", "급매"},
+                include_private=deps.personal_listings_allowed(request))
+                if favs and prefs.get("high_timing", True) else [])
     nbhd_diffs = app_api._user_nbhd_diffs(uid, favs) if uid and favs else {}
     return alert_engine.evaluate(
         favs, prefs,

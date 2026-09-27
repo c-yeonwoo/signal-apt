@@ -96,7 +96,8 @@ def budget_watch(request: Request):
         if not budget:
             return {"ready": False, "reason": "no_budget",
                     "message": "매수력을 확정하면 예산 안에 들어온 매물을 알려드립니다."}
-        rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+        rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"},
+                                       include_private=deps.personal_listings_allowed(request))
         return bw.compute(uid, rows, float(budget))
     except Exception as e:  # noqa: BLE001
         log.error("예산 변화 계산 실패 uid=%s: %s", uid, e)
@@ -116,7 +117,8 @@ def budget_watch_seen(request: Request):
     budget = (profile.get("매수력") or {}).get("최대매수가")
     if not budget:
         return {"ok": False, "reason": "no_budget"}
-    rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+    rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"},
+                                   include_private=deps.personal_listings_allowed(request))
     bw.mark_seen(uid, rows, float(budget))
     return {"ok": True}
 

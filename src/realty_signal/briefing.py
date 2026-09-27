@@ -44,8 +44,10 @@ def _key(c: dict) -> str:
     return f"{c.get('region')}|{c.get('단지')}"
 
 
-def _quicksales(regions: set[str], budget: float) -> list[dict]:
+def _quicksales(regions: set[str], budget: float, *, uid: int | None = None) -> list[dict]:
     """예산 안에 들어오는 급매만. 후보·관심지역으로 좁힌다."""
+    if not config.personal_listing_allowed(db.user_email(uid)):
+        return []
     if not QUICKSALE_FILE.exists():
         return []
     try:
@@ -231,7 +233,7 @@ def plan(uid: int) -> dict:
         except Exception as e:  # noqa: BLE001 — 후보가 없어도 나머지 할 일은 나와야 한다
             log.warning("액션플랜 숏리스트 실패 uid=%s: %s", uid, e)
         watch |= {c["region"] for c in cands}
-        qs = _quicksales(watch, float(budget))
+        qs = _quicksales(watch, float(budget), uid=uid)
 
     wk = weekly.for_user(watch)
     prev = db.kv_get(SNAP_KEY.format(uid=uid)) or {}
@@ -271,7 +273,7 @@ def build(uid: int, *, force: bool = False) -> dict:
                                     prev.get("complexes") or {}, budget=float(budget))
     cx_moved = [it for it in cx_items if it.get("changes")]
 
-    qs = _quicksales(watch, float(budget))
+    qs = _quicksales(watch, float(budget), uid=uid)
     qs_new = len(qs) - int(prev.get("quicksale") or 0)
     auctions = _auction_alerts()
 

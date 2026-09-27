@@ -48,7 +48,10 @@ def complex_building(region: str, name: str):
 
 
 @router.get("/api/complex-backtest")
-def complex_backtest_api():
+def complex_backtest_api(request: Request):
+    from realty_signal.routes import deps
+    if not deps.personal_listings_allowed(request):
+        return {"ready": False, "reason": "personal_only"}
     return _api().complex_backtest_api()
 
 
@@ -57,6 +60,8 @@ def complex_backtest_run(request: Request):
     from realty_signal.routes import deps
     if err := deps.require_admin(request):
         return err
+    if not deps.personal_listings_allowed(request):
+        return {"ready": False, "reason": "personal_only"}
     return _api().complex_backtest_run(request)
 
 

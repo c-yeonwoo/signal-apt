@@ -78,7 +78,7 @@ def test_budget_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
     uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
     db.profile_set(uid, {"매수력": {"최대매수가": 90_000}})
     rows = [{"key": "급매:1", "총액": 80_000, "유형": "급매", "단지명": "테스트", "지역": "노원구"}]
-    monkeypatch.setattr(app_api, "_build_listings", lambda kinds: rows)
+    monkeypatch.setattr(app_api, "_build_listings", lambda kinds, **_kw: rows)
 
     d = client.get("/api/budget-watch").json()
     assert d["reason"] == "first_run"
