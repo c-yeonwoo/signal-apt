@@ -37,6 +37,11 @@ def complex_detail(region: str, name: str):
     return _api().complex_detail(region, name)
 
 
+@router.post("/api/complex/{region}/{name}/quote-check")
+def complex_quote_check(region: str, name: str, data: dict = Body(...)):
+    return _api().complex_quote_check(region, name, data)
+
+
 @router.get("/api/complex/{region}/{name}/building")
 def complex_building(region: str, name: str):
     return _api().complex_building(region, name)

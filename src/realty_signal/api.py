@@ -1902,6 +1902,20 @@ def complex_detail(region: str, name: str):
     return deco(data)
 
 
+def complex_quote_check(region: str, name: str, data: dict):
+    """사용자 입력 호가를 국토부 동일면적 거래분포와 대조하되 저장하지 않는다."""
+    from fastapi import HTTPException
+    from realty_signal.services import quote_check
+
+    if not isinstance(data, dict):
+        raise HTTPException(422, "호가와 전용면적을 입력해 주세요")
+    try:
+        asking, area = quote_check.validate_input(data.get("asking"), data.get("exclusive_m2"))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return quote_check.assess(complex_detail(region, name), asking=asking, exclusive_m2=area)
+
+
 
 def _complex_backtest(sample: int = 30, months: int = 36) -> dict:
     """단지 가격추세 백테스트 — 표본 단지의 월별 평단가로 '3개월 추세 전환 → 6개월 방향 유지' 적중률.
