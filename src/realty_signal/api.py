@@ -38,6 +38,13 @@ _usage_status = deps.usage_status
 _usage_allow = deps.usage_allow
 
 
+def _personal_listings_allowed(*, request: Request | None = None, uid: int | None = None) -> bool:
+    """바로이집 원문·파생 매물은 한 계정의 응답/자문에만 포함한다."""
+    if request is not None:
+        return deps.personal_listings_allowed(request)
+    return config.personal_listing_allowed(db.user_email(uid))
+
+
 _REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
 _REFRESH_RETRY_HOURS = 6  # 수집 실패 시 하루를 기다리지 않고 이만큼 뒤 재시도
 
@@ -266,6 +273,7 @@ async def _startup_bg():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
+    config.load_env()
     task = asyncio.create_task(_startup_bg())  # 수집·갱신은 백그라운드, 서버는 즉시 서빙
     brief = asyncio.create_task(_briefing_loop())  # 텔레그램 폴링·데일리 브리핑
     yield
@@ -337,7 +345,10 @@ async def _auth_gate(request: Request, call_next):
     if p.startswith("/api/") and not p.startswith(_OPEN_PREFIXES) and p not in _OPEN_PATHS:
         if not _uid(request):
             return JSONResponse({"error": "인증이 필요합니다.", "auth": False}, status_code=401)
-    return await call_next(request)
+    response = await call_next(request)
+    if p.startswith("/api/") and p not in _OPEN_PATHS:
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 def _user_nbhd_diffs(uid: int, regions: set[str]) -> dict[str, list]:
@@ -349,6 +360,9 @@ def _user_nbhd_diffs(uid: int, regions: set[str]) -> dict[str, list]:
         curr = db.nbhd_snap_get(uid, region, weeks[0])
         prev = db.nbhd_snap_get(uid, region, weeks[1])
         if curr and prev:
+            if not _personal_listings_allowed(uid=uid):
+                curr = {**curr, "급매": None}
+                prev = {**prev, "급매": None}
             out[region] = _nbhd_diff(curr, prev)
     return out
 
@@ -367,7 +381,8 @@ def myfeed(request: Request):
     # 급매(지역별)
     qs = []
     try:
-        qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
+        if _personal_listings_allowed(request=request) and QUICKSALE_FILE.exists():
+            qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", [])
     except Exception:  # noqa: BLE001
         qs = []
     # 청약(지역별, 임박)
@@ -382,7 +397,9 @@ def myfeed(request: Request):
         gap = min([m.get("급매갭") for m in rq if m.get("급매갭") is not None], default=None)
         rp = [d for d in ps if r in (d.get("지역") or "")]
         items.append({"type": "region", "region": r, "signal": sig.get(r, ""),
-                      "급매": len(rq), "급매갭": gap, "청약임박": len(rp),
+                      "급매": len(rq) if _personal_listings_allowed(request=request) else None,
+                      "급매갭": gap, "personal_only": not _personal_listings_allowed(request=request),
+                      "청약임박": len(rp),
                       "청약단지": (rp[0].get("단지명") if rp else None)})
     for key in complexes:
         region, _, name = key.partition("|")
@@ -576,7 +593,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
             return _region_timing_row(region)
         if layer == "listing":
             kind = args.get("kind") or "급매"
-            items = _build_listings({kind})
+            items = _build_listings({kind}, include_private=_personal_listings_allowed(uid=uid))
             if region:
                 items = [x for x in items if region in (x.get("지역") or "")]
             items = sorted(items, key=lambda x: x.get("타이밍점수") or 0, reverse=True)[:8]
@@ -643,8 +660,11 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
     if name == "get_listings":
         region = (args.get("region") or "").strip()
         kind = args.get("kind") or "급매"
+        private_allowed = _personal_listings_allowed(uid=uid)
+        if kind in ("급매", "찐매물") and not private_allowed:
+            return {"reason": "personal_only", "result": "외부 매물은 개인 계정에서만 확인할 수 있습니다."}
         out: dict = {}
-        if kind in ("급매", "전체"):
+        if kind in ("급매", "전체") and private_allowed:
             try:
                 qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
             except Exception:  # noqa: BLE001
@@ -654,7 +674,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
             qs = sorted(qs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
             out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
                           "호가": m.get("호가"), "급매갭": m.get("급매갭"), "시그널": m.get("시그널")} for m in qs]
-        if kind in ("찐매물", "전체"):
+        if kind in ("찐매물", "전체") and private_allowed:
             try:
                 cs = json.loads(CERTIFIED_FILE.read_text(encoding="utf-8")).get("listings", []) if CERTIFIED_FILE.exists() else []
             except Exception:  # noqa: BLE001
@@ -1269,7 +1289,8 @@ def conclusion(request: Request | None = None, capital: float | None = None,
         for r in json.loads(loc.to_json(orient="records", force_ascii=False)):
             locmap[r["region"]] = r
 
-    raw = _build_listings({"경매", "급매", "찐매물", "청약", "재건축"})
+    raw = _build_listings({"경매", "급매", "찐매물", "청약", "재건축"},
+                          include_private=_personal_listings_allowed(request=request))
     def candidate_finance(row, price):
         from dataclasses import replace
         rp = buying_power.params_for_region(p, row.get("지역"), _sido_of(row.get("지역")))
@@ -1326,7 +1347,8 @@ _GRADE_ORDER = {"A": 4, "B": 3, "C": 2, "D": 1}
 
 def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
             extra_cash: float = 0, ltv: float = 0.7, income: float | None = None,
-            rate: float = 0.04, years: int = 30, pyeong: float = 25.7):
+            rate: float = 0.04, years: int = 30, pyeong: float = 25.7,
+            request: Request | None = None):
     """갈아타기 전략 — 현 자산 매도 → 상급지/저평가 착지 후보.
 
     current_value: 현재 집 시세(만원), loan_balance: 대출잔액(만원),
@@ -1383,7 +1405,7 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
     grade_of = {c["region"]: c["급지상향"] for c in cards}
     floor = current_value * 0.6                           # 현 시세 60% 미만은 갈아타기 아님(오피스텔·소형 노이즈 제거)
     listings = []
-    for L in _build_listings({"경매", "급매"}):
+    for L in _build_listings({"경매", "급매"}, include_private=_personal_listings_allowed(request=request)):
         tot = L.get("총액")
         if not tot or tot > budget or tot < floor:
             continue
@@ -2360,7 +2382,8 @@ def neighborhood(request: Request, region: str):
     # 매물 건수(이 동네)
     def _qs_count():
         try:
-            qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
+            qs = (json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", [])
+                  if _personal_listings_allowed(request=request) and QUICKSALE_FILE.exists() else [])
             return sum(1 for m in qs if region in (m.get("지역") or ""))
         except Exception:  # noqa: BLE001
             return 0
@@ -2410,7 +2433,8 @@ def neighborhood(request: Request, region: str):
         "평단가": lr.get("price"), "저평가도": lr.get("저평가도"), "입지점수": lr.get("입지점수"),
         "규제지역": _regulation_of(region), "규제기준": _REGULATION_ASOF,
         "미래가치": {"재건축후보수": redev_n, "개발계획": dev},
-        "매물": {"급매": _qs_count(), "청약": ps_cnt},
+        "매물": {"급매": _qs_count() if _personal_listings_allowed(request=request) else None,
+                 "청약": ps_cnt},
         "거래량": vol,
         "거시": pl.macro_latest(),
         "입지상세": pl.locality_bits(lr),
@@ -2442,8 +2466,11 @@ def neighborhood(request: Request, region: str):
         db.nbhd_snap_save(uid, region, week, metrics)
         prev = db.nbhd_snap_prev(uid, region, week)
         if prev and prev.get("data"):
-            out["prev"] = {"week": prev["week"], "data": prev["data"]}
-            out["diff"] = _nbhd_diff(metrics, prev["data"])
+            prev_data = dict(prev["data"])
+            if not _personal_listings_allowed(request=request):
+                prev_data["급매"] = None
+            out["prev"] = {"week": prev["week"], "data": prev_data}
+            out["diff"] = _nbhd_diff(metrics, prev_data)
         out["snap_weeks"] = db.nbhd_snap_weeks(uid, region)
     return out
 
@@ -2749,8 +2776,10 @@ def _listing_key(kind: str, raw: dict, ref: dict, name: str | None, region: str 
     return ":".join(parts)
 
 
-def _build_listings(want: set[str]) -> list[dict]:
-    """통합 매물 정규화(공통 스키마 + 기회도 + 총액 + 평형). 유형 필터(want)만 수집."""
+def _build_listings(want: set[str], *, include_private: bool = False) -> list[dict]:
+    """통합 매물 정규화. 바로이집 유형은 명시적 허용 없으면 읽지 않는다."""
+    if not include_private:
+        want = want - {"급매", "찐매물"}
     grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
     out = []
 
@@ -2820,7 +2849,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
 
-    out = _build_listings(set(t for t in types.split(",") if t))
+    out = _build_listings(set(t for t in types.split(",") if t),
+                          include_private=_personal_listings_allowed(request=request))
     uid = _uid(request)
     scores = eng_rank.engagement_scores(uid=uid)
     if scores:
@@ -2854,14 +2884,17 @@ def certified():
 
 
 def _scan_regions() -> list[str]:
-    """급매·찐매물 스캔 대상 = BUY+ 시그널 지역 ∪ 전체 사용자 관심 지역(중복 제거).
+    """급매·찐매물 스캔 대상 = BUY+ 시그널 지역 ∪ 개인 계정 관심 지역.
 
-    관심 지역엔 시그널과 무관하게 매물 데이터가 항상 있도록 보장 → 관심 피드·동네 리포트 밀도↑.
+    다른 계정의 관심 지역으로 개인용 외부 수집 범위를 넓히지 않는다.
     """
     df = _signals_df()
     buy = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
     valid = set(df["region"])
-    favs = [r for r in db.all_fav_regions() if r in valid]   # 유효 지역만
+    owner_email = config.personal_listing_email()
+    owner = db.user_by_email(owner_email) if owner_email else None
+    favs = ([f["key"] for f in db.fav_list(owner["id"])
+             if f["kind"] == "region" and f["key"] in valid] if owner else [])
     seen, out = set(), []
     for r in buy + favs:
         if r not in seen:

@@ -23,6 +23,11 @@ def is_admin(request: Request) -> bool:
     return bool(u) and (u.get("email") or "").lower() in config.admin_whitelist()
 
 
+def personal_listings_allowed(request: Request) -> bool:
+    u = auth.current_user(request.cookies.get(auth.COOKIE))
+    return config.personal_listing_allowed((u or {}).get("email"))
+
+
 def require_admin(request: Request) -> JSONResponse | None:
     """관리자 아니면 403 응답. 핸들러에서 `if err: return err`."""
     if not is_admin(request):

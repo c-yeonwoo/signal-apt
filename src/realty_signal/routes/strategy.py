@@ -34,15 +34,18 @@ def conclusion(request: Request, capital: float | None = None, ltv: float | None
 
 
 @router.get("/api/tradeup")
-def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
+def tradeup(request: Request, current_region: str, current_value: float, loan_balance: float = 0,
             extra_cash: float = 0, ltv: float = 0.7, income: float | None = None,
             rate: float = 0.04, years: int = 30, pyeong: float = 25.7):
     return _api().tradeup(current_region, current_value, loan_balance, extra_cash,
-                          ltv, income, rate, years, pyeong)
+                          ltv, income, rate, years, pyeong, request=request)
 
 
 @router.get("/api/quicksale")
-def quicksale():
+def quicksale(request: Request):
+    from realty_signal.routes import deps
+    if not deps.personal_listings_allowed(request):
+        return {"ready": False, "state": "personal_only", "listings": [], "reason": "personal_only"}
     return _api().quicksale()
 
 
@@ -51,11 +54,16 @@ def quicksale_refresh(request: Request, data: dict = Body(default={})):
     from realty_signal.routes import deps
     if err := deps.require_admin(request):
         return err
+    if not deps.personal_listings_allowed(request):
+        return {"ok": False, "reason": "personal_only"}
     return _api().quicksale_refresh(data)
 
 
 @router.get("/api/certified")
-def certified():
+def certified(request: Request):
+    from realty_signal.routes import deps
+    if not deps.personal_listings_allowed(request):
+        return {"ready": False, "state": "personal_only", "listings": [], "reason": "personal_only"}
     return _api().certified()
 
 
@@ -64,4 +72,6 @@ def certified_refresh(request: Request, data: dict = Body(default={})):
     from realty_signal.routes import deps
     if err := deps.require_admin(request):
         return err
+    if not deps.personal_listings_allowed(request):
+        return {"ok": False, "reason": "personal_only"}
     return _api().certified_refresh(data)

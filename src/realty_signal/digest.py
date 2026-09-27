@@ -13,7 +13,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
-from realty_signal import db
+from realty_signal import config, db
 from realty_signal.brain import snapshots
 
 
@@ -142,7 +142,7 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
             complexes.append({
                 "name": nm, "region": reg,
                 "전세가율": main.get("전세가율"), "갭": main.get("갭"),
-                "급매": qs_by.get(reg),
+                "급매": qs_by.get(reg) if config.personal_listing_allowed(u["email"]) else None,
             })
         extras = {"macro": macro, "volumes": vols, "complexes": complexes}
         out.append(build_user_digest(u["email"], u["regions"], changes, signal_map, as_of, extras))

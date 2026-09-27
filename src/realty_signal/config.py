@@ -45,6 +45,20 @@ def admin_whitelist() -> set[str]:
     return ids
 
 
+def personal_listing_email() -> str | None:
+    """외부 매물 원문을 볼 단일 계정. 명시하지 않으면 단일 관리자만 허용한다."""
+    raw = (os.environ.get("PERSONAL_LISTING_EMAIL") or "").strip().lower()
+    if raw:
+        return raw if "@" in raw and "," not in raw else None
+    admins = admin_whitelist()
+    return next(iter(admins)) if len(admins) == 1 else None
+
+
+def personal_listing_allowed(email: str | None) -> bool:
+    owner = personal_listing_email()
+    return bool(owner and email and email.strip().lower() == owner)
+
+
 def student_allowlist() -> set[str]:
     """수강생 이메일 화이트리스트(소문자). 있으면 초대 코드 없이도 가입 가능."""
     raw = os.environ.get("STUDENT_ALLOWLIST", "")

@@ -26,7 +26,8 @@ def auth_signup(data: dict = Body(...)):
     if err:
         return JSONResponse({"ok": False, "error": err}, status_code=400)
     r = JSONResponse({"ok": True})
-    r.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    r.set_cookie(auth.COOKIE, token, httponly=True, secure=config.is_prod(),
+                 samesite="lax", max_age=60 * 60 * 24 * 30)
     return r
 
 
@@ -36,7 +37,8 @@ def auth_login(data: dict = Body(...)):
     if err:
         return JSONResponse({"ok": False, "error": err}, status_code=401)
     r = JSONResponse({"ok": True})
-    r.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    r.set_cookie(auth.COOKIE, token, httponly=True, secure=config.is_prod(),
+                 samesite="lax", max_age=60 * 60 * 24 * 30)
     return r
 
 

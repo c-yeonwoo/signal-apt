@@ -59,6 +59,15 @@ def test_build_market_strength(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.store, "load_volumes", _vols)
     out = pipeline.build_market_strength({"강남구": "BUY", "마포구": "WATCH"})
     assert out["count"] == 2
+    assert out["source"] == "volume_signal_proxy"
+    assert out["regions"]["강남구"]["급매건수"] is None
     assert out["regions"]["강남구"]["시장강도"] > out["regions"]["마포구"]["시장강도"]
     health = pipeline.cache_health()
     assert "sources" in health
+
+
+def test_legacy_strength_cache_with_external_listing_counts_is_ignored(tmp_path):
+    cache = tmp_path / "market_strength.json"
+    cache.write_text(json.dumps({"source": "volume_quicksale_proxy",
+                                 "regions": {"강남구": {"급매건수": 4}}}), encoding="utf-8")
+    assert pipeline.load_market_strength(cache) == {}

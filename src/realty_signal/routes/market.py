@@ -36,7 +36,8 @@ def operations(request: Request):
         return err
     from realty_signal import jobs, llm
     from realty_signal.ingest.pipeline import cache_health
-    return {"jobs": jobs.status(), "llm": llm.usage_summary(), "sources": cache_health()}
+    return {"jobs": jobs.status(), "llm": llm.usage_summary(),
+            "sources": cache_health(include_private=deps.personal_listings_allowed(request))}
 
 _METRIC_LABEL = {
     "jeonse_supply": "전세수급지수",
@@ -110,7 +111,7 @@ def meta():
 
 
 @router.get("/api/freshness")
-def freshness():
+def freshness(request: Request):
     from realty_signal.auction import AUCTION_FILE
     from realty_signal import api as app_api
     last_date = str(md.kb().last_date.date())
@@ -140,11 +141,14 @@ def freshness():
          "cycle": "signal volumes 시", "note": "시군구 월별 거래건수·거래량비. 시장강도 프록시 입력."},
         {"key": "strength", "label": "시장강도 프록시",
          "ts": _file_mtime(store.CACHE_DIR / "market_strength.json"),
-         "cycle": "KB 갱신 시 자동", "note": "거래량비+급매 밀도 프록시(부동산지인/아실 대체)."},
+         "cycle": "KB 갱신 시 자동", "note": "공공 거래량비+시장 시그널 프록시. 개인 외부 매물 제외."},
     ]
     from realty_signal.ingest import pipeline
+    private = deps.personal_listings_allowed(request)
+    if not private:
+        sources = [source for source in sources if source["key"] not in {"quicksale", "certified"}]
     return {"기준일": last_date, "now": int(__import__("time").time()),
-            "sources": sources, "pipeline": pipeline.cache_health(),
+            "sources": sources, "pipeline": pipeline.cache_health(include_private=private),
             # 수집이 멈췄을 때 '왜' 를 화면이 말할 수 있어야 한다. 로그를 볼 수 없는 사용자도 본다.
             "kb_fetch": app_api.kb_fetch_health()}
 

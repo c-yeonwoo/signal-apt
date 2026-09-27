@@ -225,6 +225,15 @@ def user_by_email(email: str):
     return {"id": row[0], "email": row[1], "pwhash": row[2]} if row else None
 
 
+def user_email(uid: int | None) -> str | None:
+    if uid is None:
+        return None
+    c = conn()
+    row = c.execute("SELECT email FROM users WHERE id=?", (uid,)).fetchone()
+    c.close()
+    return row[0] if row else None
+
+
 def user_set_pwhash(uid: int, pwhash: str) -> bool:
     """비밀번호 해시 갱신. 대상 없으면 False."""
     c = conn()

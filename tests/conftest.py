@@ -39,7 +39,8 @@ def isolated_runtime(tmp_path, monkeypatch, synthetic_market):
     monkeypatch.setattr(db, "DB", tmp_path / "isolated.db")
     monkeypatch.setattr(db, "_migrated", [False])
     for name in ("ANTHROPIC_API_KEY", "PUBLIC_DATA_KEY", "SMTP_HOST", "SMTP_FROM",
-                 "TELEGRAM_BOT_TOKEN", "AI_OPUS_WHITELIST", "ADMIN_EMAILS"):
+                 "TELEGRAM_BOT_TOKEN", "AI_OPUS_WHITELIST", "ADMIN_EMAILS",
+                 "PERSONAL_LISTING_EMAIL"):
         monkeypatch.delenv(name, raising=False)
 
     def no_network(*args, **kwargs):
