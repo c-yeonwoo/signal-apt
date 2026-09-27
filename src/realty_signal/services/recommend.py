@@ -54,16 +54,17 @@ def score_listing(row: dict, *, budget: float, pyeong: float,
     score = (
         budget_fit
     )
+    auction_hold = row.get("유형") == "경매" and row.get("입찰상태") != "conditional_bid"
     out = dict(row)
     out.update({
         "추정가": est,
         "가격출처": est_src,
         "예산내": affordable,
         "예산확인필요": unknown_price,
-        "판단": "가격확인필요" if unknown_price else "호가예산내" if affordable else "예산초과",
+        "판단": "입찰보류" if auction_hold else "가격확인필요" if unknown_price else "호가예산내" if affordable else "예산초과",
         "판단버전": "buyer-evidence-v2",
         "예산비율": round(ratio, 3) if affordable and est else None,
-        "_score": round(score, 1),
+        "_score": -100.0 if auction_hold else round(score, 1),
     })
     return out
 
@@ -168,8 +169,9 @@ def aggregate_regions(listings: list[dict], *, locmap: dict,
             "저평가도": lr.get("저평가도"), "입지점수": lr.get("입지점수"),
             "지역급지": items[0].get("지역급지") or lr.get("급지"),
             "해설": lr.get("해설"),
-            "경매단지": [{"단지명": x.get("단지명"), "권장입찰가": x.get("총액"),
-                       "시세차익률": x.get("지표값") if x.get("유형") == "경매" else None,
+            "경매단지": [{"단지명": x.get("단지명"), "권장입찰가": x.get("검토용상한") if x.get("입찰상태") == "conditional_bid" else None,
+                       "총비용우위율": x.get("지표값"), "입찰상태": x.get("입찰상태"),
+                       "시세차익률": x.get("지표값"),  # 기존 응답 호환
                        "단지급지": None} for x in kinds.get("경매", [])],
             "급매단지": [{"단지명": x.get("단지명"), "평형": (x.get("ref") or {}).get("평형") or x.get("평형"),
                        "호가": x.get("총액"), "급매갭": x.get("지표값")}

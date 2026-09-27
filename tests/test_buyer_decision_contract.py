@@ -30,6 +30,27 @@ def test_blocking_finance_cannot_be_hidden_by_good_price():
     assert result["decision"]["blocking_reasons"]
 
 
+def test_auction_no_bid_is_infeasible_even_with_cash():
+    row = _row() | {"유형": "경매", "입찰상태": "no_bid"}
+    result = decision.build(row, bp.Params(capital=50000))
+    assert result["decision"]["feasibility"] == "infeasible"
+    assert "입찰 보류" in result["decision"]["next_action"]
+
+
+def test_auction_rights_pending_remains_unknown():
+    row = _row() | {"유형": "경매", "입찰상태": "needs_review"}
+    result = decision.build(row, bp.Params(capital=50000))
+    assert result["decision"]["feasibility"] == "unknown"
+    assert any("경매" in s for s in result["decision"]["unknowns"])
+
+
+def test_auction_missing_status_fails_closed():
+    row = _row() | {"유형": "경매"}
+    result = decision.build(row, bp.Params(capital=50000))
+    assert result["decision"]["feasibility"] == "unknown"
+    assert any("경매" in s for s in result["decision"]["unknowns"])
+
+
 def test_identity_tracks_price_profile_policy_and_owner(monkeypatch):
     p = bp.Params(capital=50000, income=8000)
     baseline = decision.build(_row(), p, uid=1)["decision"]["id"]

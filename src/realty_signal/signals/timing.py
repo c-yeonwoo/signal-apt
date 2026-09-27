@@ -72,9 +72,9 @@ def _listing_base(kind: str, raw: dict) -> tuple[int, list[str], float]:
             conf = min(0.9, conf + 0.08)   # 집주인 인증 — 허위매물 리스크↓
             why.append("찐매물(내집등록)")
     elif kind == "경매":
-        r = raw.get("시세차익률")
+        r = raw.get("총비용우위율", raw.get("시세차익률"))
         base = 0 if r is None else max(0, min(60, round(r * 1.8)))
-        why.append(f"시세차익 {r}%" if r is not None else "시세차익 –")
+        why.append(f"총비용우위 {r}%" if r is not None else "총비용우위 미확인")
         conf = 0.68 if r is not None else 0.4
     elif kind == "청약":
         st, dd = raw.get("상태"), raw.get("Dday")
@@ -103,6 +103,10 @@ def listing_timing(
     source: str = "listings_merged",
 ) -> TimingResult:
     """매물(경매·급매·청약·재건축) 타이밍 점수."""
+    if kind == "경매" and raw.get("입찰상태") in ("no_bid", "needs_review", "insufficient_evidence"):
+        reason = ", ".join(raw.get("확인할것") or []) or "입찰가 판단 보류"
+        return TimingResult(score=0, reasons=[reason], confidence=0.25,
+                            source=source, asof=asof, layer="listing")
     base, why, conf = _listing_base(kind, raw)
     sb = _SIG_BONUS.get(signal or "", 0)
     gb = _GRADE_BONUS.get(grade or "", 0)

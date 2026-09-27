@@ -32,3 +32,10 @@ def test_region_timing_with_backtest():
 def test_listing_timing_no_signal():
     r = listing_timing("경매", {"시세차익률": 20}, None, None, asof="2026-07-14")
     assert r.confidence < 0.72
+
+
+def test_auction_no_bid_cannot_regain_opportunity_score_from_region_signal():
+    r = listing_timing("경매", {"입찰상태": "no_bid", "총비용우위율": None,
+                              "확인할것": ["목표 비용 우위 미달"]}, "STRONG_BUY", "A")
+    assert r.score == 0 and r.confidence < 0.5
+    assert "미달" in r.reasons_text

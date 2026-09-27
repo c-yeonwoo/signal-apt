@@ -3,12 +3,12 @@
 입찰가 계산은 경매 입찰가 산정표 모델이다:
   - 경매 총매입비용 = 입찰가 + 등기비 + 명도비 + 미납관리비 + 수리비 + 대리입찰 + 인수보증금 + 보유이자
   - 일반매매 총매입비용 = 시세 + 취득세 + 중개수수료 + 법무비
-  - 시세차익 = 일반매매총매입 − 경매총매입,  시세차익률 = 시세차익 / 경매총매입
+  - 총비용우위 = 일반매매총매입 − 경매총매입. 매도 이익/수익률이 아니다.
   - 실투자금 = 경매총매입 − 대출금(=입찰가×대출비율)
   - 임대수익률 = (월세×12 − 대출금×금리) / (실투자금 − 임대보증금)
   - 단기매도 순수익 = 매도가 − 경매총매입 − 매도중개보수
 낙찰가율(감정가 대비)을 1%씩 변화시킨 민감도 표를 만들고,
-목표 시세차익률을 만족하는 '권장 입찰가'를 도출한다.
+목표 총비용 우위율을 만족하는 검토용 입찰 상한을 도출한다.
 
 매물은 수동입력/CSV → data/cache/auction.json.
 """
@@ -38,7 +38,7 @@ DEFAULTS = {
     "대출비율": 0.7,
     "대출금리": 0.05,
     "보유개월": 6,            # 단기매도/이자 가정 개월
-    "목표시세차익률": 0.10,   # 권장 입찰가 산정 기준
+    "목표시세차익률": 0.10,   # 호환 키: 일반매매 대비 총비용 우위율 목표
 }
 
 CSV_FIELDS = ["사건번호", "단지명", "region", "감정가", "최저매각가", "유찰횟수",
@@ -105,8 +105,8 @@ def breakdown(lst: Listing, 입찰가: float, p: dict) -> dict:
     경매총매입 = 입찰가 + 부대 + 보유이자
 
     매매총매입 = market * (1 + p["취득세율"] + p["매수중개율"]) + p["법무비"] / 10000
-    시세차익 = 매매총매입 - 경매총매입
-    시세차익률 = 시세차익 / 경매총매입 if 경매총매입 else 0.0
+    비용우위 = 매매총매입 - 경매총매입
+    비용우위율 = 비용우위 / 경매총매입 if 경매총매입 else 0.0
     실투자금 = 경매총매입 - 대출금
 
     # 임대수익률
@@ -125,7 +125,9 @@ def breakdown(lst: Listing, 입찰가: float, p: dict) -> dict:
     return {
         "입찰가": rnd(입찰가), "등기비": rnd(등기비), "명도비": rnd(명도비),
         "대출금": rnd(대출금), "보유이자": rnd(보유이자), "경매총매입": rnd(경매총매입),
-        "매매총매입": rnd(매매총매입), "시세차익": rnd(시세차익), "시세차익률": pct(시세차익률),
+        "매매총매입": rnd(매매총매입),
+        "총비용우위": rnd(비용우위), "총비용우위율": pct(비용우위율),
+        "시세차익": rnd(비용우위), "시세차익률": pct(비용우위율),  # 기존 API 호환, 매도 차익 아님
         "실투자금": rnd(실투자금), "임대수익률": pct(임대수익률),
         "매도순수익": rnd(매도순수익), "매도수익률": pct(매도수익률),
     }
@@ -179,11 +181,12 @@ def recommend(lst: Listing, p: dict) -> dict:
         return {"상태": "insufficient_evidence", "입찰가": None,
                 "사유": ["유효한 입찰가 구간이 없습니다. 최저매각가를 확인하세요."]}
     target = p["목표시세차익률"] * 100
-    ok = [row for row in rows if row["시세차익률"] is not None and row["시세차익률"] >= target]
+    ok = [row for row in rows if row["총비용우위율"] is not None and row["총비용우위율"] >= target]
     if not ok:
         return {"상태": "no_bid", "입찰가": None,
-                "사유": [f"최저매각가에서도 목표 시세차익률 {target:g}%를 충족하지 못합니다."],
-                "최저가시세차익률": rows[0]["시세차익률"]}
+                "사유": [f"최저매각가에서도 목표 총비용 우위율 {target:g}%를 충족하지 못합니다."],
+                "최저가총비용우위율": rows[0]["총비용우위율"],
+                "최저가시세차익률": rows[0]["총비용우위율"]}
     return {**max(ok, key=lambda x: x["입찰가"]), "상태": "conditional_bid", "사유": []}
 
 
@@ -503,19 +506,20 @@ _SIG_WEIGHT = {"STRONG_BUY": 2, "BUY": 1}
 
 
 def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | None = None) -> list[dict]:
-    """매물 + 권장입찰가/시세차익률 + 지역시그널 + 우선순위 점수."""
+    """매물 + 검토용 상한/총비용 우위율 + 지역시그널 + 우선순위 점수."""
     p = _p(overrides)
     out = []
     for lst in listings:
         rec = recommend(lst, p)
         sig = signals.get(lst.region, "")
-        margin = rec.get("시세차익률")
+        margin = rec.get("총비용우위율")
         score = (_SIG_WEIGHT.get(sig, 0) * 10 + margin) if margin is not None else -100
         if rec["상태"] != "conditional_bid":
             score -= 100
         out.append({
             **asdict(lst), "지역시그널": sig, "권장입찰가": rec["입찰가"],
-            "예상낙찰가": None, "시세차익": rec.get("시세차익"), "시세차익률": margin,
+            "예상낙찰가": None, "총비용우위": rec.get("총비용우위"), "총비용우위율": margin,
+            "시세차익": rec.get("총비용우위"), "시세차익률": margin,  # 호환 필드
             "임대수익률": rec.get("임대수익률"), "매도수익률": rec.get("매도수익률"),
             "최저매각가": rec.get("최저매각가") or lst.최저매각가,
             "우선순위점수": round(score, 1),

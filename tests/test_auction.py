@@ -20,8 +20,10 @@ def test_breakdown_matches_excel_model():
     assert b["명도비"] == round(59 * 0.3025 * 150000 / 10000)
     # 대출금 = 28000*0.7
     assert b["대출금"] == round(28000 * 0.7)
-    # 시세차익 = 매매총매입 - 경매총매입
-    assert b["시세차익"] == b["매매총매입"] - b["경매총매입"]
+    # 일반매수 가정 대비 비용 차이이지 매도 후 이익이 아니다.
+    assert b["총비용우위"] == b["매매총매입"] - b["경매총매입"]
+    assert b["매도순수익"] is None  # 매도가가 없으면 매도 이익을 만들지 않는다
+    assert b["시세차익"] == b["총비용우위"]  # 기존 API 호환
 
 
 def test_table_spans_from_floor_rate():
@@ -38,6 +40,7 @@ def test_recommend_picks_highest_bid_meeting_target():
     p = _p({"목표시세차익률": 0.10})
     rec = recommend(lst, p)
     assert rec["시세차익률"] >= 10.0
+    assert rec["총비용우위율"] == rec["시세차익률"]
     assert rec["상태"] == "conditional_bid"
     # 권장보다 1%p 높은 입찰가는 목표 미달이어야(=최대 입찰가)
     rows = table(lst, p)
