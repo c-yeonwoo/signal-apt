@@ -2021,32 +2021,40 @@ def warm_favorite_complexes() -> dict:
 
 # 가치기준 → (필드, 작을수록 유리?, 표시라벨, 값포맷)
 _CMP_CRIT = {
-    "가격":     ("최근평단가", True,  "평단가",   lambda v: f"{round(v):,}만"),
-    "상승여력": ("추세pct",   False, "2년 추세", lambda v: f"{v:+g}%"),
-    "전세안정성": ("전세가율", False, "전세가율", lambda v: f"{round(v)}%"),
-    "실투자금": ("갭",       True,  "갭",      lambda v: f"{v/10000:.1f}억"),
-    "유동성":   ("총거래",    False, "거래량",   lambda v: f"{round(v)}건"),
+    "가격":     ("최근평단가", True,  "최근 거래월 평균 평단", lambda v: f"{round(v):,}만"),
+    "가격변화": ("추세pct",   False, "2년 관측 변화", lambda v: f"{v:+g}%"),
+    "전세차액": ("갭",       True,  "매매-전세 차액", lambda v: f"{v/10000:.1f}억"),
+    "거래활동": ("총거래",    False, "조회기간 신고거래", lambda v: f"{round(v)}건"),
 }
+_CMP_ALIASES = {"상승여력": "가격변화", "실투자금": "전세차액", "유동성": "거래활동"}
+
+
+def _comp_area_comparable(complexes: list) -> bool:
+    areas = [c.get("전용㎡") for c in complexes]
+    return bool(areas and all(isinstance(a, (int, float)) and a > 0 for a in areas)
+                and max(areas) - min(areas) <= 1)
 
 
 def _compare_rule(criterion: str, complexes: list) -> str:
     """규칙기반 비교 해설 — 선택 가치기준에서 1등 단지 + 반대관점 주의."""
+    criterion = _CMP_ALIASES.get(criterion, criterion)
     spec = _CMP_CRIT.get(criterion)
     if not spec or not complexes:
         return "비교할 데이터가 부족합니다."
     field, lower_better, label, fmt = spec
+    if criterion == "전세차액" and not _comp_area_comparable(complexes):
+        return "주력 전용면적이 서로 달라 매매-전세 차액을 같은 기준으로 비교할 수 없습니다."
     have = [c for c in complexes if c.get(field) is not None]
     if not have:
         return f"{label} 데이터가 있는 단지가 없어 비교가 어렵습니다."
     best = (min if lower_better else max)(have, key=lambda c: c[field])
-    msg = f"‘{criterion}’ 기준으로는 {best.get('단지명','–')}가 {label} {fmt(best[field])}로 가장 유리합니다."
-    # 반대 관점: 전세안정성이 낮으면 하방 주의 등 간단 힌트
-    if criterion == "실투자금":
-        risky = [c for c in have if (c.get("전세가율") or 0) < 60]
-        if any(c is best for c in risky):
-            msg += " 다만 전세가율이 낮아 하방 안전마진은 상대적으로 약할 수 있습니다."
-    elif criterion == "상승여력" and (best.get("추세pct") or 0) < 0:
-        msg += " 단, 최근 2년 추세가 하락이라 반등 신호는 별도 확인이 필요합니다."
+    msg = f"선택한 {label} 수치만 보면 {best.get('단지명','–')}가 {fmt(best[field])}입니다."
+    if criterion == "전세차액":
+        msg += " 취득세·수리비·대출·보증금 반환 부담을 포함한 실제 필요현금은 아닙니다."
+    elif criterion == "가격변화":
+        msg += " 과거 변화는 향후 상승 여력을 뜻하지 않습니다."
+    elif criterion == "거래활동":
+        msg += " 단지 규모를 보정하지 않은 건수라 매도 소요기간을 뜻하지 않습니다."
     return msg
 
 
@@ -2062,6 +2070,8 @@ def _compare_score(criteria: list, complexes: list) -> tuple[list, int]:
             continue
         field, lower, label, fmt = spec
         have = [(c, c[field]) for c in valid if c.get(field) is not None]
+        if crit == "전세차액" and (len(have) != len(valid) or not _comp_area_comparable(valid)):
+            continue
         if len(have) < 2:                       # 값 가진 단지 2개 미만이면 변별 불가 → 스킵
             for c, v in have:
                 detail[c["단지명"]][crit] = fmt(v)
@@ -2085,11 +2095,11 @@ def _recommend_rule(criteria: list, ranked: list) -> str:
         return "비교할 데이터가 부족합니다."
     w = ranked[0]
     parts = ", ".join(f"{k} {v}" for k, v in (w.get("지표") or {}).items())
-    msg = f"선택하신 {'·'.join(criteria)} 기준을 종합하면 {w['단지명']}가 가장 부합합니다"
+    msg = f"선택한 관측 지표({'·'.join(criteria)}) 순서에서는 {w['단지명']}가 앞섭니다"
     msg += f" ({parts})." if parts else "."
     if len(ranked) > 1:
         msg += f" 차순위는 {ranked[1]['단지명']}입니다."
-    return msg
+    return msg + " 이 순위는 현재 매수가·실투자금·미래 수익률을 검증한 매수 추천이 아닙니다."
 
 
 def _verified_comparison(data):
@@ -2106,7 +2116,10 @@ def _verified_comparison(data):
             raise HTTPException(422, "지역과 단지명을 확인해 주세요")
         detail = complex_detail(region, name)
         main = max(detail.get("평형별") or [{}], key=lambda x: x.get("매매건수") or 0)
-        out.append({**detail, "전세가율": main.get("전세가율"), "갭": main.get("갭")})
+        comp = main.get("비교거래") or {}
+        gap = main.get("갭") if comp.get("상태") in ("관측", "표본적음") else None
+        out.append({**detail, "전세가율": main.get("전세가율"), "갭": gap,
+                    "전용㎡": main.get("전용㎡")})
     return out
 
 
@@ -2114,25 +2127,32 @@ def compare_recommend_api(request: Request, data: dict = Body(...)):
     """비교 단지(2+) + 중시가치(복수) → 종합점수 순위 + 추천 단지·해설(Claude, 없으면 규칙기반)."""
     from realty_signal import ai_report
     config.load_env()
-    criteria = [c for c in (data.get("criteria") or []) if c in _CMP_CRIT]
+    criteria = [_CMP_ALIASES.get(c, c) for c in (data.get("criteria") or [])]
+    criteria = list(dict.fromkeys(c for c in criteria if c in _CMP_CRIT))
     complexes = _verified_comparison(data)
+    excluded = []
+    if "전세차액" in criteria and (not _comp_area_comparable(complexes)
+                                or any(c.get("갭") is None for c in complexes)):
+        criteria.remove("전세차액")
+        excluded.append("매매-전세 차액: 주력 전용면적 또는 최근 매매·전세 거래월이 비교 불가")
     if not criteria or len(complexes) < 2:
-        return {"ok": False, "reason": "need_criteria_and_2_complexes"}
+        return {"ok": False, "reason": "no_comparable_data" if excluded else "need_criteria_and_2_complexes",
+                "제외기준": excluded}
     ranked, used = _compare_score(criteria, complexes)
     if not ranked or not used:
-        return {"ok": False, "reason": "no_comparable_data"}
+        return {"ok": False, "reason": "no_comparable_data", "제외기준": excluded}
     opus = _is_opus_user(request)
     model = ai_report.OPUS if opus else ai_report.SONNET   # 추천은 다인자 종합 → Sonnet 이상
     tier = "opus" if opus else "sonnet"
     from realty_signal.services.buyer_decision import cache_payload, fingerprint
-    sig = fingerprint(cache_payload([sorted(criteria), complexes, model, "buyer-explanation-v3"]))
-    ckey = f"cmpreco:v3:{_uid(request)}:{sig}"
+    sig = fingerprint(cache_payload([sorted(criteria), complexes, model, "buyer-explanation-v4"]))
+    ckey = f"cmpreco:v4:{_uid(request)}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True}
     text = ai_report.compare_recommend(criteria, complexes, ranked, model=model, uid=_uid(request))
     out = {"ok": True, "추천": ranked[0]["단지명"], "순위": ranked,
-           "해설": text or _recommend_rule(criteria, ranked), "ai": bool(text)}
+           "해설": text or _recommend_rule(criteria, ranked), "ai": bool(text), "제외기준": excluded}
     if text:
         db.kv_set(ckey, out)
     return out
@@ -2143,15 +2163,20 @@ def compare_insight_api(request: Request, data: dict = Body(...)):
     """비교 단지 + 가치기준 → 한줄 해설(Claude, 없으면 규칙기반)."""
     from realty_signal import ai_report
     config.load_env()
-    criterion = data.get("criterion") or "가격"
+    criterion = _CMP_ALIASES.get(data.get("criterion") or "가격", data.get("criterion") or "가격")
+    if criterion not in _CMP_CRIT:
+        return {"해설": "선택한 지표는 안전한 단지 비교 기준으로 제공하지 않습니다.", "ai": False}
     complexes = _verified_comparison(data)
+    if criterion == "전세차액" and (not _comp_area_comparable(complexes)
+                               or any(c.get("갭") is None for c in complexes)):
+        return {"해설": "주력 전용면적 또는 최근 매매·전세 거래월이 달라 차액 비교를 보류합니다.", "ai": False}
     opus = _is_opus_user(request)
     model = ai_report.OPUS if opus else ai_report.HAIKU   # 화이트리스트=Opus, 그 외=Haiku(단순 태스크)
     tier = "opus" if opus else "haiku"
     # 캐시: 기준 + 단지 시그니처(이름·핵심수치) + 티어 → 반복 클릭 재과금 방지
     from realty_signal.services.buyer_decision import cache_payload, fingerprint
-    sig = fingerprint(cache_payload([criterion, complexes, model, "buyer-explanation-v3"]))
-    ckey = f"cmpins:v3:{_uid(request)}:{sig}"
+    sig = fingerprint(cache_payload([criterion, complexes, model, "buyer-explanation-v4"]))
+    ckey = f"cmpins:v4:{_uid(request)}:{sig}"
     cached = db.kv_get(ckey, max_age=14 * 86400)
     if cached is not None:
         return {**cached, "cached": True}
