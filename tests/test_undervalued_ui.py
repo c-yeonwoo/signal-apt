@@ -25,9 +25,9 @@ def test_haesol_never_says_negative_undervalued(uv):
 
 
 def test_haesol_direction_matches_sign():
-    assert "싼 편" in locality._interpret_locality(_row(30))
-    assert "비싼 편" in locality._interpret_locality(_row(-30))
-    assert "걸맞은 시세" in locality._interpret_locality(_row(1))
+    assert "모형값보다 많이 낮습니다" in locality._interpret_locality(_row(30))
+    assert "모형값보다 많이 높습니다" in locality._interpret_locality(_row(-30))
+    assert "모형값 근처" in locality._interpret_locality(_row(1))
 
 
 def test_extreme_values_are_not_stated_as_a_plain_percentage():
@@ -37,7 +37,7 @@ def test_extreme_values_are_not_stated_as_a_plain_percentage():
     미반영이라는 사실이 숫자에 가려진다.
     """
     txt = locality._interpret_locality(_row(-303.3))
-    assert "프리미엄" in txt
+    assert "모형 설명 범위 밖" in txt
     assert "303" not in txt
 
 
@@ -70,3 +70,12 @@ def test_rows_show_a_price_a_beginner_can_picture(html):
     """평당가만 주면 초보자는 총액을 모른다 — 34평 환산가를 같이 낸다."""
     assert "34평 기준" in html
     assert "const _UV_PYEONG = 25.7" in html
+
+
+def test_locality_ui_does_not_relabel_proxy_as_school_district_or_fair_price(html):
+    assert "undervalued:{l:'가격 탐색'" in html
+    assert "교육업종 점포·환경 대리변수" in html
+    assert "학교 배정·단지 연식·층·브랜드 등은 반영되지 않아" in html
+    assert "모형보다 ${a}% 낮음" in html
+    assert "실제 저가 순위 아님" in html
+    assert "교통·학군·환경을 0~100으로 점수화" not in html
