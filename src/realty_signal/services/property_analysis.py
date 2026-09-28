@@ -70,6 +70,19 @@ def snapshot(row: dict) -> dict:
     }
 
 
+def buyer_fit(listing: dict, profile: dict | None = None) -> dict:
+    """확정 매수력과 호가만 비교한다. 구매 가능성/대출 승인이 아니다."""
+    budget = _number(((profile or {}).get("매수력") or {}).get("최대매수가"))
+    asking = _number(listing.get("asking_manwon"))
+    if budget is None:
+        return {"status": "unknown", "reason": "확정 매수력이 없어 예산 적합성을 판단하지 않았습니다."}
+    if asking is None:
+        return {"status": "unknown", "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
+    return {"status": "within" if asking <= budget else "above", "budget_manwon": budget,
+            "asking_manwon": asking, "gap_manwon": round(budget - asking),
+            "note": "호가와 확정 매수력만 비교합니다. 취득세·수리비·대출 승인·월 부담은 별도로 확인해야 합니다."}
+
+
 def _price(detail: dict, listing: dict) -> dict:
     asking, area = listing["asking_manwon"], listing["exclusive_m2"]
     if not asking or not area:
@@ -82,7 +95,8 @@ def _price(detail: dict, listing: dict) -> dict:
     return quote_check.assess(detail, asking=asking, exclusive_m2=area, floor=floor)
 
 
-def build(row: dict, detail: dict | None, building: dict | None = None) -> dict:
+def build(row: dict, detail: dict | None, building: dict | None = None,
+          profile: dict | None = None) -> dict:
     """수치 해석은 결정적인 코드로 계산하고, 누락은 보류로 노출한다."""
     listing = snapshot(row)
     detail = detail or {}
@@ -130,7 +144,7 @@ def build(row: dict, detail: dict | None, building: dict | None = None) -> dict:
         cautions.append({"text": "표시 좌표는 출입구가 검증되지 않았습니다. 실제 도보 경로는 출입구 확인 후 비교하세요.",
                          "evidence": "listing"})
     return {
-        "listing": listing, "price": price, "trades": trades,
+        "listing": listing, "buyer_fit": buyer_fit(listing, profile), "price": price, "trades": trades,
         "complex": {k: detail.get(k) for k in ("총거래", "기간", "추세pct", "최근평단가",
                                                "identity_status", "status", "시그널", "단지시그널")
                     if detail.get(k) is not None},

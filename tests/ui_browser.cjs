@@ -42,7 +42,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         const listing={key:second?'일반매물:synthetic-hb-2':'일반매물:synthetic-hb-1',kind:'일반매물',
           name:second?'두번째테스트단지':'한방테스트단지',region:'테스트구',
           asking_manwon:second?47000:50000,exclusive_m2:84.5,floor:12,source:'hanbang',collected_at:'2026-09-29',coordinate:[37.65,127.07]};
-        data=url.searchParams.get('stage')==='base'?{status:'base',listing}:{status:'ready',listing,
+        const buyer_fit={status:second?'within':'above',gap_manwon:second?1000:-2000,
+          note:'호가와 확정 매수력만 비교합니다. 취득세·대출 승인·수리비는 별도 확인해야 합니다.'};
+        data=url.searchParams.get('stage')==='base'?{status:'base',listing,buyer_fit}:{status:'ready',listing,buyer_fit,
           price:{상태:'관측비교',중앙값:49000,표본수:3,호가차이율:2,비교기준일:'2026-09-29',비교기준:'동일 단지·면적'},
           trades:[{month:'2026-09',price_manwon:48000,floor:10},{month:'2026-09',price_manwon:49000,floor:12},
             {month:'2026-09',price_manwon:50000,floor:13}],complex:{총거래:3},building:{},
@@ -65,6 +67,10 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         headlines:[{title:'테스트구 주택 소식',url:'https://news.example/story',published_at:'2026-09-28',
           match:'지역명 문자열 일치(단지 관련 미확인)'}],
         source_note:'현재 수집분 기준',news_note:'사업 단계 미확인'};
+      if(url.pathname==='/api/listing-discovery/commute') data={status:'partial',
+        selected:{key:'일반매물:synthetic-hb-1',status:'observed',minutes:39},
+        alternatives:[{key:'일반매물:synthetic-hb-2',status:'observed',minutes:31}],
+        note:'실제 출퇴근 시간대를 보증하지 않습니다.'};
       if(url.pathname==='/api/listing-kapt') data={status:'observed',source:'K-APT',
         source_url:'https://www.data.go.kr/data/15058453/openapi.do',name:'한방테스트단지',
         households:220,builder:'시험건설',parking_spaces:150,parking_per_household:0.68,
@@ -221,6 +227,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#analysisFixture button').click();
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
+    await page.getByText('확정 매수력 초과',{exact:false}).waitFor();
     assert.equal(calls.includes('/api/listing-kapt'),false);
     await page.locator('#advReport details[data-analysis="complex"] > summary').click();
     await page.getByRole('button',{name:'K-APT 세대수·시공사·주차 확인'}).click();
@@ -230,6 +237,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#advReport details[data-analysis="discovery"] > summary').click();
     await page.getByRole('button',{name:'비슷한 매물·관련 뉴스 보기'}).click();
     await page.getByText('사업 단계 미확인',{exact:false}).waitFor();
+    assert.equal(calls.includes('/api/listing-discovery/commute'),false);
+    await page.getByRole('button',{name:'내 직장까지 통근 비교'}).click();
+    await page.getByText('선택 매물보다 8분 짧음',{exact:false}).waitFor();
     await page.getByText('두번째테스트단지',{exact:false}).first().waitFor();
     await page.getByText('테스트초',{exact:false}).waitFor();
     await page.getByText('테스트역 ·',{exact:false}).first().waitFor();
