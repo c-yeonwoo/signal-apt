@@ -2534,6 +2534,7 @@ async function imjSave(i){
     checks:m, verdict, memo:(document.getElementById('imjMemo'+i)||{}).value||''};
   let r={}; try{ r=await (await fetch('/api/imjang/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json(); }catch(e){}
   if(!r.ok){ toast(r.error||'저장에 실패했습니다.'); return; }
+  track(EVENTS.IMJANG_VISIT_SAVE);
   toast(r['점수']?`${s['단지']} 기록 저장 · ${r['점수']['점수']}점`:`${s['단지']} 기록 저장`);
   _loadImjangVisits();
 }
@@ -3792,6 +3793,10 @@ const EVENTS = {
   LISTING_DETAIL_OPEN:'listing_detail_open',
   WEEKLY_OPEN:'weekly_open', BUYING_POWER_CONFIRM:'buying_power_confirm',
   EVIDENCE_OPEN:'evidence_open',
+  LISTING_ANALYSIS_START:'listing_analysis_start', LISTING_ANALYSIS_READY:'listing_analysis_ready',
+  LISTING_EVIDENCE_OPEN:'listing_evidence_open', LISTING_COMPARE_OPEN:'listing_compare_open',
+  LISTING_COMMUTE_COMPARE:'listing_commute_compare', LISTING_WATCH_ADD:'listing_watch_add',
+  IMJANG_VISIT_SAVE:'imjang_visit_save',
 };
 /** 퍼널 이벤트 — 실패해도 UX 방해 없음(fire-and-forget). */
 function track(name, props){
@@ -5688,10 +5693,11 @@ async function loadAdminEvents(){
       <span style="min-width:150px;font-family:ui-monospace,monospace;font-size:11px">${c.name}</span>
       <span style="flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden">
         <span style="display:block;height:100%;width:${Math.round(c.count/max*100)}%;background:var(--accent)"></span></span>
-      <b style="min-width:44px;text-align:right;font-variant-numeric:tabular-nums">${c.count.toLocaleString()}</b>
+      <b style="min-width:88px;text-align:right;font-variant-numeric:tabular-nums">${c.count.toLocaleString()}건 / ${(+c.users||0).toLocaleString()}명</b>
     </div>`).join('')
     + (zero.length?`<div style="margin-top:8px;padding-top:7px;border-top:1px solid var(--line);color:var(--warn);font-size:11px">
-        0건: ${zero.join(' · ')}</div>`:'');
+        0건: ${zero.join(' · ')}</div>`:'')
+    + '<div style="margin-top:8px;font-size:11px;color:var(--dim)">이용 계정 수는 이벤트별 중복 제거값입니다. 서로 다른 이벤트의 수를 나눠 전환율로 해석하지 마세요.</div>';
 }
 function closeAdmin(){ document.getElementById('adminDlg').close(); }
 function _adminStatus(t){ const e=document.getElementById('adminStatus'); if(e) e.textContent=t; }
@@ -6684,6 +6690,7 @@ async function toggleListingWatch(btn){
       on?{method:'DELETE'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.detail||'매물을 저장하지 못했습니다.'); }
     if(on) _watchKeys.delete(key); else _watchKeys.add(key);
+    if(!on) track(EVENTS.LISTING_WATCH_ADD,{kind:key.split(':',1)[0]});
     document.querySelectorAll('.watch-btn').forEach(b=>{if(b.dataset.watchKey!==key)return;
       const selected=_watchKeys.has(key); b.textContent=selected?'★ 찜함':'☆ 찜하기';
       b.setAttribute('aria-pressed',String(selected)); b.disabled=false;});
@@ -6965,6 +6972,7 @@ async function listingDiscoveryCommute(){
     const result=await response.json();
     if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
     report.discovery.commute=result; _analysisRender(report);
+    track(EVENTS.LISTING_COMMUTE_COMPARE,{status:result.status});
   }catch(e){
     if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
     report.discovery.commute={status:'unavailable',reason:e.message||'통근 경로를 확인하지 못했습니다.'};
@@ -7070,6 +7078,7 @@ async function listingCompareOpen(){
     const response=await fetch('/api/listing-compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys})});
     if(!response.ok) throw new Error((await response.json().catch(()=>({}))).detail||'비교할 매물을 확인하지 못했습니다.');
     const data=await response.json(); if(gen!==_listingCompareGen) return;
+    track(EVENTS.LISTING_COMPARE_OPEN,{count:keys.length});
     const items=data.items||[];
     const row=(label,fn)=>`<tr><th scope="row" style="text-align:left;white-space:nowrap;padding:9px 8px;border-bottom:1px solid var(--line);font-size:12px;color:var(--dim)">${label}</th>
       ${items.map(x=>`<td style="min-width:155px;vertical-align:top;padding:9px 8px;border-bottom:1px solid var(--line)">${fn(x)}</td>`).join('')}</tr>`;
@@ -7106,7 +7115,7 @@ function _analysisRender(d){
   const host=document.getElementById('advReport');
   const opened=new Set([...host.querySelectorAll('details[data-analysis][open]')].map(x=>x.dataset.analysis));
   const l=d.listing, price=d.price, card=(title,body)=>`<section class="analysis-card"><h3>${title}</h3>${body}</section>`;
-  const fold=(id,title,body)=>`<details class="analysis-card" data-analysis="${id}" ${opened.has(id)?'open':''}><summary>${title}</summary>${body}</details>`;
+  const fold=(id,title,body)=>`<details class="analysis-card" data-analysis="${id}" ${opened.has(id)?'open':''}><summary onclick="if(!this.parentElement.open)track(EVENTS.LISTING_EVIDENCE_OPEN,{section:'${id}'})">${title}</summary>${body}</details>`;
   const meta=`${esc(l.kind||'매물')} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'} · ${l.floor!=null?`${esc(l.floor)}층`:'층 미확인'}`;
   let html=`<div style="font-size:17px;font-weight:800;line-height:1.3">${esc(l.name||'단지 미확인')}</div>
     <div class="analysis-muted">${esc(l.region||'')} · ${meta}</div>
@@ -7194,6 +7203,7 @@ function _analysisRender(d){
 }
 async function openListingReport(key){
   if(!key) return;
+  track(EVENTS.LISTING_ANALYSIS_START);
   _analysisStopPick();
   _advComparisonKeys=null;
   const changed=key!==_advListingKey;
@@ -7230,6 +7240,7 @@ async function openListingReport(key){
       full=await fr.json(); full._client_cached_at=Date.now(); _analysisCache.set(cacheKey,{...full}); }
     if(gen!==_analysisGen) return;
     _analysisCurrent=full; _analysisRender(full);
+    track(EVENTS.LISTING_ANALYSIS_READY,{kind:full.listing.kind});
     locationPromise.then(loc=>{
       if(gen!==_analysisGen||!loc) return;
       _analysisMergeLocation(full,loc);

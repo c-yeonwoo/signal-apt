@@ -428,6 +428,8 @@ _ALLOWED_EVENTS = frozenset({
     "weekly_open",            # 주 1회 갱신 제품의 북극성 후보. 이번 주 화면을 실제로 열었나
     "buying_power_confirm",   # V1(타이밍) → V2(매물) 파이프가 작동하나
     "evidence_open",          # "근거가 증명되는"이 카피인가 기능인가 — 성적표를 실제로 여나
+    "listing_analysis_start", "listing_analysis_ready", "listing_evidence_open",
+    "listing_compare_open", "listing_commute_compare", "listing_watch_add", "imjang_visit_save",
 })
 
 
@@ -450,11 +452,11 @@ def event_counts(days: int = 30) -> list[dict]:
     since = int(time.time()) - max(1, days) * 86400
     c = conn()
     rows = c.execute(
-        "SELECT name, COUNT(*) FROM events WHERE ts>=? GROUP BY name ORDER BY COUNT(*) DESC",
+        "SELECT name, COUNT(*), COUNT(DISTINCT uid) FROM events WHERE ts>=? GROUP BY name ORDER BY COUNT(*) DESC",
         (since,),
     ).fetchall()
     c.close()
-    return [{"name": n, "count": cnt} for n, cnt in rows]
+    return [{"name": n, "count": cnt, "users": users} for n, cnt, users in rows]
 
 
 def _iso_week() -> str:
