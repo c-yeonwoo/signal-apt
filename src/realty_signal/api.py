@@ -527,14 +527,30 @@ def _adv_region_row(r: dict) -> dict:
     return out
 
 
-def advisor_tools(uid: int):
+def advisor_tools(uid: int, listing_key: str | None = None):
     """Bind identity once per request; never read process-global user state."""
     from functools import partial
-    return partial(_advisor_tool, uid=uid)
+    return partial(_advisor_tool, uid=uid, listing_key=listing_key)
 
 
-def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
+def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
+                  listing_key: str | None = None) -> dict:
     """자문 에이전트 tool 실행 — 기존 데이터 함수로 위임(server-side)."""
+    if name == "get_selected_listing_report":
+        from realty_signal.services import property_analysis as analysis
+        if not listing_key:
+            return {"error": "선택한 매물이 없습니다."}
+        try:
+            row = analysis.resolve(listing_key, private_allowed=_personal_listings_allowed(uid=uid))
+        except (ValueError, PermissionError, LookupError):
+            return {"error": "선택 매물을 현재 수집분에서 확인할 수 없습니다."}
+        try:
+            d = complex_detail(row["지역"], row["단지명"]) if row.get("지역") and row.get("단지명") else None
+        except Exception:  # noqa: BLE001
+            d = {"status": "failed", "degraded": True}
+        report = analysis.build(row, d)
+        report.pop("trades", None)
+        return report
     if name == "get_user_context":
         from realty_signal.brain import memory as nick_mem
         if not uid:
@@ -663,11 +679,24 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
         region = (args.get("region") or "").strip()
         kind = args.get("kind") or "급매"
         private_allowed = _personal_listings_allowed(uid=uid)
-        if kind in ("급매", "찐매물") and not private_allowed:
+        if kind in ("일반매물", "급매", "찐매물") and not private_allowed:
             return {"reason": "personal_only", "result": "외부 매물은 개인 계정에서만 확인할 수 있습니다."}
         out: dict = {}
         if private_allowed and kind in ("급매", "찐매물", "전체"):
             out["가격근거주의"] = "급매갭·시세갭은 공급사 중위시세 기준의 표시값이며, 국토부 실거래로 검증한 할인율이 아닙니다."
+        if kind in ("일반매물", "전체") and private_allowed:
+            try:
+                hb = json.loads(HANBANG_FILE.read_text(encoding="utf-8")).get("listings", []) if HANBANG_FILE.exists() else []
+            except Exception:  # noqa: BLE001
+                hb = []
+            if region:
+                hb = [m for m in hb if region in (m.get("지역") or "")]
+            out["일반매물"] = [{"매물키": _listing_key("일반매물", m, {"hanbang_id": m.get("hanbang_id")},
+                                            m.get("단지명"), m.get("지역")),
+                               "단지명": m.get("단지명"), "지역": m.get("지역"),
+                               "호가": m.get("호가"), "전용면적": m.get("전용면적"),
+                               "층": m.get("층"), "등록일": m.get("등록일")}
+                              for m in hb[:10]]
         if kind in ("급매", "전체") and private_allowed:
             try:
                 qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []
@@ -699,8 +728,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
                 au = [m for m in au if region in (m.get("region") or "")]
             out["경매"] = [{"단지명": m.get("단지명"), "region": m.get("region"), "최저매각가": m.get("최저매각가"),
                           "감정가": m.get("감정가"), "유찰횟수": m.get("유찰횟수"), "입찰기일": m.get("입찰기일")} for m in au[:10]]
-        if not out.get("급매") and not out.get("찐매물") and not out.get("경매"):
-            return {"result": "해당 조건의 매물이 없습니다(급매·찐매물은 하루 1회 캐시)."}
+        if not any(out.get(k) for k in ("일반매물", "급매", "찐매물", "경매")):
+            return {"result": "해당 조건의 매물이 없습니다(외부 매물은 수집 범위와 기준일을 확인하세요)."}
         return out
     if name == "get_policy":
         _seed_policies()

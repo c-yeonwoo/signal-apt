@@ -267,6 +267,18 @@
   /* 닉 챗봇 — 패널·입력창 크기 조절 핸들 */
   #advPanel::-webkit-resizer, #advInput::-webkit-resizer {
     background:linear-gradient(135deg,transparent 55%,var(--line) 55%); }
+  #advPanel.adv-report-mode { width:500px !important; height:calc(100vh - 32px) !important;
+    max-height:none !important; max-width:calc(100vw - 24px) !important; resize:none !important; }
+  .adv-tabs { display:flex; gap:6px; padding:9px 14px; border-bottom:1px solid var(--line); }
+  .adv-tabs button { border:1px solid var(--line); background:var(--bg); color:var(--dim);
+    border-radius:999px; padding:6px 13px; font:inherit; font-size:12px; cursor:pointer; }
+  .adv-tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .analysis-body { overflow:auto; padding:16px; flex:1 1 auto; font-size:13px; line-height:1.55; }
+  .analysis-card { border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:11px; background:var(--bg); }
+  .analysis-card h3 { font-size:13px; margin:0 0 8px; }
+  .analysis-muted { color:var(--dim); font-size:11px; line-height:1.5; }
+  .analysis-points { display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
+  .analysis-points span { border-radius:7px; background:var(--accent-weak); padding:5px 8px; }
   .ms-row { padding:14px 16px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .12s; }
   .ms-row:hover { background:rgba(17,24,39,.03); }
   .ms-row.sel { background:var(--accent-weak); box-shadow:inset 2px 0 0 var(--accent); }
@@ -357,6 +369,9 @@
     .dash-col { min-width:0; }
     .tabs .tab { flex:1; padding:9px 6px; }
     dialog { max-width:calc(100vw - 24px); box-sizing:border-box; }
+    #advPanel.adv-report-mode { inset:0 !important; width:100vw !important; height:100dvh !important;
+      max-width:none !important; max-height:none !important; min-width:0 !important;
+      border-radius:0 !important; border:none !important; }
   }
   button:focus-visible, [role="button"]:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 </style>
@@ -2966,7 +2981,7 @@ async function loadGeneralListings(force=false){
     detail:m=>`<div class="kv"><span>매매 호가 <b>${_eok(m['호가'])}</b></span><span>전용 ${m['전용면적']||'–'}㎡</span>
       <span>${m['층']??'–'}층</span><span>등록 ${esc(m['등록일']||'–')}</span><span>한방 매물번호 ${esc(m['hanbang_id'])}</span></div>
       <p style="font-size:11px;color:var(--dim)">한방 목록 기준 · 가격 할인율과 현재 판매 여부는 검증하지 않았습니다.${m['stale']?' 이 항목은 지난 수집 결과입니다.':''}</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['hanbang_id']?'일반매물:'+m['hanbang_id']:null)}${cxBtn(m['단지명'],m['지역'])}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['hanbang_id']?'일반매물:'+m['hanbang_id']:null)}${reportBtn(m['hanbang_id']?'일반매물:'+m['hanbang_id']:null)}${cxBtn(m['단지명'],m['지역'])}
         <a class="btn" href="https://m.karhanbang.com/mptl/main2" target="_blank" rel="noopener noreferrer">한방 열기 ↗</a></div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     geoq:m=>`${m['지역']||''} ${m['단지명']||''}`, regionOf:m=>m['지역'],
@@ -3104,7 +3119,7 @@ function renderQuicksale(){
       <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">공급사 인증 표시</span>':''}</div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">매물 공개 상태, 동·호수, 중위시세 비교 조건은 원천에서 확인하세요.${m['stale']||source.stale?' 이 항목은 지난 수집 결과입니다.':''}</div>
       ${txCostsSlot(m['호가'], m['지역'], m['평형'], m['전용면적'])}
-      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${qsEvidenceBtn(m)}${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
+      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${reportBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${qsEvidenceBtn(m)}${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     geoq:m=> (m['lat']&&m['lng']) ? null : `${m['지역']||''} ${m['단지명']||''}`,
     regionOf:m=>m['지역'],
@@ -3282,7 +3297,7 @@ function renderAllListings(){
         ${x['유형']==='일반매물'?`<div style="font-size:11px;color:var(--dim);margin-top:5px">한방 매물번호 ${esc(x['ref']?.['hanbang_id']||'–')} · 최신 표본, 현재 판매 여부 미확인</div>`:''}
         ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">자료 확인 필요 · 규칙 기반 참고 점수</div>`:''}
         ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
-        <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(x['key'])}${acts}</div>`; },
+        <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(x['key'])}${reportBtn(x['key'])}${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
@@ -4794,6 +4809,7 @@ function naverBtn(cno){
 }
 // 닉 문맥 진입 — 버튼에서 챗봇을 열고 질문을 미리 채워 전송
 function askNick(q){
+  if(typeof clearListingReportContext==='function') clearListingReportContext();
   const p=document.getElementById('advPanel'), f=document.getElementById('advFab');
   if(p){ p.style.display='flex'; } if(f){ f.style.display='none'; }
   if(typeof advSuggest==='function') advSuggest(q);
@@ -4803,6 +4819,10 @@ function nickCxBtn(name, region){
   if(!name||!region) return '';
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
   return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();askNick('${r} ${n} 지금 어때? 실거래·단지시그널·공시대비 근거로 알려줘.')">닉에게 물어보기</span>`;
+}
+function reportBtn(key){
+  if(!key || !/^(일반매물|급매|찐매물|경매):/.test(key)) return '';
+  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();openListingReport(this.dataset.reportKey)">매물분석</button>`;
 }
 // ===== 동네 리포트 (v2: 주간 스냅샷·diff·관심지역 비교) =====
 let _nbhdCur=null;
@@ -5762,7 +5782,7 @@ function renderAuction(rows){
       <span>입찰기일 ${r['입찰기일']||'–'}</span></div>
       <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>
-        ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}${cxBtn(r['단지명'],r['region'])}
+        ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}${reportBtn(r['id']?'경매:'+r['id']:null)}${cxBtn(r['단지명'],r['region'])}
         <span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span></div>`,
     geoq:r=>{ const dong=(r['메모']||'').match(/[가-힣]+동/); return `${r['region']||''} ${dong?dong[0]+' ':''}${r['단지명']||''}`; },
     regionOf:r=>r['region'],
@@ -6744,11 +6764,17 @@ async function startApp(needOnboard){
 <div id="advPanel" style="display:none;position:fixed;right:22px;bottom:22px;z-index:1400;width:390px;min-width:300px;max-width:calc(100vw - 16px);height:600px;min-height:360px;max-height:calc(100vh - 24px);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);flex-direction:column;overflow:auto;resize:both">
   <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex:0 0 auto;cursor:default">
     <span style="font-weight:600;letter-spacing:-0.01em">닉 <span style="font-weight:400;font-size:12px;color:var(--dim)">부동산 자문</span></span>
+    <span id="advListingTitle" style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px"></span>
     <span id="advAsof" style="font-size:11px;color:var(--dim)"></span>
     <span id="advUsage" style="font-size:11px;color:var(--dim)"></span>
     <span onclick="advClearMemory()" title="대화 기억 초기화" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:11px;padding:2px 6px">기억초기화</span>
     <span onclick="advToggle()" style="cursor:pointer;color:var(--dim);font-size:18px;line-height:1;margin-left:4px">✕</span>
   </div>
+  <div id="advTabs" class="adv-tabs" style="display:none">
+    <button type="button" id="advReportTab" onclick="advShowTab('report')">매물 리포트</button>
+    <button type="button" id="advChatTab" onclick="advShowTab('chat')">닉과 대화</button>
+  </div>
+  <div id="advReport" class="analysis-body" style="display:none" aria-live="polite"></div>
   <div id="advBody" style="flex:1 1 auto;min-height:120px;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6"></div>
   <div id="advComposer" style="padding:8px 12px 10px;border-top:1px solid var(--line);flex:0 0 auto">
     <div style="display:flex;gap:8px;align-items:flex-end">
@@ -6759,7 +6785,132 @@ async function startApp(needOnboard){
   </div>
 </div>
 <script>
-let _advMsgs=[], _advBusy=false, _advUsage=null;
+let _advMsgs=[], _advBusy=false, _advUsage=null, _advListingKey=null, _advAbort=null, _advEpoch=0;
+let _analysisGen=0, _analysisCurrent=null;
+const _analysisCache=new Map(), _analysisAsked=new Set();
+function advShowTab(tab){
+  const active=_advListingKey && tab==='report';
+  document.getElementById('advReport').style.display=active?'block':'none';
+  document.getElementById('advBody').style.display=active?'none':'flex';
+  document.getElementById('advComposer').style.display=active?'none':'block';
+  document.getElementById('advReportTab').classList.toggle('on',!!active);
+  document.getElementById('advChatTab').classList.toggle('on',!active);
+  if(!active) advRender();
+}
+function clearListingReportContext(){
+  if(!_advListingKey) return;
+  ++_analysisGen; ++_advEpoch;
+  _advAbort?.abort(); _advAbort=null; _advBusy=false;
+  _advListingKey=null; _analysisCurrent=null; _advMsgs=[];
+  document.getElementById('advSendBtn').disabled=false;
+  document.getElementById('advListingTitle').textContent='';
+  document.getElementById('advTabs').style.display='none';
+  document.getElementById('advPanel').classList.remove('adv-report-mode');
+  advShowTab('chat');
+}
+function _analysisTradeChart(d){
+  const pts=(d.trades||[]).filter(t=>Number.isFinite(+t.price_manwon)&&+t.price_manwon>0);
+  if(!pts.length) return '<div class="analysis-muted">표시할 최근 거래 점이 없습니다.</div>';
+  const ask=+d.listing.asking_manwon||0;
+  const values=pts.map(t=>+t.price_manwon).concat(ask>0?[ask]:[]);
+  const lo=Math.min(...values)*.96, hi=Math.max(...values)*1.04, span=Math.max(hi-lo,1);
+  const y=v=>110-(v-lo)/span*88, ax=ask>0?y(ask):null;
+  const circles=pts.map((t,i)=>`<circle cx="${18+(i+.5)/pts.length*330}" cy="${y(+t.price_manwon)}" r="4" fill="var(--accent)"><title>${esc(t.month||'거래월 미확인')} · ${_eok(t.price_manwon)} · ${esc(t.floor??'–')}층</title></circle>`).join('');
+  return `<svg viewBox="0 0 366 136" role="img" aria-label="최근 동일 면적 거래가격과 현재 호가 비교" style="display:block;width:100%;height:auto">
+    <line x1="18" x2="348" y1="110" y2="110" stroke="var(--line)" />
+    ${ax!=null?`<line x1="18" x2="348" y1="${ax}" y2="${ax}" stroke="#ea580c" stroke-width="2" stroke-dasharray="5 4" />`:''}
+    ${circles}<text x="20" y="129" font-size="10" fill="var(--dim)">최근 거래 ${pts.length}건 · ● 거래 / 주황선 호가</text></svg>`;
+}
+function _analysisRender(d){
+  if(!d?.listing) return;
+  const l=d.listing, price=d.price, card=(title,body)=>`<section class="analysis-card"><h3>${title}</h3>${body}</section>`;
+  const meta=`${esc(l.kind||'매물')} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'} · ${l.floor!=null?`${esc(l.floor)}층`:'층 미확인'}`;
+  let html=`<div style="font-size:17px;font-weight:800;line-height:1.3">${esc(l.name||'단지 미확인')}</div>
+    <div class="analysis-muted">${esc(l.region||'')} · ${meta}</div>
+    <div style="font-size:23px;font-weight:800;margin-top:8px">${l.asking_manwon?_eok(l.asking_manwon):'호가 미확인'}</div>
+    <div class="analysis-muted">${esc(l.source||'매물')} 수집 ${esc(l.collected_at||'시점 미확인')}${l.stale?' · 지난 결과':''} · 현재 판매 여부 확인 필요</div>`;
+  if(!price){
+    html+=card('가격과 입지 확인 중','<div class="analysis-muted">매물 정보부터 표시했습니다. 실거래 근거가 준비되면 이어서 보여드릴게요.</div>');
+  }else{
+    const checked=price['상태']==='관측비교';
+    const finding=checked?`동일 면적 거래 ${esc(price['표본수'])}건의 중앙값 ${_eok(price['중앙값'])}. 현재 호가는 ${price['호가차이율']<0?'낮은':'높은'} 편 (${esc(Math.abs(price['호가차이율']))}%).`
+      :esc(price['이유']||'비교할 거래 근거가 부족합니다.');
+    html+=card('가격 근거',`<div>${finding}</div>${checked?_analysisTradeChart(d):''}
+      <div class="analysis-muted">${esc(price['비교기준']||'동일 단지·면적')} · 표본 ${esc(price['표본수']||0)}건 · 기준 ${esc(price['비교기준일']||'미확인')}<br>호가와 관측 거래의 차이는 할인율이나 적정가가 아닙니다.</div>`);
+    const b=d.building||{}, cx=d.complex||{};
+    const facts=[];
+    if(b['사용승인일']) facts.push(`사용승인 ${esc(b['사용승인일'])}`);
+    if(b['세대수']) facts.push(`${esc(b['세대수'])}세대`);
+    if(b['최고층']) facts.push(`최고 ${esc(b['최고층'])}층`);
+    if(b['용적률']) facts.push(`용적률 ${esc(b['용적률'])}%`);
+    if(cx['총거래']) facts.push(`조회기간 거래 ${esc(cx['총거래'])}건`);
+    html+=card('단지에서 확인한 사실',facts.length?`<div class="analysis-points">${facts.map(x=>`<span>${x}</span>`).join('')}</div>`:'<div class="analysis-muted">단지 정보는 확인 중입니다.</div>');
+    const pros=(d.pros||[]).map(x=>`<li>${esc(x.text)}</li>`).join('');
+    const cautions=(d.cautions||[]).map(x=>`<li>${esc(x.text)}</li>`).join('');
+    html+=card('좋은 점과 확인할 점',`${pros?`<div style="color:#15803d;font-weight:700">긍정적 근거</div><ul>${pros}</ul>`:''}
+      <div style="color:#b45309;font-weight:700">확인할 점</div><ul>${cautions||'<li>매물 상태와 현장 조건을 확인하세요.</li>'}</ul>`);
+    html+=card('입지 검증 상태',`<div class="analysis-muted">교통·직장: ${esc(d.mobility?.reason||'미확인')}<br>
+      학교: ${esc(d.school?.reason||'미확인')}<br>상권·시설: ${esc(d.amenities?.reason||'미확인')}<br>
+      호재·뉴스: ${esc(d.development?.reason||'미확인')}</div>`);
+    html+=card('중개사에게 확인',`<ul>${(d.questions||[]).map(q=>`<li>${esc(q)}</li>`).join('')}</ul>`);
+    html+=`<div class="analysis-muted" style="margin:14px 0 4px">근거: ${(d.evidence||[]).map(e=>{
+      const label=esc(e.label), text=e.url&&/^https:\/\//.test(e.url)
+        ? `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${label} ↗</a>` : label;
+      return `${text} (${esc(e.asof||'기준일 미확인')}, ${esc(e.status)})`;
+    }).join(' · ')}</div>`;
+  }
+  document.getElementById('advReport').innerHTML=html;
+}
+async function openListingReport(key){
+  if(!key) return;
+  const changed=key!==_advListingKey;
+  if(changed){
+    ++_advEpoch; _advAbort?.abort(); _advAbort=null; _advBusy=false; _advMsgs=[];
+    document.getElementById('advSendBtn').disabled=false;
+  }
+  _advListingKey=key; const gen=++_analysisGen;
+  const panel=document.getElementById('advPanel');
+  panel.classList.add('adv-report-mode'); panel.style.display='flex';
+  document.getElementById('advFab').style.display='none';
+  document.getElementById('advTabs').style.display='flex';
+  document.getElementById('advListingTitle').textContent='매물 확인 중…';
+  document.getElementById('advReport').innerHTML='<div class="analysis-muted">선택한 매물을 확인하고 있습니다…</div>';
+  advShowTab('report');
+  try{
+    const path='/api/listing-analysis?key='+encodeURIComponent(key);
+    const br=await fetch(path+'&stage=base');
+    if(!br.ok) throw new Error((await br.json().catch(()=>({}))).detail||'매물 정보를 확인할 수 없습니다.');
+    const base=await br.json(); if(gen!==_analysisGen) return;
+    _analysisCurrent=base; _analysisRender(base);
+    document.getElementById('advListingTitle').textContent=base.listing.name||'선택 매물';
+    const cached=_analysisCache.get(key);
+    let full;
+    if(cached && Date.now()-cached._client_cached_at<900000 && cached.listing.collected_at===base.listing.collected_at
+       && cached.listing.asking_manwon===base.listing.asking_manwon) full=cached;
+    else { const fr=await fetch(path+'&stage=full');
+      if(!fr.ok) throw new Error((await fr.json().catch(()=>({}))).detail||'분석 근거를 불러오지 못했습니다.');
+      full=await fr.json(); full._client_cached_at=Date.now(); _analysisCache.set(key,full); }
+    if(gen!==_analysisGen) return;
+    _analysisCurrent=full; _analysisRender(full);
+    if(!_analysisAsked.has(key)){
+      _analysisAsked.add(key);
+      advSend('선택한 매물의 가격 근거와 장단점을 내 조건에 맞춰 요약해줘. 미확인 입지는 추정하지 말고, 중개사에게 확인할 질문도 알려줘.');
+    }
+    if(full.listing.name&&full.listing.region){
+      fetch(`/api/complex/${encodeURIComponent(full.listing.region)}/${encodeURIComponent(full.listing.name)}/building`)
+        .then(r=>r.ok?r.json():null).then(b=>{
+          if(gen!==_analysisGen||!b?.ok||!b.building) return;
+          full.building=b.building;
+          if(!full.evidence.some(e=>e.id==='building')) full.evidence.push({id:'building',label:'건축물대장',
+            source:'국토교통부',url:'https://www.data.go.kr/data/15136560/openapi.do',asof:null,status:'조회 결과'});
+          _analysisRender(full);
+        }).catch(()=>{});
+    }
+  }catch(e){
+    if(gen!==_analysisGen) return;
+    document.getElementById('advReport').innerHTML=`<div class="analysis-card">${esc(e.message||'분석을 불러오지 못했습니다.')}</div>`;
+  }
+}
 function _advSetUsage(u){
   _advUsage=u||null;
   const el=document.getElementById('advUsage'); if(!el) return;
@@ -6798,7 +6949,7 @@ function advKey(e){
 function advSuggest(t){ document.getElementById('advInput').value=t; advSend(); }
 function advRender(){
   const b=document.getElementById('advBody'); if(!b) return;
-  const asof=document.getElementById('advAsof'); if(asof && !asof.textContent && typeof meta!=='undefined' && meta.last_date) asof.textContent='기준 '+meta.last_date;
+  const asof=document.getElementById('advAsof'); if(asof && !asof.textContent && typeof meta!=='undefined' && meta?.last_date) asof.textContent='기준 '+meta.last_date;
   if(!_advMsgs.length){
     const p=_profile||{};
     const bits=[];
@@ -6823,6 +6974,12 @@ function advRender(){
   }).join('');
   b.scrollTop=b.scrollHeight;
 }
+let _advRenderPending=false;
+function advScheduleRender(){
+  if(_advRenderPending || document.getElementById('advBody').style.display==='none') return;
+  _advRenderPending=true;
+  requestAnimationFrame(()=>{ _advRenderPending=false; advRender(); });
+}
 function _advErr(m, usage){
   if(m==='limit'){
     const lim=(usage&&usage.limit)!=null?usage.limit:15;
@@ -6841,6 +6998,7 @@ async function advSend(text){
   if(_advBusy) return;
   const inp=document.getElementById('advInput');
   const q=(text||inp.value||'').trim(); if(!q) return;
+  const epoch=_advEpoch, controller=new AbortController(); _advAbort=controller;
   track('nick_ask',{q:q.slice(0,80)});
   _advClearInput(inp);
   _advMsgs.push({role:'user',text:q});
@@ -6850,23 +7008,29 @@ async function advSend(text){
   try{
     const hist=_advMsgs.filter(m=>(m.role==='user')||(m.role==='assistant'&&(m.text||'').trim()))
       .map(m=>({role:m.role,text:m.text}));
-    const resp=await fetch('/api/advisor/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:hist})});
+    const resp=await fetch('/api/advisor/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:hist,listing_key:_advListingKey}),signal:controller.signal});
+    if(!resp.ok){ const e=await resp.json().catch(()=>({})); throw new Error(_advErr(e.reason)); }
     const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
     while(true){
       const {value,done}=await reader.read(); if(done) break;
+      if(epoch!==_advEpoch){ await reader.cancel(); return; }
       buf+=dec.decode(value,{stream:true});
       let i;
       while((i=buf.indexOf('\n\n'))>=0){
         const line=buf.slice(0,i).trim(); buf=buf.slice(i+2);
         if(!line.startsWith('data:')) continue;
         let ev; try{ ev=JSON.parse(line.slice(5).trim()); }catch(e){ continue; }
-        if(ev.type==='delta'){ asst.status=null; asst.text+=ev.text; advRender(); }
-        else if(ev.type==='status'){ asst.status=ev.tool; advRender(); }
+        if(ev.type==='delta'){ asst.status=null; asst.text+=ev.text; advScheduleRender(); }
+        else if(ev.type==='status'){ asst.status=ev.tool; advScheduleRender(); }
         else if(ev.type==='done'){ asst.used=ev.used||[]; asst.asof=ev['기준일']; if(ev.usage) _advSetUsage(ev.usage); }
         else if(ev.type==='error'){ if(!(asst.text||'').trim()) asst.text=_advErr(ev.message, ev.usage); if(ev.usage) _advSetUsage(ev.usage); }
       }
     }
-  }catch(e){ if(!(asst.text||'').trim()) asst.text='연결에 문제가 있어 답변하지 못했습니다. 잠시 후 다시 시도해 주세요.'; }
+  }catch(e){ if(epoch!==_advEpoch) return;
+    if(!(asst.text||'').trim()) asst.text=e.message||'연결에 문제가 있어 답변하지 못했습니다. 잠시 후 다시 시도해 주세요.'; }
+  if(epoch!==_advEpoch) return;
+  if(_advAbort===controller) _advAbort=null;
   asst.status=null; asst.streaming=false; _advBusy=false;
   document.getElementById('advSendBtn').disabled=false; advRender();
 }

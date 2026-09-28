@@ -31,6 +31,7 @@ SYSTEM = (
     "8. 지역 시그널(KB 주간 룰)과 단지 시그널(실거래·전세가율·공시)은 계층이 다르다. 단지 전세가율·갭·평단가는 get_complex 결과만 인용하고, 필드가 없거나 '데이터없음필드'면 추정하지 않는다. 지역 BUY를 단지 BUY로 바꿔 말하지 말 것.\n"
     "9. '지금 타이밍?'·'언제 사?' 류는 get_timing 으로 타이밍점수(0~100)·근거·confidence·asof 를 조회해 조건부로 답한다. 확신형 매수 지시 금지.\n"
     "10. '최근 대화 기억'이 있으면 관심지역·단지·직전 질문을 참고하되, 이번 메시지와 충돌하면 이번 메시지를 우선한다. 기억을 사실처럼 단정하지 말 것.\n"
+    "11. 선택 매물이 있으면 서버가 확인한 매물 ID·호가·전용면적·층을 기준으로 답한다. 출입구 도보시간, 통학구역, 호재 진행 단계는 근거가 없으면 미확인이라고 말한다.\n"
 )
 
 
@@ -69,6 +70,10 @@ def build_system(
         bits.append("관심평수 " + ",".join(str(s) for s in sizes if s is not None))
     if p.get("청약관심"):
         bits.append("청약 관심 있음")
+    if p.get("직장"):
+        bits.append(f"직장 위치 이름 {str(p['직장'])[:100]} (경로시간 미확인)")
+    if p.get("자녀수") is not None and p.get("자녀수") != "":
+        bits.append(f"자녀수 {p['자녀수']} (학교 배정 정보 아님)")
     fav = favorites or {}
     regs = fav.get("관심지역") or []
     cxs = fav.get("관심단지") or []
@@ -179,11 +184,16 @@ TOOLS = [
     },
     {
         "name": "get_listings",
-        "description": "매물 탐색 — 급매·찐매물(공급사 인증 표시)·경매. region 으로 좁힘. kind: '급매'|'찐매물'|'경매'|'전체'. 하루 1회 캐시. 공급사 갭은 국토부 실거래 검증값이나 실제 할인율이 아니므로 가격 우위·매수 추천 근거로 단정하지 말 것.",
+        "description": "매물 탐색 — 일반매물·급매·찐매물(공급사 인증 표시)·경매. region 으로 좁힘. 공급사 갭은 국토부 실거래 검증값이나 실제 할인율이 아님.",
         "input_schema": {"type": "object", "properties": {
             "region": {"type": "string", "description": "지역명(선택)"},
-            "kind": {"type": "string", "enum": ["급매", "찐매물", "경매", "전체"], "description": "매물 종류(기본 급매)"},
+            "kind": {"type": "string", "enum": ["일반매물", "급매", "찐매물", "경매", "전체"], "description": "매물 종류(기본 급매)"},
         }},
+    },
+    {
+        "name": "get_selected_listing_report",
+        "description": "지도에서 선택한 매물의 서버 검증 호가·면적·층과 동일 단지 비교거래, 미확인 입지 항목을 조회. 매물분석·비교 질문에서 먼저 사용.",
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "get_policy",
