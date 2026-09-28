@@ -201,6 +201,11 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_selected_listing_kapt",
+        "description": "선택 매물 단지의 K-APT 공식 세대수·시공사·사용승인·등록 주차면을 이름과 시군구 유일 매칭 시에만 조회. 단지 규모·주차 질문에서 사용. 주차 가능성과 시공 품질은 추론하지 않음.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_selected_listing_comparison",
         "description": "사용자가 비교함에 담은 매물 2~3개의 현재 서버 검증 호가·전용면적·층·같은 조건 실거래·수집시점·예산 충족을 나란히 반환. 비교 질문에서 먼저 사용하며 누락은 우열로 치환하지 않음.",
         "input_schema": {"type": "object", "properties": {}},

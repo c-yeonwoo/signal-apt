@@ -309,6 +309,26 @@ def listing_location(request: Request, key: str):
     return JSONResponse(location.build(row, profile, entrance), headers={"Cache-Control": "private, no-store"})
 
 
+@router.get("/api/listing-kapt")
+def listing_kapt(request: Request, key: str):
+    """단지명·시군구가 유일하게 일치할 때만 공식 K-APT 정보를 제공한다."""
+    from realty_signal import api as app_api
+    from realty_signal.ingest import kapt
+    from realty_signal.services import property_analysis as analysis
+
+    try:
+        row = analysis.resolve(key, private_allowed=deps.personal_listings_allowed(request))
+    except ValueError as exc:
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 조회할 수 있습니다.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    sigungu = app_api._code_of(row.get("지역") or "")[:5]
+    return JSONResponse(kapt.lookup(row.get("단지명") or "", sigungu),
+                        headers={"Cache-Control": "private, no-store"})
+
+
 @router.put("/api/listing-entrance")
 def listing_entrance_set(request: Request, data: dict = Body(...)):
     from realty_signal.services import listing_entrance as entrance

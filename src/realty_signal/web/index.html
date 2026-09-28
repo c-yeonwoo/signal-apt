@@ -6820,6 +6820,22 @@ let _analysisGen=0, _analysisCurrent=null;
 const _analysisCache=new Map(), _analysisAsked=new Set();
 let _analysisRouteLayer=null;
 let _analysisPick=null;
+async function _analysisLoadKapt(){
+  const report=_analysisCurrent, key=report?.listing?.key, gen=_analysisGen;
+  if(!key||report.kapt?.status==='loading') return;
+  report.kapt={status:'loading'}; _analysisRender(report);
+  try{
+    const r=await fetch('/api/listing-kapt?key='+encodeURIComponent(key));
+    if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||'공식 단지 정보를 불러오지 못했습니다.');
+    const value=await r.json();
+    if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
+    report.kapt=value; _analysisRender(report);
+  }catch(e){
+    if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
+    report.kapt={status:'unavailable',reason:e.message||'공식 단지 정보를 조회하지 못했습니다.'};
+    _analysisRender(report);
+  }
+}
 function _analysisStopPick(restore=true){
   if(!_analysisPick) return;
   const pick=_analysisPick; _analysisPick=null;
@@ -7092,7 +7108,20 @@ function _analysisRender(d){
     if(b['최고층']) facts.push(`최고 ${esc(b['최고층'])}층`);
     if(b['용적률']) facts.push(`용적률 ${esc(b['용적률'])}%`);
     if(cx['총거래']) facts.push(`조회기간 거래 ${esc(cx['총거래'])}건`);
-    html+=fold('complex','단지에서 확인한 사실',facts.length?`<div class="analysis-points">${facts.map(x=>`<span>${x}</span>`).join('')}</div>`:'<div class="analysis-muted">단지 정보는 확인 중입니다.</div>');
+    const k=d.kapt||{};
+    const kaptFacts=k.status==='observed'?[k.households!=null?`${esc(k.households)}세대`:null,
+      k.builder?`시공사 ${esc(k.builder)}`:null,k.approval_date?`사용승인 ${esc(k.approval_date)}`:null,
+      k.parking_spaces!=null?`등록 주차면 ${esc(k.parking_spaces)}면 · 세대당 ${esc(k.parking_per_household)}`:null]
+      .filter(Boolean):[];
+    const kaptBody=k.status==='observed'
+      ? `<div class="analysis-points">${kaptFacts.map(x=>`<span>${x}</span>`).join('')}</div>
+        <div class="analysis-muted">K-APT ${esc(k.retrieved_at||'조회일 미확인')} 조회 · ${esc(k.address||'주소 미확인')}<br>${esc(k.note||'주차 가능 여부·시공 품질을 뜻하지 않습니다.')}
+        · <a href="${esc(k.source_url)}" target="_blank" rel="noopener noreferrer">공식 출처 ↗</a></div>`
+      : k.status==='loading'?'<div class="analysis-muted">K-APT 조회 중…</div>'
+      : `<div class="analysis-muted">${esc(k.reason||'단지명·시군구를 대조해 K-APT 공식 정보를 확인할 수 있습니다.')}</div>
+         <button type="button" class="btn" onclick="_analysisLoadKapt()">K-APT 세대수·시공사·주차 확인</button>`;
+    html+=fold('complex','단지에서 확인한 사실',`${facts.length?`<div class="analysis-points">${facts.map(x=>`<span>${x}</span>`).join('')}</div>`:'<div class="analysis-muted">건축물대장 정보는 확인 중입니다.</div>'}
+      <div style="margin-top:9px">${kaptBody}</div>`);
     const pros=(d.pros||[]).map(x=>`<li>${esc(x.text)}</li>`).join('');
     const cautions=(d.cautions||[]).map(x=>`<li>${esc(x.text)}</li>`).join('');
     html+=card('좋은 점과 확인할 점',`${pros?`<div style="color:#15803d;font-weight:700">긍정적 근거</div><ul>${pros}</ul>`:''}

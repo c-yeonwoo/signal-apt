@@ -575,6 +575,16 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             if isinstance(route, dict):
                 route.pop("path", None)
         return result
+    if name == "get_selected_listing_kapt":
+        from realty_signal.ingest import kapt
+        from realty_signal.services import property_analysis as analysis
+        if not listing_key:
+            return {"error": "선택한 매물이 없습니다."}
+        try:
+            row = analysis.resolve(listing_key, private_allowed=_personal_listings_allowed(uid=uid))
+        except (ValueError, PermissionError, LookupError):
+            return {"error": "선택 매물을 현재 수집분에서 확인할 수 없습니다."}
+        return kapt.lookup(row.get("단지명") or "", _code_of(row.get("지역") or "")[:5])
     if name == "get_selected_listing_comparison":
         from realty_signal.services import listing_compare as compare
         from realty_signal.services import property_analysis as analysis
