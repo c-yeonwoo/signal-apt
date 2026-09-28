@@ -49,6 +49,14 @@ def test_first_briefing_lists_candidates(uid):
     assert "오늘 할 일" in b["text"]
 
 
+def test_briefing_does_not_call_supplier_gap_a_verified_discount():
+    msg = briefing._render({}, {"budget": 60000, "pyeong": 25},
+                           {"new": [], "dropped": [], "moved": []}, [],
+                           [{"단지명": "테스트", "호가": 50000, "급매갭": -10}], 1, first=True)
+    assert "공급사 중위시세 대비 -10.0%, 실거래 미검증" in msg
+    assert "(시세 -10.0%)" not in msg
+
+
 def test_unchanged_day_is_not_sent(uid):
     first = briefing.build(uid)
     db.kv_set(briefing.SNAP_KEY.format(uid=uid), first["snapshot"])

@@ -103,9 +103,9 @@ def test_fetch_market_with_status_keeps_source_error_distinct_from_empty_rows():
     assert error and "TimeoutError" in error
 
 
-def test_listing_timing_certified_bonus():
+def test_listing_timing_certified_status_is_not_price_bonus():
     from realty_signal.signals.timing import listing_timing
     r = listing_timing("찐매물", {"급매갭": -10}, "BUY", "B", asof="2026-07-14")
-    assert "찐매물" in r.reasons_text
-    assert "시세갭" in r.reasons_text
-    assert r.confidence > 0.5
+    assert "인증 표시" in r.reasons_text
+    assert "공급사 표시 갭" in r.reasons_text
+    assert r.confidence <= 0.5

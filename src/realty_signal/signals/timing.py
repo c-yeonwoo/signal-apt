@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 
-VERSION = "v2-context-only"
+VERSION = "v3-source-gap-unranked"
 
 _SIG_BONUS = {"STRONG_BUY": 25, "BUY": 15, "WATCH": 5, "NEUTRAL": 0, "SELL_RISK": -20}
 _GRADE_BONUS = {"A": 8, "B": 4, "C": 0, "D": -4}
@@ -50,27 +51,23 @@ def _clamp(n: int, lo: int = 0, hi: int = 100) -> int:
 
 
 def _listing_base(kind: str, raw: dict) -> tuple[int, list[str], float]:
-    """유형별 고유 할인/기대(0~60) + 신뢰도 보정."""
+    """유형별 시장 참고값. 검증되지 않은 공급사 가격 차이는 점수에 합산하지 않는다."""
     why: list[str] = []
     conf = 0.72
     if kind in ("급매", "찐매물"):
         g = raw.get("급매갭")
-        label = "시세갭" if kind == "찐매물" else "급매갭"
-        if g is None:
-            base, why = 0, [f"{label} –"]
-            conf = 0.45
+        base = 0
+        if isinstance(g, bool) or not isinstance(g, (int, float)) or not isfinite(g):
+            why = ["공급사 표시 갭 미확인 · 가격 점수 미반영"]
+            conf = 0.38
         elif g <= -35:
-            base, why = 15, [f"{label} {g}%(⚠️비현실적·확인필요)"]
-            conf = 0.35
-        elif g < 0:
-            base, why = min(60, round(-g * 2)), [f"{label} {g}%"]
-            conf = 0.78 if g >= -30 else 0.55
+            why = [f"공급사 표시 갭 {g}%(⚠️비현실적·확인필요) · 가격 점수 미반영"]
+            conf = 0.3
         else:
-            base, why = 0, [f"{label} {g}%(시세 이상)"]
-            conf = 0.5
+            why = [f"공급사 표시 갭 {g}% · 실거래 미검증 · 가격 점수 미반영"]
+            conf = 0.42
         if kind == "찐매물":
-            conf = min(0.9, conf + 0.08)   # 집주인 인증 — 허위매물 리스크↓
-            why.append("찐매물(내집등록)")
+            why.append("공급사 인증 표시(가격·판매 가능 여부 미검증)")
     elif kind == "경매":
         r = raw.get("총비용우위율", raw.get("시세차익률"))
         base = 0 if r is None else max(0, min(60, round(r * 1.8)))
@@ -120,6 +117,8 @@ def listing_timing(
         conf = max(0.3, conf - 0.12)
     if grade:
         why.append(f"{grade}급지({gb:+d})")
+    if kind in ("급매", "찐매물"):
+        conf = min(conf, 0.5)  # 지역 시그널이 공급사 매물·가격 검증을 대신하지 않는다.
     score = _clamp(base + sb + gb)
     return TimingResult(
         score=score, reasons=why, confidence=conf,

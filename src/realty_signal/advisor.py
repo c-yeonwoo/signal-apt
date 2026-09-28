@@ -179,7 +179,7 @@ TOOLS = [
     },
     {
         "name": "get_listings",
-        "description": "실제 매물 — 급매·찐매물(집주인 인증)·경매. region 으로 좁힘. kind: '급매'|'찐매물'|'경매'|'전체'. 하루 1회 캐시.",
+        "description": "매물 탐색 — 급매·찐매물(공급사 인증 표시)·경매. region 으로 좁힘. kind: '급매'|'찐매물'|'경매'|'전체'. 하루 1회 캐시. 공급사 갭은 국토부 실거래 검증값이나 실제 할인율이 아니므로 가격 우위·매수 추천 근거로 단정하지 말 것.",
         "input_schema": {"type": "object", "properties": {
             "region": {"type": "string", "description": "지역명(선택)"},
             "kind": {"type": "string", "enum": ["급매", "찐매물", "경매", "전체"], "description": "매물 종류(기본 급매)"},
