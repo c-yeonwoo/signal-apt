@@ -33,6 +33,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
           중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
+      if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/general-listings') data={ready:true,state:'partial',regions:['테스트구'],last_success_at:1780000000,
         refresh:{limited_regions:['테스트구'],failed_requests:0},listings:[{hanbang_id:'synthetic-hb-1',단지명:'한방테스트단지',지역:'테스트구',호가:50000,전용면적:84.5,층:12,등록일:'2026-09-29'}]};
       if(url.pathname==='/api/listing-watch') data={items:[{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',saved_price:60000,
@@ -77,6 +78,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     assert.equal(await page.locator('#groupSubTabs [data-sub="report"]').count(),0);
     const navWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(navWidth<=360,`browse navigation overflows mobile viewport: ${navWidth}`);
+    await page.evaluate(()=>{mapSplit=()=>{}; switchTab('all');});
+    await page.getByText('일반·급매 매물은 지정된 개인 계정에서만 보입니다.',{exact:false}).waitFor();
+    assert.match(await page.locator('#laStatus').textContent(),/지정된 개인 계정만/);
     await page.evaluate(()=>{window.__generalRows=[]; mapSplit=(listId,mapId,items,opt)=>{
       window.__generalRows=items; document.getElementById(listId).innerHTML=opt.summary(items[0]).nm+opt.detail(items[0]);
     }; switchTab('general');});
