@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[], quotePayloads=[], nickPayloads=[];
+    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[];
     let entranceChosen=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
@@ -23,6 +23,10 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       calls.push(url.pathname);
       let data={ready:false,items:[],listings:[],regions:[],actions:[],message:'합성 테스트 데이터'};
       if(url.pathname==='/api/auth/me') return route.fulfill({status:401,json:{}});
+      if(url.pathname==='/api/events'){
+        eventPayloads.push(route.request().postDataJSON());
+        return route.fulfill({json:{ok:true}});
+      }
       const decoded=decodeURIComponent(url.pathname);
       if(decoded==='/api/complex/테스트구/테스트단지') data={단지명:'테스트단지',identity_status:'single_observed',
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
@@ -271,6 +275,11 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     const compareRequest=page.waitForRequest(req=>req.url().includes('/api/advisor/stream')&&req.postDataJSON()?.comparison_keys?.length===2);
     await page.locator('#listingCompareDlg').getByRole('button',{name:'닉에게 차이 묻기'}).click();
     assert.deepEqual((await compareRequest).postDataJSON().comparison_keys,['일반매물:synthetic-hb-1','일반매물:synthetic-hb-2']);
+    assert(eventPayloads.some(x=>x.name==='listing_analysis_ready'));
+    assert(eventPayloads.some(x=>x.name==='listing_evidence_open'&&x.props.section==='complex'));
+    assert(eventPayloads.some(x=>x.name==='listing_commute_compare'));
+    assert(eventPayloads.some(x=>x.name==='listing_compare_open'));
+    assert(!JSON.stringify(eventPayloads).includes('synthetic-hb-1'));
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     assert.deepEqual(errors,[]);

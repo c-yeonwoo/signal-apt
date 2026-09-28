@@ -30,6 +30,20 @@ def test_new_funnel_events_are_allowed(tmp_path, monkeypatch):
     assert counts.get("evidence_open") == 1
 
 
+def test_listing_funnel_counts_unique_accounts_without_identifiers(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB", tmp_path / "listing-events.db")
+    db._migrated[0] = False
+    for uid in (1, 2):
+        assert db.event_log(uid, "listing_analysis_start", {})
+        assert db.event_log(uid, "listing_analysis_ready", {"kind": "일반매물"})
+    assert db.event_log(1, "listing_analysis_start", {})
+    for event in ("listing_evidence_open", "listing_compare_open", "listing_commute_compare",
+                  "listing_watch_add", "imjang_visit_save"):
+        assert db.event_log(1, event, {})
+    starts = next(x for x in db.event_counts(30) if x["name"] == "listing_analysis_start")
+    assert starts["count"] == 3 and starts["users"] == 2
+
+
 def test_frontend_event_names_match_server_whitelist():
     """프론트 `EVENTS` 상수와 서버 화이트리스트가 갈라지면 이벤트가 조용히 유실된다.
 
