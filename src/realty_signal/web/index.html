@@ -630,7 +630,7 @@
   <div id="qsRadarPane">
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
       <label>특정 지역만 <select id="qsRegion" class="ctrl"><option value="">— BUY+ 전체 —</option></select></label>
-      <label id="qsGapLabel">최소 급매갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
+      <label id="qsGapLabel">공급사 기준 갭 <select id="qsGap" onchange="renderQuicksale()" class="ctrl">
         <option value="0">전체</option><option value="-3">-3% 이하</option><option value="-5" selected>-5% 이하</option><option value="-8">-8% 이하</option><option value="-10">-10% 이하</option></select></label>
       <span id="qsStatus" style="color:var(--dim);font-size:12px"></span>
       <span id="qsMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
@@ -2928,7 +2928,7 @@ function qsMode(mode){
     ? '공급사 표시 기준 인증 매물 · 현재 판매 여부·인증 범위는 원천에서 확인'
     : '공급사 표시 기준 급매 · 중위시세와 조건이 달라 실제 할인 여부 확인 필요';
   const gl=document.getElementById('qsGapLabel');
-  if(gl) gl.firstChild.textContent=_qsMode==='찐매물'?'최소 시세갭 ':'최소 급매갭 ';
+  if(gl) gl.firstChild.textContent='공급사 기준 갭 ';
   if(_qsMode==='찐매물' && +document.getElementById('qsGap').value===-5) document.getElementById('qsGap').value='0';
   const st=document.getElementById('qsStatus');
   const data=_qsData[_qsMode];
@@ -2988,7 +2988,7 @@ function renderQuicksale(){
   const minGap = +document.getElementById('qsGap').value || 0;
   const src = _qsMode==='찐매물' ? _qsCertList.slice() : _qsList.slice();
   const source=_qsData[_qsMode]||{};
-  const gapLabel = _qsMode==='찐매물' ? '시세갭' : '급매갭';
+  const gapLabel = '공급사 기준 갭';
   const rows = src.filter(m=>{
     if(!(inFocus(m['지역']||'') && _mtPass(m['지역'], m['시그널']))) return false;
     return minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap);
@@ -3014,13 +3014,28 @@ function renderQuicksale(){
       <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">공급사 인증 표시</span>':''}</div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">매물 공개 상태, 동·호수, 중위시세 비교 조건은 원천에서 확인하세요.${m['stale']||source.stale?' 이 항목은 지난 수집 결과입니다.':''}</div>
       ${txCostsSlot(m['호가'], m['지역'], m['평형'], m['전용면적'])}
-      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
+      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${qsEvidenceBtn(m)}${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}${nickCxBtn(m['단지명'],m['지역'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     geoq:m=> (m['lat']&&m['lng']) ? null : `${m['지역']||''} ${m['단지명']||''}`,
     regionOf:m=>m['지역'],
     color:m=> (m['급매갭']!=null&&m['급매갭']<=-8?deep:accent),
     label:m=> `<b>${m['단지명']}</b>${_qsMode==='찐매물'?' · 찐':''}<br>${m['평형']||''}평 · ${_eok(m['호가'])} <span style="color:${accent}">(${m['급매갭']??'–'}%)</span>`,
   });
+}
+function qsEvidenceBtn(m){
+  const ref=m['ref']||m;
+  const name=m['단지명'], region=m['지역'];
+  const asking=Number(m['호가']??m['총액']);
+  const area=Number(m['전용면적']??ref['전용면적']);
+  if(!name||!region||!Number.isFinite(asking)||asking<=0||!Number.isFinite(area)||area<=0)
+    return '<span style="font-size:11px;color:var(--dim)">동일면적 비교: 전용면적·호가 확인 필요</span>';
+  const floor=m['층']??ref['층']??'';
+  return `<button type="button" class="btn qs-evidence" style="padding:3px 10px" data-name="${esc(name)}" data-region="${esc(region)}" data-asking="${asking}" data-area="${area}" data-floor="${esc(floor)}" onclick="event.stopPropagation();openQuicksaleEvidence(this)">국토부 거래와 비교</button>`;
+}
+function openQuicksaleEvidence(btn){
+  const {name,region,asking,area,floor}=btn.dataset;
+  const parsedFloor=/^\d+$/.test(floor||'')&&+floor>=1&&+floor<=200 ? +floor : null;
+  return openComplex(name,region,{asking:+asking,exclusive_m2:+area,floor:parsedFloor});
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
 const _LA_TYPES=['경매','급매','찐매물','청약','재건축'];
@@ -3116,7 +3131,7 @@ function renderAllListings(){
       sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${x['유형']} · ${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''}`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
-        : cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
+        : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
       const priced=['급매','찐매물','경매'].includes(x['유형']) && x['총액'];
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
       return `<div class="kv"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>기회도 <b>${x['기회도']??'–'}</b></span></div>
@@ -5026,7 +5041,7 @@ function _cxSigBanner(cs){
     ${note}
   </div>`;
 }
-async function openComplex(name, region){
+async function openComplex(name, region, quote=null){
   _cxCur={name,region};
   updateCxFavBtn();
   const body=document.getElementById('cxBody');
@@ -5083,9 +5098,9 @@ async function openComplex(name, region){
       <summary style="cursor:pointer;font-size:12px;font-weight:700">같은 전용면적 최근 6개월 거래 근거 보기</summary>
       <div style="font-size:11px;color:var(--dim);margin:8px 0">국토부 신고 거래 · 같은 단지/전용면적 0.1㎡ 기준 · 취소·명시된 직거래 제외. 층·집 상태·거래 시점 보정 전 관측 분포이며 현재 적정가/호가가 아닙니다.</div>${compRows}
     </details>
-    <details style="margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+    <details id="cxQuoteDetails" style="margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
       <summary style="cursor:pointer;font-size:12px;font-weight:700">내가 확인한 호가와 비교하기</summary>
-      <p style="font-size:11px;color:var(--dim);margin:7px 0">직접 확인한 호가만 입력하세요. 입력값은 저장하지 않으며 거래 표본에 섞지 않습니다.</p>
+      <p style="font-size:11px;color:var(--dim);margin:7px 0">직접 확인한 호가를 입력하세요. 급매에서 연 경우 공급사 호가를 가져옵니다. 입력값은 저장하지 않으며 거래 표본에 섞지 않습니다.</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end">
         <label style="font-size:11px">전용면적<br><select id="cxQuoteArea" class="ctrl">${quoteOpts}</select></label>
         <label style="font-size:11px">매물 층(선택)<br><input id="cxQuoteFloor" type="number" min="1" max="200" step="1" inputmode="numeric" placeholder="예: 12" style="width:85px"></label>
@@ -5133,6 +5148,20 @@ async function openComplex(name, region){
         <span style="color:var(--dim)">${q['입력층']==null?'층·':'±2층 이외 층 차이·'}집 상태·거래 시점·취득비용 미보정. 차이가 곧 할인율이나 매수 권고는 아닙니다.</span>`;
     }catch(e){result.textContent='비교 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.';}
   };
+  if(quote){
+    body.querySelector('#cxQuoteDetails').open=true;
+    const result=body.querySelector('#cxQuoteResult');
+    body.querySelector('#cxQuoteAmount').value=quote.asking;
+    const matched=(d['평형별']||[]).find(p=>Number.isFinite(+p['전용㎡'])
+      && Math.round(+p['전용㎡']*10)===Math.round(quote.exclusive_m2*10));
+    if(!matched){
+      result.textContent='공급사 전용면적과 같은 단지·면적 거래를 찾지 못했습니다. 다른 면적의 거래로 대신 비교하지 않습니다.';
+    }else{
+      body.querySelector('#cxQuoteArea').value=String(matched['전용㎡']);
+      if(quote.floor!=null) body.querySelector('#cxQuoteFloor').value=quote.floor;
+      body.querySelector('#cxQuoteBtn').click();
+    }
+  }
   loadComplexAgents(name, region);
   loadCxBuilding(name, region);
   loadCxLoanScen(d);

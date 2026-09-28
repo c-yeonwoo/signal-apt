@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[];
+    const errors=[], calls=[], quotePayloads=[];
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -27,8 +27,11 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
           비교거래:{상태:'관측',건수:4,중앙값:50000,최저:45000,최고:55000,거래월범위:'2026-08~2026-09'}}],
         매매추이:[{ym:'2026-08',평단가:2000,건수:4}],최근평단가:2000,총거래:4,기간:'2026-08',추세pct:0};
-      if(decoded==='/api/complex/테스트구/테스트단지/quote-check') data={상태:'관측비교',입력호가:48000,입력층:11,
-        중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
+      if(decoded==='/api/complex/테스트구/테스트단지/quote-check') {
+        quotePayloads.push(route.request().postDataJSON());
+        data={상태:'관측비교',입력호가:48000,입력층:11,
+          중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
+      }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/shortlist') data={ready:true,budget:60000,pyeong:25,candidates:[
         {'단지':'테스트 단지 A',region:'테스트구','예상가':50000,'자금':{'필요현금':30000,'총월상환':105},'근거':'현금 여유 우선'}]};
@@ -104,7 +107,27 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     assert.match(await page.locator('#cxQuoteResult').textContent(),/2,000만.*낮음/);
     assert.match(await page.locator('#cxQuoteResult').textContent(),/11층 ±2층/);
     await page.keyboard.press('Escape');
+    await page.evaluate(()=>{
+      document.body.insertAdjacentHTML('beforeend', '<div id="qsEvidenceFixture">'
+        +qsEvidenceBtn({단지명:'테스트단지',지역:'테스트구',호가:48000,전용면적:84.9,층:11})+'</div>');
+    });
+    await page.locator('#qsEvidenceFixture .qs-evidence').click();
+    await page.getByText('산술 차이',{exact:false}).waitFor();
+    assert.equal(await page.locator('#cxQuoteDetails').getAttribute('open'),'');
+    assert.equal(await page.locator('#cxQuoteArea').inputValue(),'84.9');
+    assert.equal(await page.locator('#cxQuoteFloor').inputValue(),'11');
+    assert.deepEqual(quotePayloads.at(-1),{asking:48000,exclusive_m2:84.9,floor:11});
+    await page.keyboard.press('Escape');
+    await page.evaluate(()=>{
+      document.getElementById('qsEvidenceFixture').innerHTML=qsEvidenceBtn(
+        {단지명:'테스트단지',지역:'테스트구',호가:48000,전용면적:59.9,층:11});
+    });
+    const callsBefore=quotePayloads.length;
+    await page.locator('#qsEvidenceFixture .qs-evidence').click();
+    await page.getByText('다른 면적의 거래로 대신 비교하지 않습니다.',{exact:false}).waitFor();
+    assert.equal(quotePayloads.length,callsBefore);
+    await page.keyboard.press('Escape');
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, Escape focus');
+    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

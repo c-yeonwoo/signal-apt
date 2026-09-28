@@ -47,6 +47,19 @@ test('quicksale empty view names filter and source states separately', () => {
   assert.match(empty.textContent, /필터에서 제외됐습니다/);
 });
 
+test('listing evidence action requires exact area and escapes source attributes', () => {
+  const ctx = vm.createContext({esc: s => String(s ?? '').replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))});
+  vm.runInContext(extract('function qsEvidenceBtn(m){', '// ===== 통합 매물('), ctx);
+  const button = ctx.qsEvidenceBtn({단지명:'A" onclick="alert(1)', 지역:'테스트구',
+    총액:48000, ref:{전용면적:84.9,층:11}});
+  assert.match(button, /data-name="A&quot; onclick=/);
+  assert.doesNotMatch(button, /data-name="A" onclick=/);
+  assert.match(button, /data-area="84.9"/);
+  assert.match(button, /data-floor="11"/);
+  assert.match(ctx.qsEvidenceBtn({단지명:'A', 지역:'테스트구', 호가:48000}), /전용면적·호가 확인 필요/);
+});
+
 function selectionHarness() {
   const classes = (...init) => {
     const s = new Set(init);

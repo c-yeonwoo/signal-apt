@@ -2816,16 +2816,16 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
     if "급매" in want and QUICKSALE_FILE.exists():
         for m in json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []):
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
-                "급매갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
+                "공급사 기준 갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
-                 "전용면적": m.get("전용면적"), "naver_id": m.get("naver_id")},
+                 "전용면적": m.get("전용면적"), "층": m.get("층"), "naver_id": m.get("naver_id")},
                 total=m.get("호가"))
     if "찐매물" in want and CERTIFIED_FILE.exists():
         for m in json.loads(CERTIFIED_FILE.read_text(encoding="utf-8")).get("listings", []):
             add("찐매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
-                "시세갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
+                "공급사 기준 갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
-                 "전용면적": m.get("전용면적"), "naver_id": m.get("naver_id"), "찐매물": True},
+                 "전용면적": m.get("전용면적"), "층": m.get("층"), "naver_id": m.get("naver_id"), "찐매물": True},
                 total=m.get("호가"))
     if "청약" in want:
         for d in _presale():
