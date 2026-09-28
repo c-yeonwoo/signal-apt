@@ -26,6 +26,7 @@ test('quicksale status separates verified empty from upstream failure', () => {
   assert.match(ctx.qsStatusText(zero), /해당 매물 없음/);
   assert.match(ctx.qsStatusText({ready: false, state: 'failed', listings: [], refresh: {error: 'timeout'}}), /0건으로 판단할 수 없습니다/);
   assert.match(ctx.qsStatusText({...zero, state: 'partial_empty', refresh: {failed_requests: 1}}), /0건 확정 불가/);
+  assert.match(ctx.qsStatusText({...zero, refresh: {signal_context: 'unavailable'}}), /지역 시그널 미확인/);
 });
 
 test('quicksale empty view names filter and source states separately', () => {

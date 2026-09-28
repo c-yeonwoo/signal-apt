@@ -66,6 +66,40 @@ def test_quicksale_seed_does_not_require_public_data_key(monkeypatch):
     assert calls == ["급매", "찐매물"]
 
 
+def test_scan_regions_keeps_only_owner_favorites_without_kb(tmp_path, monkeypatch):
+    sale = tmp_path / "quicksale.json"
+    cert = tmp_path / "certified.json"
+    sale.write_text(json.dumps({"regions": ["은평구", "없는지역"]}), encoding="utf-8")
+    cert.write_text(json.dumps({"regions": ["은평구"]}), encoding="utf-8")
+    monkeypatch.setattr(api, "QUICKSALE_FILE", sale)
+    monkeypatch.setattr(api, "CERTIFIED_FILE", cert)
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1], "은평구": [37.6, 126.9]})
+    monkeypatch.setattr(api, "_signals_df", lambda: (_ for _ in ()).throw(FileNotFoundError("KB cache")))
+    monkeypatch.setattr(api.config, "personal_listing_email", lambda: "owner@example.com")
+    monkeypatch.setattr(api.db, "user_by_email", lambda email: {"id": 1} if email == "owner@example.com" else None)
+    monkeypatch.setattr(api.db, "fav_list", lambda uid: [
+        {"kind": "region", "key": "노원구"}, {"kind": "region", "key": "없는지역"}])
+
+    assert api._scan_regions() == ["노원구"]  # 과거 캐시는 다른 계정의 관심지역일 수 있다.
+
+
+def test_radar_fetches_bundled_region_when_kb_signal_is_unavailable(monkeypatch):
+    from realty_signal.ingest import baroezip
+
+    monkeypatch.setattr(api, "_signal_map", lambda: (_ for _ in ()).throw(FileNotFoundError("KB cache")))
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1]})
+    monkeypatch.setattr(api, "_code_of", lambda region: (_ for _ in ()).throw(AssertionError("not needed")))
+    monkeypatch.setattr(api, "_region_centroid", lambda region, code: (37.6, 127.1))
+    monkeypatch.setattr(api, "_sigungu_at", lambda lat, lng: "노원구")
+    monkeypatch.setattr(baroezip, "fetch_market_with_status", lambda *args, **kwargs: ([
+        {"단지명": "테스트", "complex_no": "1", "평형": "25", "층": 10,
+         "호가": 50000, "급매": True, "급매갭": -5, "lat": 37.6, "lng": 127.1}], None))
+
+    rows, status = api._radar_scan_with_status(["노원구"])
+    assert status["usable"] is True and status["signal_context"] == "unavailable"
+    assert rows[0]["단지명"] == "테스트" and rows[0]["시그널"] == ""
+
+
 def test_partial_refresh_keeps_unscanned_regions_with_stale_flag(tmp_path):
     from realty_signal.storage import atomic_json
     path = tmp_path / "quicksale.json"
