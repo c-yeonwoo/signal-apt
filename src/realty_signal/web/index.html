@@ -6955,22 +6955,50 @@ async function listingDiscoveryLoad(){
     _analysisCurrent.discovery={error:e.message||'조회 실패'}; _analysisRender(_analysisCurrent);
   }
 }
+async function listingDiscoveryCommute(){
+  const report=_analysisCurrent, key=report?.listing?.key, gen=_analysisGen;
+  if(!key||!report.discovery||report.discovery.commute?.status==='loading') return;
+  report.discovery.commute={status:'loading'}; _analysisRender(report);
+  try{
+    const response=await fetch('/api/listing-discovery/commute?key='+encodeURIComponent(key));
+    if(!response.ok) throw new Error('대안의 통근 경로를 불러오지 못했습니다.');
+    const result=await response.json();
+    if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
+    report.discovery.commute=result; _analysisRender(report);
+  }catch(e){
+    if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
+    report.discovery.commute={status:'unavailable',reason:e.message||'통근 경로를 확인하지 못했습니다.'};
+    _analysisRender(report);
+  }
+}
 function _analysisDiscovery(d){
   const box=d.discovery;
   if(!box) return '<button type="button" class="btn" onclick="listingDiscoveryLoad()">비슷한 매물·관련 뉴스 보기</button>';
   if(box.loading) return '<div class="analysis-muted">현재 수집분과 헤드라인을 확인 중…</div>';
   if(box.error) return `<div class="analysis-muted">${esc(box.error)}</div><button type="button" class="btn" onclick="listingDiscoveryLoad()">다시 시도</button>`;
+  const commute=box.commute||{}, selectedMinutes=commute.selected?.minutes;
+  const commuteByKey=new Map((commute.alternatives||[]).map(x=>[x.key,x]));
   const alternatives=(box.alternatives||[]).map(x=>{
     const l=x.listing||{};
+    const route=commuteByKey.get(l.key), diff=route?.minutes!=null&&selectedMinutes!=null?route.minutes-selectedMinutes:null;
+    const commuteText=route?.status==='observed'?`저장된 직장 안내시간 ${esc(route.minutes)}분${diff!=null?` · 선택 매물보다 ${diff<0?`${esc(-diff)}분 짧음`:diff>0?`${esc(diff)}분 김`:'같음'}`:''}`
+      :route?esc(route.reason||'통근 경로 미확인'):'';
     return `<div style="padding:7px 0;border-bottom:1px solid var(--line)"><b>${esc(l.name||'단지 미확인')}</b> · ${esc(l.kind||'')}
       <div>${l.asking_manwon?_eok(l.asking_manwon):'호가 미확인'} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'}</div>
       <div class="analysis-muted">${esc(x.reason)} · 수집 ${esc(l.collected_at||'미확인')}${l.stale?' · 지난 결과':''}</div>
+      ${commuteText?`<div class="analysis-muted">${commuteText}</div>`:''}
       <button type="button" class="btn" data-key="${esc(l.key)}" onclick="openListingReport(this.dataset.key)">이 매물 분석</button></div>`;
   }).join('');
   const headlines=(box.headlines||[]).map(x=>`<div style="padding:6px 0"><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>
     <div class="analysis-muted">${esc(x.published_at||'시점 미확인')} · ${esc(x.match||'관련성 미확인')}</div></div>`).join('');
   const query=encodeURIComponent([d.listing.region,d.listing.name,'아파트'].filter(Boolean).join(' '));
+  const commuteAction=commute.status==='loading'?'<div class="analysis-muted">통근 경로를 조회 중…</div>'
+    :commute.status==='partial'||commute.status==='observed'
+      ? `<div class="analysis-muted">선택 매물 ${selectedMinutes!=null?`${esc(selectedMinutes)}분`:'경로 미확인'} · ${esc(commute.note||'')}</div>`
+      : `<div class="analysis-muted">${esc(commute.reason||'출근 경로는 필요할 때만 조회합니다.')}</div>
+         <button type="button" class="btn" onclick="listingDiscoveryCommute()">내 직장까지 통근 비교</button>`;
   return `<div style="font-weight:700">다른 매물</div>${alternatives||'<div class="analysis-muted">현재 수집분에서 비교할 대안을 찾지 못했습니다.</div>'}
+    ${alternatives?commuteAction:''}
     <div class="analysis-muted">${esc(box.source_note||'')}</div>
     <div style="font-weight:700;margin-top:11px">관련 헤드라인 후보</div>${headlines||'<div class="analysis-muted">기존 뉴스 자료에서 일치 항목이 없습니다.</div>'}
     <div class="analysis-muted">${esc(box.news_note||'')}</div>
@@ -7092,11 +7120,14 @@ function _analysisRender(d){
     html+=card('가격과 입지 확인 중','<div class="analysis-muted">매물 정보부터 표시했습니다. 실거래 근거가 준비되면 이어서 보여드릴게요.</div>');
   }else{
     const checked=price['상태']==='관측비교';
+    const fit=d.buyer_fit||{};
     const routeMinutes=d.mobility?.station_walk?.status==='observed'?d.mobility.station_walk.minutes:null;
     const zoneCount=d.school?.status==='candidate'?(d.school.zones||[]).length:0;
-    html+=card('한눈에 보기',`<div>가격 · ${checked?`동일 조건 거래 ${esc(price['표본수'])}건과 비교`:'같은 조건 거래 근거 부족'}</div>
+    html+=card('한눈에 보기',`<div>내 예산 · ${fit.status==='within'?`확정 매수력 안 (호가 기준 여유 ${_eok(fit.gap_manwon)})`:fit.status==='above'?`확정 매수력 초과 (호가 기준 부족 ${_eok(-fit.gap_manwon)})`:'확정 매수력 미확인'}</div>
+      <div>가격 · ${checked?`동일 조건 거래 ${esc(price['표본수'])}건과 비교`:'같은 조건 거래 근거 부족'}</div>
       <div>역 이동 · ${routeMinutes!=null?`표시 좌표 기준 도보 ${esc(routeMinutes)}분`:'경로 미확인'}</div>
-      <div>학교 · ${zoneCount?`통학구역 후보 ${esc(zoneCount)}곳`:'배정 미확인'}</div>`);
+      <div>학교 · ${zoneCount?`통학구역 후보 ${esc(zoneCount)}곳`:'배정 미확인'}</div>
+      <div class="analysis-muted">${esc(fit.note||fit.reason||'호가·매수력 외 세금·대출·수리비는 별도 확인')}</div>`);
     const finding=checked?`동일 면적 거래 ${esc(price['표본수'])}건의 중앙값 ${_eok(price['중앙값'])}. 현재 호가는 ${price['호가차이율']<0?'낮은':'높은'} 편 (${esc(Math.abs(price['호가차이율']))}%).`
       :esc(price['이유']||'비교할 거래 근거가 부족합니다.');
     html+=card('가격 근거',`<div>${finding}</div>${checked?_analysisTradeChart(d):''}
@@ -7189,13 +7220,14 @@ async function openListingReport(key){
     document.getElementById('advListingTitle').textContent=base.listing.name||'선택 매물';
     const locationPromise=base.listing.coordinate?fetch('/api/listing-location?key='+encodeURIComponent(key))
       .then(r=>r.ok?r.json():null).catch(()=>null):Promise.resolve(null);
-    const cached=_analysisCache.get(key);
+    const cacheKey=(_userEmail||'anonymous')+'|'+key;
+    const cached=_analysisCache.get(cacheKey);
     let full;
     if(cached && Date.now()-cached._client_cached_at<900000 && cached.listing.collected_at===base.listing.collected_at
-       && cached.listing.asking_manwon===base.listing.asking_manwon) full=cached;
+       && cached.listing.asking_manwon===base.listing.asking_manwon) full={...cached,buyer_fit:base.buyer_fit};
     else { const fr=await fetch(path+'&stage=full');
       if(!fr.ok) throw new Error((await fr.json().catch(()=>({}))).detail||'분석 근거를 불러오지 못했습니다.');
-      full=await fr.json(); full._client_cached_at=Date.now(); _analysisCache.set(key,full); }
+      full=await fr.json(); full._client_cached_at=Date.now(); _analysisCache.set(cacheKey,{...full}); }
     if(gen!==_analysisGen) return;
     _analysisCurrent=full; _analysisRender(full);
     locationPromise.then(loc=>{

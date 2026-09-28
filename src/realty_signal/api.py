@@ -556,7 +556,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             d = complex_detail(row["지역"], row["단지명"]) if row.get("지역") and row.get("단지명") else None
         except Exception:  # noqa: BLE001
             d = {"status": "failed", "degraded": True}
-        report = analysis.build(row, d)
+        report = analysis.build(row, d, profile=db.profile_get(uid) if uid else None)
         report.pop("trades", None)
         return report
     if name == "get_selected_listing_location":

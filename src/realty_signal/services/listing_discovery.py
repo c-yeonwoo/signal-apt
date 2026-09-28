@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from math import isfinite
@@ -70,6 +71,57 @@ def alternatives(row: dict, candidates: list[dict], budget: float | None = None)
     same = [x[3] for x in scored if x[0] == 0][:3]
     nearby = [x[3] for x in scored if x[0] == 1][:max(0, 6-len(same))]
     return same + nearby
+
+
+def commute_candidates(row: dict, candidate_rows: list[dict], profile: dict,
+                       kakao_key: str | None, entrance_get=None) -> dict:
+    """사용자가 명시적으로 요청할 때만 후보 6개와 선택 매물의 통근 안내시간을 비교한다."""
+    from realty_signal.ingest import kakao_places
+    from realty_signal.services import listing_entrance
+
+    source = {"source": "Kakao 대중교통 경로", "source_url": kakao_places.DOCS,
+              "note": "매물 표시 좌표 또는 내가 지정한 출입구 후보 기준 안내시간입니다. 실제 출퇴근 시간대·목적지 출입구를 보증하지 않습니다."}
+    try:
+        work = (float(profile.get("직장lat")), float(profile.get("직장lng")))
+    except (TypeError, ValueError):
+        work = (None, None)
+    if not kakao_places.valid_point(*work):
+        return {**source, "status": "missing_work", "reason": "프로필에 직장 위치를 저장하면 통근 차이를 비교할 수 있습니다."}
+    if not kakao_key:
+        return {**source, "status": "unconfigured", "reason": "경로 API를 사용할 수 없습니다."}
+
+    def one(candidate: dict) -> dict:
+        listing = snapshot(candidate)
+        point = listing["coordinate"]
+        origin = "listing_point"
+        if point and entrance_get:
+            try:
+                saved = entrance_get(candidate.get("key"))
+            except Exception:  # noqa: BLE001 - 저장 후보 오류는 원래 표시 좌표로 복귀
+                saved = None
+            if saved:
+                try:
+                    point = listing_entrance.validate(candidate, saved.get("lat"), saved.get("lng"))
+                    origin = "user_marked_candidate"
+                except ValueError:
+                    pass
+        if not point:
+            return {"key": candidate.get("key"), "status": "unverified",
+                    "reason": "매물 표시 좌표가 없어 통근 경로를 조회하지 않았습니다."}
+        try:
+            route = kakao_places.route(*point, *work, "publictraffic", kakao_key)
+        except Exception:  # noqa: BLE001 - 한 경로 장애가 다른 후보를 가리지 않는다.
+            route = {"status": "unavailable"}
+        return {"key": candidate.get("key"), "status": route.get("status", "unavailable"),
+                "minutes": route.get("minutes") if route.get("status") == "observed" else None,
+                "origin_source": origin,
+                "reason": None if route.get("status") == "observed" else "경로를 확인하지 못했습니다."}
+
+    rows = [row, *candidate_rows[:6]]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(one, rows))
+    return {**source, "status": "partial" if any(r["status"] == "observed" for r in results)
+            else "unavailable", "selected": results[0], "alternatives": results[1:]}
 
 
 def _published(value: str | None) -> datetime | None:

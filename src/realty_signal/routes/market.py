@@ -276,8 +276,10 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
         raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 분석할 수 있습니다.") from exc
     except LookupError as exc:
         raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    profile = db.profile_get(deps.uid(request)) or {}
     if stage == "base":
-        out = {"listing": analysis.snapshot(row), "status": "base"}
+        listing = analysis.snapshot(row)
+        out = {"listing": listing, "buyer_fit": analysis.buyer_fit(listing, profile), "status": "base"}
     else:
         detail = None
         if row.get("지역") and row.get("단지명"):
@@ -285,7 +287,7 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
                 detail = app_api.complex_detail(row["지역"], row["단지명"])
             except Exception:  # noqa: BLE001
                 detail = {"status": "failed", "degraded": True}
-        out = {"status": "ready", **analysis.build(row, detail)}
+        out = {"status": "ready", **analysis.build(row, detail, profile=profile)}
     return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
 
 
@@ -423,6 +425,34 @@ def listing_discovery(request: Request, key: str):
            "news_note": "헤드라인 문자열 일치는 단지 관련성·개발사업 단계·가격 영향을 입증하지 않습니다.",
            "source_note": "대안은 현재 수집분의 가격·면적 유사성 기준이며 매물 상태를 보증하지 않습니다."}
     return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/api/listing-discovery/commute")
+def listing_discovery_commute(request: Request, key: str):
+    """현재 수집 대안에 한정해 사용자 요청 시에만 통근 안내시간을 조회한다."""
+    from realty_signal import api as app_api, config
+    from realty_signal.services import listing_discovery as discovery
+    from realty_signal.services import property_analysis as analysis
+
+    allowed = deps.personal_listings_allowed(request)
+    try:
+        row = analysis.resolve(key, private_allowed=allowed)
+    except ValueError as exc:
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 탐색할 수 있습니다.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    uid = deps.uid(request)
+    profile = db.profile_get(uid) or {}
+    candidates = app_api._build_listings({"일반매물", "급매", "찐매물"}, include_private=True) if allowed else []
+    budget = discovery._positive((profile.get("매수력") or {}).get("최대매수가"))
+    selected = discovery.alternatives(row, candidates, budget)
+    by_key = {candidate.get("key"): candidate for candidate in candidates}
+    rows = [by_key[x["listing"]["key"]] for x in selected if x["listing"]["key"] in by_key]
+    entrance_get = (lambda item_key: db.entrance_get(uid, item_key)) if uid else None
+    result = discovery.commute_candidates(row, rows, profile, config.kakao_key(), entrance_get)
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/api/listing-watch")
