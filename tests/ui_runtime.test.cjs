@@ -21,6 +21,16 @@ test('inline app scripts parse and browse navigation separates tools from acquis
   assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="report"/);
 });
 
+test('general listing status distinguishes personal-only, source failure, and limited coverage', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(extract('function generalStatusText(data){', 'async function loadGeneralListings(){'), ctx);
+  assert.match(ctx.generalStatusText({state:'personal_only'}), /개인 계정/);
+  assert.match(ctx.generalStatusText({state:'failed',listings:[],refresh:{error:'timeout'}}), /0건이라는 뜻이 아닙니다/);
+  const text = ctx.generalStatusText({state:'partial',listings:[{}],regions:['노원구'],
+    last_success_at:1,refresh:{limited_regions:['노원구'],failed_requests:0}});
+  assert.match(text, /전체 매물 아님/);
+});
+
 test('opening quicksale reaches both APIs and renders', async () => {
   const calls = [], status = {}, region = {options: [0, 1]};
   const ctx = vm.createContext({

@@ -232,7 +232,7 @@
   .zrow { display:flex; align-items:center; gap:8px; margin:4px 0; }
   .zsw-sm { width:15px; height:15px; border-radius:3px; flex:0 0 auto; }
   /* 경매 */
-  #view-auction, #view-undervalued, #view-presale, #view-quicksale, #view-redev, #view-mymap, #view-watch, #view-report { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
+  #view-auction, #view-undervalued, #view-presale, #view-general, #view-quicksale, #view-redev, #view-mymap, #view-watch, #view-report { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:0; height:calc(100vh - 178px); min-height:420px; }
   .ms-list { width:46%; min-width:280px; max-width:75%; overflow:auto; border:1px solid var(--line); border-radius:12px; background:#ffffff; flex:0 0 auto; }
@@ -618,6 +618,17 @@
     </div>
     <p id="psEmpty" style="color:var(--dim);font-size:14px"></p>
   </div>
+</div>
+
+<div id="view-general" style="display:none">
+  <h2 class="page-head">일반 아파트 매매 <span class="pill">한방 · 개인용</span></h2>
+  <p class="page-sub">관심지역 우선 최대 3개 시군구, 지역당 최신 3페이지의 표본입니다. 전체 매물·현재 판매 여부를 보장하지 않습니다.</p>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+    <button class="btn" id="hbRefreshBtn" onclick="refreshGeneralListings()">관심지역 다시 수집</button>
+    <span id="hbStatus" style="color:var(--dim);font-size:12px"></span>
+  </div>
+  <div class="mapsplit"><div class="ms-list" id="hbList"></div><div class="ms-map" id="hbMap"></div></div>
+  <p id="hbEmpty" style="color:var(--dim);font-size:13px"></p>
 </div>
 
 <div id="view-quicksale" style="display:none">
@@ -1499,24 +1510,24 @@ function renderMtFilter(hostId, rerender){
 const _GROUPS={
   home:     ['dashboard'],
   criteria: ['mypage'],
-  browse:   ['all','quicksale','presale','signal','undervalued','report','auction','redev','tradeup'],
+  browse:   ['all','general','quicksale','presale','signal','undervalued','report','auction','redev','tradeup'],
   find:     ['watch','mymap'],
 };
 // 매물·청약은 기본, 분석 도구와 다른 취득 방식은 목적별로 분리한다.
-const _LISTING_PRIMARY=['all','quicksale','presale'];
+const _LISTING_PRIMARY=['all','general','quicksale','presale'];
 const _BROWSE_SECTIONS={analysis:['signal','undervalued','report','tradeup'], special:['auction','redev']};
 const _LISTING_MORE=Object.values(_BROWSE_SECTIONS).flat();
 const _browseOpen={analysis:false,special:false};
 const _GROUP_LABEL={browse:'후보 탐색', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
   signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'가격 탐색',d:'지역 모형 차이'},
-  all:{l:'전체',d:'시장 참고점수순'}, quicksale:{l:'급매',d:'급매·찐매물'},
+  all:{l:'전체',d:'시장 참고점수순'}, general:{l:'일반 매물',d:'한방 매매 표본'}, quicksale:{l:'급매',d:'급매·찐매물'},
   presale:{l:'청약',d:'신규 분양'}, auction:{l:'경매',d:'시세 이하 낙찰'},
   redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
   watch:{l:'찜한 매물',d:'가격·일정·대안'}, mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
 };
-const _LISTING=['all','quicksale','presale','auction','redev','tradeup'];
-const _ALLVIEWS=['dashboard','signal','undervalued','all','auction','quicksale','presale','redev','tradeup','watch','mymap','report','glossary','about','mypage'];
+const _LISTING=['all','general','quicksale','presale','auction','redev','tradeup'];
+const _ALLVIEWS=['dashboard','signal','undervalued','all','general','auction','quicksale','presale','redev','tradeup','watch','mymap','report','glossary','about','mypage'];
 function _groupOf(v){ for(const g in _GROUPS) if(_GROUPS[g].includes(v)) return g; return null; }
 let _listingSub='all';
 let _focusRegion=null;   // 관심지역 → 매물 좁히기(옵션, 강제 X)
@@ -1534,7 +1545,7 @@ function renderListingFocus(){
   el.style.display = _focusRegion ? '' : 'none';
 }
 function inFocus(region){ return !_focusRegion || (region||'').includes(_focusRegion) || _focusRegion.includes(region||'§'); }
-const _LISTLOAD={all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
+const _LISTLOAD={all:()=>loadAllListings(), general:()=>loadGeneralListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
 function _subBtn(v, active){
   const m=_SUBMETA[v];
   return `<button class="subtab${v===active?' on':''}" data-sub="${v}" onclick="switchTab('${v}')">${m.l}<small>${m.d}</small></button>`;
@@ -1570,7 +1581,7 @@ const _LOAD={
   dashboard:()=>loadDashboard(),
   signal:()=>{chart.resize(); renderScoreboard(); renderAha();},
   undervalued:()=>loadUndervalued(),
-  all:()=>loadAllListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev(),
+  all:()=>loadAllListings(), general:()=>loadGeneralListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev(),
   tradeup:()=>tuPrefill(), watch:()=>loadListingWatch(), mymap:()=>drawMyMap(),
   report:()=>{applyProfileDefaults(); if(!document.getElementById('ccCards').children.length) loadConclusion();},
   glossary:()=>renderGlossary(), mypage:()=>fillMyPage(),
@@ -2914,6 +2925,52 @@ async function loadRedevZones(){
     tb.appendChild(tr);
   });
 }
+let _hbList=[];
+function generalStatusText(data){
+  if(data.state==='personal_only') return '외부 일반 매물은 개인 계정에서만 확인할 수 있습니다.';
+  if(data.state==='never_scanned') return '아직 한방 매매 표본을 수집하지 않았습니다.';
+  const n=(data.listings||[]).length, r=data.refresh||{};
+  if(data.state==='failed') return `원천 수집 실패 · 매물 0건이라는 뜻이 아닙니다.${r.error?' '+r.error:''}`;
+  let s=`${n}건 · 조회 대상 ${(data.regions||[]).length}곳 · ${data.last_success_at?new Date(data.last_success_at*1000).toLocaleDateString('ko-KR'):'시점 미확인'} 수집`;
+  if(r.limited_regions?.length) s+=` · 페이지 제한 ${r.limited_regions.length}곳(전체 매물 아님)`;
+  if(r.failed_requests) s+=` · 실패 ${r.failed_requests}곳`;
+  if(data.stale || data.state==='stale_failed') s+=' · 지난 결과';
+  if(r.error) s+=' · '+r.error;
+  return s;
+}
+async function loadGeneralListings(){
+  let data;
+  try{ const r=await fetch('/api/general-listings'); if(!r.ok) throw new Error(); data=await r.json(); }
+  catch(e){ data={state:'failed',listings:[],refresh:{error:'불러오기 실패'}}; }
+  _hbList=data.listings||[];
+  document.getElementById('hbStatus').textContent=generalStatusText(data);
+  document.getElementById('hbRefreshBtn').disabled=data.state==='personal_only';
+  document.getElementById('hbEmpty').textContent=_hbList.length?'':
+    data.state==='empty'?'조회 범위에서 아파트 매매 매물이 없습니다. 전국 0건은 아닙니다.':
+    data.state==='personal_only'?'개인 계정 전용 데이터입니다.':'원천 상태와 수집 지역을 확인해 주세요.';
+  mapSplit('hbList','hbMap',_hbList,{
+    summary:m=>({nm:`${esc(m['단지명'])}${m['급매표시']?' <span class="pill">한방 급매 표시</span>':''}${m['stale']?' <span class="pill">지난 결과</span>':''}`,
+      right:`<b>${_eok(m['호가'])}</b>`,
+      sub:`${esc(m['지역']||'')} · 전용 ${m['전용면적']||'–'}㎡ · ${m['층']??'–'}층 · 등록 ${esc(m['등록일']||'–')}`}),
+    detail:m=>`<div class="kv"><span>매매 호가 <b>${_eok(m['호가'])}</b></span><span>전용 ${m['전용면적']||'–'}㎡</span>
+      <span>${m['층']??'–'}층</span><span>등록 ${esc(m['등록일']||'–')}</span><span>한방 매물번호 ${esc(m['hanbang_id'])}</span></div>
+      <p style="font-size:11px;color:var(--dim)">한방 목록 기준 · 가격 할인율과 현재 판매 여부는 검증하지 않았습니다.${m['stale']?' 이 항목은 지난 수집 결과입니다.':''}</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['hanbang_id']?'일반매물:'+m['hanbang_id']:null)}${cxBtn(m['단지명'],m['지역'])}
+        <a class="btn" href="https://m.karhanbang.com/mptl/main2" target="_blank" rel="noopener noreferrer">한방 열기 ↗</a></div>`,
+    coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
+    geoq:m=>`${m['지역']||''} ${m['단지명']||''}`, regionOf:m=>m['지역'],
+    label:m=>`<b>${esc(m['단지명'])}</b><br>${_eok(m['호가'])} · 전용 ${m['전용면적']||'–'}㎡`,
+  });
+}
+async function refreshGeneralListings(){
+  const btn=document.getElementById('hbRefreshBtn'), status=document.getElementById('hbStatus');
+  btn.disabled=true; status.textContent='관심지역 수집 중… (최대 3곳, 수십 초)';
+  try{ const r=await fetch('/api/general-listings/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const data=await r.json(); if(!r.ok||!data.ok) throw new Error(data.message||data.scan?.error||data.detail||'수집 실패');
+    await loadGeneralListings();
+  }catch(e){ status.textContent='수집 실패: '+(e.message||'원천 상태를 확인해 주세요.'); }
+  btn.disabled=false;
+}
 let _qsList=[], _qsCertList=[], _qsMode='급매', _qsData={급매:null,찐매물:null};
 function qsStatusText(data){
   const n=(data?.listings||[]).length, refresh=data?.refresh||{};
@@ -3050,8 +3107,8 @@ function openQuicksaleEvidence(btn){
   return openComplex(name,region,{asking:+asking,exclusive_m2:+area,floor:parsedFloor});
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
-const _LA_TYPES=['경매','급매','찐매물','청약','재건축'];
-const _LA_COLOR={경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
+const _LA_TYPES=['일반매물','경매','급매','찐매물','청약','재건축'];
+const _LA_COLOR={일반매물:'#2563eb', 경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 let _laSort='opp';          // 정렬 기준 (매수신호는 공통 _mtBuyOnly)
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
@@ -3061,7 +3118,7 @@ function toggleLaMore(){
   const open=box.classList.toggle('open');
   if(btn){ btn.classList.toggle('on', open); btn.textContent=open?'필터 닫기':'필터'; }
 }
-function _laInitSel(){ if(_laSel) return; _laSel=new Set(['경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
+function _laInitSel(){ if(_laSel) return; _laSel=new Set(['일반매물','경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
 function initLaPriceFilter(){
   const box=document.getElementById('laPriceFilter');
   const priced=_laData.map(x=>x['총액']).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
@@ -3144,10 +3201,11 @@ function renderAllListings(){
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="switchTab('presale')">청약 상세 →</span>`
         : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
-      const priced=['급매','찐매물','경매'].includes(x['유형']) && x['총액'];
+      const priced=['일반매물','급매','찐매물','경매'].includes(x['유형']) && x['총액'];
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
       return `<div class="kv"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
+        ${x['유형']==='일반매물'?`<div style="font-size:11px;color:var(--dim);margin-top:5px">한방 매물번호 ${esc(x['ref']?.['hanbang_id']||'–')} · 최신 표본, 현재 판매 여부 미확인</div>`:''}
         ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">자료 확인 필요 · 규칙 기반 참고 점수</div>`:''}
         ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
         <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(x['key'])}${acts}</div>`; },
@@ -6438,7 +6496,7 @@ async function loadWatchKeys(){
   }catch(e){}
 }
 function watchBtn(key){
-  if(!key || !/^(급매|찐매물|청약|경매):/.test(key)) return '';
+  if(!key || !/^(급매|찐매물|일반매물|청약|경매):/.test(key)) return '';
   const on=_watchKeys.has(key);
   return `<button type="button" class="btn watch-btn" style="padding:3px 10px" data-watch-key="${esc(key)}" aria-pressed="${on}" onclick="event.stopPropagation();toggleListingWatch(this)">${on?'★ 찜함':'☆ 찜하기'}</button>`;
 }
@@ -6458,7 +6516,7 @@ async function toggleListingWatch(btn){
 }
 function goWatchCandidate(btn){
   const kind=btn.dataset.kind;
-  switchTab(kind==='청약'?'presale':kind==='급매'||kind==='찐매물'?'quicksale':'auction');
+  switchTab(kind==='청약'?'presale':kind==='일반매물'?'general':kind==='급매'||kind==='찐매물'?'quicksale':'auction');
   if(kind==='찐매물') qsMode('찐매물');
 }
 async function loadListingWatch(){

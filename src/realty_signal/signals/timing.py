@@ -68,6 +68,9 @@ def _listing_base(kind: str, raw: dict) -> tuple[int, list[str], float]:
             conf = 0.42
         if kind == "찐매물":
             why.append("공급사 인증 표시(가격·판매 가능 여부 미검증)")
+    elif kind == "일반매물":
+        base, conf = 20, 0.45
+        why.append("일반 매매 호가 · 할인율·현재 판매 여부 미검증")
     elif kind == "경매":
         r = raw.get("총비용우위율", raw.get("시세차익률"))
         base = 0 if r is None else max(0, min(60, round(r * 1.8)))
