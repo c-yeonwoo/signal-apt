@@ -190,6 +190,10 @@ async def _auto_refresh_loop():
                 and config.odsay_cache_approved() and store.load_localities().empty):
             store.build_localities()
 
+    def school_zone_job():
+        from realty_signal.ingest import school_zone
+        return school_zone.refresh()
+
     def backup_job():
         if backup.enabled() and backup.run_backup() is None:
             raise RuntimeError("backup_failed")
@@ -201,6 +205,7 @@ async def _auto_refresh_loop():
         ("hanbang", lambda: hanbang_refresh({})
          if config.personal_listing_email() and _hanbang_stale() else None, 3600),
         ("localities", locality_job, 86400),
+        ("school_zones", school_zone_job, 7*86400),
         ("digest", digest_job, 6*3600),
         ("backup", backup_job, 86400),
     ]
@@ -551,6 +556,21 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         report = analysis.build(row, d)
         report.pop("trades", None)
         return report
+    if name == "get_selected_listing_location":
+        from realty_signal.services import listing_location as location
+        from realty_signal.services import property_analysis as analysis
+        if not listing_key:
+            return {"error": "선택한 매물이 없습니다."}
+        try:
+            row = analysis.resolve(listing_key, private_allowed=_personal_listings_allowed(uid=uid))
+        except (ValueError, PermissionError, LookupError):
+            return {"error": "선택 매물을 현재 수집분에서 확인할 수 없습니다."}
+        result = location.build(row, db.profile_get(uid) if uid else {})
+        result.pop("listing", None)
+        for route in (result.get("mobility") or {}).values():
+            if isinstance(route, dict):
+                route.pop("path", None)
+        return result
     if name == "get_user_context":
         from realty_signal.brain import memory as nick_mem
         if not uid:
