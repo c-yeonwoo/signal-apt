@@ -532,14 +532,17 @@ def _adv_region_row(r: dict) -> dict:
     return out
 
 
-def advisor_tools(uid: int, listing_key: str | None = None):
+def advisor_tools(uid: int, listing_key: str | None = None,
+                  comparison_keys: list[str] | None = None):
     """Bind identity once per request; never read process-global user state."""
     from functools import partial
-    return partial(_advisor_tool, uid=uid, listing_key=listing_key)
+    return partial(_advisor_tool, uid=uid, listing_key=listing_key,
+                   comparison_keys=comparison_keys)
 
 
 def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
-                  listing_key: str | None = None) -> dict:
+                  listing_key: str | None = None,
+                  comparison_keys: list[str] | None = None) -> dict:
     """자문 에이전트 tool 실행 — 기존 데이터 함수로 위임(server-side)."""
     if name == "get_selected_listing_report":
         from realty_signal.services import property_analysis as analysis
@@ -571,6 +574,17 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             if isinstance(route, dict):
                 route.pop("path", None)
         return result
+    if name == "get_selected_listing_comparison":
+        from realty_signal.services import listing_compare as compare
+        from realty_signal.services import property_analysis as analysis
+        if not comparison_keys or len(comparison_keys) not in (2, 3):
+            return {"error": "비교할 매물 2~3개가 선택되지 않았습니다."}
+        try:
+            rows = [analysis.resolve(key, private_allowed=_personal_listings_allowed(uid=uid))
+                    for key in comparison_keys]
+        except (ValueError, PermissionError, LookupError):
+            return {"error": "비교 매물을 현재 수집분에서 확인할 수 없습니다."}
+        return compare.build(rows, complex_detail, db.profile_get(uid) if uid else {})
     if name == "get_user_context":
         from realty_signal.brain import memory as nick_mem
         if not uid:

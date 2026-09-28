@@ -37,8 +37,10 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       if(url.pathname==='/api/general-listings') data={ready:true,state:'partial',regions:['테스트구'],last_success_at:1780000000,
         refresh:{limited_regions:['테스트구'],failed_requests:0},listings:[{hanbang_id:'synthetic-hb-1',단지명:'한방테스트단지',지역:'테스트구',호가:50000,전용면적:84.5,층:12,등록일:'2026-09-29'}]};
       if(url.pathname==='/api/listing-analysis'){
-        const listing={key:'일반매물:synthetic-hb-1',kind:'일반매물',name:'한방테스트단지',region:'테스트구',
-          asking_manwon:50000,exclusive_m2:84.5,floor:12,source:'hanbang',collected_at:'2026-09-29',coordinate:[37.65,127.07]};
+        const second=url.searchParams.get('key')==='일반매물:synthetic-hb-2';
+        const listing={key:second?'일반매물:synthetic-hb-2':'일반매물:synthetic-hb-1',kind:'일반매물',
+          name:second?'두번째테스트단지':'한방테스트단지',region:'테스트구',
+          asking_manwon:second?47000:50000,exclusive_m2:84.5,floor:12,source:'hanbang',collected_at:'2026-09-29',coordinate:[37.65,127.07]};
         data=url.searchParams.get('stage')==='base'?{status:'base',listing}:{status:'ready',listing,
           price:{상태:'관측비교',중앙값:49000,표본수:3,호가차이율:2,비교기준일:'2026-09-29',비교기준:'동일 단지·면적'},
           trades:[{month:'2026-09',price_manwon:48000,floor:10},{month:'2026-09',price_manwon:49000,floor:12},
@@ -47,6 +49,14 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
           mobility:{reason:'출입구 미확인'},school:{reason:'통학구역 미확인'},
           amenities:{reason:'시설 미확인'},development:{reason:'사업자료 미확인'},
           questions:['현재 판매 가능 여부는?'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
+      }
+      if(url.pathname==='/api/listing-compare'){
+        const keys=route.request().postDataJSON().keys;
+        data={items:keys.map((key,i)=>({listing:{key,kind:'일반매물',name:i?'두번째테스트단지':'한방테스트단지',
+          region:'테스트구',asking_manwon:i?47000:50000,exclusive_m2:84.5,floor:12,collected_at:'2026-09-29'},
+          asking_per_m2_manwon:i?556.2:591.7,budget_fit:'unknown',building:{},
+          price:{상태:'관측비교',호가차이율:i?-4:2,표본수:3,중앙값:49000,비교기준일:'2026-09-29'}})),
+          warnings:['확정 매수력이 없습니다.'],basis:'같은 면적 국토부 실거래',not_compared:['수리 상태']};
       }
       if(url.pathname==='/api/listing-location') data={
         school:{status:'candidate',reason:'매물 표시 좌표 기준 후보',boundary_near:false,zones:[
@@ -199,6 +209,19 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.getByRole('button',{name:'닉과 대화'}).click();
     await page.getByText('선택 매물의 가격을 확인하세요.',{exact:false}).waitFor();
     assert.equal(nickPayloads.at(-1).listing_key,'일반매물:synthetic-hb-1');
+    await page.getByRole('button',{name:'매물 리포트'}).click();
+    await page.getByRole('button',{name:'＋ 비교함 담기'}).click();
+    await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-2'));
+    await page.getByText('두번째테스트단지',{exact:true}).last().waitFor();
+    await page.getByRole('button',{name:'＋ 비교함 담기'}).click();
+    await page.getByRole('button',{name:'선택 매물 비교 2/3'}).click();
+    await page.getByText('같은 면적 국토부 실거래',{exact:false}).waitFor();
+    assert.equal(await page.locator('#listingCompareBody thead th').count(),3);
+    await page.locator('#listingCompareDlg').getByRole('button',{name:'교통·학교 차이 확인'}).click();
+    await page.locator('#listingCompareLocation').getByText('통학구역 후보 테스트초',{exact:false}).first().waitFor();
+    const compareRequest=page.waitForRequest(req=>req.url().includes('/api/advisor/stream')&&req.postDataJSON()?.comparison_keys?.length===2);
+    await page.locator('#listingCompareDlg').getByRole('button',{name:'닉에게 차이 묻기'}).click();
+    assert.deepEqual((await compareRequest).postDataJSON().comparison_keys,['일반매물:synthetic-hb-1','일반매물:synthetic-hb-2']);
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     assert.deepEqual(errors,[]);

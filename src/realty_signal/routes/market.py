@@ -307,6 +307,30 @@ def listing_location(request: Request, key: str):
     return JSONResponse(location.build(row, profile), headers={"Cache-Control": "private, no-store"})
 
 
+@router.post("/api/listing-compare")
+def listing_compare(request: Request, keys: list[str] = Body(embed=True)):
+    """매물 ID만 받아 현재 수집분을 다시 찾고, 개인 권한을 항목별로 검증한다."""
+    from realty_signal import api as app_api
+    from realty_signal.services import listing_compare as compare
+    from realty_signal.services import property_analysis as analysis
+
+    if len(keys) not in (2, 3) or len(set(keys)) != len(keys):
+        raise HTTPException(422, "서로 다른 매물 2~3개를 선택해 주세요.")
+    rows = []
+    for key in keys:
+        try:
+            rows.append(analysis.resolve(key, private_allowed=deps.personal_listings_allowed(request)))
+        except ValueError as exc:
+            raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+        except PermissionError as exc:
+            raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 비교할 수 있습니다.") from exc
+        except LookupError as exc:
+            raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    profile = db.profile_get(deps.uid(request)) or {}
+    return JSONResponse(compare.build(rows, app_api.complex_detail, profile),
+                        headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("/api/listing-watch")
 def listing_watch_get(request: Request):
     from realty_signal import api as app_api
