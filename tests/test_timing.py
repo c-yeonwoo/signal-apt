@@ -33,6 +33,14 @@ def test_certification_does_not_verify_price_or_raise_ranking_confidence():
     assert listing_timing("급매", {"급매갭": "불명"}, "BUY", "B").score == sale.score
 
 
+def test_general_listing_has_no_price_advantage_bonus():
+    general = listing_timing("일반매물", {"호가": 50_000}, "BUY", "A")
+    quicksale = listing_timing("급매", {"급매갭": None}, "BUY", "A")
+    assert general.score == quicksale.score
+    assert "가격 우위 점수 미반영" in general.reasons_text
+    assert general.confidence <= 0.5
+
+
 def test_region_timing_with_backtest():
     r = region_timing("STRONG_BUY", asof="2026-07-14", backtest_up_pct=68.0)
     assert r.score >= 70

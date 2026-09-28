@@ -1,6 +1,7 @@
 """한방 일반 아파트 매매: 필드 최소화·페이지 상태·개인 계정 격리."""
 
 import json
+import time
 
 from fastapi.testclient import TestClient
 
@@ -71,7 +72,7 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
     cache = tmp_path / "hanbang.json"
     cache.write_text(json.dumps({"ready": True, "listings": [
-        {**hanbang.normalize(_raw()), "지역": "노원구", "fetched_at": 1_780_000_000}],
+        {**hanbang.normalize(_raw()), "지역": "노원구", "fetched_at": time.time()}],
         "regions": ["노원구"], "_scan_ver": 1}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(api, "HANBANG_FILE", cache)
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {"노원구": {"급지": "C"}}})
@@ -81,6 +82,9 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     assert guest.get("/api/listings/all?types=일반매물").json()["listings"] == []
     listing = owner.get("/api/listings/all?types=일반매물").json()["listings"][0]
     assert listing["key"] == "일반매물:1" and listing["총액"] == 53_000
+    assert not listing["stale"]
+    api._record_radar_refresh(cache, {"ok": False, "attempted_at": time.time()})
+    assert owner.get("/api/listings/all?types=일반매물").json()["listings"][0]["stale"]
     assert owner.post("/api/listing-watch", json={"key": listing["key"]}).json()["ok"]
     assert guest.post("/api/listing-watch", json={"key": listing["key"]}).status_code == 403
     assert guest.get("/api/listing-watch").json()["items"] == []
