@@ -349,7 +349,7 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
         L.append(head)
         for m in qs[:2]:
             gap = m.get("급매갭")
-            gap_s = f" (시세 {gap:+.1f}%)" if gap is not None else ""
+            gap_s = f" (공급사 중위시세 대비 {gap:+.1f}%, 실거래 미검증)" if gap is not None else ""
             py = f"{m['평형']}평 " if m.get("평형") else ""
             L.append(f"· {m.get('단지명')} {py}{_eok(m.get('호가'))}{gap_s}")
         L.append("")

@@ -664,6 +664,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None) -> dict:
         if kind in ("급매", "찐매물") and not private_allowed:
             return {"reason": "personal_only", "result": "외부 매물은 개인 계정에서만 확인할 수 있습니다."}
         out: dict = {}
+        if private_allowed and kind in ("급매", "찐매물", "전체"):
+            out["가격근거주의"] = "급매갭·시세갭은 공급사 중위시세 기준의 표시값이며, 국토부 실거래로 검증한 할인율이 아닙니다."
         if kind in ("급매", "전체") and private_allowed:
             try:
                 qs = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", []) if QUICKSALE_FILE.exists() else []

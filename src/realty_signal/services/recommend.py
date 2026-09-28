@@ -12,7 +12,6 @@ from typing import Callable
 from realty_signal.services import shortlist as sl
 
 _SIG_RANK = {"STRONG_BUY": 2, "BUY": 1}
-_KIND_BONUS = {"급매": 8, "경매": 6, "찐매물": 5, "청약": 3, "재건축": 2}
 
 
 def _est_total(row: dict, loc_price: float | None,
@@ -46,14 +45,8 @@ def score_listing(row: dict, *, budget: float, pyeong: float,
     affordable = bool(not unknown_price and est is not None and budget > 0 and est <= budget)
     ratio = (est / budget) if (affordable and est and budget) else 0.0
     budget_fit = sl._budget_score(ratio) if affordable else 0.0
-    opp = row.get("기회도") or row.get("타이밍점수") or 0
-    kind_b = _KIND_BONUS.get(row.get("유형") or "", 0)
-    # 급매갭이 깊을수록(음수) 가산
-    gap = row.get("지표값") if row.get("유형") in ("급매", "찐매물") else None
-    gap_b = min(12.0, max(0.0, -(float(gap) if gap is not None else 0))) if gap is not None else 0.0
-    score = (
-        budget_fit
-    )
+    # 공급사 표시 갭은 가격 검증이 아니다. 정렬은 확인 가능한 예산 여유를 우선한다.
+    score = budget_fit
     auction_hold = row.get("유형") == "경매" and row.get("입찰상태") != "conditional_bid"
     out = dict(row)
     out.update({
