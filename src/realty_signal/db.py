@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS favorites(uid INTEGER, kind TEXT, key TEXT, label TEX
 CREATE TABLE IF NOT EXISTS listing_watch(uid INTEGER NOT NULL, key TEXT NOT NULL,
     kind TEXT NOT NULL, name TEXT NOT NULL, region TEXT, saved_price REAL,
     created_at INTEGER NOT NULL, PRIMARY KEY(uid, key));
+CREATE TABLE IF NOT EXISTS listing_entrance(uid INTEGER NOT NULL, listing_key TEXT NOT NULL,
+    lat REAL NOT NULL, lng REAL NOT NULL, ts INTEGER NOT NULL,
+    PRIMARY KEY(uid, listing_key));
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS news(link TEXT PRIMARY KEY, title TEXT, descr TEXT,
     source TEXT, topic TEXT, pubdate TEXT, ts INTEGER);
@@ -203,6 +206,29 @@ def building_set(key: str, b: dict | None) -> None:
     c.execute("INSERT OR REPLACE INTO building(k,vlrat,bcrat,useapr,hhld,floors,ts) VALUES(?,?,?,?,?,?,?)",
               (key, b.get("용적률"), b.get("건폐율"), b.get("사용승인일"), b.get("세대수"),
                b.get("최고층"), int(time.time())))
+    c.commit()
+    c.close()
+
+
+def entrance_get(uid: int, listing_key: str) -> dict | None:
+    c = conn()
+    row = c.execute("SELECT lat,lng,ts FROM listing_entrance WHERE uid=? AND listing_key=?",
+                    (uid, listing_key)).fetchone()
+    c.close()
+    return {"lat": row[0], "lng": row[1], "updated_at": row[2]} if row else None
+
+
+def entrance_set(uid: int, listing_key: str, lat: float, lng: float) -> None:
+    c = conn()
+    c.execute("INSERT OR REPLACE INTO listing_entrance VALUES(?,?,?,?,?)",
+              (uid, listing_key, lat, lng, int(time.time())))
+    c.commit()
+    c.close()
+
+
+def entrance_delete(uid: int, listing_key: str) -> None:
+    c = conn()
+    c.execute("DELETE FROM listing_entrance WHERE uid=? AND listing_key=?", (uid, listing_key))
     c.commit()
     c.close()
 

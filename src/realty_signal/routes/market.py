@@ -304,7 +304,55 @@ def listing_location(request: Request, key: str):
     except LookupError as exc:
         raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
     profile = db.profile_get(deps.uid(request)) or {}
-    return JSONResponse(location.build(row, profile), headers={"Cache-Control": "private, no-store"})
+    uid = deps.uid(request)
+    entrance = db.entrance_get(uid, key) if uid else None
+    return JSONResponse(location.build(row, profile, entrance), headers={"Cache-Control": "private, no-store"})
+
+
+@router.put("/api/listing-entrance")
+def listing_entrance_set(request: Request, data: dict = Body(...)):
+    from realty_signal.services import listing_entrance as entrance
+    from realty_signal.services import property_analysis as analysis
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    key = data.get("key")
+    try:
+        row = analysis.resolve(key, private_allowed=deps.personal_listings_allowed(request))
+    except ValueError as exc:
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 지정할 수 있습니다.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    try:
+        lat, lng = entrance.validate(row, data.get("lat"), data.get("lng"))
+    except ValueError as exc:
+        raise HTTPException(422, "출입구 후보는 매물 표시 위치에서 800m 이내의 유효한 좌표로 지정해 주세요.") from exc
+    db.entrance_set(uid, key, lat, lng)
+    return JSONResponse({"ok": True, "status": "user_marked_candidate"},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@router.delete("/api/listing-entrance")
+def listing_entrance_delete(request: Request, key: str):
+    from realty_signal.services import property_analysis as analysis
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    try:
+        analysis.resolve(key, private_allowed=deps.personal_listings_allowed(request))
+    except ValueError as exc:
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 삭제할 수 있습니다.") from exc
+    except LookupError:
+        # 더 이상 수집되지 않는 매물이라도 사용자의 저장 좌표는 지울 수 있어야 한다.
+        pass
+    db.entrance_delete(uid, key)
+    return JSONResponse({"ok": True}, headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/api/listing-compare")

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from realty_signal import config
 from realty_signal.ingest import kakao_places, school_zone
+from realty_signal.services import listing_entrance
 from realty_signal.services.property_analysis import snapshot
 
 
@@ -16,10 +17,20 @@ def _safe(call, fallback: dict) -> dict:
         return fallback
 
 
-def build(row: dict, profile: dict | None = None) -> dict:
+def build(row: dict, profile: dict | None = None, entrance: dict | None = None) -> dict:
     listing = snapshot(row)
     point = listing["coordinate"]
-    origin_note = "매물 표시 좌표 기준이며 아파트 출입구와 목적지 출입구가 검증되지 않았습니다."
+    selected = False
+    if entrance:
+        try:
+            listing_entrance.validate(row, entrance.get("lat"), entrance.get("lng"))
+            selected = True
+        except ValueError:
+            pass
+    route_point = [entrance["lat"], entrance["lng"]] if selected else point
+    origin_source = "user_marked_candidate" if selected else "listing_point"
+    origin_note = ("내가 지도에서 지정한 출입구 후보 기준입니다. 실제 출입구·보행 가능 여부는 현장에서 확인하세요."
+                   if selected else "매물 표시 좌표 기준이며 아파트 출입구와 목적지 출입구가 검증되지 않았습니다.")
     missing = {"status": "unverified", "reason": "표시 좌표가 없어 위치를 판정하지 않았습니다."}
     if not point:
         return {"listing": listing, "mobility": missing, "school": missing,
@@ -27,7 +38,11 @@ def build(row: dict, profile: dict | None = None) -> dict:
     lat, lng = point
     school = _safe(lambda: school_zone.at_point(lat, lng),
                    {"status": "unavailable", "reason": "통학구역 파일을 조회할 수 없습니다.", "zones": []})
-    school["coordinate_note"] = origin_note
+    school["coordinate_note"] = "통학구역은 출입구 후보가 아닌 원래 매물 표시 좌표 기준입니다. 실제 주소의 배정은 교육청에 확인하세요."
+    lat, lng = route_point
+    origin = {"origin_source": origin_source, "origin_coordinate": route_point,
+              "origin_updated_at": entrance.get("updated_at") if selected else None,
+              "reason": origin_note}
     evidence = []
     if school.get("status") == "candidate":
         evidence.append({"label": "학구도안내서비스 공개 통학구역", "url": school_zone.SOURCE_PAGE,
@@ -36,7 +51,8 @@ def build(row: dict, profile: dict | None = None) -> dict:
     key = config.kakao_key()
     if not key:
         return {"listing": listing, "school": school,
-                "mobility": {"status": "unverified", "reason": "경로 API 키가 없어 도보·통근을 확인하지 못했습니다."},
+                "mobility": {"status": "unverified", **origin,
+                             "api_reason": "경로 API 키가 없어 도보·통근을 확인하지 못했습니다."},
                 "amenities": {"status": "unverified", "reason": "장소 API 키가 없어 주변 시설을 확인하지 못했습니다."},
                 "evidence": evidence}
     categories = tuple(kakao_places.POI_TYPES)
@@ -63,11 +79,13 @@ def build(row: dict, profile: dict | None = None) -> dict:
         commute_route = commute_future.result() if commute_future else None
     if station_route:
         station_route["destination"] = station["name"]
+        station_route["origin_quality"] = origin_source
     if commute_route:
         commute_route["destination"] = str(work.get("직장") or "저장된 직장")[:80]
+        commute_route["origin_quality"] = origin_source
     mobility = {"status": "partial" if station_route or commute_route else "unverified",
                 "station_walk": station_route, "work_transit": commute_route,
-                "reason": origin_note,
+                **origin,
                 "transit_note": "대중교통 안내 시간은 실제 출퇴근 시간대의 소요시간을 보증하지 않습니다."}
     amenities = {"status": "partial" if any("count_within_radius" in p for p in places.values())
                  else "unavailable", "by_category": places, "coordinate_note": origin_note}

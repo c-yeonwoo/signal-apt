@@ -568,7 +568,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             row = analysis.resolve(listing_key, private_allowed=_personal_listings_allowed(uid=uid))
         except (ValueError, PermissionError, LookupError):
             return {"error": "선택 매물을 현재 수집분에서 확인할 수 없습니다."}
-        result = location.build(row, db.profile_get(uid) if uid else {})
+        result = location.build(row, db.profile_get(uid) if uid else {},
+                                db.entrance_get(uid, listing_key) if uid else None)
         result.pop("listing", None)
         for route in (result.get("mobility") or {}).values():
             if isinstance(route, dict):
