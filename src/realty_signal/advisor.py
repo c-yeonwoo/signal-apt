@@ -201,6 +201,11 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_selected_listing_comparison",
+        "description": "사용자가 비교함에 담은 매물 2~3개의 현재 서버 검증 호가·전용면적·층·같은 조건 실거래·수집시점·예산 충족을 나란히 반환. 비교 질문에서 먼저 사용하며 누락은 우열로 치환하지 않음.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_policy",
         "description": "부동산 정책·규제·개발계획 지식베이스 검색(스트레스 DSR, 대출규제, 3기 신도시, GTX, 재건축 규제 등). "
                        "제도·개발계획 질문에 사용. 결과의 source·eff_date(시행/기준일)를 반드시 함께 인용하고, 정책은 변경될 수 있음을 밝힌다.",
