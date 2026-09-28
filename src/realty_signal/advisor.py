@@ -196,6 +196,11 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_selected_listing_location",
+        "description": "선택 매물 표시 좌표 기준 Kakao 역 도보·직장 대중교통·주변 시설과 공식 초등학교 통학구역 후보. 출입구·배정 학교는 확정 아님. 입지·통근·학군 질문에서 사용.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_policy",
         "description": "부동산 정책·규제·개발계획 지식베이스 검색(스트레스 DSR, 대출규제, 3기 신도시, GTX, 재건축 규제 등). "
                        "제도·개발계획 질문에 사용. 결과의 source·eff_date(시행/기준일)를 반드시 함께 인용하고, 정책은 변경될 수 있음을 밝힌다.",

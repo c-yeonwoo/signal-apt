@@ -38,7 +38,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         refresh:{limited_regions:['테스트구'],failed_requests:0},listings:[{hanbang_id:'synthetic-hb-1',단지명:'한방테스트단지',지역:'테스트구',호가:50000,전용면적:84.5,층:12,등록일:'2026-09-29'}]};
       if(url.pathname==='/api/listing-analysis'){
         const listing={key:'일반매물:synthetic-hb-1',kind:'일반매물',name:'한방테스트단지',region:'테스트구',
-          asking_manwon:50000,exclusive_m2:84.5,floor:12,source:'hanbang',collected_at:'2026-09-29'};
+          asking_manwon:50000,exclusive_m2:84.5,floor:12,source:'hanbang',collected_at:'2026-09-29',coordinate:[37.65,127.07]};
         data=url.searchParams.get('stage')==='base'?{status:'base',listing}:{status:'ready',listing,
           price:{상태:'관측비교',중앙값:49000,표본수:3,호가차이율:2,비교기준일:'2026-09-29',비교기준:'동일 단지·면적'},
           trades:[{month:'2026-09',price_manwon:48000,floor:10},{month:'2026-09',price_manwon:49000,floor:12},
@@ -48,6 +48,12 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
           amenities:{reason:'시설 미확인'},development:{reason:'사업자료 미확인'},
           questions:['현재 판매 가능 여부는?'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
       }
+      if(url.pathname==='/api/listing-location') data={
+        school:{status:'candidate',reason:'매물 표시 좌표 기준 후보',boundary_near:false,zones:[
+          {name:'테스트 통학구역',schools:[{name:'테스트초'}]}]},
+        mobility:{status:'partial',reason:'출입구 미확인',station_walk:{status:'observed',destination:'테스트역',minutes:8,distance_m:620,path:[]}},
+        amenities:{status:'partial',by_category:{SW8:{label:'지하철역',places:[{name:'테스트역',distance_m:550}]}}},
+        evidence:[{label:'학구도안내서비스',status:'표시 좌표 기준 후보',asof:'2026-03-20'}]};
       if(url.pathname==='/api/advisor/stream'){
         nickPayloads.push(route.request().postDataJSON());
         return route.fulfill({contentType:'text/event-stream',body:'data: {"type":"delta","text":"선택 매물의 가격을 확인하세요."}\n\ndata: {"type":"done","used":["get_selected_listing_report"]}\n\n'});
@@ -187,6 +193,8 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#analysisFixture button').click();
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
+    await page.getByText('테스트초',{exact:false}).waitFor();
+    await page.getByText('테스트역 ·',{exact:false}).first().waitFor();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.classList.contains('adv-report-mode')),true);
     await page.getByRole('button',{name:'닉과 대화'}).click();
     await page.getByText('선택 매물의 가격을 확인하세요.',{exact:false}).waitFor();

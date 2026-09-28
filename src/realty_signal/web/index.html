@@ -3562,13 +3562,10 @@ function plotPins(mapId, items, coords, opt, opts){
     const cxOk = opt.complexDetail!==false && it['유형']!=='청약';
     const cxName=cxOk ? (it['단지명']||'').replace(/['"\\]/g,'') : '';
     const cxReg=cxOk ? ((it['지역']||it.region)||'').replace(/['"\\]/g,'') : '';
-    const popup=lbl+(cxName&&cxReg
-      ? `<div style="margin-top:4px;font-size:11px;color:var(--dim)">다시 클릭 · 상세</div>` : '');
+    const popup=lbl+'<div style="margin-top:4px;font-size:11px;color:var(--dim)">다시 클릭 · 목록 접기</div>';
     const mk=L.marker(c,{icon}).bindPopup(popup);
     mk.on('click', e=>{
       L.DomEvent.stopPropagation(e);
-      const cur=_ms[mapId];
-      if(cur && cur.sel===i && cxName && cxReg){ openComplex(cxName, cxReg); return; }
       selectMsRow(mapId, i);
     });
     st.markers[i]=mk;
@@ -6788,6 +6785,17 @@ async function startApp(needOnboard){
 let _advMsgs=[], _advBusy=false, _advUsage=null, _advListingKey=null, _advAbort=null, _advEpoch=0;
 let _analysisGen=0, _analysisCurrent=null;
 const _analysisCache=new Map(), _analysisAsked=new Set();
+let _analysisRouteLayer=null;
+function _analysisShowRoute(which){
+  const path=_analysisCurrent?.mobility?.[which]?.path;
+  const kind=_analysisCurrent?.listing?.kind;
+  const mapId=kind==='일반매물'?'hbMap':kind==='급매'?'qsMap':'laMap';
+  const map=_ms[mapId]?.map;
+  if(!map||!Array.isArray(path)||path.length<2){ toast('이 매물의 지도 경로가 아직 없습니다.'); return; }
+  _analysisRouteLayer?.remove();
+  _analysisRouteLayer=L.polyline(path,{color:'#2563eb',weight:4,opacity:.9}).addTo(map);
+  map.fitBounds(_analysisRouteLayer.getBounds().pad(.18),{maxZoom:15});
+}
 function advShowTab(tab){
   const active=_advListingKey && tab==='report';
   document.getElementById('advReport').style.display=active?'block':'none';
@@ -6802,6 +6810,7 @@ function clearListingReportContext(){
   ++_analysisGen; ++_advEpoch;
   _advAbort?.abort(); _advAbort=null; _advBusy=false;
   _advListingKey=null; _analysisCurrent=null; _advMsgs=[];
+  _analysisRouteLayer?.remove(); _analysisRouteLayer=null;
   document.getElementById('advSendBtn').disabled=false;
   document.getElementById('advListingTitle').textContent='';
   document.getElementById('advTabs').style.display='none';
@@ -6849,9 +6858,28 @@ function _analysisRender(d){
     const cautions=(d.cautions||[]).map(x=>`<li>${esc(x.text)}</li>`).join('');
     html+=card('좋은 점과 확인할 점',`${pros?`<div style="color:#15803d;font-weight:700">긍정적 근거</div><ul>${pros}</ul>`:''}
       <div style="color:#b45309;font-weight:700">확인할 점</div><ul>${cautions||'<li>매물 상태와 현장 조건을 확인하세요.</li>'}</ul>`);
-    html+=card('입지 검증 상태',`<div class="analysis-muted">교통·직장: ${esc(d.mobility?.reason||'미확인')}<br>
-      학교: ${esc(d.school?.reason||'미확인')}<br>상권·시설: ${esc(d.amenities?.reason||'미확인')}<br>
-      호재·뉴스: ${esc(d.development?.reason||'미확인')}</div>`);
+    const m=d.mobility||{}, school=d.school||{}, amen=d.amenities||{};
+    const route=(r,label,which)=>r?.status==='observed'
+      ? `<div>${esc(label)} ${esc(r.destination||'')} · <b>${esc(r.minutes)}분</b>${r.distance_m!=null?` · ${esc(r.distance_m)}m`:''}
+        ${r.path?.length>1?`<button type="button" class="btn" onclick="_analysisShowRoute('${which}')">지도 경로</button>`:''}
+        ${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Kakao에서 확인 ↗</a>`:''}</div>`
+      : `<div class="analysis-muted">${esc(label)} ${esc(r?.reason||'경로 미확인')}</div>`;
+    html+=card('교통·직장',`${route(m.station_walk,'가까운 역','station_walk')}${route(m.work_transit,'저장된 직장','work_transit')}
+      <div class="analysis-muted">${esc(m.reason||'경로 자료 확인 중')} ${esc(m.transit_note||'')}</div>`);
+    const zones=school.zones||[];
+    const schools=zones.flatMap(z=>z.schools||[]).map(s=>s.name).filter((x,i,a)=>a.indexOf(x)===i);
+    html+=card('통학구역 후보',zones.length?`<div>${esc(schools.join(' · ')||zones.map(z=>z.name).join(' · '))}</div>
+      <div class="analysis-muted">${school.boundary_near?'경계 10m 이내 · ':''}${esc(school.reason||'표시 좌표 기준 후보입니다.')} 실제 주소의 배정 학교는 교육청에 확인하세요.</div>`
+      :`<div class="analysis-muted">${esc(school.reason||'통학구역 자료 확인 중')}</div>`);
+    const category=amen.by_category||{};
+    const placeBits=Object.values(category).map(p=>{
+      if(p.status==='unavailable') return `${esc(p.label)} 조회 실패`;
+      const first=p.places?.[0];
+      return first?`${esc(p.label)} ${esc(first.name)} · 직선 ${esc(first.distance_m??'–')}m`:`${esc(p.label)} 반경 ${esc(p.radius_m||1800)}m 조회 결과 없음`;
+    });
+    html+=card('가까운 생활시설',`<div>${placeBits.join('<br>')||esc(amen.reason||'시설 자료 확인 중')}</div>
+      <div class="analysis-muted">${esc(amen.coordinate_note||'시설까지의 실제 이동 경로·영업 상태는 확인되지 않았습니다.')}</div>`);
+    html+=card('호재·뉴스',`<div class="analysis-muted">${esc(d.development?.reason||'해당 단지와 연결된 공식 자료 미확인')}</div>`);
     html+=card('중개사에게 확인',`<ul>${(d.questions||[]).map(q=>`<li>${esc(q)}</li>`).join('')}</ul>`);
     html+=`<div class="analysis-muted" style="margin:14px 0 4px">근거: ${(d.evidence||[]).map(e=>{
       const label=esc(e.label), text=e.url&&/^https:\/\//.test(e.url)
@@ -6869,6 +6897,7 @@ async function openListingReport(key){
     document.getElementById('advSendBtn').disabled=false;
   }
   _advListingKey=key; const gen=++_analysisGen;
+  _analysisRouteLayer?.remove(); _analysisRouteLayer=null;
   const panel=document.getElementById('advPanel');
   panel.classList.add('adv-report-mode'); panel.style.display='flex';
   document.getElementById('advFab').style.display='none';
@@ -6883,6 +6912,8 @@ async function openListingReport(key){
     const base=await br.json(); if(gen!==_analysisGen) return;
     _analysisCurrent=base; _analysisRender(base);
     document.getElementById('advListingTitle').textContent=base.listing.name||'선택 매물';
+    const locationPromise=base.listing.coordinate?fetch('/api/listing-location?key='+encodeURIComponent(key))
+      .then(r=>r.ok?r.json():null).catch(()=>null):Promise.resolve(null);
     const cached=_analysisCache.get(key);
     let full;
     if(cached && Date.now()-cached._client_cached_at<900000 && cached.listing.collected_at===base.listing.collected_at
@@ -6892,9 +6923,15 @@ async function openListingReport(key){
       full=await fr.json(); full._client_cached_at=Date.now(); _analysisCache.set(key,full); }
     if(gen!==_analysisGen) return;
     _analysisCurrent=full; _analysisRender(full);
+    locationPromise.then(loc=>{
+      if(gen!==_analysisGen||!loc) return;
+      full.mobility=loc.mobility; full.school=loc.school; full.amenities=loc.amenities;
+      full.evidence=[...(full.evidence||[]),...(loc.evidence||[])];
+      _analysisCurrent=full; _analysisRender(full);
+    });
     if(!_analysisAsked.has(key)){
       _analysisAsked.add(key);
-      advSend('선택한 매물의 가격 근거와 장단점을 내 조건에 맞춰 요약해줘. 미확인 입지는 추정하지 말고, 중개사에게 확인할 질문도 알려줘.');
+      advSend('선택한 매물의 가격 근거와 장단점을 내 조건에 맞춰 요약해줘. 입지 도구에서 확인된 경로·통학구역 후보만 구분해서 설명하고, 출입구·배정 학교·호재는 추정하지 말아줘. 중개사 질문도 알려줘.');
     }
     if(full.listing.name&&full.listing.region){
       fetch(`/api/complex/${encodeURIComponent(full.listing.region)}/${encodeURIComponent(full.listing.name)}/building`)

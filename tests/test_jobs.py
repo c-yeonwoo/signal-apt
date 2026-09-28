@@ -37,4 +37,4 @@ def test_scheduler_launches_sources_independently(monkeypatch):
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(api._auto_refresh_loop(), timeout=.2)
     asyncio.run(exercise())
-    assert set(calls) == {"kb", "quicksale", "certified", "hanbang", "localities", "digest", "backup"}
+    assert set(calls) == {"kb", "quicksale", "certified", "hanbang", "localities", "school_zones", "digest", "backup"}
