@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[], quotePayloads=[];
+    const errors=[], calls=[], quotePayloads=[], nickPayloads=[];
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -36,6 +36,22 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/general-listings') data={ready:true,state:'partial',regions:['테스트구'],last_success_at:1780000000,
         refresh:{limited_regions:['테스트구'],failed_requests:0},listings:[{hanbang_id:'synthetic-hb-1',단지명:'한방테스트단지',지역:'테스트구',호가:50000,전용면적:84.5,층:12,등록일:'2026-09-29'}]};
+      if(url.pathname==='/api/listing-analysis'){
+        const listing={key:'일반매물:synthetic-hb-1',kind:'일반매물',name:'한방테스트단지',region:'테스트구',
+          asking_manwon:50000,exclusive_m2:84.5,floor:12,source:'hanbang',collected_at:'2026-09-29'};
+        data=url.searchParams.get('stage')==='base'?{status:'base',listing}:{status:'ready',listing,
+          price:{상태:'관측비교',중앙값:49000,표본수:3,호가차이율:2,비교기준일:'2026-09-29',비교기준:'동일 단지·면적'},
+          trades:[{month:'2026-09',price_manwon:48000,floor:10},{month:'2026-09',price_manwon:49000,floor:12},
+            {month:'2026-09',price_manwon:50000,floor:13}],complex:{총거래:3},building:{},
+          pros:[],cautions:[{text:'호가는 비교거래보다 높습니다.',evidence:'trades'}],
+          mobility:{reason:'출입구 미확인'},school:{reason:'통학구역 미확인'},
+          amenities:{reason:'시설 미확인'},development:{reason:'사업자료 미확인'},
+          questions:['현재 판매 가능 여부는?'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
+      }
+      if(url.pathname==='/api/advisor/stream'){
+        nickPayloads.push(route.request().postDataJSON());
+        return route.fulfill({contentType:'text/event-stream',body:'data: {"type":"delta","text":"선택 매물의 가격을 확인하세요."}\n\ndata: {"type":"done","used":["get_selected_listing_report"]}\n\n'});
+      }
       if(url.pathname==='/api/listing-watch') data={items:[{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',saved_price:60000,
         price_change:-10000,current:{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',price:50000},
         alternatives:[{key:'급매:synthetic-2',kind:'급매',name:'테스트단지',region:'테스트구',price:52000,reason:'같은 단지의 다른 매물'}]}]};
@@ -166,7 +182,18 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.getByText('다른 면적의 거래로 대신 비교하지 않습니다.',{exact:false}).waitFor();
     assert.equal(quotePayloads.length,callsBefore);
     await page.keyboard.press('Escape');
+    await page.evaluate(()=>document.body.insertAdjacentHTML('beforeend',
+      '<div id="analysisFixture">'+reportBtn('일반매물:synthetic-hb-1')+'</div>'));
+    await page.locator('#analysisFixture button').click();
+    await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
+    await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
+    assert.equal(await page.locator('#advPanel').evaluate(el=>el.classList.contains('adv-report-mode')),true);
+    await page.getByRole('button',{name:'닉과 대화'}).click();
+    await page.getByText('선택 매물의 가격을 확인하세요.',{exact:false}).waitFor();
+    assert.equal(nickPayloads.at(-1).listing_key,'일반매물:synthetic-hb-1');
+    const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
+    assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence');
+    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

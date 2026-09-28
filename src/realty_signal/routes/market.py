@@ -259,6 +259,36 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     return app_api.listings_all(request, types)
 
 
+@router.get("/api/listing-analysis")
+def listing_analysis(request: Request, key: str, stage: str = "full"):
+    """선택 매물을 서버 스냅샷에서 재조회하고 개인 매물 권한을 검사한다."""
+    from realty_signal import api as app_api
+    from realty_signal.services import property_analysis as analysis
+
+    if stage not in {"base", "full"}:
+        raise HTTPException(422, "매물 식별자 또는 조회 단계가 올바르지 않습니다.")
+    allowed = deps.personal_listings_allowed(request)
+    try:
+        row = analysis.resolve(key, private_allowed=allowed)
+    except ValueError as exc:
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 분석할 수 있습니다.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    if stage == "base":
+        out = {"listing": analysis.snapshot(row), "status": "base"}
+    else:
+        detail = None
+        if row.get("지역") and row.get("단지명"):
+            try:
+                detail = app_api.complex_detail(row["지역"], row["단지명"])
+            except Exception:  # noqa: BLE001
+                detail = {"status": "failed", "degraded": True}
+        out = {"status": "ready", **analysis.build(row, detail)}
+    return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("/api/listing-watch")
 def listing_watch_get(request: Request):
     from realty_signal import api as app_api
