@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from realty_signal import db, store
@@ -253,6 +253,54 @@ def series(region: str):
 def listings_all(request: Request, types: str = "경매,급매,청약"):
     from realty_signal import api as app_api
     return app_api.listings_all(request, types)
+
+
+@router.get("/api/listing-watch")
+def listing_watch_get(request: Request):
+    from realty_signal import api as app_api
+    from realty_signal.services import listing_watch as watch
+
+    uid = deps.uid(request)
+    saved = db.listing_watch_list(uid)
+    if not deps.personal_listings_allowed(request):
+        saved = [row for row in saved if row["kind"] not in watch.PRIVATE]
+    kinds = {row["kind"] for row in saved}
+    # 대안은 저장한 유형뿐 아니라 다른 급매·찐매물도 비교한다. 비소유자에게는 절대 읽지 않는다.
+    if kinds & watch.PRIVATE and deps.personal_listings_allowed(request):
+        kinds |= watch.PRIVATE
+    current = app_api._build_listings(kinds, include_private=deps.personal_listings_allowed(request)) if kinds else []
+    return {"items": watch.build(saved, current)}
+
+
+@router.post("/api/listing-watch")
+def listing_watch_add(request: Request, data: dict = Body(...)):
+    from realty_signal import api as app_api
+    from realty_signal.services import listing_watch as watch
+
+    key = data.get("key")
+    if not isinstance(key, str) or len(key) > 180 or ":" not in key:
+        raise HTTPException(422, "매물 식별자를 확인해 주세요.")
+    kind = key.split(":", 1)[0]
+    if kind not in watch.WATCHABLE:
+        raise HTTPException(422, "이 유형은 매물 찜을 지원하지 않습니다.")
+    if kind in watch.PRIVATE and not deps.personal_listings_allowed(request):
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 저장할 수 있습니다.")
+    current = app_api._build_listings({kind}, include_private=deps.personal_listings_allowed(request))
+    row = next((r for r in current if r["key"] == key), None)
+    if row is None:
+        raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.")
+    if not row.get("단지명"):
+        raise HTTPException(422, "단지명이 없는 매물은 찜할 수 없습니다.")
+    db.listing_watch_add(deps.uid(request), row)
+    return {"ok": True}
+
+
+@router.delete("/api/listing-watch")
+def listing_watch_remove(request: Request, key: str):
+    if not key or len(key) > 180:
+        raise HTTPException(422, "매물 식별자를 확인해 주세요.")
+    db.listing_watch_remove(deps.uid(request), key)
+    return {"ok": True}
 
 
 @router.get("/api/listing-costs")

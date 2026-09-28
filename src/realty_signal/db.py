@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid INTEGER, ts INTE
 CREATE TABLE IF NOT EXISTS profile(uid INTEGER PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS favorites(uid INTEGER, kind TEXT, key TEXT, label TEXT, ts INTEGER,
     PRIMARY KEY(uid, kind, key));
+CREATE TABLE IF NOT EXISTS listing_watch(uid INTEGER NOT NULL, key TEXT NOT NULL,
+    kind TEXT NOT NULL, name TEXT NOT NULL, region TEXT, saved_price REAL,
+    created_at INTEGER NOT NULL, PRIMARY KEY(uid, key));
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS news(link TEXT PRIMARY KEY, title TEXT, descr TEXT,
     source TEXT, topic TEXT, pubdate TEXT, ts INTEGER);
@@ -303,6 +306,31 @@ def fav_add(uid: int, kind: str, key: str, label: str) -> None:
 def fav_remove(uid: int, kind: str, key: str) -> None:
     c = conn()
     c.execute("DELETE FROM favorites WHERE uid=? AND kind=? AND key=?", (uid, kind, key))
+    c.commit()
+    c.close()
+
+
+def listing_watch_list(uid: int) -> list[dict]:
+    c = conn()
+    rows = c.execute("SELECT key,kind,name,region,saved_price,created_at FROM listing_watch "
+                     "WHERE uid=? ORDER BY created_at DESC", (uid,)).fetchall()
+    c.close()
+    return [dict(zip(("key", "kind", "name", "region", "saved_price", "created_at"), row))
+            for row in rows]
+
+
+def listing_watch_add(uid: int, listing: dict) -> None:
+    c = conn()
+    c.execute("INSERT OR IGNORE INTO listing_watch VALUES(?,?,?,?,?,?,?)",
+              (uid, listing["key"], listing["유형"], listing["단지명"], listing.get("지역"),
+               listing.get("총액"), int(time.time())))
+    c.commit()
+    c.close()
+
+
+def listing_watch_remove(uid: int, key: str) -> None:
+    c = conn()
+    c.execute("DELETE FROM listing_watch WHERE uid=? AND key=?", (uid, key))
     c.commit()
     c.close()
 
