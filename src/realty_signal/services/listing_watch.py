@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 
-WATCHABLE = {"급매", "찐매물", "청약", "경매"}
-PRIVATE = {"급매", "찐매물"}
+WATCHABLE = {"급매", "찐매물", "일반매물", "청약", "경매"}
+PRIVATE = {"급매", "찐매물", "일반매물"}
 
 
 def public_fields(row: dict) -> dict:
@@ -24,13 +24,17 @@ def _same_complex(a: dict, b: dict) -> bool:
     ar, br = a.get("ref") or {}, b.get("ref") or {}
     if ar.get("complex_no") and br.get("complex_no"):
         return str(ar["complex_no"]) == str(br["complex_no"])
+    if ar.get("hanbang_complex_id") and br.get("hanbang_complex_id"):
+        return str(ar["hanbang_complex_id"]) == str(br["hanbang_complex_id"])
     return a["단지명"] == b.get("단지명") and a["지역"] == b.get("지역")
 
 
 def _same_source_listing(a: dict, b: dict) -> bool:
     ar, br = a.get("ref") or {}, b.get("ref") or {}
-    return bool(ar.get("naver_id") and br.get("naver_id")
-                and str(ar["naver_id"]) == str(br["naver_id"]))
+    for key in ("naver_id", "hanbang_id"):
+        if ar.get(key) and br.get(key) and str(ar[key]) == str(br[key]):
+            return True
+    return False
 
 
 def _similar(a: dict, b: dict) -> bool:

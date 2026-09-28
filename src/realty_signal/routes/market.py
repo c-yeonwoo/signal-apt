@@ -117,6 +117,7 @@ def freshness(request: Request):
     last_date = str(md.kb().last_date.date())
     qs = getattr(app_api, "QUICKSALE_FILE", store.CACHE_DIR / "quicksale.json")
     cert = getattr(app_api, "CERTIFIED_FILE", store.CACHE_DIR / "certified.json")
+    hanbang = getattr(app_api, "HANBANG_FILE", store.CACHE_DIR / "hanbang_general.json")
     sources = [
         {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
          "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동",
@@ -127,6 +128,9 @@ def freshness(request: Request):
          "cycle": "하루 1회 자동", "note": "BUY+·관심지역 시세 이하 호가(baroezip). 캐시 1일."},
         {"key": "certified", "label": "찐매물 스캔", "ts": _file_mtime(cert),
          "cycle": "하루 1회 자동", "note": "바로이집 내집등록·인증 매물(scope=all). 캐시 1일."},
+        {"key": "hanbang", "label": "일반 아파트 매매", "ts": _file_mtime(hanbang),
+         "cycle": "하루 1회 자동 · 최대 3개 지역/지역당 3페이지",
+         "note": "한방 아파트 매매 목록의 개인용 표본. 페이지 제한으로 전체 시장 매물이 아닙니다."},
         {"key": "auction", "label": "경매 물건", "ts": _file_mtime(AUCTION_FILE),
          "cycle": "관리자 등록·갱신 시", "note": "법원경매 물건과 시세를 관리자가 등록·갱신."},
         {"key": "presale", "label": "청약", "ts": None, "cycle": "실시간",
@@ -146,7 +150,7 @@ def freshness(request: Request):
     from realty_signal.ingest import pipeline
     private = deps.personal_listings_allowed(request)
     if not private:
-        sources = [source for source in sources if source["key"] not in {"quicksale", "certified"}]
+        sources = [source for source in sources if source["key"] not in {"quicksale", "certified", "hanbang"}]
     return {"기준일": last_date, "now": int(__import__("time").time()),
             "sources": sources, "pipeline": pipeline.cache_health(include_private=private),
             # 수집이 멈췄을 때 '왜' 를 화면이 말할 수 있어야 한다. 로그를 볼 수 없는 사용자도 본다.

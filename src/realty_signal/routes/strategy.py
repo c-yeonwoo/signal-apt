@@ -75,3 +75,19 @@ def certified_refresh(request: Request, data: dict = Body(default={})):
     if not deps.personal_listings_allowed(request):
         return {"ok": False, "reason": "personal_only"}
     return _api().certified_refresh(data)
+
+
+@router.get("/api/general-listings")
+def general_listings(request: Request):
+    from realty_signal.routes import deps
+    if not deps.personal_listings_allowed(request):
+        return {"ready": False, "state": "personal_only", "listings": [], "reason": "personal_only"}
+    return _api().hanbang()
+
+
+@router.post("/api/general-listings/refresh")
+def general_listings_refresh(request: Request, data: dict = Body(default={})):
+    from realty_signal.routes import deps
+    if not deps.personal_listings_allowed(request):
+        return {"ok": False, "reason": "personal_only"}
+    return _api().hanbang_refresh(data)
