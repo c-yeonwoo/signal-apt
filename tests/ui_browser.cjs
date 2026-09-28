@@ -11,6 +11,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[];
+    let entranceChosen=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -64,10 +65,17 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         headlines:[{title:'테스트구 주택 소식',url:'https://news.example/story',published_at:'2026-09-28',
           match:'지역명 문자열 일치(단지 관련 미확인)'}],
         source_note:'현재 수집분 기준',news_note:'사업 단계 미확인'};
+      if(url.pathname==='/api/listing-entrance'){
+        entranceChosen=route.request().method()==='PUT';
+        data={ok:true};
+      }
       if(url.pathname==='/api/listing-location') data={
+        listing:{name:'한방테스트단지'},
         school:{status:'candidate',reason:'매물 표시 좌표 기준 후보',boundary_near:false,zones:[
           {name:'테스트 통학구역',schools:[{name:'테스트초'}]}]},
-        mobility:{status:'partial',reason:'출입구 미확인',station_walk:{status:'observed',destination:'테스트역',minutes:8,distance_m:620,path:[]}},
+        mobility:{status:'partial',origin_source:entranceChosen?'user_marked_candidate':'listing_point',
+          reason:entranceChosen?'내가 지도에서 지정한 출입구 후보 기준입니다.':'출입구 미확인',
+          station_walk:{status:'observed',destination:'테스트역',minutes:8,distance_m:620,path:[]}},
         amenities:{status:'partial',by_category:{SW8:{label:'지하철역',places:[{name:'테스트역',distance_m:550}]}}},
         evidence:[{label:'학구도안내서비스',status:'표시 좌표 기준 후보',asof:'2026-03-20'}]};
       if(url.pathname==='/api/advisor/stream'){
@@ -209,11 +217,24 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#analysisFixture button').click();
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
+    assert.equal(await page.locator('#advReport details[data-analysis="amenities"]').getAttribute('open'),null);
+    await page.locator('#advReport details[data-analysis="discovery"] > summary').click();
     await page.getByRole('button',{name:'비슷한 매물·관련 뉴스 보기'}).click();
     await page.getByText('사업 단계 미확인',{exact:false}).waitFor();
     await page.getByText('두번째테스트단지',{exact:false}).first().waitFor();
     await page.getByText('테스트초',{exact:false}).waitFor();
     await page.getByText('테스트역 ·',{exact:false}).first().waitFor();
+    await page.evaluate(()=>{
+      _ms.hbMap={map:{once(_event,fn){window.__pickEntrance=fn;},off(){},setView(){}}};
+    });
+    await page.getByRole('button',{name:'지도에서 출입구 후보 지정'}).click();
+    assert.equal(await page.locator('#advPanel').evaluate(el=>el.style.display),'none');
+    page.once('dialog',dlg=>dlg.accept());
+    await page.evaluate(()=>window.__pickEntrance({latlng:{lat:37.6505,lng:127.0705}}));
+    await page.getByText('내가 지도에서 지정한 출입구 후보 기준입니다.',{exact:false}).waitFor();
+    assert.equal(await page.locator('#advPanel').evaluate(el=>el.style.display),'flex');
+    await page.getByRole('button',{name:'내 지정 지우기'}).click();
+    await page.getByRole('button',{name:'지도에서 출입구 후보 지정',exact:true}).waitFor();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.classList.contains('adv-report-mode')),true);
     await page.getByRole('button',{name:'닉과 대화'}).click();
     await page.getByText('선택 매물의 가격을 확인하세요.',{exact:false}).waitFor();
