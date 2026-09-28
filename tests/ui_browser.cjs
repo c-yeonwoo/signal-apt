@@ -92,6 +92,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.getByText('찜 당시보다 하락 1.0억').waitFor();
     assert.match(await page.locator('#watchList').textContent(),/같은 단지의 다른 매물/);
     assert.equal(await page.locator('#view-watch .watch-btn').getAttribute('aria-pressed'),'true');
+    const generalCalls=calls.filter(x=>x==='/api/general-listings').length;
+    await page.evaluate(()=>{_ms.hbMap={map:{invalidateSize(){}}}; switchTab('general');});
+    assert.equal(calls.filter(x=>x==='/api/general-listings').length,generalCalls);
     await page.evaluate(()=>switchTab('dashboard'));
     await page.evaluate(()=>openLoanCalc(50000,'합성 후보'));
     await page.getByText('확인 필요 · 가정 기반 추정, 은행 승인 전',{exact:true}).waitFor();
@@ -124,6 +127,13 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.keyboard.press('Escape');
     assert.equal(await b.getAttribute('aria-expanded'),'false');
     assert.equal(await b.evaluate(el=>el===document.activeElement),true);
+    await page.evaluate(()=>{
+      _ms.test.items=Array.from({length:130},(_,i)=>({id:String(i)}));
+      renderMsList('test',Array.from({length:130},(_,i)=>i));
+    });
+    assert.equal(await page.locator('#testList .ms-row').count(),60);
+    await page.locator('#testList').getByRole('button',{name:/더 보기/}).click();
+    assert.equal(await page.locator('#testList .ms-row').count(),120);
     await page.evaluate(async()=>{
       loadComplexAgents=()=>{}; loadCxBuilding=()=>{}; loadCxLoanScen=()=>{}; loadCxTxCosts=()=>{};
       await openComplex('테스트단지','테스트구');

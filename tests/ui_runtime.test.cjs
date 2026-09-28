@@ -23,7 +23,7 @@ test('inline app scripts parse and browse navigation separates tools from acquis
 
 test('general listing status distinguishes personal-only, source failure, and limited coverage', () => {
   const ctx = vm.createContext({});
-  vm.runInContext(extract('function generalStatusText(data){', 'async function loadGeneralListings(){'), ctx);
+  vm.runInContext(extract('function generalStatusText(data){', 'async function loadGeneralListings('), ctx);
   assert.match(ctx.generalStatusText({state:'personal_only'}), /개인 계정/);
   assert.match(ctx.generalStatusText({state:'failed',listings:[],refresh:{error:'timeout'}}), /0건이라는 뜻이 아닙니다/);
   const text = ctx.generalStatusText({state:'partial',listings:[{}],regions:['노원구'],
@@ -31,14 +31,61 @@ test('general listing status distinguishes personal-only, source failure, and li
   assert.match(text, /전체 매물 아님/);
 });
 
+test('general listings reuse the same-day map and explicit refresh bypasses cache', async () => {
+  const calls = [], nodes = new Map(), map = {invalidateSize: () => calls.push('resize')};
+  const ctx = vm.createContext({
+    _hbList: [], _hbLoadedAt: 0, _ms: {hbMap: {map}},
+    _listingCacheFresh: at => at > 0, _reuseListingMap: () => map.invalidateSize(),
+    document: {getElementById: id => {
+      if (!nodes.has(id)) nodes.set(id, {textContent: '', disabled: false});
+      return nodes.get(id);
+    }},
+    fetch: async url => {calls.push(url); return {ok:true, json:async()=>({state:'ready', listings:[{단지명:'시험단지'}], regions:['노원구']})};},
+    generalStatusText: () => '1건', mapSplit: () => calls.push('render'),
+  });
+  vm.runInContext(extract('async function loadGeneralListings(', 'async function refreshGeneralListings('), ctx);
+  await ctx.loadGeneralListings();
+  await ctx.loadGeneralListings();
+  await ctx.loadGeneralListings(true);
+  assert.deepEqual(calls, ['/api/general-listings','render','resize','/api/general-listings','render']);
+});
+
+test('market snapshot loads in parallel, reuses browser cache, and refresh bypasses it', async () => {
+  const calls = [], saved = new Map(), elements = new Map();
+  const payload = {
+    '/api/meta': {last_date:'2026-09-29'},
+    '/api/signals': [{region:'노원구',signal:'BUY'}],
+    '/api/regime': {}, '/api/macro': {},
+  };
+  const ctx = vm.createContext({
+    meta:null, allSignals:[], selected:null, active:new Set(['BUY']), window:{},
+    localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},
+    document:{getElementById:id=>{
+      if(!elements.has(id)) elements.set(id,{style:{},textContent:'',innerHTML:''});
+      return elements.get(id);
+    }},
+    fetch:async url=>{calls.push(url); return {ok:true,json:async()=>payload[url]};},
+    renderZoneLegend(){}, renderList(){}, selectRegion:region=>calls.push('select:'+region),
+  });
+  vm.runInContext(extract('const _MARKET_CACHE_KEY=', 'let _showHist='), ctx);
+  await ctx.loadData();
+  assert.deepEqual(calls.slice(0,4), ['/api/meta','/api/signals','/api/regime','/api/macro']);
+  await ctx.loadData();
+  assert.equal(calls.filter(x=>x.startsWith('/api/')).length,4);
+  await ctx.loadData(true);
+  assert.equal(calls.filter(x=>x.startsWith('/api/')).length,8);
+});
+
 test('opening quicksale reaches both APIs and renders', async () => {
   const calls = [], status = {}, region = {options: [0, 1]};
   const ctx = vm.createContext({
     document: {getElementById: id => id === 'qsRegion' ? region : status},
     fetch: async url => {calls.push(url); return {json: async () => ({ready: true, listings: []})};},
-    _qsMode: '급매', qsStatusText: () => '0건', renderQuicksale: () => calls.push('render'),
+    _qsMode: '급매', _qsLoadedAt: 0, _qsData: {급매:null,찐매물:null},
+    _listingCacheFresh: () => false,
+    qsStatusText: () => '0건', renderQuicksale: () => calls.push('render'),
   });
-  vm.runInContext(extract('async function loadQuicksale(){', 'async function refreshQuicksale(){'), ctx);
+  vm.runInContext(extract('async function loadQuicksale(', 'async function refreshQuicksale('), ctx);
   await ctx.loadQuicksale();
   assert.deepEqual(calls, ['/api/quicksale', '/api/certified', 'render']);
   assert.equal(status.textContent, '0건');
@@ -60,6 +107,7 @@ test('quicksale empty view names filter and source states separately', () => {
     document: {getElementById: id => id === 'qsGap' ? gap : empty},
     renderMtFilter() {}, inFocus: () => true, _mtPass: () => true, mapSplit() {},
     _qsMode: '급매', _qsList: [], _qsCertList: [], _qsData: {급매: {state: 'failed'}},
+    _qsViewKey: () => 'test',
   });
   vm.runInContext(extract('function renderQuicksale(){', '// ===== 통합 매물('), ctx);
   ctx.renderQuicksale();
