@@ -6,6 +6,21 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/index.html'), 'utf8');
 const extract = (start, end) => html.slice(html.indexOf(start), html.indexOf(end));
 
+test('inline app scripts parse and browse navigation separates tools from acquisition paths', () => {
+  const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));
+  const targets = {groupSubLabel: {}, groupSubTabs: {}, listingFocus: {style: {}}};
+  const ctx = vm.createContext({document: {getElementById: id => targets[id]}, location: {hash: '#all'}});
+  vm.runInContext(extract('const _GROUPS={', 'const _LOAD={'), ctx);
+  ctx.renderGroupSubnav('browse', 'all');
+  assert.match(targets.groupSubTabs.innerHTML, /분석·전략/);
+  assert.match(targets.groupSubTabs.innerHTML, /경매·재건축/);
+  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /분석·특수 매물/);
+  ctx.renderGroupSubnav('browse', 'auction');
+  assert.match(targets.groupSubTabs.innerHTML, /data-sub="auction"/);
+  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="report"/);
+});
+
 test('opening quicksale reaches both APIs and renders', async () => {
   const calls = [], status = {}, region = {options: [0, 1]};
   const ctx = vm.createContext({

@@ -33,6 +33,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
           중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
+      if(url.pathname==='/api/listing-watch') data={items:[{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',saved_price:60000,
+        price_change:-10000,current:{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',price:50000},
+        alternatives:[{key:'급매:synthetic-2',kind:'급매',name:'테스트단지',region:'테스트구',price:52000,reason:'같은 단지의 다른 매물'}]}]};
       if(url.pathname==='/api/shortlist') data={ready:true,budget:60000,pyeong:25,candidates:[
         {'단지':'테스트 단지 A',region:'테스트구','예상가':50000,'자금':{'필요현금':30000,'총월상환':105},'근거':'현금 여유 우선'}]};
       if(url.pathname==='/api/geocode') {
@@ -64,6 +67,19 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     assert.equal(new URL(page.url()).hash,'#mypage');
     await page.goBack();
     await page.waitForFunction(()=>document.body.className==='tab-dashboard');
+    await page.evaluate(()=>{document.getElementById('groupSubnav').style.display='flex'; renderGroupSubnav('browse','all');});
+    assert.equal(await page.locator('#groupSubTabs').getByRole('button',{name:/분석·전략/}).count(),1);
+    assert.equal(await page.locator('#groupSubTabs').getByRole('button',{name:/경매·재건축/}).count(),1);
+    await page.locator('#groupSubTabs').getByRole('button',{name:/경매·재건축/}).click();
+    assert.equal(await page.locator('#groupSubTabs [data-sub="auction"]').count(),1);
+    assert.equal(await page.locator('#groupSubTabs [data-sub="report"]').count(),0);
+    const navWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
+    assert(navWidth<=360,`browse navigation overflows mobile viewport: ${navWidth}`);
+    await page.evaluate(()=>switchTab('watch'));
+    await page.getByText('찜 당시보다 하락 1.0억').waitFor();
+    assert.match(await page.locator('#watchList').textContent(),/같은 단지의 다른 매물/);
+    assert.equal(await page.locator('#view-watch .watch-btn').getAttribute('aria-pressed'),'true');
+    await page.evaluate(()=>switchTab('dashboard'));
     await page.evaluate(()=>openLoanCalc(50000,'합성 후보'));
     await page.getByText('확인 필요 · 가정 기반 추정, 은행 승인 전',{exact:true}).waitFor();
     await page.keyboard.press('Escape');
