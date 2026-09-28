@@ -3109,7 +3109,7 @@ function openQuicksaleEvidence(btn){
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
 const _LA_TYPES=['일반매물','경매','급매','찐매물','청약','재건축'];
 const _LA_COLOR={일반매물:'#2563eb', 경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
-let _laSel=null, _laData=[], _laPrice=null;   // _laPrice={lo,hi,min,max} 만원, null=미적용
+let _laSel=null, _laData=[], _laPrice=null, _laAccessDenied=false;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 let _laSort='opp';          // 정렬 기준 (매수신호는 공통 _mtBuyOnly)
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
 function toggleLaMore(){
@@ -3157,11 +3157,13 @@ function drawLaPrice(){
 async function loadAllListings(){
   _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
   const types=[..._laSel].join(',')||'경매';
+  _laAccessDenied=false;
   document.getElementById('laStatus').textContent='불러오는 중…';
   document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">최초 1회는 데이터 수집으로 수십초 걸릴 수 있어요</span></div>';
   try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent(types))).json();
     _laData=d.listings||[]; const meta=d.meta||{};
-    document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${meta.data_age_days!=null?` · ${meta.data_age_days}일 전 수집`:''}`; }
+    _laAccessDenied=meta.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
+    document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${meta.data_age_days!=null?` · ${meta.data_age_days}일 전 수집`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`; }
   catch(e){ _laData=[]; document.getElementById('laStatus').textContent='불러오기 실패'; }
   initLaPriceFilter();
   renderAllListings();
@@ -3191,7 +3193,9 @@ function renderAllListings(){
     if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
     return opp(b)-opp(a);   // opp 기본
   });
-  document.getElementById('laEmpty').textContent = rows.length?'':'조건에 맞는 매물이 없습니다. (유형·급지·매수신호·가격대 완화 / 급매는 급매 탭에서 스캔)';
+  document.getElementById('laEmpty').textContent = rows.length?'':_laAccessDenied?
+    '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
+    '조건에 맞는 매물이 없습니다. (유형·급지·매수신호·가격대 완화 / 급매는 급매 탭에서 스캔)';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
   const rowBadge=x=>x['시그널']?badge(x['시그널']):typeBadge(x['유형']);
   mapSplit('laList','laMap',rows,{

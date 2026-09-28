@@ -79,8 +79,11 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     owner, guest = _client("owner@example.com"), _client("guest@example.com")
     assert len(owner.get("/api/general-listings").json()["listings"]) == 1
     assert guest.get("/api/general-listings").json()["listings"] == []
-    assert guest.get("/api/listings/all?types=일반매물").json()["listings"] == []
-    listing = owner.get("/api/listings/all?types=일반매물").json()["listings"][0]
+    public = guest.get("/api/listings/all?types=일반매물").json()
+    assert public["listings"] == [] and public["meta"]["private_access"] is False
+    private = owner.get("/api/listings/all?types=일반매물").json()
+    assert private["meta"]["private_access"] is True
+    listing = private["listings"][0]
     assert listing["key"] == "일반매물:1" and listing["총액"] == 53_000
     assert not listing["stale"]
     api._record_radar_refresh(cache, {"ok": False, "attempted_at": time.time()})

@@ -2889,8 +2889,9 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
 
+    private_access = _personal_listings_allowed(request=request)
     out = _build_listings(set(t for t in types.split(",") if t),
-                          include_private=_personal_listings_allowed(request=request))
+                          include_private=private_access)
     uid = _uid(request)
     scores = eng_rank.engagement_scores(uid=uid)
     if scores:
@@ -2906,6 +2907,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "timing_version": TIMING_VERSION,
             "data_age_days": round(_data_age_days() or 0, 1),
             "engagement_boost": bool(scores),
+            "private_access": private_access,
         },
         "counts": {k: sum(1 for x in out if x["유형"] == k) for k in kinds},
     }
