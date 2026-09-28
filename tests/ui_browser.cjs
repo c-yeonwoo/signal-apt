@@ -65,6 +65,10 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         headlines:[{title:'테스트구 주택 소식',url:'https://news.example/story',published_at:'2026-09-28',
           match:'지역명 문자열 일치(단지 관련 미확인)'}],
         source_note:'현재 수집분 기준',news_note:'사업 단계 미확인'};
+      if(url.pathname==='/api/listing-kapt') data={status:'observed',source:'K-APT',
+        source_url:'https://www.data.go.kr/data/15058453/openapi.do',name:'한방테스트단지',
+        households:220,builder:'시험건설',parking_spaces:150,parking_per_household:0.68,
+        retrieved_at:'2026-09-29',address:'테스트구 합성 주소',note:'주차 가능 여부를 뜻하지 않습니다.'};
       if(url.pathname==='/api/listing-entrance'){
         entranceChosen=route.request().method()==='PUT';
         data={ok:true};
@@ -217,6 +221,11 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#analysisFixture button').click();
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
+    assert.equal(calls.includes('/api/listing-kapt'),false);
+    await page.locator('#advReport details[data-analysis="complex"] > summary').click();
+    await page.getByRole('button',{name:'K-APT 세대수·시공사·주차 확인'}).click();
+    await page.getByText('등록 주차면 150면',{exact:false}).waitFor();
+    assert.equal(calls.filter(x=>x==='/api/listing-kapt').length,1);
     assert.equal(await page.locator('#advReport details[data-analysis="amenities"]').getAttribute('open'),null);
     await page.locator('#advReport details[data-analysis="discovery"] > summary').click();
     await page.getByRole('button',{name:'비슷한 매물·관련 뉴스 보기'}).click();
