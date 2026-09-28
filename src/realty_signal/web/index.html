@@ -302,6 +302,8 @@
   .leaflet-popup-content { font-size:12px; line-height:1.4; }
   .mpin { width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 3px rgba(0,0,0,.25), 0 0 10px rgba(37,99,235,.5); }
   .mpin.sel { width:22px; height:22px; box-shadow:0 0 0 4px rgba(37,99,235,.35), 0 0 16px rgba(37,99,235,.9); z-index:1000; }
+  .mpin.group { width:26px; height:26px; display:grid; place-items:center; color:#fff; font-size:10px; font-weight:800; }
+  .mpin.group.sel { width:28px; height:28px; }
   .mpin.fb { opacity:.55; border-style:dashed; }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#475569; }
@@ -3392,9 +3394,11 @@ function applyViewportFilter(mapId, opts){
   st.viewIndices=indices; st.lastBoundsKey=nextBoundsKey;
   // 리스트와 핀을 같은 범위로 — 화면 밖 핀을 지우지 않으면 "갱신 안 됨"처럼 보인다
   const visible=new Set(indices);
+  const markerVisibility=new Map();
   Object.keys(st.markers||{}).forEach(k=>{
-    const i=+k, mk=st.markers[i]; if(!mk) return;
-    const on=visible.has(i);
+    const mk=st.markers[k]; if(mk) markerVisibility.set(mk,(markerVisibility.get(mk)||false)||visible.has(+k));
+  });
+  markerVisibility.forEach((on,mk)=>{
     if(on && !st.map.hasLayer(mk)) mk.addTo(st.map);
     if(!on && st.map.hasLayer(mk)) st.map.removeLayer(mk);
   });
@@ -3555,33 +3559,51 @@ function initMap(mapId){
     st=_ms[mapId]={map,markers:{},sel:null}; }
   return st;
 }
+function _pinGroups(items,coords){
+  const groups=new Map();
+  items.forEach((it,i)=>{
+    const c=coords[i]; if(!c||!Number.isFinite(+c[0])||!Number.isFinite(+c[1])) return;
+    const name=(it['단지명']||'').trim(), region=(it['지역']||it.region||'').trim();
+    const key=name&&region?`${region}|${name}|${(+c[0]).toFixed(4)}|${(+c[1]).toFixed(4)}`:`item:${i}`;
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(i);
+  });
+  return [...groups.values()];
+}
 function plotPins(mapId, items, coords, opt, opts){
   const st=initMap(mapId);
   opts=opts||{};
   st.items=items; st.opt=opt; st.coords=coords;   // 클릭 시 on-demand 지오코딩용
-  Object.values(st.markers).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
+  new Set(Object.values(st.markers)).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
   const fb=opt._fb||new Set();
   const viewSet=st._vpLocked&&st.viewIndices? new Set(st.viewIndices): null;
-  items.forEach((it,i)=>{ const c=coords[i]; if(!c) return;
-    const color=(opt.color&&opt.color(it))||'var(--accent)';
-    const isfb=fb.has(i);
-    const icon=L.divIcon({className:'',html:`<div class="mpin${isfb?' fb':''}" style="background:${color}"></div>`,iconSize:[16,16],iconAnchor:[8,8]});
+  _pinGroups(items,coords).forEach(group=>{
+    const i=group[0], it=items[i], c=coords[i], multi=group.length>1;
+    const color=multi?'var(--accent)':(opt.color&&opt.color(it))||'var(--accent)';
+    const isfb=group.some(j=>fb.has(j)), size=multi?28:16;
+    const icon=L.divIcon({className:'',html:`<div class="mpin${multi?' group':''}${isfb?' fb':''}" style="background:${color}">${multi?group.length>99?'99+':group.length:''}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]});
     const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사</span>`:'');
-    // 청약(분양)·opt.complexDetail=false 는 실거래 단지상세가 없어 재클릭 생략
-    const cxOk = opt.complexDetail!==false && it['유형']!=='청약';
-    const cxName=cxOk ? (it['단지명']||'').replace(/['"\\]/g,'') : '';
-    const cxReg=cxOk ? ((it['지역']||it.region)||'').replace(/['"\\]/g,'') : '';
-    const popup=lbl+'<div style="margin-top:4px;font-size:11px;color:var(--dim)">다시 클릭 · 목록 접기</div>';
+    const popup=multi?`<b>${esc(it['단지명']||'매물 묶음')}</b> · ${group.length}개 매물<br><span style="font-size:11px;color:var(--dim)">같은 단지명·표시 좌표 묶음 · 개별 매물을 선택하세요</span>
+      ${group.slice(0,8).map(j=>`<button type="button" class="btn" data-listing-i="${j}" style="display:block;margin-top:5px;width:100%;text-align:left">${esc(items[j]['유형']||'매물')} · ${items[j]['총액']?_eok(items[j]['총액']):'가격 미확인'}${items[j]['평형']?` · ${esc(items[j]['평형'])}평`:''}</button>`).join('')}
+      ${group.length>8?`<div style="font-size:11px">나머지 ${group.length-8}개는 왼쪽 목록에서 선택</div>`:''}`
+      :lbl+'<div style="margin-top:4px;font-size:11px;color:var(--dim)">다시 클릭 · 목록 접기</div>';
     const mk=L.marker(c,{icon}).bindPopup(popup);
+    if(multi) mk.on('popupopen',ev=>{
+      const root=ev.popup.getElement(); if(!root) return;
+      root.querySelectorAll('[data-listing-i]').forEach(btn=>{
+        btn.onclick=e=>{ L.DomEvent.stopPropagation(e); selectMsRow(mapId,+btn.dataset.listingI); };
+      });
+    });
     mk.on('click', e=>{
       L.DomEvent.stopPropagation(e);
-      selectMsRow(mapId, i);
+      if(multi){ if(group.includes(st.sel)) selectMsRow(mapId,st.sel); }
+      else selectMsRow(mapId, i);
     });
-    st.markers[i]=mk;
+    group.forEach(j=>{st.markers[j]=mk;});
     // 뷰포트 잠금 중이면 화면 안 핀만 올린다 (다시 찾기 결과 유지)
-    if(!viewSet || viewSet.has(i)) mk.addTo(st.map);
+    if(!viewSet || group.some(j=>viewSet.has(j))) mk.addTo(st.map);
   });
-  const ms=Object.values(st.markers).filter(mk=>st.map.hasLayer(mk));
+  const ms=[...new Set(Object.values(st.markers))].filter(mk=>st.map.hasLayer(mk));
   const skipFit=opts.keepView || st._vpLocked;
   if(ms.length && !skipFit){ st._suppressCtaUntil=Date.now()+900;
     const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
@@ -6839,6 +6861,42 @@ function _analysisTradeChart(d){
     ${ax!=null?`<line x1="18" x2="348" y1="${ax}" y2="${ax}" stroke="#ea580c" stroke-width="2" stroke-dasharray="5 4" />`:''}
     ${circles}<text x="20" y="129" font-size="10" fill="var(--dim)">최근 거래 ${pts.length}건 · ● 거래 / 주황선 호가</text></svg>`;
 }
+async function listingDiscoveryLoad(){
+  const report=_analysisCurrent, key=report?.listing?.key, gen=_analysisGen;
+  if(!key||!report.price||report.discovery?.loading) return;
+  report.discovery={loading:true}; _analysisRender(report);
+  try{
+    const response=await fetch('/api/listing-discovery?key='+encodeURIComponent(key));
+    if(!response.ok) throw new Error('대안·뉴스 근거를 확인하지 못했습니다.');
+    const data=await response.json();
+    if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
+    _analysisCurrent.discovery=data; _analysisRender(_analysisCurrent);
+  }catch(e){
+    if(gen!==_analysisGen||_analysisCurrent?.listing?.key!==key) return;
+    _analysisCurrent.discovery={error:e.message||'조회 실패'}; _analysisRender(_analysisCurrent);
+  }
+}
+function _analysisDiscovery(d){
+  const box=d.discovery;
+  if(!box) return '<button type="button" class="btn" onclick="listingDiscoveryLoad()">비슷한 매물·관련 뉴스 보기</button>';
+  if(box.loading) return '<div class="analysis-muted">현재 수집분과 헤드라인을 확인 중…</div>';
+  if(box.error) return `<div class="analysis-muted">${esc(box.error)}</div><button type="button" class="btn" onclick="listingDiscoveryLoad()">다시 시도</button>`;
+  const alternatives=(box.alternatives||[]).map(x=>{
+    const l=x.listing||{};
+    return `<div style="padding:7px 0;border-bottom:1px solid var(--line)"><b>${esc(l.name||'단지 미확인')}</b> · ${esc(l.kind||'')}
+      <div>${l.asking_manwon?_eok(l.asking_manwon):'호가 미확인'} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'}</div>
+      <div class="analysis-muted">${esc(x.reason)} · 수집 ${esc(l.collected_at||'미확인')}${l.stale?' · 지난 결과':''}</div>
+      <button type="button" class="btn" data-key="${esc(l.key)}" onclick="openListingReport(this.dataset.key)">이 매물 분석</button></div>`;
+  }).join('');
+  const headlines=(box.headlines||[]).map(x=>`<div style="padding:6px 0"><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>
+    <div class="analysis-muted">${esc(x.published_at||'시점 미확인')} · ${esc(x.match||'관련성 미확인')}</div></div>`).join('');
+  const query=encodeURIComponent([d.listing.region,d.listing.name,'아파트'].filter(Boolean).join(' '));
+  return `<div style="font-weight:700">다른 매물</div>${alternatives||'<div class="analysis-muted">현재 수집분에서 비교할 대안을 찾지 못했습니다.</div>'}
+    <div class="analysis-muted">${esc(box.source_note||'')}</div>
+    <div style="font-weight:700;margin-top:11px">관련 헤드라인 후보</div>${headlines||'<div class="analysis-muted">기존 뉴스 자료에서 일치 항목이 없습니다.</div>'}
+    <div class="analysis-muted">${esc(box.news_note||'')}</div>
+    <a href="https://search.naver.com/search.naver?where=news&amp;query=${query}" target="_blank" rel="noopener noreferrer">새 뉴스 직접 검색 ↗</a>`;
+}
 let _listingCompareGen=0, _listingCompareActiveKeys=[];
 function _listingCompareStorageKey(){ return 'listing-compare:'+(_userEmail||'unknown'); }
 function _listingCompareKeys(){
@@ -6990,6 +7048,7 @@ function _analysisRender(d){
     html+=card('가까운 생활시설',`<div>${placeBits.join('<br>')||esc(amen.reason||'시설 자료 확인 중')}</div>
       <div class="analysis-muted">${esc(amen.coordinate_note||'시설까지의 실제 이동 경로·영업 상태는 확인되지 않았습니다.')}</div>`);
     html+=card('호재·뉴스',`<div class="analysis-muted">${esc(d.development?.reason||'해당 단지와 연결된 공식 자료 미확인')}</div>`);
+    html+=card('대안과 변화 살피기',_analysisDiscovery(d));
     html+=card('중개사에게 확인',`<ul>${(d.questions||[]).map(q=>`<li>${esc(q)}</li>`).join('')}</ul>`);
     html+=`<div class="analysis-muted" style="margin:14px 0 4px">근거: ${(d.evidence||[]).map(e=>{
       const label=esc(e.label), text=e.url&&/^https:\/\//.test(e.url)

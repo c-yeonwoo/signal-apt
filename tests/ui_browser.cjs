@@ -58,6 +58,12 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
           price:{상태:'관측비교',호가차이율:i?-4:2,표본수:3,중앙값:49000,비교기준일:'2026-09-29'}})),
           warnings:['확정 매수력이 없습니다.'],basis:'같은 면적 국토부 실거래',not_compared:['수리 상태']};
       }
+      if(url.pathname==='/api/listing-discovery') data={
+        alternatives:[{listing:{key:'일반매물:synthetic-hb-2',kind:'일반매물',name:'두번째테스트단지',
+          asking_manwon:47000,exclusive_m2:84.5,collected_at:'2026-09-29'},reason:'같은 지역·비슷한 전용면적·호가대'}],
+        headlines:[{title:'테스트구 주택 소식',url:'https://news.example/story',published_at:'2026-09-28',
+          match:'지역명 문자열 일치(단지 관련 미확인)'}],
+        source_note:'현재 수집분 기준',news_note:'사업 단계 미확인'};
       if(url.pathname==='/api/listing-location') data={
         school:{status:'candidate',reason:'매물 표시 좌표 기준 후보',boundary_near:false,zones:[
           {name:'테스트 통학구역',schools:[{name:'테스트초'}]}]},
@@ -203,6 +209,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#analysisFixture button').click();
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
+    await page.getByRole('button',{name:'비슷한 매물·관련 뉴스 보기'}).click();
+    await page.getByText('사업 단계 미확인',{exact:false}).waitFor();
+    await page.getByText('두번째테스트단지',{exact:false}).first().waitFor();
     await page.getByText('테스트초',{exact:false}).waitFor();
     await page.getByText('테스트역 ·',{exact:false}).first().waitFor();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.classList.contains('adv-report-mode')),true);

@@ -331,6 +331,32 @@ def listing_compare(request: Request, keys: list[str] = Body(embed=True)):
                         headers={"Cache-Control": "private, no-store"})
 
 
+@router.get("/api/listing-discovery")
+def listing_discovery(request: Request, key: str):
+    """현재 수집 매물의 대안과 기존 뉴스 KB 문자열 일치 후보를 온디맨드로 보여준다."""
+    from realty_signal import api as app_api
+    from realty_signal.services import listing_discovery as discovery
+    from realty_signal.services import property_analysis as analysis
+
+    allowed = deps.personal_listings_allowed(request)
+    try:
+        row = analysis.resolve(key, private_allowed=allowed)
+    except ValueError as exc:
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 탐색할 수 있습니다.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    profile = db.profile_get(deps.uid(request)) or {}
+    budget = discovery._positive((profile.get("매수력") or {}).get("최대매수가"))
+    candidates = app_api._build_listings({"일반매물", "급매", "찐매물"}, include_private=allowed) if allowed else []
+    out = {"alternatives": discovery.alternatives(row, candidates, budget),
+           "headlines": discovery.news(row, db.news_list(None, limit=300)),
+           "news_note": "헤드라인 문자열 일치는 단지 관련성·개발사업 단계·가격 영향을 입증하지 않습니다.",
+           "source_note": "대안은 현재 수집분의 가격·면적 유사성 기준이며 매물 상태를 보증하지 않습니다."}
+    return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("/api/listing-watch")
 def listing_watch_get(request: Request):
     from realty_signal import api as app_api

@@ -21,6 +21,41 @@ test('inline app scripts parse and browse navigation separates tools from acquis
   assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="report"/);
 });
 
+test('same named complex pins group only when display coordinates nearly match', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('function _pinGroups(', 'function plotPins('),ctx);
+  const items=[
+    {단지명:'가상단지',지역:'노원구'}, {단지명:'가상단지',지역:'노원구'},
+    {단지명:'가상단지',지역:'노원구'}, {단지명:'가상단지',지역:'강남구'}];
+  const coords={0:[37.65001,127.07001],1:[37.65002,127.07002],
+    2:[37.6510,127.0710],3:[37.65001,127.07001]};
+  const groups=Array.from(ctx._pinGroups(items,coords),g=>Array.from(g));
+  assert.deepEqual(groups,[[0,1],[2],[3]]);
+});
+
+test('grouped map pins keep per-listing selection and one marker per group', () => {
+  const layers=new Set(), made=[];
+  const map={removeLayer:m=>layers.delete(m),hasLayer:m=>layers.has(m),invalidateSize(){}};
+  const st={map,markers:{},sel:null};
+  const ctx=vm.createContext({_ms:{test:st},initMap:()=>st,setTimeout(){},esc:s=>String(s),_eok:v=>String(v),
+    selectMsRow(){},L:{divIcon:o=>o,DomEvent:{stopPropagation(){}},marker:(coord,opts)=>{
+      const marker={coord,opts,events:{},bindPopup(html){this.popup=html;return this;},
+        on(name,fn){this.events[name]=fn;return this;},addTo(){layers.add(this);return this;}};
+      made.push(marker);return marker;
+    }}});
+  vm.runInContext(extract('function _pinGroups(', '// 핀 포커스:'),ctx);
+  const items=[{단지명:'가상단지',지역:'노원구',유형:'일반매물',총액:50000},
+    {단지명:'가상단지',지역:'노원구',유형:'일반매물',총액:49000},
+    {단지명:'다른단지',지역:'노원구',유형:'급매',총액:51000}];
+  ctx.plotPins('test',items,{0:[37.65,127.07],1:[37.65,127.07],2:[37.66,127.08]},
+    {label:x=>x.단지명},{keepView:true});
+  assert.equal(made.length,2);
+  assert.equal(st.markers[0],st.markers[1]);
+  assert.notEqual(st.markers[0],st.markers[2]);
+  assert.match(st.markers[0].popup,/2개 매물/);
+  assert.equal(layers.size,2);
+});
+
 test('general listing status distinguishes personal-only, source failure, and limited coverage', () => {
   const ctx = vm.createContext({});
   vm.runInContext(extract('function generalStatusText(data){', 'async function loadGeneralListings('), ctx);
