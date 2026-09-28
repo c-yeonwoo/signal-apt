@@ -2857,7 +2857,10 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                  "전용면적": m.get("전용면적"), "층": m.get("층"), "naver_id": m.get("naver_id"), "찐매물": True},
                 total=m.get("호가"))
     if "일반매물" in want and HANBANG_FILE.exists():
+        source_failed = _radar_refresh_status(HANBANG_FILE).get("ok") is False
         for m in json.loads(HANBANG_FILE.read_text(encoding="utf-8")).get("listings", []):
+            if source_failed:
+                m = {**m, "stale": True}
             add("일반매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "등록일", m.get("등록일"), "", m, m.get("lat"), m.get("lng"),
                 {"hanbang_id": m.get("hanbang_id"), "hanbang_complex_id": m.get("hanbang_complex_id"),
