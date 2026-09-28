@@ -2918,6 +2918,7 @@ function qsStatusText(data){
   else if(state==='stale_failed') text+=` · 지난 결과, 최근 갱신 실패${refresh.error?' ('+refresh.error+')':''}`;
   else if(state==='stale') text+=' · 지난 결과, 갱신 대기';
   else if(state==='unverified') text+=' · 원천 확인 상태 미상';
+  if(refresh.signal_context==='unavailable') text+=' · 지역 시그널 미확인';
   return text;
 }
 function qsMode(mode){

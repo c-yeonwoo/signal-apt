@@ -2629,12 +2629,22 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
     from realty_signal.ingest.baroezip import bbox_around, fetch_market_with_status
 
     scope = "all" if kind == "찐매물" else None
-    sig = _signal_map()
+    try:
+        sig = _signal_map()
+        signal_context = "available"
+    except Exception as exc:  # noqa: BLE001 - 매물 수집은 KB 시그널 장애와 독립적으로 계속한다
+        log.warning("급매 지역 시그널 미확인: %s", type(exc).__name__)
+        sig, signal_context = {}, "unavailable"
     seen, out = set(), []
     queryable, succeeded, failures, skipped = 0, 0, [], 0
     successful_regions = []
     for region in regions:
-        code = _code_of(region)
+        code = ""
+        if region not in _bundled_centroids():
+            try:
+                code = _code_of(region)
+            except Exception as exc:  # noqa: BLE001 - DB 좌표가 있으면 코드 없이도 수집한다
+                log.warning("급매 지역코드 미확인 %s: %s", region, type(exc).__name__)
         c = _region_centroid(region, code)
         if not c:
             skipped += 1
@@ -2675,6 +2685,7 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
         "skipped_regions": skipped,
         "required_successes": required,
         "usable": succeeded >= required,
+        "signal_context": signal_context,
         "failures": failures[:10],
     }
     return out, status
@@ -2888,11 +2899,17 @@ def certified():
 def _scan_regions() -> list[str]:
     """급매·찐매물 스캔 대상 = BUY+ 시그널 지역 ∪ 개인 계정 관심 지역.
 
-    다른 계정의 관심 지역으로 개인용 외부 수집 범위를 넓히지 않는다.
+    KB 장애 중에도 소유자 관심지역은 유지한다. 과거 캐시의 지역은 수집 당시의
+    소유자를 확인할 수 없으므로 재사용하지 않는다.
     """
-    df = _signals_df()
-    buy = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
-    valid = set(df["region"])
+    known = set(_bundled_centroids())
+    try:
+        df = _signals_df()
+        buy = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
+        valid = set(df["region"]) | known
+    except Exception as exc:  # noqa: BLE001 - KB 실패가 외부 매물 수집까지 막지 않게 한다
+        log.warning("급매 대상 지역 시그널 미확인: %s", type(exc).__name__)
+        buy, valid = [], known
     owner_email = config.personal_listing_email()
     owner = db.user_by_email(owner_email) if owner_email else None
     favs = ([f["key"] for f in db.fav_list(owner["id"])
