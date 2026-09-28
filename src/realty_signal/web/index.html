@@ -2925,7 +2925,14 @@ async function loadRedevZones(){
     tb.appendChild(tr);
   });
 }
-let _hbList=[];
+let _hbList=[], _hbLoadedAt=0;
+function _listingCacheFresh(at){
+  return at>0 && new Date(at).toDateString()===new Date().toDateString();
+}
+function _reuseListingMap(mapId){
+  const st=_ms[mapId];
+  if(st?.map) requestAnimationFrame(()=>st.map.invalidateSize());
+}
 function generalStatusText(data){
   if(data.state==='personal_only') return '외부 일반 매물은 개인 계정에서만 확인할 수 있습니다.';
   if(data.state==='never_scanned') return '아직 한방 매매 표본을 수집하지 않았습니다.';
@@ -2938,10 +2945,14 @@ function generalStatusText(data){
   if(r.error) s+=' · '+r.error;
   return s;
 }
-async function loadGeneralListings(){
+async function loadGeneralListings(force=false){
+  if(!force && _listingCacheFresh(_hbLoadedAt) && _ms.hbMap?.map){
+    _reuseListingMap('hbMap'); return;
+  }
   let data;
   try{ const r=await fetch('/api/general-listings'); if(!r.ok) throw new Error(); data=await r.json(); }
   catch(e){ data={state:'failed',listings:[],refresh:{error:'불러오기 실패'}}; }
+  _hbLoadedAt=['ready','partial','empty'].includes(data.state)?Date.now():0;
   _hbList=data.listings||[];
   document.getElementById('hbStatus').textContent=generalStatusText(data);
   document.getElementById('hbRefreshBtn').disabled=data.state==='personal_only';
@@ -2967,11 +2978,13 @@ async function refreshGeneralListings(){
   btn.disabled=true; status.textContent='관심지역 수집 중… (최대 3곳, 수십 초)';
   try{ const r=await fetch('/api/general-listings/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json(); if(!r.ok||!data.ok) throw new Error(data.message||data.scan?.error||data.detail||'수집 실패');
-    await loadGeneralListings();
+    _laInvalidateCache();
+    await loadGeneralListings(true);
   }catch(e){ status.textContent='수집 실패: '+(e.message||'원천 상태를 확인해 주세요.'); }
   btn.disabled=false;
 }
-let _qsList=[], _qsCertList=[], _qsMode='급매', _qsData={급매:null,찐매물:null};
+let _qsList=[], _qsCertList=[], _qsMode='급매', _qsData={급매:null,찐매물:null}, _qsLoadedAt=0, _qsRenderedKey='';
+function _qsViewKey(){ return JSON.stringify([_qsMode,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),document.getElementById('qsGap').value]); }
 function qsStatusText(data){
   const n=(data?.listings||[]).length, refresh=data?.refresh||{};
   const state=data?.state||(!data?.ready?'never_scanned':'unverified');
@@ -3005,7 +3018,12 @@ function qsMode(mode){
   renderQuicksale();
 }
 
-async function loadQuicksale(){
+async function loadQuicksale(force=false){
+  if(!force && _listingCacheFresh(_qsLoadedAt) && _qsData.급매 && _qsData.찐매물){
+    if(_qsRenderedKey!==_qsViewKey()) renderQuicksale();
+    else _reuseListingMap('qsMap');
+    return;
+  }
   // 지역 셀렉트 채우기(BUY+ 지역)
   const sel=document.getElementById('qsRegion');
   if(sel.options.length<=1){
@@ -3021,6 +3039,7 @@ async function loadQuicksale(){
   _qsList = d.listings||[];
   _qsCertList = c.listings||[];
   _qsData={급매:d,찐매물:c};
+  _qsLoadedAt=['ready','partial','empty'].includes(d.state) && ['ready','partial','empty'].includes(c.state)?Date.now():0;
   const cur=_qsMode==='찐매물'?c:d;
   document.getElementById('qsStatus').textContent = qsStatusText(cur);
   renderQuicksale();
@@ -3037,7 +3056,8 @@ async function refreshQuicksale(){
       fetch('/api/certified/refresh',{method:'POST',headers:hdr,body:JSON.stringify(body)}),
     ]);
     if(results.some(r=>!r.ok)) throw new Error('스캔 요청 권한 또는 원천 응답을 확인해 주세요.');
-    await loadQuicksale();
+    _laInvalidateCache();
+    await loadQuicksale(true);
   }catch(e){ document.getElementById('qsStatus').textContent='스캔 실패: '+e; }
   btn.disabled=false; btn.textContent=o;
 }
@@ -3053,6 +3073,7 @@ function _priceLabel(L, fmt){
   return (L && L['가격출처']==='지역평단추정') ? `${s} <span style="font-size:10px;opacity:.75">(지역평균 추정)</span>` : s;
 }
 function renderQuicksale(){
+  _qsRenderedKey=_qsViewKey();
   renderMtFilter('qsMtFilter', renderQuicksale);
   const minGap = +document.getElementById('qsGap').value || 0;
   const src = _qsMode==='찐매물' ? _qsCertList.slice() : _qsList.slice();
@@ -3110,6 +3131,44 @@ function openQuicksaleEvidence(btn){
 const _LA_TYPES=['일반매물','경매','급매','찐매물','청약','재건축'];
 const _LA_COLOR={일반매물:'#2563eb', 경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null, _laAccessDenied=false;   // _laPrice={lo,hi,min,max} 만원, null=미적용
+const _laCache=new Map(), _laRevalidating=new Set();
+let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
+function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
+function _laViewKey(types){
+  return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_laSort,
+    _laPrice?.min,_laPrice?.max]);
+}
+function _laApplyResponse(types,d,preservePrice=false){
+  const price=preservePrice && _laPrice ? {..._laPrice} : null;
+  _laCurrentTypes=types; _laData=d.listings||[];
+  const info=d.meta||{};
+  _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
+  document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전 수집`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`;
+  initLaPriceFilter();
+  if(price && _laPrice){
+    _laPrice.min=Math.min(price.min,_laPrice.hi);
+    _laPrice.max=Math.min(Math.max(price.max,_laPrice.min),_laPrice.hi);
+    document.getElementById('laPriceMin').value=_laPrice.min;
+    document.getElementById('laPriceMax').value=_laPrice.max;
+    drawLaPrice();
+  }
+  renderAllListings();
+}
+function _laRevalidate(types,old){
+  if(_laRevalidating.has(types)) return;
+  const epoch=_laCacheEpoch;
+  _laRevalidating.add(types);
+  fetch('/api/listings/all?types='+encodeURIComponent(types)).then(r=>{
+    if(!r.ok) throw new Error('매물 재검증 실패'); return r.json();
+  }).then(d=>{
+    if(epoch!==_laCacheEpoch) return;
+    _laCache.set(types,{at:Date.now(),data:d});
+    const changed=JSON.stringify(d.listings)!==JSON.stringify(old.listings) || d.asof!==old.asof ||
+      d.meta?.private_access!==old.meta?.private_access;
+    if(changed && _laCurrentTypes===types && [..._laSel].join(',')===types && location.hash.slice(1)==='all')
+      _laApplyResponse(types,d,true);
+  }).catch(()=>{}).finally(()=>_laRevalidating.delete(types));
+}
 let _laSort='opp';          // 정렬 기준 (매수신호는 공통 _mtBuyOnly)
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
 function toggleLaMore(){
@@ -3157,16 +3216,26 @@ function drawLaPrice(){
 async function loadAllListings(){
   _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
   const types=[..._laSel].join(',')||'경매';
+  const gen=++_laRequestGen;
+  const cached=_laCache.get(types);
+  if(cached && _listingCacheFresh(cached.at)){
+    if(_laCurrentTypes!==types) _laApplyResponse(types,cached.data);
+    else if(_laRenderedKey!==_laViewKey(types)) renderAllListings();
+    else _reuseListingMap('laMap');
+    if(Date.now()-cached.at>900000) _laRevalidate(types,cached.data);
+    return;
+  }
   _laAccessDenied=false;
+  const epoch=_laCacheEpoch;
   document.getElementById('laStatus').textContent='불러오는 중…';
   document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">최초 1회는 데이터 수집으로 수십초 걸릴 수 있어요</span></div>';
-  try{ const d=await (await fetch('/api/listings/all?types='+encodeURIComponent(types))).json();
-    _laData=d.listings||[]; const meta=d.meta||{};
-    _laAccessDenied=meta.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
-    document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${meta.data_age_days!=null?` · ${meta.data_age_days}일 전 수집`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`; }
-  catch(e){ _laData=[]; document.getElementById('laStatus').textContent='불러오기 실패'; }
-  initLaPriceFilter();
-  renderAllListings();
+  try{ const r=await fetch('/api/listings/all?types='+encodeURIComponent(types));
+    if(!r.ok) throw new Error('매물 조회 실패');
+    const d=await r.json(); if(gen!==_laRequestGen || epoch!==_laCacheEpoch) return;
+    _laCache.set(types,{at:Date.now(),data:d}); _laApplyResponse(types,d);
+  }catch(e){ if(gen!==_laRequestGen) return;
+    _laData=[]; _laCurrentTypes=''; document.getElementById('laStatus').textContent='불러오기 실패';
+    initLaPriceFilter(); renderAllListings(); }
 }
 function renderLaTypeChips(){
   const el=document.getElementById('laTypeChips'); if(!el) return;
@@ -3183,6 +3252,7 @@ function _laPricePass(x){
   return v>=_laPrice.min && v<=cap;
 }
 function renderAllListings(){
+  _laRenderedKey=_laViewKey(_laCurrentTypes);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역'], x['시그널']) && _laPricePass(x));
   // 정렬 — 시장 참고점수순(기본)·시그널 강한순·가격순. null 지표는 뒤로.
   const opp=x=>x['기회도']??-1, tot=x=>(x['총액']!=null&&x['총액']>0)?x['총액']:null;
@@ -3249,6 +3319,7 @@ function renderMsList(mapId, indices){
   const st=_ms[mapId]; if(!st||!st.listId) return;
   const listEl=document.getElementById(st.listId); if(!listEl) return;
   const items=st.items, opt=st.opt;
+  const limit=st.listLimit||60;
   listEl.innerHTML='';
   const hint=document.createElement('div'); hint.className='ms-viewport-hint';
   hint.textContent=`지도 영역 ${indices.length}건`;
@@ -3259,7 +3330,7 @@ function renderMsList(mapId, indices){
     empty.textContent='이 구역에 표시된 매물이 없습니다. 지도를 옮긴 뒤 「이 지역 매물 다시 찾기」를 눌러보세요.';
     listEl.appendChild(empty); return;
   }
-  indices.forEach(i=>{
+  indices.slice(0,limit).forEach(i=>{
     const it=items[i], s=opt.summary(it,i);
     const row=document.createElement('div'); row.className='ms-row'; row.dataset.i=i;
     row.setAttribute('role','button'); row.tabIndex=0; row.setAttribute('aria-expanded','false');
@@ -3270,6 +3341,13 @@ function renderMsList(mapId, indices){
     det.onkeydown=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); selectMsRow(mapId,i); } };
     listEl.appendChild(row); listEl.appendChild(det);
   });
+  if(indices.length>limit){
+    const more=document.createElement('button'); more.type='button'; more.className='btn';
+    more.style.cssText='display:block;margin:12px auto;padding:8px 16px';
+    more.textContent=`더 보기 (${indices.length-limit}건 남음)`;
+    more.onclick=()=>{st.listLimit=limit+60; renderMsList(mapId,indices);};
+    listEl.appendChild(more);
+  }
 }
 function applyViewportFilter(mapId, opts){
   const st=_ms[mapId]; if(!st||!st.map||!st.items) return;
@@ -3285,11 +3363,14 @@ function applyViewportFilter(mapId, opts){
   if(!indices.length && (st.items||[]).length && !Object.keys(st.coords||{}).length){
     for(let i=0;i<st.items.length;i++) indices.push(i);
   }
-  st.viewIndices=indices; st.lastBoundsKey=_boundsKey(b);
+  const nextBoundsKey=_boundsKey(b);
+  if(st.lastBoundsKey!==nextBoundsKey) st.listLimit=60;
+  st.viewIndices=indices; st.lastBoundsKey=nextBoundsKey;
   // 리스트와 핀을 같은 범위로 — 화면 밖 핀을 지우지 않으면 "갱신 안 됨"처럼 보인다
+  const visible=new Set(indices);
   Object.keys(st.markers||{}).forEach(k=>{
     const i=+k, mk=st.markers[i]; if(!mk) return;
-    const on=indices.includes(i);
+    const on=visible.has(i);
     if(on && !st.map.hasLayer(mk)) mk.addTo(st.map);
     if(!on && st.map.hasLayer(mk)) st.map.removeLayer(mk);
   });
@@ -3302,6 +3383,11 @@ async function selectMsRow(mapId, i){
   const selectionGen=st._selectionGen=(st._selectionGen||0)+1;
   const listEl=document.getElementById(st.listId);
   let row=listEl&&listEl.querySelector(`.ms-row[data-i="${i}"]`);
+  if(!row && st.viewIndices?.includes(i)){
+    st.listLimit=Math.ceil((st.viewIndices.indexOf(i)+1)/60)*60;
+    renderMsList(mapId,st.viewIndices);
+    row=listEl&&listEl.querySelector(`.ms-row[data-i="${i}"]`);
+  }
   if(!row&&st.coords&&st.coords[i]&&st.map.getBounds().contains(L.latLng(st.coords[i][0],st.coords[i][1]))){
     applyViewportFilter(mapId);
     row=listEl&&listEl.querySelector(`.ms-row[data-i="${i}"]`);
@@ -3332,6 +3418,7 @@ async function selectMsRow(mapId, i){
 async function mapSplit(listId, mapId, items, opt){
   const st=initMap(mapId);
   st._selectionGen=(st._selectionGen||0)+1;
+  st.listLimit=60;
   const keepView=!!st._vpLocked;   // 필터·데이터 재로드 시에도 사용자가 옮겨 둔 화면 유지
   st.listId=listId; st.items=items; st.opt=opt; st._mapSplitGen=(st._mapSplitGen||0)+1;
   const gen=st._mapSplitGen;
@@ -4492,16 +4579,31 @@ function drawCycleMini(region, z0, last){
 function redrawChart(){ if(_lastM && selected) drawChart(selected, _lastM, _lastSig); }
 async function doRefresh(){
   const btn = document.getElementById('refresh'); btn.disabled = true; const old = btn.textContent; btn.textContent = '갱신 중…';
-  try { const r = await (await fetch('/api/refresh', {method:'POST'})).json(); await loadData();
+  try { const r = await (await fetch('/api/refresh', {method:'POST'})).json(); await loadData(true);
     btn.textContent = `✓ ${r.last_date}`; } catch(e){ btn.textContent = '갱신 실패'; }
   setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
 }
-async function loadData(){
-  meta = await (await fetch('/api/meta')).json();
+const _MARKET_CACHE_KEY='signal-apt-market-v1', _DAY_MS=86400000;
+let _marketRevalidation=null, _marketGeneration=0;
+function _marketCached(){
+  try{ const entry=JSON.parse(localStorage.getItem(_MARKET_CACHE_KEY));
+    return entry && Date.now()-entry.at<_DAY_MS && Array.isArray(entry.data?.signals) && entry.data?.meta?.last_date ? entry : null;
+  }catch(e){ return null; }
+}
+function _marketRemember(data){
+  try{ localStorage.setItem(_MARKET_CACHE_KEY,JSON.stringify({at:Date.now(),data})); }catch(e){}
+}
+async function _fetchMarketData(){
+  const get=async url=>{const r=await fetch(url); if(!r.ok) throw new Error(url+' unavailable'); return r.json();};
+  const [freshMeta,signals,regime,macro]=await Promise.all([
+    get('/api/meta'),get('/api/signals'),get('/api/regime').catch(()=>null),get('/api/macro').catch(()=>null)]);
+  return {meta:freshMeta,signals,regime,macro};
+}
+function _applyMarketData(data){
+  meta=data.meta; allSignals=data.signals;
   document.getElementById('dateTxt').textContent = `최신 ${meta.last_date}`;
-  allSignals = await (await fetch('/api/signals')).json();
-  try {
-    const rg = await (await fetch('/api/regime')).json();
+  {
+    const rg = data.regime;
     const box = document.getElementById('regimeBox');
     if(rg && rg.phase){
       const C = {green:'#22c55e', yellow:'#ca8a04', orange:'#ea580c', red:'#ef4444'}[rg.color]||'#94a3b8';
@@ -4510,16 +4612,36 @@ async function loadData(){
         + `<span style="color:${C};font-weight:700">${rg.phase}</span>`
         + _regimeEvidenceHtml(rg, true);
     } else box.style.display='none';
-  } catch(e){}
-  try {
-    const mc = await (await fetch('/api/macro')).json();
-    if(mc.dates) window._macro = {
+  }
+  {
+    const mc = data.macro;
+    if(mc?.dates) window._macro = {
       dates: mc.dates.map(s=>`${s.slice(0,4)}-${s.slice(4,6)}-01`),
       구매력: mc.구매력, 대출금리: mc.대출금리 };
-  } catch(e){}
+  }
   renderZoneLegend(); renderList();
   const keep = selected && allSignals.find(r=>r.region===selected);
-  selectRegion(keep ? selected : (allSignals.find(r=>active.has(r.signal))||allSignals[0]).region);
+  if(allSignals.length) selectRegion(keep ? selected : (allSignals.find(r=>active.has(r.signal))||allSignals[0]).region);
+}
+async function loadData(force=false){
+  const generation=++_marketGeneration;
+  const cached=force?null:_marketCached();
+  if(cached){
+    _applyMarketData(cached.data);
+    // 오래된 화면은 즉시 보여주고, 15분 뒤부터 백그라운드 재검증한다.
+    if(Date.now()-cached.at>900000 && !_marketRevalidation){
+      _marketRevalidation=_fetchMarketData().then(fresh=>{
+        if(generation!==_marketGeneration) return;
+        _marketRemember(fresh);
+        if(JSON.stringify(fresh)!==JSON.stringify(cached.data)) _applyMarketData(fresh);
+      }).catch(()=>{}).finally(()=>{_marketRevalidation=null;});
+    }
+    return;
+  }
+  const fresh=await _fetchMarketData();
+  if(generation!==_marketGeneration) return;
+  _marketRemember(fresh);
+  _applyMarketData(fresh);
 }
 let _showHist=false, _histCache={}, _lastM=null, _lastSig=null, _lastVol=null;
 // 오버레이 상태 — 전세수급 배경 구간(기본 off) + 경기 국면 밴드
