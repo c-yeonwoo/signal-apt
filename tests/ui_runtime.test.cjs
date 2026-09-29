@@ -54,6 +54,12 @@ test('grouped map pins keep per-listing selection and one marker per group', () 
   assert.notEqual(st.markers[0],st.markers[2]);
   assert.match(st.markers[0].popup,/2개 매물/);
   assert.equal(layers.size,2);
+  const general=[{단지명:'가상단지',지역:'노원구',호가:75000,평형:25.7},
+    {단지명:'가상단지',지역:'노원구',호가:74000,평형:25.7}];
+  ctx.plotPins('test',general,{0:[37.65,127.07],1:[37.65,127.07]},
+    {label:x=>x.단지명,popupKind:'일반매물',popupPrice:x=>x.호가},{keepView:true});
+  assert.match(st.markers[0].popup,/일반매물 · 75000 · 25.7평/);
+  assert.doesNotMatch(st.markers[0].popup,/가격 미확인/);
 });
 
 test('general listing status distinguishes personal-only, source failure, and limited coverage', () => {
