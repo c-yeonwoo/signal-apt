@@ -1,5 +1,9 @@
 """공식 단지명 매칭과 개인정보 권한을 독립적으로 검증한다."""
 
+from io import BytesIO
+from urllib.error import HTTPError
+
+import pytest
 from fastapi.testclient import TestClient
 
 from realty_signal import api, auth, db
@@ -74,6 +78,36 @@ def test_incomplete_official_list_cannot_make_false_unique_match(monkeypatch):
         {"kaptCode": "A10000001", "kaptName": "상계주공3단지", "bjdCode": "1135010500"}],
         "totalCount": None}))
     assert kapt.lookup("상계주공3단지", "11350")["status"] == "unavailable"
+
+
+def test_kapt_gateway_access_denial_is_actionable_and_does_not_leak_key(monkeypatch):
+    monkeypatch.setattr(kapt.db, "kv_get", lambda *args, **kwargs: None)
+    monkeypatch.setattr(kapt.config, "public_data_key", lambda: "test-secret-key")
+
+    def denied(request, timeout):
+        raise HTTPError(request.full_url, 403, "Forbidden", {},
+                        BytesIO(b"SERVICE_KEY_IS_NOT_REGISTERED_ERROR"))
+
+    monkeypatch.setattr(kapt, "urlopen", denied)
+    found = kapt.lookup("상계주공3단지", "11350")
+    assert found["status"] == "approval_required"
+    assert "활용신청" in found["reason"]
+    assert found["action_url"] == kapt.LIST_SOURCE_URL
+    assert "test-secret-key" not in str(found)
+
+
+def test_kapt_gateway_other_http_error_does_not_guess_approval(monkeypatch):
+    def failed(request, timeout):
+        raise HTTPError(request.full_url, 503, "Unavailable", {}, BytesIO(b"temporary error"))
+
+    monkeypatch.setattr(kapt, "urlopen", failed)
+    with pytest.raises(OSError, match="K-APT HTTP request failed") as error:
+        kapt._get(kapt.LIST_URL, {"serviceKey": "test-secret-key"})
+    assert "test-secret-key" not in str(error.value)
+
+
+def test_kapt_accepts_official_response_envelope():
+    assert kapt._body({"response": _raw({"totalCount": 1})})["totalCount"] == 1
 
 
 def test_kapt_endpoint_rechecks_personal_permission(tmp_path, monkeypatch):

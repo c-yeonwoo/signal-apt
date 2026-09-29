@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import re
+from urllib.error import HTTPError
 from urllib.parse import unquote, urlencode
 from urllib.request import Request, urlopen
 
@@ -13,19 +14,40 @@ LIST_URL = "https://apis.data.go.kr/1613000/AptListService4/getSigunguAptList4"
 BASIC_URL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5"
 DETAIL_URL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusDtlInfoV5"
 SOURCE_URL = "https://www.data.go.kr/data/15058453/openapi.do"
+LIST_SOURCE_URL = "https://www.data.go.kr/data/15057332/openapi.do"
+_ACCESS_ERRORS = (b"SERVICE_KEY_IS_NOT_REGISTERED_ERROR", b"SERVICE_ACCESS_DENIED_ERROR",
+                  b"PERMISSION_DENIED")
+
+
+class KaptAccessError(ValueError):
+    """공공데이터포털이 이 서비스에 대한 키 접근을 거부했다."""
 
 
 def _get(url: str, params: dict) -> dict:
     req = Request(url + "?" + urlencode(params), headers={"User-Agent": "realty-signal/1.0"})
-    with urlopen(req, timeout=8) as response:  # noqa: S310 - fixed official hosts
-        raw = response.read(2_000_001)
+    try:
+        with urlopen(req, timeout=8) as response:  # noqa: S310 - fixed official hosts
+            raw = response.read(2_000_001)
+    except HTTPError as exc:
+        # HTTPError의 URL에는 인증키가 있으므로 예외 문자열을 화면이나 로그에 전달하지 않는다.
+        error_body = exc.read(4096)
+        if any(code in error_body for code in _ACCESS_ERRORS):
+            raise KaptAccessError("K-APT service access denied") from None
+        raise OSError("K-APT HTTP request failed") from None
     if len(raw) > 2_000_000:
         raise ValueError("K-APT response too large")
     return jsonx.loads(raw)
 
 
 def _body(raw: dict) -> dict:
-    if not isinstance(raw, dict) or str((raw.get("header") or {}).get("resultCode")) != "00":
+    if isinstance(raw, dict) and isinstance(raw.get("response"), dict):
+        raw = raw["response"]
+    header = raw.get("header") if isinstance(raw, dict) else None
+    if not isinstance(header, dict):
+        raise ValueError("K-APT header missing")
+    if any(code.decode() in str(header.get("resultMsg") or "") for code in _ACCESS_ERRORS):
+        raise KaptAccessError("K-APT service access denied")
+    if str(header.get("resultCode")) != "00":
         raise ValueError("K-APT service unavailable")
     body = raw.get("body")
     if not isinstance(body, dict):
@@ -123,5 +145,8 @@ def lookup(name: str, sigungu: str) -> dict:
                 "parking_status": "observed" if parking is not None else "unavailable",
                 "retrieved_at": datetime.now(timezone.utc).date().isoformat(),
                 "note": "공식 등록 단지 정보입니다. 주차 가능 여부·시공 품질·실제 출입구는 뜻하지 않습니다."}
+    except KaptAccessError:
+        return {**source, "status": "approval_required", "action_url": LIST_SOURCE_URL,
+                "reason": "K-APT 공식 API 접근이 거부됐습니다. 공공데이터포털에서 단지 목록과 기본 정보 두 서비스의 활용신청·승인 및 운영 키를 확인해 주세요."}
     except (OSError, ValueError, TypeError):
         return {**source, "status": "unavailable", "reason": "K-APT 응답을 확인하지 못했습니다. 활용 승인과 API 상태를 확인해 주세요."}
