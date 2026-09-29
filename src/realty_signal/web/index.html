@@ -7158,7 +7158,8 @@ function _analysisRender(d){
         <div class="analysis-muted">K-APT ${esc(k.retrieved_at||'조회일 미확인')} 조회 · ${esc(k.address||'주소 미확인')}<br>${esc(k.note||'주차 가능 여부·시공 품질을 뜻하지 않습니다.')}
         · <a href="${esc(k.source_url)}" target="_blank" rel="noopener noreferrer">공식 출처 ↗</a></div>`
       : k.status==='loading'?'<div class="analysis-muted">K-APT 조회 중…</div>'
-      : `<div class="analysis-muted">${esc(k.reason||'단지명·시군구를 대조해 K-APT 공식 정보를 확인할 수 있습니다.')}</div>
+      : `<div class="analysis-muted">${esc(k.reason||'단지명·시군구를 대조해 K-APT 공식 정보를 확인할 수 있습니다.')}
+         ${k.status==='approval_required'?`<br><a href="https://www.data.go.kr/data/15057332/openapi.do" target="_blank" rel="noopener noreferrer">단지 목록 활용신청 ↗</a> · <a href="https://www.data.go.kr/data/15058453/openapi.do" target="_blank" rel="noopener noreferrer">기본 정보 활용신청 ↗</a>`:''}</div>
          <button type="button" class="btn" onclick="_analysisLoadKapt()">K-APT 세대수·시공사·주차 확인</button>`;
     html+=fold('complex','단지에서 확인한 사실',`${facts.length?`<div class="analysis-points">${facts.map(x=>`<span>${x}</span>`).join('')}</div>`:'<div class="analysis-muted">건축물대장 정보는 확인 중입니다.</div>'}
       <div style="margin-top:9px">${kaptBody}</div>`);
