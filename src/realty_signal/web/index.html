@@ -2999,6 +2999,7 @@ async function loadGeneralListings(force=false){
         <a class="btn" href="https://m.karhanbang.com/mptl/main2" target="_blank" rel="noopener noreferrer">한방 열기 ↗</a></div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     geoq:m=>`${m['지역']||''} ${m['단지명']||''}`, regionOf:m=>m['지역'],
+    popupKind:'일반매물', popupPrice:m=>m['호가'],
     label:m=>`<b>${esc(m['단지명'])}</b><br>${_eok(m['호가'])} · 전용 ${m['전용면적']||'–'}㎡`,
   });
 }
@@ -3587,7 +3588,8 @@ function plotPins(mapId, items, coords, opt, opts){
     const icon=L.divIcon({className:'',html:`<div class="mpin${multi?' group':''}${isfb?' fb':''}" style="background:${color}">${multi?group.length>99?'99+':group.length:''}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]});
     const lbl=opt.label(it)+(isfb?`<br><span style="color:#94a3b8;font-size:11px">※ 위치 근사</span>`:'');
     const popup=multi?`<b>${esc(it['단지명']||'매물 묶음')}</b> · ${group.length}개 매물<br><span style="font-size:11px;color:var(--dim)">같은 단지명·표시 좌표 묶음 · 개별 매물을 선택하세요</span>
-      ${group.slice(0,8).map(j=>`<button type="button" class="btn" data-listing-i="${j}" style="display:block;margin-top:5px;width:100%;text-align:left">${esc(items[j]['유형']||'매물')} · ${items[j]['총액']?_eok(items[j]['총액']):'가격 미확인'}${items[j]['평형']?` · ${esc(items[j]['평형'])}평`:''}</button>`).join('')}
+      ${group.slice(0,8).map(j=>{const item=items[j], price=opt.popupPrice?opt.popupPrice(item):item['총액'];
+        return `<button type="button" class="btn" data-listing-i="${j}" style="display:block;margin-top:5px;width:100%;text-align:left">${esc(opt.popupKind||item['유형']||'매물')} · ${price!=null?_eok(price):'가격 미확인'}${item['평형']?` · ${esc(item['평형'])}평`:''}</button>`;}).join('')}
       ${group.length>8?`<div style="font-size:11px">나머지 ${group.length-8}개는 왼쪽 목록에서 선택</div>`:''}`
       :lbl+'<div style="margin-top:4px;font-size:11px;color:var(--dim)">다시 클릭 · 목록 접기</div>';
     const mk=L.marker(c,{icon}).bindPopup(popup);
