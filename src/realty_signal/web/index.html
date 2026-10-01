@@ -29,8 +29,8 @@
   }
   * { box-sizing:border-box; }
   /* 통일 컨트롤: 셀렉트·인풋·필터바 */
-  select, input[type=number], input[type=text], .ctrl {
-    font-size:14px; padding:9px 12px; border:1px solid var(--line); border-radius:10px;
+  select, input[type=number], input[type=text], input[type=password], .ctrl {
+    font-size:16px; padding:12px 12px; min-height:44px; border:1px solid var(--line); border-radius:10px;
     background:#fff; color:var(--txt); outline:none; }
   select:focus, input:focus, .ctrl:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
   /* 넓고 둥근 검색창 */
@@ -38,14 +38,14 @@
     box-shadow:0 1px 2px rgba(2,32,71,.04); }
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
   .page-head { font-size:20px; font-weight:600; letter-spacing:-0.02em; margin:0 0 6px; color:var(--txt); }
-  .page-sub { color:var(--dim); font-size:13px; margin:0 0 18px; line-height:1.5; max-width:36em; }
+  .page-sub { color:var(--dim); font-size:16px; margin:0 0 18px; line-height:1.55; max-width:40em; }
   .dash-layout { display:grid; grid-template-columns:1fr 1fr; gap:20px 28px; align-items:start; }
   .dash-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
-  .dash-col-label { font-size:15px; font-weight:700; color:var(--txt); letter-spacing:-0.02em;
+  .dash-col-label { font-size:17px; font-weight:700; color:var(--txt); letter-spacing:-0.02em;
     margin:2px 0 4px; }
   .dash-more { margin-top:10px; }
-  .dash-more > summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--accent);
-    list-style:none; user-select:none; }
+  .dash-more > summary { cursor:pointer; font-size:16px; font-weight:700; color:var(--accent);
+    list-style:none; user-select:none; min-height:48px; display:flex; align-items:center; }
   .dash-more > summary::-webkit-details-marker { display:none; }
   .dash-more > summary::after { content:' ▾'; color:var(--dim); font-weight:400; }
   .dash-more[open] > summary::after { content:' ▴'; }
@@ -77,13 +77,13 @@
   .mappin.sel { width:24px; height:24px; box-shadow:0 0 0 4px var(--ring),0 2px 6px rgba(0,0,0,.3); z-index:1000; }
   /* 매물 발견 세그먼트 탭 */
   .mtabs { display:flex; gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel); flex-wrap:wrap; align-items:stretch; }
-  .mtabs .subtab { display:flex; flex-direction:column; align-items:center; gap:1px; border:none; border-right:1px solid var(--line);
-    background:var(--panel); color:var(--txt); cursor:pointer; padding:9px 20px; font-size:15px; font-weight:700; line-height:1.15; }
+  .mtabs .subtab { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:none; border-right:1px solid var(--line);
+    background:var(--panel); color:var(--txt); cursor:pointer; padding:10px 22px; min-height:52px; font-size:17px; font-weight:700; line-height:1.2; }
   .mtabs .subtab:last-child { border-right:none; }
-  .mtabs .subtab small { font-size:10px; font-weight:500; color:var(--dim); }
+  .mtabs .subtab small { font-size:13px; font-weight:600; color:var(--dim); }
   .mtabs .subtab:hover { background:var(--accent-weak); }
-  .mtabs .subtab.on { background:var(--accent-weak); color:var(--accent); }
-  .mtabs .subtab.on small { color:var(--dim); }
+  .mtabs .subtab.on { background:var(--accent); color:#fff; }
+  .mtabs .subtab.on small { color:rgba(255,255,255,.9); }
   .mtabs .subtab.more { color:var(--dim); font-weight:600; background:var(--bg); }
   .mtabs .subtab.more.open { color:var(--txt); background:var(--accent-weak); }
   .mtabs .subtab.more.on { background:var(--accent-weak); color:var(--accent); }
@@ -105,43 +105,46 @@
     background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; margin-bottom:14px; }
   .filterbar label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:7px; white-space:nowrap; }
   .filterbar .status { color:var(--dim); font-size:12.5px; margin-left:auto; }
-  body { margin:0; font:15px/1.6 "Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+  body { margin:0; font:16px/1.65 "Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
          background:var(--bg); color:var(--txt); -webkit-font-smoothing:antialiased; }
   header { padding:14px 28px; border-bottom:1px solid var(--line); display:flex;
            align-items:center; gap:16px; flex-wrap:wrap; min-height:60px; box-sizing:border-box;
            background:var(--panel); position:relative; z-index:600; }
   header h1 { font-size:17px; margin:0; white-space:nowrap; font-weight:600; letter-spacing:-0.02em; }
   .tabs { display:flex; gap:2px; }
-  .tab { padding:8px 14px; border:none; border-radius:8px; background:transparent;
-         color:var(--dim); cursor:pointer; font-size:13.5px; font-weight:500; }
-  .tab:hover { color:var(--txt); background:rgba(17,24,39,.04); }
-  .tab.on { color:var(--accent); background:var(--accent-weak); font-weight:600; }
+  .tab { padding:10px 16px; min-height:44px; border:none; border-radius:10px; background:transparent;
+         color:var(--txt); cursor:pointer; font-size:16px; font-weight:600; }
+  .tab:hover { background:rgba(17,24,39,.05); }
+  .tab.on { color:#fff; background:var(--accent); }
   .date { color:var(--dim); font-size:12px; white-space:nowrap; }
   #refresh { padding:7px 14px; border:1px solid #3b82f6; border-radius:8px;
              background:#eef2f7; color:var(--accent); cursor:pointer; font-size:13px; white-space:nowrap; }
   #refresh:disabled { opacity:.5; cursor:wait; }
   .right { margin-left:auto; display:flex; gap:12px; align-items:center; }
   .wrap { display:flex; height:calc(100vh - var(--hh, 70px)); }
-  .side { width:264px; min-width:0; border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+  .side { width:320px; min-width:0; border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; background:var(--panel); }
   #regimeBox { min-width:0; overflow:hidden; overflow-wrap:anywhere; word-break:break-word; line-height:1.45; }
   /* 사이드바 필터 */
-  .sfilters { padding:10px 12px; border-bottom:1px solid var(--line); background:#f1f5f9;
-              display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
-  .sfilters #search, .sfilters #groupFilter { width:100%; padding:7px 10px; background:#ffffff;
-              border:1px solid var(--line); border-radius:8px; color:var(--txt); outline:none; font-size:13px; }
-  .filters { display:flex; gap:5px; flex-wrap:wrap; }
-  .chip { padding:3px 9px; border:1px solid var(--line); border-radius:12px; cursor:pointer;
-          background:var(--panel); color:var(--dim); font-size:11px; user-select:none; }
-  /* 차트바 칩(지난 시그널·해설·전세수급 구간·출처)은 크게 — 가시성 */
-  .chartbar .chip { font-size:13px; padding:7px 14px; border-radius:14px; font-weight:600; color:var(--txt); }
+  .sfilters { padding:14px; border-bottom:1px solid var(--line); background:#f8fafc;
+              display:flex; flex-direction:column; gap:10px; flex:0 0 auto; }
+  .sfilters #search, .sfilters #groupFilter { width:100%; font-size:16px; min-height:48px; }
+  .side-filter-btn { border:1px solid var(--line); background:var(--panel); color:var(--txt); cursor:pointer;
+              font-size:15px; font-weight:700; min-height:44px; padding:8px 12px; border-radius:10px; text-align:left; }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { padding:8px 12px; min-height:36px; border:1px solid var(--line); border-radius:12px; cursor:pointer;
+          background:var(--panel); color:var(--txt); font-size:14px; font-weight:600; user-select:none;
+          display:inline-flex; align-items:center; }
+  .chartbar .chip { font-size:15px; padding:8px 14px; min-height:40px; border-radius:14px; font-weight:700; }
   .chip.on { color:#fff; border-color:var(--accent); background:var(--accent); }
   #list { flex:1; overflow:auto; }
-  .row { padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex;
+  .row { padding:12px 14px; min-height:56px; border-bottom:1px solid var(--line); cursor:pointer; display:flex;
          align-items:center; gap:8px; flex-wrap:wrap; }
-  .row:hover, .row.sel { background:#eef2f7; }
-  .row .nm { font-weight:600; }
-  .row .mn { width:100%; color:var(--dim); font-size:11px; }
-  .badge { font-size:11px; padding:3px 8px; border-radius:6px; font-weight:600; white-space:nowrap;
+  .row:hover { background:#f8fafc; }
+  .row.sel { background:var(--accent-weak); }
+  .row .nm { font-weight:700; font-size:16px; }
+  .row .mn { width:100%; color:var(--dim); font-size:14px; line-height:1.45; }
+  .row .fav { font-size:20px; line-height:1; padding:4px 2px; }
+  .badge { font-size:13px; padding:4px 8px; border-radius:6px; font-weight:700; white-space:nowrap;
            border:1px solid transparent; letter-spacing:-0.01em; }
   /* 배지 색은 :root 토큰에서만 가져온다 — 하드코딩하면 JS 팔레트와 또 갈라진다.
      투명 배경/테두리는 color-mix 로 같은 토큰에서 파생시킨다. */
@@ -172,10 +175,10 @@
   .astep { font-size:13px; color:var(--txt); background:var(--panel); border:1px solid var(--line);
            border-radius:var(--r-md); padding:9px 12px; }
   .astep b:first-child { display:inline-block; width:18px; }
-  .navlink { border:none; background:none; color:var(--dim); cursor:pointer; font-size:13px;
-             font-weight:600; padding:6px 8px; border-radius:8px; line-height:1; }
+  .navlink { border:none; background:none; color:var(--txt); cursor:pointer; font-size:15px;
+             font-weight:700; padding:8px 10px; min-height:44px; border-radius:8px; line-height:1; }
   .navlink:hover { color:var(--accent); background:var(--accent-weak); }
-  .acct-item { display:block; padding:8px 12px; font-size:13px; color:var(--txt); cursor:pointer;
+  .acct-item { display:block; padding:12px 14px; font-size:16px; color:var(--txt); cursor:pointer;
                border-radius:8px; white-space:nowrap; }
   .acct-item:hover { background:var(--accent-weak); }
   .footer { padding:8px 16px 12px; border-top:1px solid var(--line); display:flex;
@@ -205,9 +208,9 @@
   .auth-field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.14); }
   .zlegend { display:flex; gap:4px; margin-left:auto; align-items:center; }
   /* 지역 트리 */
-  .ghead { padding:8px 12px; font-weight:700; font-size:13px; cursor:pointer; background:#f1f5f9;
+  .ghead { padding:12px 14px; font-weight:700; font-size:15px; cursor:pointer; background:#f1f5f9;
            border-bottom:1px solid var(--line); display:flex; align-items:center; gap:6px; position:sticky; top:0; }
-  .ghead .cnt { color:var(--dim); font-weight:400; font-size:11px; }
+  .ghead .cnt { color:var(--dim); font-weight:600; font-size:13px; }
   .shead { padding:6px 12px 6px 22px; font-weight:600; cursor:pointer; display:flex; align-items:center;
            gap:6px; border-bottom:1px solid var(--line); background:#ffffff; }
   .caret { display:inline-block; width:10px; color:var(--dim); transition:transform .1s; }
@@ -219,9 +222,10 @@
   .side.collapsed { width:0; min-width:0; border:none; overflow:hidden; }
   .chartbar { display:flex; align-items:center; gap:8px; padding:7px 12px;
               border-bottom:1px solid var(--line); flex-wrap:wrap; position:relative; }
-  #sideToggle { background:var(--panel); border:1px solid var(--line); color:var(--dim);
-                border-radius:6px; cursor:pointer; padding:3px 9px; font-size:12px; white-space:nowrap; }
-  #sideToggle:hover { color:#fff; }
+  #sideToggle { background:var(--panel); border:1px solid var(--line); color:var(--txt);
+                border-radius:10px; cursor:pointer; padding:8px 12px; min-height:40px; font-size:15px;
+                font-weight:700; white-space:nowrap; }
+  #sideToggle:hover { color:var(--accent); background:var(--accent-weak); }
   .haesol-panel { padding:11px 14px; border-bottom:1px solid var(--line); background:#ffffff;
                   font-size:13px; line-height:1.65; display:none; }
   .haesol-panel.open { display:block; }
@@ -316,15 +320,15 @@
   .params input { width:64px; background:#ffffff; border:1px solid var(--line); color:var(--txt);
                   border-radius:6px; padding:4px 6px; }
   .btn { display:inline-flex; align-items:center; justify-content:center; vertical-align:middle;
-         line-height:1.15; white-space:nowrap; padding:6px 12px; border:1px solid var(--line);
-         border-radius:8px; background:#eef2f7; color:#475569; cursor:pointer; font-size:13px; box-sizing:border-box; }
-  .btn.primary { border-color:#3b82f6; color:var(--accent); }
+         line-height:1.2; white-space:nowrap; padding:10px 16px; min-height:44px; border:1px solid var(--line);
+         border-radius:10px; background:#fff; color:var(--txt); cursor:pointer; font-size:15px; font-weight:700; box-sizing:border-box; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   table { width:100%; border-collapse:collapse; font-size:14px; }
   th,td { padding:7px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th:first-child,td:first-child,th.l,td.l { text-align:left; }
   thead th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--bg); }
   tr.imminent { background:#fee2e233; } tr.unprofit td { opacity:.5; }
-  .pill { font-size:10px; padding:1px 6px; border-radius:8px; background:#eef2f7; color:var(--dim); }
+  .pill { font-size:13px; padding:3px 8px; border-radius:8px; background:#eef2f7; color:var(--dim); font-weight:600; }
   .strat { display:flex; gap:12px; flex-wrap:wrap; }
   .scard { flex:1; min-width:180px; background:var(--panel); border:1px solid var(--line);
            border-radius:10px; padding:12px 14px; }
@@ -354,7 +358,9 @@
     .right { width:100%; order:2; flex-wrap:wrap; }
     /* 시그널: 사이드바 위 + 차트 아래로 스택 */
     .wrap { flex-direction:column; height:auto; }
-    .side { width:100%; max-height:42vh; border-right:none; border-bottom:1px solid var(--line); }
+    .side { width:100%; max-height:48vh; border-right:none; border-bottom:1px solid var(--line); }
+    .mtabs .subtab { flex:1 1 120px; padding:10px 8px; font-size:16px; min-height:48px; }
+    #groupSubnav { padding:8px 12px; }
     .side.collapsed { max-height:0; border:none; }
     .main { min-height:64vh; }
     /* 좌우 분할 → 목록 위 + 지도 아래로 스택 */
@@ -377,7 +383,9 @@
       max-width:none !important; max-height:none !important; min-width:0 !important;
       border-radius:0 !important; border:none !important; }
   }
-  button:focus-visible, [role="button"]:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+  button:focus-visible, [role="button"]:focus-visible, summary:focus-visible, .chip:focus-visible, .row:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  .subnav { padding:12px 20px; border-bottom:1px solid var(--line); gap:12px; align-items:center; flex-wrap:wrap; background:var(--panel); }
+  #groupSubLabel { display:none; }
 </style>
 </head>
 <body class="tab-signal">
@@ -400,7 +408,7 @@
     <button class="tab on" data-group="home" onclick="switchTab('dashboard')" title="다음 할 일과 확인할 후보">홈</button>
     <button class="tab" data-group="criteria" onclick="switchTab('mypage')" title="예산·출퇴근·주거 조건">내 조건</button>
     <button class="tab" data-group="find" onclick="switchTab('watch')" title="찜한 매물·청약과 관심단지">내 후보</button>
-    <button class="tab" data-group="browse" onclick="switchTab('all')" title="매물 탐색과 시장 참고 자료">더 찾아보기</button>
+    <button class="tab" data-group="browse" onclick="switchTab('all')" title="매물 목록과 시그널 지도">매물 찾기</button>
   </div>
   <div class="right">
     <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">가이드</button>
@@ -419,7 +427,7 @@
   </div>
 </header>
 
-<div id="groupSubnav" style="padding:10px 16px;border-bottom:1px solid var(--line);gap:12px;align-items:center;display:none">
+<div id="groupSubnav" class="subnav" style="display:none">
   <span id="groupSubLabel" style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
   <div class="mtabs" id="groupSubTabs"></div>
   <span id="listingFocus" style="margin-left:auto;font-size:12px;color:var(--dim);display:none"></span>
@@ -428,7 +436,7 @@
 <!-- 대시보드 홈 -->
 <div id="view-dashboard" style="display:none;padding:24px 28px 48px;max-width:1440px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto;box-sizing:border-box;width:100%">
   <div id="dashHello" style="font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-bottom:6px"></div>
-  <div id="dashSub" class="page-sub" style="margin-bottom:20px">할 일·후보와 주간 동향</div>
+  <div id="dashSub" class="page-sub" style="margin-bottom:20px">이번 주 할 일과 살 수 있는 집</div>
   <div id="dashBody"></div>
 </div>
 
@@ -438,16 +446,16 @@
     <div class="side">
       <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help;flex:0 0 auto"></div>
       <div class="sfilters">
-        <button id="filterToggle" onclick="toggleFilters()" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;text-align:left;display:flex;align-items:center;gap:4px">지역 검색·필터 <span id="filterCaret">▾</span></button>
+        <input id="search" type="text" placeholder="지역 이름 검색" aria-label="지역 이름 검색" />
+        <select id="groupFilter" onchange="renderList()" aria-label="지역 범위">
+          <option value="">전체 지역</option>
+          <option value="서울">서울 · 자치구</option>
+          <option value="경기">경기 · 시군구</option>
+          <option value="인천">인천</option>
+          <option value="지방·광역">지방 · 광역</option>
+        </select>
+        <button id="filterToggle" class="side-filter-btn" type="button" onclick="toggleFilters()">신호·급지 <span id="filterCaret">▾</span></button>
         <div id="filterPanel" style="display:none;flex-direction:column;gap:8px">
-          <input id="search" placeholder="지역 검색" />
-          <select id="groupFilter" onchange="renderList()">
-            <option value="">전체 지역</option>
-            <option value="서울">서울 · 자치구</option>
-            <option value="경기">경기 · 시군구</option>
-            <option value="인천">인천</option>
-            <option value="지방·광역">지방 · 광역</option>
-          </select>
           <div class="filters" id="filters"></div>
         </div>
       </div>
@@ -455,7 +463,7 @@
     </div>
     <div class="main">
       <div class="chartbar">
-        <button id="sideToggle" onclick="toggleSide()" title="목록 접기/펼치기" style="font-size:15px">◀</button>
+        <button id="sideToggle" onclick="toggleSide()" title="지역 목록 접기/펼치기" type="button">◀ 지역</button>
         <span id="sigbadge" style="font-size:18px;font-weight:700"></span>
         <span id="sigsub" style="color:var(--dim);font-size:12.5px"></span>
         <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 매물을 예산 순으로 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 매물 ›</button>
@@ -775,7 +783,7 @@
       <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 이번 주 할 일과 살 수 있는 가격을 보고, 예산 안 집부터 봅니다.</div>
       <div class="astep"><b style="color:var(--accent)">2</b> <b>내 조건</b> — 자본·소득·출퇴근을 저장합니다. 추천과 알림이 이 숫자를 따라갑니다.</div>
       <div class="astep"><b style="color:var(--accent)">3</b> <b>내 후보</b> — 찜한 매물·청약과 관심단지의 가격·일정 변화를 봅니다.</div>
-      <div class="astep"><b style="color:var(--accent)">4</b> <b>더 찾아보기</b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다.</div>
+      <div class="astep"><b style="color:var(--accent)">4</b> <b>매물 찾기</b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다.</div>
     </div>
     <p style="color:var(--dim);font-size:11px;margin-top:20px">※ 모든 지표는 참고용입니다. 투자 판단과 실거래 확인은 이용자 책임입니다.</p>
   </div>
@@ -1637,7 +1645,7 @@ function routeFromHash(){
 // ===== 대시보드 홈 — 좌:할 일·후보 / 우:주간 동향 =====
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;${extra}">${inner}</div>`;
-const _dashH=t=>`<div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:-0.01em">${t}</div>`;
+const _dashH=t=>`<div style="font-size:17px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:-0.01em">${t}</div>`;
 // 요청 성공만으로 '읽음' 처리하면 모바일에서 화면 아래에 있던 변화가 사라진다.
 // 실제로 뷰포트에 들어온 카드만 다음 비교 기준점으로 확정한다.
 const _deliveryAcked=new Set(), _deliveryAckPending=new Set();
@@ -2311,9 +2319,9 @@ async function _loadBuyingPower(){
   const tag=(confirmed && !stale) ? '저장한 계산 · 은행 승인 전' : (stale ? '다시 계산이 필요합니다' : '아직 저장하지 않음');
   const tagCol=(confirmed && !stale) ? 'var(--dim)' : '#b45309';
   const conclusion=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
-      <span style="font-size:26px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">최대 ${_eok(d['최대매수가'])}</span>
-      <span style="font-size:12px;color:${tagCol}">${tag}</span></div>
-    <div style="font-size:13.5px;color:var(--dim);margin-top:6px;line-height:1.5">매달 ${(d['월상환']||0).toLocaleString()}만 · 필요한 돈 ${_eok(d['필요현금'])}</div>`;
+      <span style="font-size:32px;font-weight:700;letter-spacing:-0.03em;color:var(--txt)">최대 ${_eok(d['최대매수가'])}</span>
+      <span style="font-size:15px;color:${tagCol}">${tag}</span></div>
+    <div style="font-size:17px;color:var(--txt);margin-top:8px;line-height:1.5">매달 ${(d['월상환']||0).toLocaleString()}만 · 필요한 돈 ${_eok(d['필요현금'])}</div>`;
   const detail=`<div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])}${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
     <div style="margin-top:8px">${_bpRegBadge(d['규제'])}</div>`;
   const cta=(confirmed && !stale)
@@ -3945,7 +3953,7 @@ function _buyerFour(L, eok){
 }
 function _buyerFourHtml(L, eok){
   const f=_buyerFour(L, eok);
-  const row=(k,v)=>`<div style="font-size:12px;line-height:1.55"><span style="color:var(--dim)">${k}</span> ${esc(v)}</div>`;
+  const row=(k,v)=>`<div style="font-size:16px;line-height:1.6"><span style="color:var(--dim);font-weight:700">${k}</span> ${esc(v)}</div>`;
   return row('돈',f.cash)+row('가격',f.price)+row('아직',f.unknown)+row('다음',f.next);
 }
 function _ccListingCard(L, eok){
@@ -4380,30 +4388,28 @@ let _filtersOpen=false;
 function toggleFilters(){ _filtersOpen=!_filtersOpen;
   document.getElementById('filterPanel').style.display=_filtersOpen?'flex':'none';
   updateFilterToggleLabel();
-  if(_filtersOpen) setTimeout(()=>document.getElementById('search').focus(),30); }
+}
 function updateFilterToggleLabel(){
   const btn=document.getElementById('filterToggle'); if(!btn) return;
-  // 비활성(전체가 아닌) 필터 개수 = 접혔을 때 적용중임을 표시
   const off = SIGNALS.length - active.size + (5 - (typeof activeGrade!=='undefined'?activeGrade.size:5));
-  const cnt = off>0 ? ` <span style="color:var(--accent)">· ${off} 적용중</span>` : '';
-  btn.innerHTML = `지역 검색·필터${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
+  const cnt = off>0 ? ` <span style="color:var(--accent)">· ${off}개 골라 둠</span>` : '';
+  btn.innerHTML = `신호·급지${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
 }
 function renderFilters(){
   const f = document.getElementById('filters'); f.innerHTML = '';
   SIGNALS.forEach(s => {
     const el = document.createElement('span');
-    el.className = 'chip' + (active.has(s)?' on':''); el.textContent = s;
+    el.className = 'chip' + (active.has(s)?' on':''); el.textContent = SIG_KO[s]||s;
     el.onclick = () => { active.has(s)?active.delete(s):active.add(s); renderFilters(); renderList(); };
     f.appendChild(el);
   });
   // 지역 급지 필터 (상~하급지)
   const g = document.createElement('div');
   g.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;align-items:center';
-  g.innerHTML = '<span style="font-size:10px;color:var(--dim)">급지</span>';
+  g.innerHTML = '<span style="font-size:14px;font-weight:700;color:var(--dim);align-self:center">급지</span>';
   [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].forEach(([code,lbl]) => {
     const el = document.createElement('span');
     el.className = 'chip' + (activeGrade.has(code)?' on':''); el.textContent = lbl;
-    el.style.fontSize = '11px';
     el.onclick = () => { activeGrade.has(code)?activeGrade.delete(code):activeGrade.add(code); renderFilters(); renderList(); };
     g.appendChild(el);
   });
@@ -4429,7 +4435,7 @@ function rowEl(r, lv){
   const disp = lv===2 ? r.region.split(' ').slice(1).join(' ')||r.region : r.region;
   const faved = _favs.has('region:'+r.region);
   row.innerHTML = `<span class="nm">${disp}</span>${badge(r.signal)}
-    <span class="fav" title="즐겨찾기" style="cursor:pointer;color:${faved?'#f59e0b':'var(--line)'};margin-left:auto">${faved?'★':'☆'}</span>
+    <span class="fav" title="즐겨찾기" style="cursor:pointer;color:${faved?'#b45309':'var(--dim)'};margin-left:auto">${faved?'★':'☆'}</span>
     <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
   row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); toggleFav('region', r.region, r.region); };
   row.onclick = () => selectRegion(r.region);
@@ -4482,7 +4488,7 @@ function renderZoneLegend(){
 function toggleSide(){
   const s = document.querySelector('#view-signal .side');
   const collapsed = s.classList.toggle('collapsed');
-  document.getElementById('sideToggle').textContent = collapsed ? '▶ 목록' : '◀ 목록';
+  document.getElementById('sideToggle').textContent = collapsed ? '▶ 지역' : '◀ 지역';
   setTimeout(()=>chart && chart.resize(), 180);
 }
 function toggleHaesol(){
@@ -6792,7 +6798,7 @@ async function loadListingWatch(){
   catch(e){ status.textContent='찜한 후보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'; return; }
   _watchKeys=new Set(items.map(x=>x.key));
   status.textContent=`${items.length}건 · 가격 변화는 찜 당시와 현재 수집값의 차이입니다. 수집 범위에서 사라진 매물은 거래완료로 단정하지 않습니다.`;
-  if(!items.length){ body.innerHTML='<div class="sec" style="padding:20px;color:var(--dim)">아직 찜한 매물이 없습니다. 더 찾아보기에서 급매·청약 상세를 열고 ☆ 찜하기를 눌러보세요.</div>'; return; }
+  if(!items.length){ body.innerHTML='<div class="sec" style="padding:20px;font-size:16px;line-height:1.6">아직 찜한 매물이 없습니다. 매물 찾기에서 집을 열고 ☆ 를 눌러 두세요.</div>'; return; }
   body.innerHTML=items.map(w=>{
     const c=w.current, change=w.price_change;
     const amount=n=>n==null?'가격 미확인':_eok(n);
