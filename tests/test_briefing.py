@@ -80,7 +80,7 @@ def test_new_candidate_is_reported(uid):
     assert b["send"] and "후보 변화" in b["text"]
     assert "+ 상계주공7" in b["text"]
     todo = b["text"].split("오늘 할 일 → ")[1]
-    assert "호가" in todo or "네 갈래" in todo
+    assert "매매가" in todo or "사는 방법" in todo
 
 
 def test_dropped_candidate_is_reported(uid):

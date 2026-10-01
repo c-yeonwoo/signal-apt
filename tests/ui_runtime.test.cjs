@@ -227,10 +227,10 @@ test('buyer candidate card distinguishes inquiry from infeasibility and expands 
     총액: 50000, 입찰상태: 'needs_review', 예산확인필요: true,
     decision: {feasibility: 'unknown', unknowns: ['권리 확인'], next_action: '권리 확인 후 검토'}}, eok);
   assert.match(auction, /<details class="cc-listing"/);
-  assert.match(auction, /입찰 보류/);
-  assert.match(auction, /최저매각가 · 취득비용 별도/);
-  assert.match(auction, /현금/);
-  assert.match(auction, /미확인/);
+  assert.match(auction, /아직 입찰하지 않음/);
+  assert.match(auction, /최저 입찰가입니다/);
+  assert.match(auction, /돈/);
+  assert.match(auction, /아직/);
   assert.match(auction, /권리 확인/);
   assert.match(auction, /다음/);
   assert.doesNotMatch(auction, /예산초과·참고|<div onclick="switchTab/);
@@ -238,8 +238,8 @@ test('buyer candidate card distinguishes inquiry from infeasibility and expands 
   const estimated = ctx._ccListingCard({유형: '재건축', 단지명: '<가짜>', 지역: '노원구',
     추정가: 60000, 가격출처: '지역평단추정', 예산확인필요: true,
     decision: {feasibility: 'unknown', unknowns: ['현장 확인']}}, eok);
-  assert.match(estimated, /가격·자금 확인 필요/);
-  assert.match(estimated, /지역평단 추정 · 매물가 아님/);
+  assert.match(estimated, /가격과 돈을 확인해야 함/);
+  assert.match(estimated, /동네 평균으로 짐작한 가격입니다/);
   assert.match(estimated, /&lt;가짜>/);
   const lined = ctx._ccListingCard({유형:'급매', 단지명:'선', 지역:'노원구', 총액:10000,
     lines:{cash:'서버현금', price:'서버가격', unknown:'서버미확인', next:'서버다음'}}, eok);
@@ -261,7 +261,7 @@ test('listing price filter and budget sort keep unknown prices out of the afford
   assert.equal(ctx._laPricePass({총액: null}), false);
   assert.equal(ctx._laPricePass({총액: 10000}), true);
   assert.equal(ctx._laPricePass({총액: 160000}), false);
-  assert.match(html, /내 상한 순/);
+  assert.match(html, /내 예산 순/);
   assert.doesNotMatch(html, /언제·어디를 볼지/);
-  assert.match(html, /더 찾아보기<\/b> — 전체 매물은 내 상한 순입니다/);
+  assert.match(html, /더 찾아보기<\/b> — 전체 매물은 내 예산 순입니다/);
 });

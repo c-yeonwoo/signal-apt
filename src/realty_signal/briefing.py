@@ -164,13 +164,13 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
     elif asks:
         top = asks[0]
         price = top.get("총액") or top.get("호가") or top.get("예상가")
-        out.append(_act("asks", f"{top.get('단지명') or '매물'} 호가 {_eok(price)}",
-                        f"상한 안에서 가격이 확인된 매물 {len(asks)}곳입니다. 지역 평단 추정이 아닙니다.",
-                        "dashboard", "이 호가 보기"))
+        out.append(_act("asks", f"{top.get('단지명') or '매물'} 매매가 {_eok(price)}",
+                        f"예산 안에서 가격이 있는 매물 {len(asks)}곳입니다. 동네 평균으로 짐작한 단지가 아닙니다.",
+                        "dashboard", "이 집 보기"))
     else:
-        out.append(_act("levers", "같은 돈의 네 갈래 보기",
-                        "상한 안에 확인된 호가가 없습니다. 실거주·갭·경매·재건축을 나란히 봅니다.",
-                        "dashboard", "네 갈래 열기"))
+        out.append(_act("levers", "같은 돈으로 사는 방법 보기",
+                        "예산 안에 맞는 매물이 없습니다. 실거주, 갭, 경매, 재건축을 나란히 봅니다.",
+                        "dashboard", "방법 보기"))
 
     for s in [x for x in sigs if x["up"]][:2]:
         out.append(_act("signal_up", f"{s['region']} 동네 리포트 다시 보기",

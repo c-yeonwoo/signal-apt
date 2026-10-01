@@ -107,45 +107,45 @@ def card_lines(row: dict, decision: dict | None) -> dict:
     auction_state = row.get("입찰상태") if kind == "경매" else None
     decision = decision or {}
     if kind == "경매" and auction_state and auction_state != "conditional_bid":
-        cash = "입찰 보류 · 필요현금 산정 전"
+        cash = "아직 입찰하지 않습니다. 필요한 돈은 계산 전입니다"
     elif finance.get("필요현금") is not None:
         month = finance.get("총월상환", finance.get("월상환"))
         if finance.get("확인필요"):
-            state = "확인 필요"
+            state = "확인이 필요합니다"
         elif finance.get("가능") is False or decision.get("feasibility") == "infeasible":
-            state = "조건 초과"
+            state = "가진 돈으로 안 됩니다"
         elif modeled:
-            state = "추정가 기준 · 호가 확인 전"
+            state = "짐작한 가격입니다. 매물 가격은 모릅니다"
         elif decision.get("feasibility") == "unknown":
-            state = "확인 필요"
+            state = "확인이 필요합니다"
         else:
-            state = "호가 기준 가정 안"
-        month_bit = f" · 월 {int(month):,}만" if isinstance(month, (int, float)) else ""
-        cash = f"필요현금 {_eok(finance.get('필요현금'))}{month_bit} · {state}"
+            state = "계산상 됩니다"
+        month_bit = f" · 매달 {int(month):,}만" if isinstance(month, (int, float)) else ""
+        cash = f"필요한 돈 {_eok(finance.get('필요현금'))}{month_bit} · {state}"
     elif row.get("예산내"):
-        cash = "호가 기준 상한 이내 · 취득비용은 별도"
+        cash = "예산 안 가격입니다. 세금과 중개비는 따로입니다"
     elif row.get("총액") or row.get("추정가") or row.get("예상가"):
-        cash = "매수 상한을 확정하면 현금 비교가 붙습니다"
+        cash = "살 수 있는 가격을 저장하면 필요한 돈을 계산합니다"
     else:
-        cash = "가격이 없어 현금 비교 전"
+        cash = "가격이 없어 필요한 돈을 계산하지 못했습니다"
     if kind == "경매":
-        price = "최저매각가 · 취득비용 별도"
+        price = "최저 입찰가입니다. 세금과 비용은 따로입니다"
     elif src == "매물가":
-        price = "원천 호가 · 유효성 확인"
+        price = "매물에 적힌 가격입니다. 아직 팔리는지는 모릅니다"
     elif modeled:
-        price = "지역평단 추정 · 매물가 아님"
+        price = "동네 평균으로 짐작한 가격입니다. 매물 가격이 아닙니다"
     elif src == "사용자입력":
-        price = "입력한 매매가 · 매물 호가 아님"
+        price = "직접 넣은 가격입니다. 매물에 적힌 가격이 아닙니다"
     elif row.get("추정가") or row.get("총액") or row.get("예상가"):
-        price = "가격 출처 확인 필요"
+        price = "이 가격이 어디서 온 것인지 확인이 필요합니다"
     else:
-        price = "가격 미상"
+        price = "가격을 모릅니다"
     unknowns = decision.get("unknowns") or []
     blocking = decision.get("blocking_reasons") or []
-    unknown = " · ".join(unknowns[:2]) if unknowns else (blocking[0] if blocking else "호가·권리·대출 승인")
+    unknown = " · ".join(unknowns[:2]) if unknowns else (blocking[0] if blocking else "매물 가격, 권리, 은행 대출")
     nxt = decision.get("next_action") or (
-        "권리·시세 근거 확인 후 입찰 검토" if kind == "경매" and auction_state and auction_state != "conditional_bid"
-        else "호가와 필요현금을 단지 상세에서 확인")
+        "권리와 시세를 확인한 뒤 입찰을 검토하세요" if kind == "경매" and auction_state and auction_state != "conditional_bid"
+        else "매물 가격과 필요한 돈을 확인하세요")
     return {"cash": cash, "price": price, "unknown": unknown, "next": nxt}
 
 

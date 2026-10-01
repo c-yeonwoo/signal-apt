@@ -14,7 +14,7 @@ def compare(params: buying_power.Params, *, price: float | None = None,
             auction_price: float | None = None, auction_state: str | None = None) -> dict:
     if params.capital <= 0:
         return {"ready": False, "reason": "no_capital", "winner": None, "columns": [],
-                "message": "가용자본을 입력하면 같은 돈의 네 갈래를 계산합니다."}
+                "message": "가진 돈을 넣으면 같은 돈으로 사는 방법을 계산합니다."}
     columns = [
         _live(params, price),
         _gap(params, price, jeonse),
@@ -30,9 +30,9 @@ def _live(params, price):
         ceiling = float(statement["최대매수가"])
         finance = buying_power.for_price(ceiling, params) if ceiling else None
         row = {"유형": "실거주", "가격출처": "사용자입력", "추정가": ceiling or None, "자금": finance}
-        decision = {"feasibility": "unknown", "unknowns": ["개별 호가를 넣지 않았습니다"],
-                    "next_action": "보고 싶은 매매가를 넣으면 그 집 기준으로 다시 계산합니다"}
-        return _col("live", "실거주", decision, row, "확정 상한 기준 · 6개월 전입 의무는 규제지역만")
+        decision = {"feasibility": "unknown", "unknowns": ["집값을 아직 넣지 않았습니다"],
+                    "next_action": "보고 싶은 집값을 넣으면 그 집으로 다시 계산합니다"}
+        return _col("live", "실거주", decision, row, "저장한 예산 기준입니다. 규제지역은 6개월 안에 전입해야 합니다")
     finance = buying_power.for_price(price, params)
     feasible = "infeasible" if not finance["가능"] and not finance["확인필요"] else (
         "unknown" if finance["확인필요"] else "conditional")
@@ -40,19 +40,19 @@ def _live(params, price):
         "feasibility": feasible,
         "unknowns": ["은행 심사·권리·입주 조건"],
         "blocking_reasons": ["입력한 자금 또는 월 부담 한도 초과"] if feasible == "infeasible" else [],
-        "next_action": "가격·자금 조건 다시 설정" if feasible == "infeasible" else "호가·전용면적과 은행 한도 확인",
+        "next_action": "가격이나 돈을 다시 넣어 보세요" if feasible == "infeasible" else "매물 가격, 면적, 은행 한도를 확인하세요",
     }
     row = {"유형": "실거주", "가격출처": "사용자입력", "추정가": price, "자금": finance}
-    return _col("live", "실거주", decision, row, "매매 잔금과 취득비용 · 규제지역이면 6개월 내 전입")
+    return _col("live", "실거주", decision, row, "집값과 세금, 중개비입니다. 규제지역이면 6개월 안에 전입합니다")
 
 
 def _gap(params, price, jeonse):
     if jeonse is None or price is None:
         missing = "전세보증금" if jeonse is None else "매매가"
-        decision = {"feasibility": "unknown", "unknowns": [f"{missing}이 없어 갭 현금을 계산하지 않았습니다"],
-                    "next_action": "매매가와 전세보증금을 넣으면 필요현금만 계산합니다"}
+        decision = {"feasibility": "unknown", "unknowns": [f"{missing}이 없어 갭으로 들어갈 돈을 계산하지 않았습니다"],
+                    "next_action": "집값과 전세보증금을 넣으면 필요한 돈만 계산합니다"}
         return _col("gap", "갭", decision, {"유형": "갭", "가격출처": "사용자입력"},
-                    "보증금이 없으면 이 칸은 비어 있습니다")
+                    "전세 보증금을 모르면 이 칸은 비워 둡니다")
     if jeonse >= price:
         decision = {"feasibility": "unknown", "unknowns": ["보증금이 매매가 이상입니다"],
                     "next_action": "매매가와 보증금을 다시 확인"}
@@ -75,9 +75,9 @@ def _gap(params, price, jeonse):
 
 def _auction(params, auction_price, auction_state):
     if auction_price is None or not auction_state:
-        decision = {"feasibility": "unknown", "unknowns": ["조건부 입찰로 볼 물건이 이 응답에 없습니다"],
-                    "next_action": "권리·시세 근거가 있는 물건만 이 칸에 올립니다"}
-        return _col("auction", "경매", decision, {"유형": "경매"}, "입찰기일 전 권리 확인")
+        decision = {"feasibility": "unknown", "unknowns": ["권리 확인이 끝난 경매 물건이 없습니다"],
+                    "next_action": "권리와 시세가 확인된 물건만 여기에 올립니다"}
+        return _col("auction", "경매", decision, {"유형": "경매"}, "입찰일 전에 권리를 확인합니다")
     row = {"유형": "경매", "입찰상태": auction_state, "가격출처": "사용자입력", "추정가": auction_price}
     if auction_state != "conditional_bid":
         decision = {"feasibility": "infeasible" if auction_state == "no_bid" else "unknown",
@@ -97,10 +97,10 @@ def _auction(params, auction_price, auction_state):
 def _rebuild(params, price, contribution):
     if contribution is None or price is None:
         missing = "분담금" if contribution is None else "매매가"
-        decision = {"feasibility": "unknown", "unknowns": [f"{missing} 입력이 없습니다"],
-                    "next_action": "분담금을 넣기 전에는 재건축 현금을 계산하지 않습니다"}
+        decision = {"feasibility": "unknown", "unknowns": [f"{missing}을 아직 넣지 않았습니다"],
+                    "next_action": "분담금을 넣기 전에는 재건축에 들 돈을 계산하지 않습니다"}
         return _col("rebuild", "재건축", decision, {"유형": "재건축", "가격출처": "사용자입력"},
-                    "사업 기간과 분담금은 입력 전엔 비어 있습니다")
+                    "사업 기간과 분담금을 모르면 이 칸은 비워 둡니다")
     finance = buying_power.for_price(price, params)
     need = finance["필요현금"] + contribution
     available = max(0.0, params.capital - params.reserve_cash)
