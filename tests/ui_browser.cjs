@@ -237,7 +237,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#analysisFixture button').click();
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
-    await page.getByText('확정 매수력 초과',{exact:false}).waitFor();
+    await page.getByText('살 수 있는 가격보다 비쌈',{exact:false}).waitFor();
     assert.equal(calls.includes('/api/listing-kapt'),false);
     await page.locator('#advReport details[data-analysis="complex"] > summary').click();
     await page.getByRole('button',{name:'K-APT 세대수·시공사·주차 확인'}).click();
