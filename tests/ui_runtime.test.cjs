@@ -6,19 +6,19 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/index.html'), 'utf8');
 const extract = (start, end) => html.slice(html.indexOf(start), html.indexOf(end));
 
-test('inline app scripts parse and browse navigation separates tools from acquisition paths', () => {
+test('inline app scripts parse and browse navigation keeps one list and the signal map', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));
   const targets = {groupSubLabel: {}, groupSubTabs: {}, listingFocus: {style: {}}};
   const ctx = vm.createContext({document: {getElementById: id => targets[id]}, location: {hash: '#all'}});
   vm.runInContext(extract('const _GROUPS={', 'const _LOAD={'), ctx);
   ctx.renderGroupSubnav('browse', 'all');
-  assert.match(targets.groupSubTabs.innerHTML, /분석·전략/);
-  assert.match(targets.groupSubTabs.innerHTML, /경매·재건축/);
-  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /분석·특수 매물/);
+  assert.match(targets.groupSubTabs.innerHTML, /data-sub="all"/);
+  assert.match(targets.groupSubTabs.innerHTML, /data-sub="signal"/);
+  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /분석·전략|경매·재건축|data-sub="auction"|data-sub="report"/);
   ctx.renderGroupSubnav('browse', 'auction');
-  assert.match(targets.groupSubTabs.innerHTML, /data-sub="auction"/);
-  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="report"/);
+  assert.match(targets.groupSubTabs.innerHTML, /data-sub="all"/);
+  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="auction"|data-sub="report"/);
 });
 
 test('same named complex pins group only when display coordinates nearly match', () => {
@@ -263,5 +263,5 @@ test('listing price filter and budget sort keep unknown prices out of the afford
   assert.equal(ctx._laPricePass({총액: 160000}), false);
   assert.match(html, /내 예산 순/);
   assert.doesNotMatch(html, /언제·어디를 볼지/);
-  assert.match(html, /더 찾아보기<\/b> — 전체 매물은 내 예산 순입니다/);
+  assert.match(html, /더 찾아보기<\/b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다/);
 });

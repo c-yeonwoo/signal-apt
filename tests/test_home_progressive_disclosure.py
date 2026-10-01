@@ -21,7 +21,8 @@ def test_dashboard_keeps_primary_actions_before_optional_cards():
     assert plan < power < shortlist < budget < extra
     levers = markup.index('id="dashLeversWrap"')
     assert shortlist < levers < budget
-    assert markup.index('id="dashEstimateWrap"') > extra
+    assert 'id="dashEstimateWrap"' not in markup
+    assert '가격을 짐작한 단지' not in markup
     assert '관심 동네·후보 더 보기' in markup
     assert "fetch('/api/asks')" in HTML
     assert "지금 예산 안에" not in HTML

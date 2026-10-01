@@ -73,7 +73,7 @@ def test_rows_show_a_price_a_beginner_can_picture(html):
 
 
 def test_locality_ui_does_not_relabel_proxy_as_school_district_or_fair_price(html):
-    assert "undervalued:{l:'가격 탐색'" in html
+    assert "undervalued:'signal'" in html
     assert "교육업종 점포·환경 대리변수" in html
     assert "학교 배정·단지 연식·층·브랜드 등은 반영되지 않아" in html
     assert "모형보다 ${a}% 낮음" in html
