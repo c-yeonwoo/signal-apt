@@ -95,8 +95,52 @@ def _price(detail: dict, listing: dict) -> dict:
     return quote_check.assess(detail, asking=asking, exclusive_m2=area, floor=floor)
 
 
+def _complex_token(name: str | None) -> str:
+    """괄호·'아파트'를 뺀 단지 핵심어. 두 글자 이하는 동명 구역이 너무 많다."""
+    raw = (name or "").split("(")[0].strip()
+    for suffix in ("아파트", "단지"):
+        if raw.endswith(suffix) and len(raw) > len(suffix) + 2:
+            raw = raw[: -len(suffix)].strip()
+    return raw
+
+
+def official_schedule(name: str | None, zones: list[dict] | None) -> dict:
+    """단지명이 서울 정비구역 명칭과 겹칠 때만 일정으로 돌려준다.
+
+    추진경과에는 사업 번호만 있어 단지 단계·분담금을 붙이지 않는다.
+    구 단위 분포도 이 단지의 호재로 쓰지 않는다.
+    """
+    token = _complex_token(name)
+    matched = []
+    if len(token) >= 3:
+        for zone in zones or []:
+            blob = f"{zone.get('구역명') or ''} {zone.get('위치') or ''}"
+            if token in blob:
+                matched.append(zone)
+    if len(matched) > 3:
+        return {
+            "status": "unverified", "items": [],
+            "reason": "이름이 여러 정비구역과 겹쳐 이 단지로 단정하지 않았습니다.",
+        }
+    if not matched:
+        return {
+            "status": "unverified", "items": [],
+            "reason": "단지명과 일치하는 공식 정비 일정이 없습니다. 구 단위 단계를 이 단지의 호재로 쓰지 않습니다.",
+        }
+    items = [{
+        "종류": "정비구역",
+        "내용": f"{zone.get('구분') or '정비'} · {zone.get('구역명') or zone.get('위치') or '구역명 없음'}",
+        "출처": "서울 열린데이터 정비구역",
+        "주의": "구역 명칭이 단지명과 겹칩니다. 이 단지의 사업 단계·분담금은 확인되지 않았습니다.",
+    } for zone in matched]
+    return {
+        "status": "observed", "items": items,
+        "reason": "공개 구역명과 겹치는 사실만 보여 줍니다. 매물 순위는 바꾸지 않습니다.",
+    }
+
+
 def build(row: dict, detail: dict | None, building: dict | None = None,
-          profile: dict | None = None) -> dict:
+          profile: dict | None = None, schedule: dict | None = None) -> dict:
     """수치 해석은 결정적인 코드로 계산하고, 누락은 보류로 노출한다."""
     listing = snapshot(row)
     detail = detail or {}
@@ -153,7 +197,7 @@ def build(row: dict, detail: dict | None, building: dict | None = None,
         "mobility": {"status": "unverified", "reason": "출입구·목적지 경로는 아직 검증되지 않았습니다."},
         "school": {"status": "unverified", "reason": "통학구역 자료를 연결하지 않았습니다."},
         "amenities": {"status": "unverified", "reason": "시설 접근성 자료를 연결하지 않았습니다."},
-        "development": {"status": "unverified", "reason": "이 단지와 연결된 공식 사업 자료를 확인하지 않았습니다."},
+        "development": schedule or official_schedule(row.get("단지명"), []),
         "pros": pros[:3], "cautions": cautions[:3], "evidence": evidence,
         "questions": ["현재 판매 가능 여부와 실제 호가는?", "동·향·수리 상태와 추가 비용은?",
                       "출입구에서 직장·학교까지 실제 동선은?"],

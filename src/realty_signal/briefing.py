@@ -193,7 +193,7 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
         # ★가 있는데 후보만 없는 경우는 예산 문제라 위에서 이미 말했다 — 두 번 시키지 않는다
         out.append(_act("no_favorite", "관심 지역 ★ 추가하기",
                         "★가 있어야 주간 변화와 후보 추천이 내 것으로 좁혀집니다",
-                        "signal", "시장·지역 →"))
+                        "signal", "시그널 지도 →"))
 
     if not p.get("직장"):
         out.append(_act("no_job", "직장 주소 넣기",
@@ -313,7 +313,9 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
     if first:
         L.append("[이번 주 볼 단지]")
         for c in cands:
-            L.append(f"· {c['단지']} ({c['region']}) {_eok(c.get('예상가'))} — {c.get('근거', '')}")
+            lines = c.get("lines") or {}
+            tail = f" | {lines['cash']} | {lines.get('unknown', '')}" if lines.get("cash") else ""
+            L.append(f"· {c['단지']} ({c['region']}) {_eok(c.get('예상가'))} — {c.get('근거', '')}{tail}")
         if not cands:
             L.append("· 예산 안에 드는 후보가 없어요. 매수력이나 관심지역을 조정해 보세요.")
         L.append("")

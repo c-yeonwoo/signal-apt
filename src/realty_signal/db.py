@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS imjang_visit(id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid INTEGER, region TEXT, cx TEXT, visited TEXT, checks TEXT, memo TEXT,
     verdict TEXT, score INTEGER, ts INTEGER);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_imjang_uid_cx ON imjang_visit(uid, region, cx, visited);
+CREATE TABLE IF NOT EXISTS decision_snap(uid INTEGER NOT NULL, entity_id TEXT NOT NULL,
+    week TEXT NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL,
+    PRIMARY KEY(uid, entity_id, week));
+CREATE INDEX IF NOT EXISTS ix_decision_snap_uid_week ON decision_snap(uid, week);
 """
 
 _migrated = [False]
@@ -826,3 +830,36 @@ def news_recent_for_ai(limit: int = 15) -> list[dict]:
     """AI 리포트용 최근 뉴스 요약(제목+토픽) — 정책·시장 맥락 주입용."""
     return [{"title": n["title"], "topic": n["topic"], "date": n["pubdate"]}
             for n in news_list(None, limit)]
+
+
+def decision_snap_put(uid: int, entity_id: str, week: str, payload: dict) -> None:
+    c = conn()
+    c.execute(
+        "INSERT OR REPLACE INTO decision_snap(uid,entity_id,week,data,ts) VALUES(?,?,?,?,?)",
+        (uid, entity_id, week, json.dumps(payload, ensure_ascii=False), int(time.time())),
+    )
+    c.commit()
+    c.close()
+
+
+def decision_snap_week(uid: int, week: str) -> list[dict]:
+    c = conn()
+    rows = c.execute(
+        "SELECT entity_id, data FROM decision_snap WHERE uid=? AND week=?", (uid, week),
+    ).fetchall()
+    c.close()
+    out = []
+    for entity_id, data in rows:
+        payload = json.loads(data)
+        payload["entity_id"] = entity_id
+        out.append(payload)
+    return out
+
+
+def decision_snap_weeks(uid: int) -> list[str]:
+    c = conn()
+    rows = c.execute(
+        "SELECT DISTINCT week FROM decision_snap WHERE uid=? ORDER BY week", (uid,),
+    ).fetchall()
+    c.close()
+    return [r[0] for r in rows]

@@ -1276,6 +1276,26 @@ def telegram_test(request: Request):
     return {"ok": ok, "preview": b["text"]}
 
 
+def _remember_decisions(uid: int | None, rows: list[dict]) -> None:
+    if not uid or not rows:
+        return
+    try:
+        from realty_signal.services import decision_log
+        decision_log.remember(uid, rows)
+    except Exception as exc:  # noqa: BLE001 — 기록 실패가 후보 응답을 막지 않는다
+        log.warning("보류 기록 실패: %s", exc)
+
+
+def _attach_card_lines(rows: list[dict], uid: int | None) -> list[dict]:
+    from realty_signal.services import buyer_decision
+    profile = db.profile_get(uid) or {} if uid else {}
+    try:
+        params = _buyer_params(profile) if profile else None
+    except Exception:  # noqa: BLE001
+        params = None
+    return [buyer_decision.annotate(row, params, uid=uid, sido_of=_sido_of) for row in rows]
+
+
 def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     """이번 주 볼 단지 3곳 — 확정 매수력 × 라이프스타일 적합도."""
     from realty_signal.services import shortlist as sl
@@ -1296,6 +1316,7 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
                 "message": "매수력을 먼저 확정해 주세요."}
     out = sl.build(profile, budget, limit=max(1, min(10, limit)), budget_is_ceiling=explicit_budget)
     out["확정예산"] = bool((profile.get("매수력") or {}).get("최대매수가"))
+    _remember_decisions(uid, out.get("candidates") or [])
     return out
 
 
@@ -1404,6 +1425,7 @@ def conclusion(request: Request | None = None, capital: float | None = None,
             **buyer_decision.build(L, p, uid=_uid(request) if request else None),
         })
     cards = rec.aggregate_regions(listings, locmap=locmap, budget=budget, pyeong=py)
+    _remember_decisions(_uid(request) if request else None, slim)
     return {
         "ready": True,
         "budget": budget, "pyeong": py, "ltv": p.ltv, "capital": round(p.capital),
@@ -2971,6 +2993,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     if scores:
         out = eng_rank.apply_engagement_bonus(out, scores)
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
+    out = _attach_card_lines(out, uid)
     asof = _timing_asof()
     kinds = ("경매", "급매", "찐매물", "일반매물", "청약", "재건축")
     return {

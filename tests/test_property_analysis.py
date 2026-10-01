@@ -35,6 +35,23 @@ def test_selected_listing_is_resolved_on_server_and_private_denied_before_read(m
         raise AssertionError("personal listing was exposed")
 
 
+def test_schedule_uses_name_overlap_and_refuses_district_stage():
+    zones = [
+        {"구역명": "가상 재건축", "위치": "노원구 가상단지", "구분": "재건축"},
+        {"구역명": "다른곳", "위치": "강남구 은마", "구분": "재건축"},
+    ]
+    hit = analysis.official_schedule("가상단지", zones)
+    assert hit["status"] == "observed"
+    assert len(hit["items"]) == 1
+    assert "사업 단계" in hit["items"][0]["주의"]
+    assert "단계" not in hit["items"][0]["내용"]
+    miss = analysis.official_schedule("없는단지아파트", zones)
+    assert miss["status"] == "unverified"
+    assert "구 단위" in miss["reason"]
+    vague = analysis.official_schedule("가", zones)
+    assert vague["status"] == "unverified"
+
+
 def test_report_uses_exact_area_and_holds_unverified_identity():
     result = analysis.build(_row(), _detail())
     assert result["price"]["상태"] == "관측비교"

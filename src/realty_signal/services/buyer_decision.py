@@ -83,4 +83,81 @@ def build(row, params, *, uid=None):
                 "scope": "가정 기반 비교이며 구매 가능 확정이 아님"}
     decision["id"] = fingerprint(decision)
     decision["generated_at"] = datetime.now(timezone.utc).isoformat()
-    return {"decision": decision, "evidence": [evidence]}
+    return {"decision": decision, "evidence": [evidence], "lines": card_lines(row, decision)}
+
+
+def _eok(man) -> str:
+    if man is None or man <= 0:
+        return "–"
+    return f"{float(man) / 10000:.1f}억"
+
+
+def card_lines(row: dict, decision: dict | None) -> dict:
+    """현금·가격·미확인·다음. 화면은 이 네 문장만 그린다."""
+    finance = row.get("자금") or {}
+    kind = row.get("유형") or ""
+    src = row.get("가격출처") or ""
+    modeled = src in ("지역평단추정", "단지평단추정")
+    auction_state = row.get("입찰상태") if kind == "경매" else None
+    decision = decision or {}
+    if kind == "경매" and auction_state and auction_state != "conditional_bid":
+        cash = "입찰 보류 · 필요현금 산정 전"
+    elif finance.get("필요현금") is not None:
+        month = finance.get("총월상환", finance.get("월상환"))
+        if finance.get("확인필요"):
+            state = "확인 필요"
+        elif finance.get("가능") is False or decision.get("feasibility") == "infeasible":
+            state = "조건 초과"
+        elif modeled:
+            state = "추정가 기준 · 호가 확인 전"
+        elif decision.get("feasibility") == "unknown":
+            state = "확인 필요"
+        else:
+            state = "호가 기준 가정 안"
+        month_bit = f" · 월 {int(month):,}만" if isinstance(month, (int, float)) else ""
+        cash = f"필요현금 {_eok(finance.get('필요현금'))}{month_bit} · {state}"
+    elif row.get("예산내"):
+        cash = "호가 기준 상한 이내 · 취득비용은 별도"
+    elif row.get("총액") or row.get("추정가") or row.get("예상가"):
+        cash = "매수 상한을 확정하면 현금 비교가 붙습니다"
+    else:
+        cash = "가격이 없어 현금 비교 전"
+    if kind == "경매":
+        price = "최저매각가 · 취득비용 별도"
+    elif src == "매물가":
+        price = "원천 호가 · 유효성 확인"
+    elif modeled:
+        price = "지역평단 추정 · 매물가 아님"
+    elif src == "사용자입력":
+        price = "입력한 매매가 · 매물 호가 아님"
+    elif row.get("추정가") or row.get("총액") or row.get("예상가"):
+        price = "가격 출처 확인 필요"
+    else:
+        price = "가격 미상"
+    unknowns = decision.get("unknowns") or []
+    blocking = decision.get("blocking_reasons") or []
+    unknown = " · ".join(unknowns[:2]) if unknowns else (blocking[0] if blocking else "호가·권리·대출 승인")
+    nxt = decision.get("next_action") or (
+        "권리·시세 근거 확인 후 입찰 검토" if kind == "경매" and auction_state and auction_state != "conditional_bid"
+        else "호가와 필요현금을 단지 상세에서 확인")
+    return {"cash": cash, "price": price, "unknown": unknown, "next": nxt}
+
+
+def annotate(row: dict, params, *, uid=None, sido_of=None) -> dict:
+    """가격이 있고 입찰 보류가 아니면 지역 규제 기준으로 자금을 붙이고 네 줄을 만든다."""
+    out = dict(row)
+    price = out.get("추정가", out.get("예상가", out.get("총액")))
+    kind = out.get("유형") or ""
+    auction_state = out.get("입찰상태")
+    skip = kind == "경매" and auction_state and auction_state != "conditional_bid"
+    used = params or buying_power.Params(capital=0)
+    if (params is not None and params.capital > 0 and price and not skip and not out.get("자금")):
+        region = out.get("지역") or out.get("region")
+        sido = sido_of(region) if sido_of else None
+        used = buying_power.params_for_region(params, region, sido)
+        try:
+            out["자금"] = buying_power.for_price(float(price), used)
+        except (TypeError, ValueError):
+            used = params
+    out.update(build(out, used, uid=uid))
+    return out

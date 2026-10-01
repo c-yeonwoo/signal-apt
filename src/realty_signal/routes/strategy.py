@@ -22,6 +22,26 @@ def presale_types(manage_no: str):
     return _api().presale_types(manage_no)
 
 
+@router.get("/api/levers")
+def levers(request: Request, price: float | None = None, jeonse: float | None = None,
+           contribution: float | None = None, auction_price: float | None = None,
+           auction_state: str | None = None):
+    """같은 자본의 실거주·갭·경매·재건축. 승자 점수는 없다."""
+    from realty_signal import db
+    from realty_signal.routes import deps
+    from realty_signal.services import levers as board
+
+    for name, value in (("price", price), ("jeonse", jeonse), ("contribution", contribution),
+                        ("auction_price", auction_price)):
+        if value is not None and value < 0:
+            from fastapi import HTTPException
+            raise HTTPException(422, f"{name}는 0 이상이어야 합니다.")
+    profile = db.profile_get(deps.uid(request)) or {}
+    params = _api()._buyer_params(profile)
+    return board.compare(params, price=price, jeonse=jeonse, contribution=contribution,
+                         auction_price=auction_price, auction_state=auction_state)
+
+
 @router.get("/api/conclusion")
 def conclusion(request: Request, capital: float | None = None, ltv: float | None = None,
                pyeong: float | None = None, income: float | None = None,
