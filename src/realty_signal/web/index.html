@@ -503,7 +503,7 @@
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
         <select id="laSort" class="ctrl" onchange="onLaSort()" style="font-size:12px;padding:3px 6px">
-          <option value="budget" selected>내 상한 순</option>
+          <option value="budget" selected>내 예산 순</option>
           <option value="opp">시장 참고점수순</option>
           <option value="signal">시그널 강한순</option>
           <option value="price_asc">가격 낮은순</option>
@@ -772,10 +772,10 @@
 
     <h3 style="font-size:16px;margin:26px 0 8px">이렇게 쓰세요</h3>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 이번 주 할 일과 매수 상한을 보고, 예산 안 후보부터 확인합니다.</div>
+      <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 이번 주 할 일과 살 수 있는 가격을 보고, 예산 안 집부터 봅니다.</div>
       <div class="astep"><b style="color:var(--accent)">2</b> <b>내 조건</b> — 자본·소득·출퇴근을 저장합니다. 추천과 알림이 이 숫자를 따라갑니다.</div>
       <div class="astep"><b style="color:var(--accent)">3</b> <b>내 후보</b> — 찜한 매물·청약과 관심단지의 가격·일정 변화를 봅니다.</div>
-      <div class="astep"><b style="color:var(--accent)">4</b> <b>더 찾아보기</b> — 전체 매물은 내 상한 순입니다. 시그널·경매·재건축은 접힌 메뉴에서 엽니다.</div>
+      <div class="astep"><b style="color:var(--accent)">4</b> <b>더 찾아보기</b> — 전체 매물은 내 예산 순입니다. 시그널·경매·재건축은 접힌 메뉴에서 엽니다.</div>
     </div>
     <p style="color:var(--dim);font-size:11px;margin-top:20px">※ 모든 지표는 참고용입니다. 투자 판단과 실거래 확인은 이용자 책임입니다.</p>
   </div>
@@ -1550,7 +1550,7 @@ const _browseOpen={analysis:false,special:false};
 const _GROUP_LABEL={browse:'후보 탐색', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
   signal:{l:'시그널',d:'국면·성적표'}, undervalued:{l:'가격 탐색',d:'지역 모형 차이'},
-  all:{l:'전체',d:'내 상한 순'}, general:{l:'일반 매물',d:'한방 매매 표본'}, quicksale:{l:'급매',d:'급매·찐매물'},
+  all:{l:'전체',d:'내 예산 순'}, general:{l:'일반 매물',d:'한방 매매 표본'}, quicksale:{l:'급매',d:'급매·찐매물'},
   presale:{l:'청약',d:'신규 분양'}, auction:{l:'경매',d:'시세 이하 낙찰'},
   redev:{l:'재건축',d:'미래 가치'}, tradeup:{l:'갈아타기',d:'상급지 이동'},
   watch:{l:'찜한 매물',d:'가격·일정·대안'}, mymap:{l:'내 시그널맵',d:'즐겨찾기 지도'}, report:{l:'AI 리포트',d:'개인화 결론'},
@@ -1766,7 +1766,7 @@ async function loadDashboard(){
   }
   const loadRegime=async()=>{
   const target=document.getElementById('dashRegimeWrap');
-  let regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">…</div>';
+  let regimeH=_dashH('수도권 경기 흐름')+'<div style="color:var(--dim);font-size:13px">…</div>';
   try{ const rg=await (await fetch('/api/regime')).json();
     if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
       const skewed=rg.quality==='skewed' || String(rg.phase).includes('표본');
@@ -1782,13 +1782,13 @@ async function loadDashboard(){
       const warn=skewed
         ? `<div style="margin-top:10px;padding:10px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;font-size:13px;color:#92400e;line-height:1.5">영통·노원이 최하급으로 보이면 데이터가 비정상입니다. 외곽 시군구 캐시를 갱신해야 해요.</div>`
         : '';
-      regimeH=_dashH('수도권 유동성 국면')
+      regimeH=_dashH('수도권 경기 흐름')
         +`<div style="font-size:22px;font-weight:600;color:${C};letter-spacing:-0.02em">${rg.phase}</div>`
         +`<div style="color:var(--dim);font-size:13.5px;margin-top:8px;line-height:1.5">${blurb}</div>`
         +warn
         +_dashMore('근거 보기', _regimeEvidenceHtml(rg,false)+(rg.desc?`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55">${rg.desc}</div>`:'')); }
-    else regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
-  }catch(e){ regimeH=_dashH('수도권 유동성 국면')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
+    else regimeH=_dashH('수도권 경기 흐름')+'<div style="color:var(--dim);font-size:13px">데이터 없음</div>';
+  }catch(e){ regimeH=_dashH('수도권 경기 흐름')+'<div style="color:var(--dim);font-size:13px">불러오기 실패</div>'; }
   if(target) target.innerHTML=_dashCard(regimeH);
   };
   const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
@@ -1976,7 +1976,7 @@ function _renderComeback(d){
     'margin-bottom:14px;border-left:3px solid var(--accent)');
 }
 
-/** 임계 근접 워치 — **예측이 아니라 거리.** "오를 것"이 아니라 "0.7 남았다"고만 말한다.
+/** 곧 바뀔 수 있는 동네 워치 — **예측이 아니라 거리.** "오를 것"이 아니라 "0.7 남았다"고만 말한다.
  *  광역 상속 지표는 발표 단위로 묶여 오므로 한 줄에 '등 N곳' 으로 표시한다. */
 async function _loadNear(){
   const wrap=document.getElementById('dashNearWrap'); if(!wrap) return;
@@ -1986,14 +1986,14 @@ async function _loadNear(){
     d=await r.json();
   }catch(e){ wrap.innerHTML=''; return; }
   if(d.blocked_reason){
-    wrap.innerHTML=_dashCard(_dashH('임계 근접')
+    wrap.innerHTML=_dashCard(_dashH('곧 바뀔 수 있는 동네')
       +`<div style="font-size:13px;color:var(--dim)">${d.blocked_reason}</div>`);
     return;
   }
   const items=d.items||[];
   if(!items.length){
-    wrap.innerHTML=_dashCard(_dashH('임계 근접')
-      +`<div style="font-size:13px;color:var(--dim)">지금은 임계에 붙은 지역이 없습니다. 이번 주는 등급이 뒤집힐 여지가 작습니다.</div>`);
+    wrap.innerHTML=_dashCard(_dashH('곧 바뀔 수 있는 동네')
+      +`<div style="font-size:13px;color:var(--dim)">이번 주에 신호가 바뀔 만큼 가까운 동네는 없습니다.</div>`);
     return;
   }
   const row = x => {
@@ -2012,7 +2012,7 @@ async function _loadNear(){
   };
   const shown = items.slice(0,5), more = items.slice(5);
   wrap.innerHTML=_dashCard(
-    _dashH('임계 근접 — 다음 주에 뒤집힐 수 있는 곳')
+    _dashH('곧 신호가 바뀔 수 있는 동네')
     + shown.map(row).join('')
     + (more.length ? _dashMore(`그 외 ${more.length}곳`, more.map(row).join('')) : '')
     + `<div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.5">${d.note||''}
@@ -2251,12 +2251,12 @@ async function _loadBudgetWatch(){
 
   if(!d.ready){
     if(d.reason==='no_budget'){
-      wrap.innerHTML=_dashCard(_dashH('내 예산 안 매물')
+      wrap.innerHTML=_dashCard(_dashH('예산 아래 매물')
         +`<div style="font-size:13.5px;color:var(--dim);line-height:1.55">${d.message||''}</div>`);
     } else if(d.reason==='first_run'){
-      wrap.innerHTML=_dashCard(_dashH('내 예산 안 매물')
-        +`<div style="font-size:14px;line-height:1.55">가격이 적힌 수집분 <b>${(d.in_budget||0).toLocaleString()}건</b>이 상한 아래입니다.
-           <div style="font-size:12px;color:var(--dim);margin-top:6px">방문 목록이 아닙니다. 확인할 호가는 위 카드이고, 다음 방문부터 새로 들어온 것만 알려드립니다.</div></div>`);
+      wrap.innerHTML=_dashCard(_dashH('예산 아래 매물')
+        +`<div style="font-size:14px;line-height:1.55">가격이 있는 매물이 <b>${(d.in_budget||0).toLocaleString()}건</b> 있습니다.
+           <div style="font-size:12px;color:var(--dim);margin-top:6px">보러 갈 목록은 아닙니다. 지금 볼 집은 위 카드에 있고, 다음부터는 새로 나온 것만 알려 드립니다.</div></div>`);
       _ackWhenVisible(wrap,'/api/budget-watch/seen');
     } else { wrap.innerHTML=''; }
     return;
@@ -2286,16 +2286,16 @@ async function _loadBudgetWatch(){
   if((d.left||[]).length) parts.push(_dashMore(`예산에서 빠짐 ${d.left_total}건`,
     d.left.map(x=>row(x,'out')).join('')));
 
-  const head=_dashH('내 예산 안 매물');
+  const head=_dashH('예산 아래 매물');
   if(d.quiet){
     wrap.innerHTML=_dashCard(head
-      +`<div style="font-size:14px;line-height:1.55">상한 아래 수집분 <b>${(d.in_budget||0).toLocaleString()}건</b> · 지난 방문 대비 변화 없음
+      +`<div style="font-size:14px;line-height:1.55">예산 아래 매물 <b>${(d.in_budget||0).toLocaleString()}건</b> · 지난번과 같습니다
         <div style="font-size:12px;color:var(--dim);margin-top:6px">새로 들어오거나 빠진 매물이 없었습니다.</div></div>`);
     _ackWhenVisible(wrap,'/api/budget-watch/seen');
     return;
   }
   wrap.innerHTML=_dashCard(head
-    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">상한 ${_eok(d.budget)} 아래 수집분 ${(d.in_budget||0).toLocaleString()}건 · 방문 목록이 아닙니다</div>`
+    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} 아래, 가격이 있는 매물 ${(d.in_budget||0).toLocaleString()}건 · 보러 갈 목록은 아닙니다</div>`
     + parts.join(''));
   _ackWhenVisible(wrap,'/api/budget-watch/seen');
 }
@@ -2309,33 +2309,33 @@ async function _loadBuyingPower(){
     if(!r.ok) throw new Error(r.status===401?'로그인이 필요합니다':`서버 오류 ${r.status}`);
     d=await r.json();
   }catch(e){
-    wrap.innerHTML=_dashCard(_dashH('내 매수력')
-      +`<div style="font-size:14px;color:var(--dim);line-height:1.55">매수력을 불러오지 못했습니다 (${e.message}).
+    wrap.innerHTML=_dashCard(_dashH('내가 살 수 있는 가격')
+      +`<div style="font-size:14px;color:var(--dim);line-height:1.55">가격을 불러오지 못했습니다 (${e.message}).
         <div style="margin-top:12px"><span class="btn" style="padding:6px 14px" onclick="_loadBuyingPower()">다시 시도</span></div></div>`);
     return;
   }
   _bp=d;
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH('내 매수력')
-      +`<div style="font-size:15px;line-height:1.55;color:var(--dim)">${d.message||'가용자본을 입력하면 매수 상한을 정할 수 있어요.'}
-        <div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">매수력 계산</span></div></div>`);
+    wrap.innerHTML=_dashCard(_dashH('내가 살 수 있는 가격')
+      +`<div style="font-size:15px;line-height:1.55;color:var(--dim)">${d.message||'가진 돈을 넣으면 살 수 있는 집값을 계산합니다.'}
+        <div style="margin-top:14px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">계산하기</span></div></div>`);
     return;
   }
   const confirmed=!!d['확정'];
   const g=d['가정']||{};
   const stale=confirmed && (d['재확인필요'] || Math.abs(d['확정']-d['최대매수가'])>Math.max(500, d['최대매수가']*0.01));
-  const tag=(confirmed && !stale) ? '가정 저장됨 · 승인 전' : (stale ? '가정 재확인 필요' : '가정 미저장');
+  const tag=(confirmed && !stale) ? '저장한 계산 · 은행 승인 전' : (stale ? '다시 계산이 필요합니다' : '아직 저장하지 않음');
   const tagCol=(confirmed && !stale) ? 'var(--dim)' : '#b45309';
   const conclusion=`<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
-      <span style="font-size:26px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">상한 추정 ${_eok(d['최대매수가'])}</span>
+      <span style="font-size:26px;font-weight:600;letter-spacing:-0.03em;color:var(--txt)">최대 ${_eok(d['최대매수가'])}</span>
       <span style="font-size:12px;color:${tagCol}">${tag}</span></div>
-    <div style="font-size:13.5px;color:var(--dim);margin-top:6px;line-height:1.5">월 ${(d['월상환']||0).toLocaleString()}만 · 필요현금 ${_eok(d['필요현금'])}</div>`;
+    <div style="font-size:13.5px;color:var(--dim);margin-top:6px;line-height:1.5">매달 ${(d['월상환']||0).toLocaleString()}만 · 필요한 돈 ${_eok(d['필요현금'])}</div>`;
   const detail=`<div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])}${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
     <div style="margin-top:8px">${_bpRegBadge(d['규제'])}</div>`;
   const cta=(confirmed && !stale)
     ? `<div style="margin-top:12px"><span class="btn" style="padding:6px 14px" onclick="openBuyingPower()">조건 바꾸기</span></div>`
-    : `<div style="margin-top:12px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">${stale?'다시 확정':'매수력 확정'}</span></div>`;
-  wrap.innerHTML=_dashCard(_dashH('내 매수력')+conclusion+cta+_dashMore('대출·규제 상세', detail));
+    : `<div style="margin-top:12px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">${stale?'다시 저장':'이 계산 저장'}</span></div>`;
+  wrap.innerHTML=_dashCard(_dashH('내가 살 수 있는 가격')+conclusion+cta+_dashMore('대출 자세히', detail));
 }
 function openBuyingPower(){
   const p=_profile||{}, g=(_bp&&_bp['가정'])||{};
@@ -2422,13 +2422,13 @@ async function bpConfirm(){
 }
 async function _loadAsks(){
   const wrap=document.getElementById('dashShortlistWrap'); if(!wrap) return;
-  wrap.innerHTML=_dashCard(_dashH('상한 안 호가')+'<div style="color:var(--dim);font-size:13px">확인된 호가를 찾는 중…</div>');
+  wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')+'<div style="color:var(--dim);font-size:13px">매물을 찾는 중…</div>');
   let d; try{ const r=await fetch('/api/asks'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
-    wrap.innerHTML=_dashCard(_dashH('상한 안 호가')+'<p>호가를 불러오지 못했습니다.</p><button class="btn" onclick="_loadAsks()">다시 시도</button>'); return; }
+    wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')+'<p>매물을 불러오지 못했습니다.</p><button class="btn" onclick="_loadAsks()">다시 시도</button>'); return; }
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH('상한 안 호가')
-      +`<div style="font-size:14px;line-height:1.6">${esc(d.message||'상한 안에 확인된 호가가 없습니다.')}
-        <div style="margin-top:8px"><button class="btn primary" onclick="_planGo('levers','dashboard')">같은 돈의 네 갈래</button></div></div>`);
+    wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')
+      +`<div style="font-size:14px;line-height:1.6">${esc(d.message||'예산 안에 맞는 매물이 없습니다.')}
+        <div style="margin-top:8px"><button class="btn primary" onclick="_planGo('levers','dashboard')">다른 방법으로 보기</button></div></div>`);
     return;
   }
   const cards=(d.asks||[]).map((c,i)=>`<div style="padding:${i?10:0}px 0 0;${i?'border-top:1px solid var(--line);margin-top:10px':''}">
@@ -2436,24 +2436,24 @@ async function _loadAsks(){
         <span style="font-size:12px;color:var(--dim)">${i+1}</span>
         <b style="font-size:15px;font-weight:600">${esc(c['단지명'])}</b>
         <span style="font-size:12px;color:var(--dim)">${esc(c['지역']||'')} · ${esc(c['유형']||'')}</span>
-        <span style="margin-left:auto;font-size:15px;font-weight:600">호가 ${_eok(c['총액'])}</span>
+        <span style="margin-left:auto;font-size:15px;font-weight:600">매매가 ${_eok(c['총액'])}</span>
       </div>
       <div style="margin-top:6px">${_buyerFourHtml(c, _eok)}</div>
       ${c.key?`<button type="button" class="btn" data-ask="${i}">이 매물 확인</button>`:''}
     </div>`).join('');
-  wrap.innerHTML=_dashCard(_dashH('상한 안 호가')
-    +`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">상한 ${_eok(d.budget)} 안에서 가격이 확인되고 현금이 맞는 매물입니다. 지역 평단 추정이 아닙니다.</div>`
+  wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')
+    +`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} 안에서 매물 가격이 있고, 가진 돈으로 되는 집입니다. 동네 평균으로 짐작한 가격은 빼 두었습니다.</div>`
     +cards);
   wrap.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{ const c=d.asks[Number(b.dataset.ask)]; if(c&&c.key) openListingReport(c.key); });
 }
 // ===== 추정 단지 — 펼침 안에만. 호가가 아니다 =====
 async function _loadShortlist(){
   const wrap=document.getElementById('dashEstimateWrap'); if(!wrap) return;
-  wrap.innerHTML=_dashCard(_dashH('추정 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>');
+  wrap.innerHTML=_dashCard(_dashH('가격을 짐작한 단지')+'<div style="color:var(--dim);font-size:13px">단지를 좁히는 중…</div>');
   let d; try{ const r=await fetch('/api/shortlist'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
-    wrap.innerHTML=_dashCard(_dashH('추정 단지')+'<p>후보 데이터를 불러오지 못했습니다. 후보가 없다는 뜻은 아닙니다.</p><button class="btn" onclick="_loadShortlist()">다시 시도</button>'); return; }
+    wrap.innerHTML=_dashCard(_dashH('가격을 짐작한 단지')+'<p>단지를 불러오지 못했습니다. 단지가 없다는 뜻은 아닙니다.</p><button class="btn" onclick="_loadShortlist()">다시 시도</button>'); return; }
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH('추정 단지')
+    wrap.innerHTML=_dashCard(_dashH('가격을 짐작한 단지')
       +`<div style="color:var(--dim);font-size:13px;line-height:1.6">${d.message||'예산 안에서 볼 만한 단지를 찾지 못했습니다.'}
         ${d['탈락']?`<div style="margin-top:6px;font-size:12px">${_slRejectLine(d)}</div>`:''}
         <div style="margin-top:8px"><span class="btn" style="padding:5px 12px" onclick="switchTab('signal')">시그널 지도에서 ★ 추가 →</span></div></div>`);
@@ -2463,7 +2463,7 @@ async function _loadShortlist(){
       <span style="font-size:12px;color:var(--dim)">${i+1}</span>
       <b style="font-size:15px;font-weight:600">${esc(c['단지'])}</b>
       <span style="font-size:12px;color:var(--dim)">${esc(c.region)}</span>
-      <span style="margin-left:auto;font-size:15px;font-weight:600">추정 ${_eok(c['예상가'])}</span>
+      <span style="margin-left:auto;font-size:15px;font-weight:600">약 ${_eok(c['예상가'])}</span>
       <div style="width:100%;margin-top:6px">${_buyerFourHtml(c, _eok)}</div>
       <button type="button" class="btn" data-candidate="${i}">단지·실거래 확인</button>
     </div>`).join('');
@@ -2478,19 +2478,19 @@ async function _loadShortlist(){
       </div></div>`;
   }).join('')
     +`<div style="margin-top:12px;font-size:12.5px;color:var(--dim)">${_slRejectLine(d)}</div>`;
-  const sub=`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">${d.pyeong}평 · 예산 ${_eok(d.budget)} · 지역 평단 추정입니다. 매물 호가가 아닙니다.</div>`;
-  wrap.innerHTML=_dashCard(_dashH('추정 단지')+sub+conclusion
+  const sub=`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">${d.pyeong}평 · 예산 ${_eok(d.budget)} · 동네 평균으로 짐작한 가격입니다. 매물에 적힌 가격이 아닙니다.</div>`;
+  wrap.innerHTML=_dashCard(_dashH('가격을 짐작한 단지')+sub+conclusion
     +`<div style="margin-top:14px"><button class="btn" onclick="openImjang()">현장 방문 계획</button></div>`
     +_dashMore('근거 · 탈락 사유', detail));
   wrap.querySelectorAll('[data-candidate]').forEach(b=>b.onclick=()=>{ const c=d.candidates[Number(b.dataset.candidate)]; openComplex(c['단지'],c.region); });
 }
 function _renderLevers(d){
   const cols=(d.columns||[]).map(col=>`<div style="padding:10px 0;border-top:1px solid var(--line)">
-      <b>${esc(col.label)}</b> <span style="color:var(--dim);font-size:12px">${esc(col.feasibility||'')}</span>
+      <b>${esc(col.label)}</b> <span style="color:var(--dim);font-size:12px">${esc({conditional:'계산상 됩니다',unknown:'아직 모릅니다',infeasible:'가진 돈으로 안 됩니다'}[col.feasibility]||'')}</span>
       ${_buyerFourHtml({lines:col.lines}, _eok)}
       <div style="font-size:12px;color:var(--dim);margin-top:4px">${esc(col['시간']||'')}</div>
     </div>`).join('');
-  return cols||`<div style="color:var(--dim);font-size:13px">${esc(d.message||'자본을 확정하면 네 갈래를 계산합니다.')}</div>`;
+  return cols||`<div style="color:var(--dim);font-size:13px">${esc(d.message||'가진 돈을 넣으면 같은 돈으로 사는 방법을 계산합니다.')}</div>`;
 }
 async function _loadLevers(){
   const wrap=document.getElementById('dashLeversWrap'); if(!wrap) return;
@@ -2508,11 +2508,11 @@ async function _loadLevers(){
       <button type="button" class="btn" onclick="_loadLevers()">다시 계산</button>
     </div>`;
   let body='<div style="color:var(--dim);font-size:13px">계산 중…</div>';
-  wrap.innerHTML=_dashCard(_dashH('같은 돈의 네 갈래')+form+body);
+  wrap.innerHTML=_dashCard(_dashH('같은 돈으로 사는 방법')+form+body);
   let d; try{ const r=await fetch('/api/levers?'+q); if(!r.ok) throw new Error('load'); d=await r.json(); }
-  catch(e){ wrap.innerHTML=_dashCard(_dashH('같은 돈의 네 갈래')+form+'<div style="color:var(--dim);font-size:13px">계산하지 못했습니다.</div>'); return; }
-  wrap.innerHTML=_dashCard(_dashH('같은 돈의 네 갈래')
-    +`<div style="font-size:12px;color:var(--dim);margin-bottom:4px">승자를 고르지 않습니다. 보증금·분담금이 없으면 그 칸은 비어 있습니다.</div>`
+  catch(e){ wrap.innerHTML=_dashCard(_dashH('같은 돈으로 사는 방법')+form+'<div style="color:var(--dim);font-size:13px">계산하지 못했습니다.</div>'); return; }
+  wrap.innerHTML=_dashCard(_dashH('같은 돈으로 사는 방법')
+    +`<div style="font-size:12px;color:var(--dim);margin-bottom:4px">어느 쪽이 낫다고 정하지 않습니다. 전세 보증금이나 분담금을 모르면 그 칸은 비워 둡니다.</div>`
     +form+_renderLevers(d));
 }
 
@@ -3847,7 +3847,7 @@ function renderAiReport(d, eok){
   if(homeCard) lines.push(`거주지 <b>${esc(p['거주지'])}</b>는 현재 ${badge(homeCard['시그널']||'')} — ${homeCard['예산내']?'지역평균 추정가는 가정 예산 범위':'지역평균 추정가는 가정 예산 초과'}. 개별 매물은 별도 확인이 필요합니다.`);
   if(danghae) lines.push(`추천 지역 청약 <b>${danghae}건</b>이 진행/예정입니다.`);
   if(quick) lines.push(`추천 지역 급매·찐매물 <b>${quick}건</b>이 포착됐습니다.`);
-  lines.push(`<span style="color:var(--dim)">다음 행동: 추천 매물·지역에서 ★ 즐겨찾기 → 통합 매물·매수력으로 조건을 고정하세요.</span>`);
+  lines.push(`<span style="color:var(--dim)">다음: 관심 매물과 지역에 ★를 누르고, 살 수 있는 가격을 저장하세요.</span>`);
 
   _reportSummary = {
     매수가능_억: +(d.budget/10000).toFixed(1), 거주지:p['거주지']||null, 주택수:p['주택수'],
@@ -3965,8 +3965,8 @@ function _ccBudgetHtml(d, eok){
 function _holdBlock(h){
   if(!h) return '';
   const items=h.items||[];
-  if(!items.length) return `<div style="margin-top:10px;font-size:13px;line-height:1.55"><b>내 보류</b><div style="color:var(--dim)">${esc(h.reason||'지난주와 비교할 보류 기록이 없습니다.')}</div></div>`;
-  return `<div style="margin-top:10px;font-size:13px;line-height:1.55"><b>내 보류</b>${items.map(it=>`<div style="margin-top:6px"><b>${esc(it.name||'후보')}</b> ${esc(it.region||'')}<div style="color:var(--dim)">${(it.changes||[]).map(esc).join(' · ')}</div></div>`).join('')}</div>`;
+  if(!items.length) return `<div style="margin-top:10px;font-size:13px;line-height:1.55"><b>지난주에 미뤄 둔 것</b><div style="color:var(--dim)">${esc(h.reason||'지난주와 비교할 기록이 없습니다.')}</div></div>`;
+  return `<div style="margin-top:10px;font-size:13px;line-height:1.55"><b>지난주에 미뤄 둔 것</b>${items.map(it=>`<div style="margin-top:6px"><b>${esc(it.name||'후보')}</b> ${esc(it.region||'')}<div style="color:var(--dim)">${(it.changes||[]).map(esc).join(' · ')}</div></div>`).join('')}</div>`;
 }
 function _buyerFour(L, eok){
   if(L.lines&&L.lines.cash) return {cash:L.lines.cash, price:L.lines.price, unknown:L.lines.unknown, next:L.lines.next};
@@ -3981,33 +3981,33 @@ function _buyerFour(L, eok){
   let cash;
   if(z['필요현금']!=null){
     const month=z['총월상환']!=null?z['총월상환']:z['월상환'];
-    const state=z['확인필요']?'확인 필요':z['가능']===false?'조건 초과':modeled?'추정가 기준 · 호가 확인 전':'호가 기준 가정 안';
-    cash=`필요현금 ${money(z['필요현금'])}${month!=null?` · 월 ${Number(month).toLocaleString()}만`:''} · ${state}`;
+    const state=z['확인필요']?'확인이 필요합니다':z['가능']===false?'가진 돈으로 안 됩니다':modeled?'짐작한 가격입니다. 매물 가격은 모릅니다':'계산상 됩니다';
+    cash=`필요한 돈 ${money(z['필요현금'])}${month!=null?` · 매달 ${Number(month).toLocaleString()}만`:''} · ${state}`;
   }else if(kind==='경매'&&L['입찰상태']&&L['입찰상태']!=='conditional_bid'){
-    cash='입찰 보류 · 필요현금 산정 전';
+    cash='아직 입찰하지 않습니다. 필요한 돈은 계산 전입니다';
   }else if(L['예산내']||(cap&&ask!=null&&ask<=cap)){
-    cash='호가 기준 상한 이내 · 취득비용은 별도';
+    cash='예산 안 가격입니다. 세금과 중개비는 따로입니다';
   }else if(cap&&ask!=null&&ask>cap){
-    cash='호가 기준 상한 초과';
+    cash='예산보다 비쌉니다';
   }else if(ask==null){
-    cash='가격이 없어 현금 비교 전';
+    cash='가격이 없어 필요한 돈을 계산하지 못했습니다';
   }else{
-    cash='매수 상한을 확정하면 현금 비교가 붙습니다';
+    cash='살 수 있는 가격을 저장하면 필요한 돈을 계산합니다';
   }
-  const price=kind==='경매'?'최저매각가 · 취득비용 별도'
-    :src==='매물가'?'원천 호가 · 유효성 확인'
-    :modeled?'지역평단 추정 · 매물가 아님'
-    :(L['추정가']??L['총액']??L['예상가'])?'가격 출처 확인 필요':'가격 미상';
+  const price=kind==='경매'?'최저 입찰가입니다. 세금과 비용은 따로입니다'
+    :src==='매물가'?'매물에 적힌 가격입니다. 아직 팔리는지는 모릅니다'
+    :modeled?'동네 평균으로 짐작한 가격입니다. 매물 가격이 아닙니다'
+    :(L['추정가']??L['총액']??L['예상가'])?'이 가격이 어디서 온 것인지 확인이 필요합니다':'가격을 모릅니다';
   const unknown=(d.unknowns&&d.unknowns.length)?d.unknowns.slice(0,2).join(' · ')
-    :(d.blocking_reasons&&d.blocking_reasons[0])||'호가·권리·대출 승인';
+    :(d.blocking_reasons&&d.blocking_reasons[0])||'매물 가격, 권리, 은행 대출';
   const next=d.next_action||(kind==='경매'&&L['입찰상태']&&L['입찰상태']!=='conditional_bid'
-    ?'권리·시세 근거 확인 후 입찰 검토':'호가와 필요현금을 단지 상세에서 확인');
+    ?'권리와 시세를 확인한 뒤 입찰을 검토하세요':'매물 가격과 필요한 돈을 확인하세요');
   return {cash, price, unknown, next};
 }
 function _buyerFourHtml(L, eok){
   const f=_buyerFour(L, eok);
   const row=(k,v)=>`<div style="font-size:12px;line-height:1.55"><span style="color:var(--dim)">${k}</span> ${esc(v)}</div>`;
-  return row('현금',f.cash)+row('가격',f.price)+row('미확인',f.unknown)+row('다음',f.next);
+  return row('돈',f.cash)+row('가격',f.price)+row('아직',f.unknown)+row('다음',f.next);
 }
 function _ccListingCard(L, eok){
   const kind=L['유형']||'';
@@ -4017,8 +4017,8 @@ function _ccListingCard(L, eok){
   const tab={급매:'quicksale',경매:'auction',찐매물:'quicksale',청약:'presale',재건축:'signal'}[kind]||'all';
   const d=L['decision']||{};
   const held=kind==='경매'&&L['입찰상태']!=='conditional_bid';
-  const status=held?'입찰 보류':d.feasibility==='infeasible'?'조건 불가':L['예산내']?'호가 예산 내 · 확인 필요':L['예산확인필요']?'가격·자금 확인 필요':'조건 초과';
-  const priceLabel=kind==='경매'?'최저매각가 · 취득비용 별도':L['가격출처']==='매물가'?'원천 호가 · 유효성 확인':L['가격출처']==='지역평단추정'?'지역평단 추정 · 매물가 아님':'가격 확인 필요';
+  const status=held?'아직 입찰하지 않음':d.feasibility==='infeasible'?'가진 돈으로 안 됨':L['예산내']?'예산 안 · 확인 필요':L['예산확인필요']?'가격과 돈을 확인해야 함':'조건이 맞지 않음';
+  const priceLabel=kind==='경매'?'최저 입찰가입니다. 세금과 비용은 따로입니다':L['가격출처']==='매물가'?'매물에 적힌 가격입니다. 아직 팔리는지는 모릅니다':L['가격출처']==='지역평단추정'?'동네 평균으로 짐작한 가격입니다. 매물 가격이 아닙니다':'가격 확인이 필요합니다';
   const issues=[...(d.blocking_reasons||[]),...(d.unknowns||[])].slice(0,5);
   return `<details class="cc-listing" style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff">
     <summary style="cursor:pointer;list-style:none">
@@ -4036,7 +4036,7 @@ function _ccListingCard(L, eok){
       ${metric?`<div>비교 지표: ${esc(metric)} <span style="color:var(--dim)">(매수·매도 수익 보장 아님)</span></div>`:''}
       ${L['예산비율']!=null?`<div>호가/예산 비율: ${Math.round(L['예산비율']*100)}%</div>`:''}
       ${issues.length?`<div style="margin-top:6px;color:var(--dim)">확인할 것: ${issues.map(esc).join(' · ')}</div>`:''}
-      <div style="margin-top:6px">다음 행동: ${esc(d.next_action||'가격·권리·자금 확인')}</div>
+      <div style="margin-top:6px">다음: ${esc(d.next_action||'가격, 권리, 돈을 확인하세요')}</div>
       <button type="button" class="btn" style="margin-top:8px" onclick="switchTab('${tab}')">${esc(kind)} 화면에서 확인 →</button>
     </div>
   </details>`;
@@ -5021,7 +5021,7 @@ async function openNbhd(region){
 function _nbSec(title, inner){ return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--dim);margin-bottom:7px">${title}</div>${inner}</div>`; }
 function _nbStat(label, val){ return `<div style="display:inline-flex;flex-direction:column;gap:1px;min-width:92px;padding:8px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px"><span style="font-size:11px;color:var(--dim)">${label}</span><span style="font-weight:700;font-size:14px">${val}</span></div>`; }
 function _nbDiffRow(it){
-  const lab={시그널:'시그널',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',평단가:'평단가',저평가도:'입지 모형 차이',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
+  const lab={시그널:'시그널',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',평단가:'평단가',저평가도:'입지 대비 가격',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
   const money=v=>v==null?'–':(typeof v==='number'&&v>=1000?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
   let arrow='', col='var(--dim)';
   if(it.key==='시그널' && it.delta!=null){ arrow=it.delta>0?' ▲':(it.delta<0?' ▼':''); col=it.delta>0?'var(--sig-buy)':(it.delta<0?'var(--sig-sell)':'var(--dim)'); }
@@ -5119,7 +5119,7 @@ async function nbhdCompare(){
   catch(e){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교를 불러오지 못했습니다.</div>'; return; }
   if(!d.ok){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교할 지역을 찾지 못했습니다.</div>'; return; }
   const money=v=>v==null?'–':(typeof v==='number'&&v>=100?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
-  const lab={시그널:'시그널',급지:'급지',평단가:'평단가',저평가도:'입지 모형 차이',입지점수:'입지 대리점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
+  const lab={시그널:'시그널',급지:'급지',평단가:'평단가',저평가도:'입지 대비 가격',입지점수:'입지 대리점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
   const rows=(d.rows||[]).map(r=>{
     const va=r.key==='시그널'?badge(r.a):(r.key==='평단가'?money(r.a):(r.a??'–'));
     const vb=r.key==='시그널'?badge(r.b):(r.key==='평단가'?money(r.b):(r.b??'–'));
@@ -7121,7 +7121,7 @@ async function listingDiscoveryCommute(){
 function _analysisDiscovery(d){
   const box=d.discovery;
   if(!box) return '<button type="button" class="btn" onclick="listingDiscoveryLoad()">비슷한 매물·관련 뉴스 보기</button>';
-  if(box.loading) return '<div class="analysis-muted">현재 수집분과 헤드라인을 확인 중…</div>';
+  if(box.loading) return '<div class="analysis-muted">가져온 매물과 기사를 확인하는 중…</div>';
   if(box.error) return `<div class="analysis-muted">${esc(box.error)}</div><button type="button" class="btn" onclick="listingDiscoveryLoad()">다시 시도</button>`;
   const commute=box.commute||{}, selectedMinutes=commute.selected?.minutes;
   const commuteByKey=new Map((commute.alternatives||[]).map(x=>[x.key,x]));
@@ -7144,7 +7144,7 @@ function _analysisDiscovery(d){
       ? `<div class="analysis-muted">선택 매물 ${selectedMinutes!=null?`${esc(selectedMinutes)}분`:'경로 미확인'} · ${esc(commute.note||'')}</div>`
       : `<div class="analysis-muted">${esc(commute.reason||'출근 경로는 필요할 때만 조회합니다.')}</div>
          <button type="button" class="btn" onclick="listingDiscoveryCommute()">내 직장까지 통근 비교</button>`;
-  return `<div style="font-weight:700">다른 매물</div>${alternatives||'<div class="analysis-muted">현재 수집분에서 비교할 대안을 찾지 못했습니다.</div>'}
+  return `<div style="font-weight:700">다른 매물</div>${alternatives||'<div class="analysis-muted">가져온 매물 중에서 비교할 집을 찾지 못했습니다.</div>'}
     ${alternatives?commuteAction:''}
     <div class="analysis-muted">${esc(box.source_note||'')}</div>
     <div style="font-weight:700;margin-top:11px">관련 헤드라인 후보</div>${headlines||'<div class="analysis-muted">기존 뉴스 자료에서 일치 항목이 없습니다.</div>'}
@@ -7212,7 +7212,7 @@ async function listingCompareOpen(){
   if(!dlg.open) dlg.showModal();
   const keys=_listingCompareKeys(), gen=++_listingCompareGen; _listingCompareActiveKeys=keys;
   if(keys.length<2){ body.innerHTML=`<div class="analysis-muted">${keys.length?'한 매물을 담았습니다.':'비교함이 비었습니다.'} 다른 매물의 매물분석에서 하나 더 담아주세요.</div>`; return; }
-  body.innerHTML='<div class="analysis-muted">현재 수집분과 실거래를 확인하는 중…</div>';
+  body.innerHTML='<div class="analysis-muted">매물과 실거래를 확인하는 중…</div>';
   try{
     const response=await fetch('/api/listing-compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys})});
     if(!response.ok) throw new Error((await response.json().catch(()=>({}))).detail||'비교할 매물을 확인하지 못했습니다.');
@@ -7234,7 +7234,7 @@ async function listingCompareOpen(){
         ${row('전용면적·층',x=>`${x.listing.exclusive_m2?`${esc(x.listing.exclusive_m2)}㎡`:'면적 미확인'} · ${x.listing.floor!=null?`${esc(x.listing.floor)}층`:'층 미확인'}`)}
         ${row('전용㎡당 호가',x=>x.asking_per_m2_manwon!=null?`${esc(x.asking_per_m2_manwon)}만/㎡`:'미확인')}
         ${row('동일 조건 실거래 대비',price)}
-        ${row('내 확정 매수력',x=>x.budget_fit==='unknown'?'미확인':x.budget_fit==='within'?'호가 기준 이내':'호가 기준 초과')}
+        ${row('내가 살 수 있는 가격',x=>x.budget_fit==='unknown'?'모름':x.budget_fit==='within'?'예산 안':'예산 초과')}
         ${row('매물 수집일',x=>esc(x.listing.collected_at||'미확인')+(x.listing.stale?' · 지난 결과':''))}
         ${row('사용승인·세대수',x=>`${esc(x.building?.['사용승인일']||'미확인')} · ${x.building?.['세대수']?`${esc(x.building['세대수'])}세대`:'세대수 미확인'}`)}
         </tbody></table></div>
@@ -7245,7 +7245,7 @@ async function listingCompareOpen(){
       <button type="button" class="btn" style="margin-top:12px;background:var(--accent);color:#fff" onclick="listingCompareAsk()">닉에게 차이 묻기</button>
       <details style="font-size:12px;margin-top:12px"><summary>왜 이렇게 비교하나요?</summary>
         <p>면적이나 층이 다르면 총 호가만으로 유불리를 가를 수 없습니다. 같은 면적의 최근 실거래라도 현재 매물의 동·향·상태와 다르며, 표본이 적으면 판단을 보류합니다.</p>
-        <p>예산은 호가와 확정 매수력만 비교합니다. 취득세·대출 승인·수리비를 포함한 실제 자금계획은 따로 확인해야 합니다.</p>
+        <p>예산은 매물 가격과 저장한 계산만 비교합니다. 세금, 은행 대출, 수리는 따로 확인해야 합니다.</p>
       </details>`;
   }catch(e){ if(gen===_listingCompareGen) body.innerHTML=`<div class="analysis-muted">${esc(e.message||'비교 실패')}</div>`; }
 }
@@ -7272,7 +7272,7 @@ function _analysisRender(d){
     const routeMinutes=d.mobility?.station_walk?.status==='observed'?d.mobility.station_walk.minutes:null;
     const zoneCount=d.school?.status==='candidate'?(d.school.zones||[]).length:0;
     const four=d.lines?_buyerFourHtml({lines:d.lines}, _eok):'';
-    html+=card('한눈에 보기',`${four}<div>내 예산 · ${fit.status==='within'?`확정 매수력 안 (호가 기준 여유 ${_eok(fit.gap_manwon)})`:fit.status==='above'?`확정 매수력 초과 (호가 기준 부족 ${_eok(-fit.gap_manwon)})`:'확정 매수력 미확인'}</div>
+    html+=card('한눈에 보기',`${four}<div>내 예산 · ${fit.status==='within'?`살 수 있는 가격 안 (여유 ${_eok(fit.gap_manwon)})`:fit.status==='above'?`살 수 있는 가격보다 비쌈 (부족 ${_eok(-fit.gap_manwon)})`:'살 수 있는 가격을 아직 모릅니다'}</div>
       <div>가격 · ${checked?`동일 조건 거래 ${esc(price['표본수'])}건과 비교`:'같은 조건 거래 근거 부족'}</div>
       <div>역 이동 · ${routeMinutes!=null?`표시 좌표 기준 도보 ${esc(routeMinutes)}분`:'경로 미확인'}</div>
       <div>학교 · ${zoneCount?`통학구역 후보 ${esc(zoneCount)}곳`:'배정 미확인'}</div>
@@ -7333,7 +7333,7 @@ function _analysisRender(d){
     html+=fold('amenities','가까운 생활시설',`<div>${placeBits.join('<br>')||esc(amen.reason||'시설 자료 확인 중')}</div>
       <div class="analysis-muted">${esc(amen.coordinate_note||'시설까지의 실제 이동 경로·영업 상태는 확인되지 않았습니다.')}</div>`);
     const schedule=d.development||{}, scheduleItems=schedule.items||[];
-    html+=fold('development','확인된 일정',`${scheduleItems.map(item=>`<div><b>${esc(item.종류||'일정')}</b> ${esc(item.내용||'')}</div><div class="analysis-muted">${esc(item.출처||'')} · ${esc(item.주의||'')}</div>`).join('')}<div class="analysis-muted">${esc(schedule.reason||'단지명과 일치하는 공식 일정이 없습니다.')}</div>`);
+    html+=fold('development','공식 일정',`${scheduleItems.map(item=>`<div><b>${esc(item.종류||'일정')}</b> ${esc(item.내용||'')}</div><div class="analysis-muted">${esc(item.출처||'')} · ${esc(item.주의||'')}</div>`).join('')}<div class="analysis-muted">${esc(schedule.reason||'이 단지와 맞는 공식 일정이 없습니다.')}</div>`);
     html+=fold('discovery','대안과 변화 살피기',_analysisDiscovery(d));
     html+=fold('questions','중개사에게 확인',`<ul>${(d.questions||[]).map(q=>`<li>${esc(q)}</li>`).join('')}</ul>`);
     html+=`<div class="analysis-muted" style="margin:14px 0 4px">근거: ${(d.evidence||[]).map(e=>{

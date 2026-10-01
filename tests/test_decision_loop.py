@@ -13,7 +13,7 @@ def test_card_lines_come_from_the_decision_and_skip_auction_cash():
            "자금": {"필요현금": 10000, "가능": True, "월상환": 30}}
     decision = {"feasibility": "unknown", "unknowns": ["권리 확인"], "next_action": "권리 확인 후 검토"}
     lines = buyer_decision.card_lines(row, decision)
-    assert lines["cash"] == "입찰 보류 · 필요현금 산정 전"
+    assert lines["cash"] == "아직 입찰하지 않습니다. 필요한 돈은 계산 전입니다"
     assert lines["unknown"] == "권리 확인"
     assert lines["next"] == "권리 확인 후 검토"
     built = buyer_decision.build(
@@ -21,8 +21,8 @@ def test_card_lines_come_from_the_decision_and_skip_auction_cash():
          "fetched_at": "2026-09-19T00:00:00Z", "source": "synthetic",
          "자금": {"가능": True, "확인필요": False, "필요현금": 21000, "월상환": 135}},
         bp.Params(capital=50000), uid=1)
-    assert built["lines"]["cash"].startswith("필요현금")
-    assert "가정 안" in built["lines"]["cash"]
+    assert built["lines"]["cash"].startswith("필요한 돈")
+    assert "계산상 됩니다" in built["lines"]["cash"]
 
 
 def test_same_capital_board_has_no_winner_and_blank_gap():

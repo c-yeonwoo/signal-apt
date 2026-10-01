@@ -238,7 +238,7 @@ def asks(request: Request):
     budget = buying_power.max_purchase(params)[0] if params.capital > 0 else 0
     if not budget:
         return {"ready": False, "reason": "no_budget", "asks": [],
-                "message": "매수력을 확정하면 상한 안의 호가를 보여 드립니다."}
+                "message": "살 수 있는 가격을 저장하면 맞는 매물을 보여 드립니다."}
     picked = briefing.asks_within(uid, profile, float(budget))
     slim = []
     for row in picked:
@@ -249,7 +249,7 @@ def asks(request: Request):
             "lines": lines, "자금": {"가능": (row.get("자금") or {}).get("가능")},
         })
     return {"ready": bool(slim), "budget": round(float(budget)), "asks": slim,
-            "message": "" if slim else "상한 안에 확인된 호가가 없습니다. 아래 네 갈래에서 같은 돈을 비교합니다."}
+            "message": "" if slim else "예산 안에 맞는 매물이 없습니다. 아래에서 같은 돈으로 사는 방법을 비교합니다."}
 
 
 @router.get("/api/weekly-issues")
