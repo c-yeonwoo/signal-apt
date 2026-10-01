@@ -287,7 +287,29 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
                 detail = app_api.complex_detail(row["지역"], row["단지명"])
             except Exception:  # noqa: BLE001
                 detail = {"status": "failed", "degraded": True}
-        out = {"status": "ready", **analysis.build(row, detail, profile=profile)}
+        zones = []
+        try:
+            cached = db.kv_get("redev_zones", max_age=90 * 86400)
+            if isinstance(cached, list):
+                zones = cached
+        except Exception:  # noqa: BLE001
+            zones = []
+        schedule = analysis.official_schedule(row.get("단지명"), zones)
+        out = {"status": "ready", **analysis.build(row, detail, profile=profile, schedule=schedule)}
+        try:
+            from realty_signal.services import buyer_decision
+            params = app_api._buyer_params(profile)
+        except Exception:  # noqa: BLE001
+            params = None
+            buyer_decision = None
+        if buyer_decision is not None:
+            try:
+                packet = buyer_decision.annotate(
+                    dict(row), params, uid=deps.uid(request), sido_of=app_api._sido_of)
+                out["lines"] = packet["lines"]
+                out["decision"] = packet["decision"]
+            except Exception:  # noqa: BLE001
+                pass
     return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
 
 

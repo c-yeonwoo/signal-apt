@@ -221,7 +221,7 @@ test('data reload invalidates in-flight map selection', async () => {
 
 test('buyer candidate card distinguishes inquiry from infeasibility and expands in place', () => {
   const ctx = vm.createContext({esc: s => String(s ?? '').replace(/</g, '&lt;')});
-  vm.runInContext(extract('function _ccListingCard(', 'async function loadConclusion(){'), ctx);
+  vm.runInContext(extract('function _buyerFour(', 'async function loadConclusion(){'), ctx);
   const eok = n => n == null ? '–' : `${n}만`;
   const auction = ctx._ccListingCard({유형: '경매', 단지명: '시험단지', 지역: '노원구',
     총액: 50000, 입찰상태: 'needs_review', 예산확인필요: true,
@@ -229,6 +229,10 @@ test('buyer candidate card distinguishes inquiry from infeasibility and expands 
   assert.match(auction, /<details class="cc-listing"/);
   assert.match(auction, /입찰 보류/);
   assert.match(auction, /최저매각가 · 취득비용 별도/);
+  assert.match(auction, /현금/);
+  assert.match(auction, /미확인/);
+  assert.match(auction, /권리 확인/);
+  assert.match(auction, /다음/);
   assert.doesNotMatch(auction, /예산초과·참고|<div onclick="switchTab/);
 
   const estimated = ctx._ccListingCard({유형: '재건축', 단지명: '<가짜>', 지역: '노원구',
@@ -237,4 +241,27 @@ test('buyer candidate card distinguishes inquiry from infeasibility and expands 
   assert.match(estimated, /가격·자금 확인 필요/);
   assert.match(estimated, /지역평단 추정 · 매물가 아님/);
   assert.match(estimated, /&lt;가짜>/);
+  const lined = ctx._ccListingCard({유형:'급매', 단지명:'선', 지역:'노원구', 총액:10000,
+    lines:{cash:'서버현금', price:'서버가격', unknown:'서버미확인', next:'서버다음'}}, eok);
+  assert.match(lined, /서버현금/);
+  assert.match(lined, /서버다음/);
+  assert.doesNotMatch(lined, /매수 상한을 확정하면/);
+});
+
+test('listing price filter and budget sort keep unknown prices out of the affordable tier', () => {
+  const ctx = vm.createContext({
+    _profile: {매수력: {최대매수가: 50000}},
+    _bp: null,
+    _laPrice: {lo: 0, hi: 200000, min: 0, max: 150000},
+  });
+  vm.runInContext(extract('function _laBudgetCap(){', 'function renderAllListings(){'), ctx);
+  assert.equal(ctx._laBudgetTier({총액: 40000}), 2);
+  assert.equal(ctx._laBudgetTier({총액: null}), 1);
+  assert.equal(ctx._laBudgetTier({총액: 80000}), 0);
+  assert.equal(ctx._laPricePass({총액: null}), false);
+  assert.equal(ctx._laPricePass({총액: 10000}), true);
+  assert.equal(ctx._laPricePass({총액: 160000}), false);
+  assert.match(html, /내 상한 순/);
+  assert.doesNotMatch(html, /언제·어디를 볼지/);
+  assert.match(html, /더 찾아보기<\/b> — 전체 매물은 내 상한 순입니다/);
 });

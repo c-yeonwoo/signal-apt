@@ -37,6 +37,12 @@ def weekly_change(request: Request):
         # 자리를 비운 동안 놓친 것 — '이번 주 변화' 는 직전 1주만 보므로 따로 계산한다
         if uid:
             out["comeback"] = _comeback_for(uid, favs, out.get("as_of"))
+            try:
+                from realty_signal.services import decision_log
+                out["holds"] = decision_log.changes(uid)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("보류 비교 실패: %s", exc)
+                out["holds"] = None
         return out
     except Exception as e:  # noqa: BLE001
         log.error("주간 변화 계산 실패: %s", e)
