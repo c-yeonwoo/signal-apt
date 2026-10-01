@@ -143,7 +143,7 @@ def build(profile: dict, budget: float, *, limit: int = 3,
     if not regions:
         return {
             "ready": False, "reason": "needs_focus_regions",
-            "message": "입지 비교 자료를 확인할 수 없어 지역을 임의로 추천하지 않았습니다. 더 찾아보기의 시그널 지도에서 관심지역을 선택해 주세요.",
+            "message": "입지 비교 자료를 확인할 수 없어 지역을 임의로 추천하지 않았습니다. 매물 찾기의 시그널 지도에서 관심지역을 선택해 주세요.",
             "budget": round(budget), "pyeong": pyeong, "candidates": [],
             "검토": 0, "통과": 0, "탈락": {}, "지역": [],
             "탐색범위": {"조회지역수": 0, "전체지역수": len(signal_map), "제한": MAX_REGIONS,

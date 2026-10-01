@@ -263,5 +263,5 @@ test('listing price filter and budget sort keep unknown prices out of the afford
   assert.equal(ctx._laPricePass({총액: 160000}), false);
   assert.match(html, /내 예산 순/);
   assert.doesNotMatch(html, /언제·어디를 볼지/);
-  assert.match(html, /더 찾아보기<\/b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다/);
+  assert.match(html, /매물 찾기<\/b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다/);
 });
