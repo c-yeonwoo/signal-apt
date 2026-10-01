@@ -37,7 +37,13 @@ def build(row, params, *, uid=None):
     finance = row.get("자금") or {}
     kind = row.get("유형") or "단지"
     region = row.get("지역") or row.get("region")
-    price_kind = "asking" if row.get("가격출처") == "매물가" and kind in ("급매", "찐매물") else "modeled"
+    explicit = row.get("price_kind")
+    if explicit == "asking" and kind in ("급매", "찐매물", "일반매물"):
+        price_kind = "asking"
+    elif row.get("가격출처") == "매물가" and kind in ("급매", "찐매물", "일반매물"):
+        price_kind = "asking"
+    else:
+        price_kind = "modeled"
     source = row.get("source") or ("molit_aggregate" if kind == "단지" else "unknown")
     price = row.get("추정가", row.get("예상가", row.get("총액")))
     evidence = {"source_id": source, "source_record_id": row.get("ref"),

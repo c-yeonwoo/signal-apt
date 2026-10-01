@@ -156,6 +156,39 @@ def test_confirm_prompt_only_when_unconfirmed():
         _NO_DIFF, [], [], [], confirmed=True, **base)]
 
 
+def test_known_ask_leads_and_quicksale_count_does_not():
+    """첫 문장은 상한 안 호가다. 급매 건수는 할 일이 아니다."""
+    asks = [{"단지명": "상계주공", "총액": 48000, "지역": "노원구"}]
+    qs = [{"지역": "노원구", "단지명": "다른급매"}] * 22
+    acts = briefing.actions(
+        _NO_DIFF, [{"region": "노원구", "from": "WATCH", "to": "BUY", "up": True}],
+        qs, [], profile={"_favs": ["노원구"], "직장": "강남"},
+        budget=61000, confirmed=True, asks=asks)
+    assert acts[0]["key"] == "asks"
+    assert "상계주공" in acts[0]["title"]
+    assert "22건" not in acts[0]["title"]
+    assert "quicksale" not in {a["key"] for a in acts}
+
+
+def test_no_known_ask_points_at_the_four_levers():
+    qs = [{"지역": "노원구"}] * 22
+    acts = briefing.actions(
+        _NO_DIFF, [], qs, [], profile={"직장": "강남"},
+        budget=61000, confirmed=True, asks=[])
+    assert acts[0]["key"] == "levers"
+    assert "급매" not in acts[0]["title"]
+    assert "quicksale" not in {a["key"] for a in acts}
+
+
+def test_auction_deadline_still_precedes_asks():
+    asks = [{"단지명": "상계주공", "총액": 48000}]
+    acts = briefing.actions(
+        _NO_DIFF, [], [], [], asks=asks,
+        auctions=[{"kind": "bid", "D": 0, "단지": "상계주공7", "region": "노원구", "날짜": "2026-07-27"}],
+        profile={"직장": "강남"}, budget=61000, confirmed=True)
+    assert [a["key"] for a in acts[:2]] == ["auction_bid", "asks"]
+
+
 def test_todo_line_is_the_first_action():
     """텔레그램 한 줄과 홈 1번이 갈라지면 앱이 서로 다른 말을 한다."""
     args = (_NO_DIFF, [{"region": "노원구", "from": "WATCH", "to": "BUY", "up": True}], [], [])

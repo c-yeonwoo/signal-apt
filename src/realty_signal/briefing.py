@@ -132,11 +132,12 @@ def _act(key: str, title: str, why: str, tab: str, cta: str, *, urgent: bool = F
 def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
             visited: dict | None = None, auctions: list[dict] | None = None,
             *, profile: dict | None = None, confirmed: bool = True,
-            budget: float = 0) -> list[dict]:
+            budget: float = 0, asks: list[dict] | None = None) -> list[dict]:
     """다음에 할 일 — 우선순위 순. 텔레그램 '오늘 할 일'과 홈 카드가 같은 판단을 쓴다.
 
     두 화면이 각자 판단하면 앱이 서로 다른 말을 하게 된다. 순서는 **되돌릴 수 없는 것**부터다:
-    입찰기일 > 돈(예산·확정) > 이번 주 바뀐 것 > 후보 좁히기 > 설정 보완.
+    입찰기일 > 돈(예산·확정) > 상한 안 확인된 호가 > 이번 주 바뀐 것 > 설정 보완.
+    호가가 없으면 같은 돈의 네 갈래가 그 자리다. 급매 건수는 첫 문장이 아니다.
     """
     p = profile or {}
     out: list[dict] = []
@@ -160,6 +161,16 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
         out.append(_act("confirm_power", "매수력 확정하기",
                         "확정해 두면 후보·급매·브리핑이 모두 같은 예산을 씁니다",
                         "dashboard", "매수력 카드에서 확정 →"))
+    elif asks:
+        top = asks[0]
+        price = top.get("총액") or top.get("호가") or top.get("예상가")
+        out.append(_act("asks", f"{top.get('단지명') or '매물'} 호가 {_eok(price)}",
+                        f"상한 안에서 가격이 확인된 매물 {len(asks)}곳입니다. 지역 평단 추정이 아닙니다.",
+                        "dashboard", "이 호가 보기"))
+    else:
+        out.append(_act("levers", "같은 돈의 네 갈래 보기",
+                        "상한 안에 확인된 호가가 없습니다. 실거주·갭·경매·재건축을 나란히 봅니다.",
+                        "dashboard", "네 갈래 열기"))
 
     for s in [x for x in sigs if x["up"]][:2]:
         out.append(_act("signal_up", f"{s['region']} 동네 리포트 다시 보기",
@@ -173,10 +184,6 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
     for c in (diff.get("new") or [])[:2]:
         out.append(_act("new_candidate", f"{c['단지']}({c['region']}) 실거래·평면 확인",
                         "이번 주 새로 후보에 들어온 단지입니다", "dashboard", "단지 상세 →"))
-
-    if qs:
-        out.append(_act("quicksale", f"{qs[0].get('지역')} 급매 {len(qs)}건 확인",
-                        "예산 안에 들어오는 시세 이하 매물입니다", "quicksale", "급매 레이더 →"))
 
     if cands:
         seen = visited or {}
@@ -203,10 +210,25 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
 
 def _todo(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
           visited: dict | None = None, auctions: list[dict] | None = None,
-          profile: dict | None = None, budget: float = 0) -> str:
+          profile: dict | None = None, budget: float = 0,
+          asks: list[dict] | None = None) -> str:
     """텔레그램 한 줄 — 액션 목록의 첫 항목. 판단은 `actions()` 한 곳에서만 한다."""
-    acts = actions(diff, sigs, qs, cands, visited, auctions, profile=profile, budget=budget)
+    acts = actions(diff, sigs, qs, cands, visited, auctions, profile=profile,
+                   budget=budget, asks=asks)
     return acts[0]["title"] if acts else "마이페이지에 직장 주소를 넣어 통근 필터 켜기"
+
+
+def asks_within(uid: int, profile: dict, budget: float, *, limit: int = 3) -> list[dict]:
+    """홈과 텔레그램이 같은 호가 3곳을 보게 한다."""
+    if not budget:
+        return []
+    from realty_signal import api as app_api
+    from realty_signal.services.asks import known_asks
+
+    allowed = bool(uid) and config.personal_listing_allowed(db.user_email(uid))
+    rows = app_api._build_listings({"급매", "찐매물", "일반매물"}, include_private=allowed)
+    params = buying_power.params_from_profile(profile)
+    return known_asks(rows, params, float(budget), uid=uid, sido_of=app_api._sido_of, limit=limit)
 
 
 def plan(uid: int) -> dict:
@@ -235,14 +257,15 @@ def plan(uid: int) -> dict:
         watch |= {c["region"] for c in cands}
         qs = _quicksales(watch, float(budget), uid=uid)
 
+    asks = asks_within(uid, profile, float(budget or 0))
     wk = weekly.for_user(watch)
     prev = db.kv_get(SNAP_KEY.format(uid=uid)) or {}
     diff = _diff_candidates(cands, prev.get("candidates") or {}) if prev else {"new": [], "dropped": [], "moved": []}
     acts = actions(diff, wk["mine"], qs, cands, db.imjang_latest(uid), _auction_alerts(),
-                   profile=profile, confirmed=confirmed, budget=float(budget or 0))
+                   profile=profile, confirmed=confirmed, budget=float(budget or 0), asks=asks)
     return {"actions": acts, "budget": round(float(budget)) if budget else 0,
-            "confirmed": confirmed, "candidates": len(cands), "watching": sorted(watch),
-            "as_of": wk.get("as_of")}
+            "confirmed": confirmed, "candidates": len(cands), "asks": len(asks),
+            "watching": sorted(watch), "as_of": wk.get("as_of")}
 
 
 def build(uid: int, *, force: bool = False) -> dict:
@@ -274,6 +297,7 @@ def build(uid: int, *, force: bool = False) -> dict:
     cx_moved = [it for it in cx_items if it.get("changes")]
 
     qs = _quicksales(watch, float(budget), uid=uid)
+    asks = asks_within(uid, profile, float(budget))
     qs_new = len(qs) - int(prev.get("quicksale") or 0)
     auctions = _auction_alerts()
 
@@ -295,7 +319,7 @@ def build(uid: int, *, force: bool = False) -> dict:
 
     text = _render(profile, data, diff, sigs, qs, qs_new, first=first,
                    visited=db.imjang_latest(uid), auctions=auctions,
-                   complexes=cx_moved)
+                   complexes=cx_moved, asks=asks)
     return {"send": True, "text": text, "snapshot": snapshot, "news": news,
             "first": first, "candidates": cands}
 
@@ -303,7 +327,7 @@ def build(uid: int, *, force: bool = False) -> dict:
 def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             qs: list[dict], qs_new: int, *, first: bool,
             visited: dict | None = None, auctions: list[dict] | None = None,
-            complexes: list[dict] | None = None) -> str:
+            complexes: list[dict] | None = None, asks: list[dict] | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
     L = [f"🦊 닉 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
@@ -380,7 +404,7 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
         L.append("※ 직장 주소가 없어 통근 필터가 꺼져 있습니다. 마이페이지에서 넣어 주세요.")
         L.append("")
 
-    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited, auctions, profile, data.get('budget') or 0)}")
+    L.append(f"오늘 할 일 → {_todo(diff, sigs, qs, cands, visited, auctions, profile, data.get('budget') or 0, asks)}")
     L.append(f"{config.app_base_url()}/#dashboard")
     L.append("")
     L.append("끄기: /stop")

@@ -1810,6 +1810,7 @@ async function loadDashboard(){
       <details class="dash-more" id="dashExtra">
         <summary>관심 동네·후보 더 보기</summary>
         <div class="dash-more-body">
+          <div id="dashEstimateWrap"></div>
           <div id="dashCxWrap"></div>
           ${_dashCard(favH)}
           ${_dashCard(_dashH('가격대별 동네 참고')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
@@ -1834,10 +1835,10 @@ async function loadDashboard(){
   _loadBuyingPower();
   _loadBudgetWatch();
   _loadPlan();
-  _loadShortlist(); _loadLevers();
+  _loadAsks(); _loadLevers();
   _loadWeekly();
   _loadNotifyStatus();
-  _onFirstExpand('dashExtra', ()=>{ _loadComplexWatch(); _loadDashBudget(); _loadDashFeed(); });
+  _onFirstExpand('dashExtra', ()=>{ _loadShortlist(); _loadComplexWatch(); _loadDashBudget(); _loadDashFeed(); });
   _onFirstExpand('dashMarketExtra', ()=>{ _loadNear(); loadRegime(); _loadIssues(); });
 }
 // ===== 이번 주 변화 — 지난주 KB 대비 =====
@@ -2102,6 +2103,8 @@ function _planGo(key, tab){
   if(key==='confirm_power'){ openBuyingPower(); return; }
   if(key==='imjang'||key==='imjang_compare'){ openImjang(); return; }
   if(key==='no_budget'||key==='no_job'){ acctGo('profile'); return; }
+  if(key==='asks'){ document.getElementById('dashShortlistWrap')?.scrollIntoView({behavior:'smooth',block:'start'}); return; }
+  if(key==='levers'){ document.getElementById('dashLeversWrap')?.scrollIntoView({behavior:'smooth',block:'start'}); return; }
   switchTab(tab||'dashboard');
 }
 async function _loadPlan(){
@@ -2252,8 +2255,8 @@ async function _loadBudgetWatch(){
         +`<div style="font-size:13.5px;color:var(--dim);line-height:1.55">${d.message||''}</div>`);
     } else if(d.reason==='first_run'){
       wrap.innerHTML=_dashCard(_dashH('내 예산 안 매물')
-        +`<div style="font-size:14px;line-height:1.55">지금 예산 안에 <b>${(d.in_budget||0).toLocaleString()}건</b>이 있습니다.
-           <div style="font-size:12px;color:var(--dim);margin-top:6px">다음 방문부터 '새로 들어온 것'을 알려드립니다.</div></div>`);
+        +`<div style="font-size:14px;line-height:1.55">가격이 적힌 수집분 <b>${(d.in_budget||0).toLocaleString()}건</b>이 상한 아래입니다.
+           <div style="font-size:12px;color:var(--dim);margin-top:6px">방문 목록이 아닙니다. 확인할 호가는 위 카드이고, 다음 방문부터 새로 들어온 것만 알려드립니다.</div></div>`);
       _ackWhenVisible(wrap,'/api/budget-watch/seen');
     } else { wrap.innerHTML=''; }
     return;
@@ -2286,13 +2289,13 @@ async function _loadBudgetWatch(){
   const head=_dashH('내 예산 안 매물');
   if(d.quiet){
     wrap.innerHTML=_dashCard(head
-      +`<div style="font-size:14px;line-height:1.55">예산 안 <b>${(d.in_budget||0).toLocaleString()}건</b> · 지난 방문 대비 변화 없음
+      +`<div style="font-size:14px;line-height:1.55">상한 아래 수집분 <b>${(d.in_budget||0).toLocaleString()}건</b> · 지난 방문 대비 변화 없음
         <div style="font-size:12px;color:var(--dim);margin-top:6px">새로 들어오거나 빠진 매물이 없었습니다.</div></div>`);
     _ackWhenVisible(wrap,'/api/budget-watch/seen');
     return;
   }
   wrap.innerHTML=_dashCard(head
-    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} 기준 · 지금 예산 안 ${(d.in_budget||0).toLocaleString()}건</div>`
+    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">상한 ${_eok(d.budget)} 아래 수집분 ${(d.in_budget||0).toLocaleString()}건 · 방문 목록이 아닙니다</div>`
     + parts.join(''));
   _ackWhenVisible(wrap,'/api/budget-watch/seen');
 }
@@ -2415,16 +2418,42 @@ async function bpConfirm(){
   toast('매수력을 확정했습니다');
   // V1(타이밍) → V2(매물) 파이프가 실제로 이어지는지 재는 유일한 지점
   track(EVENTS.BUYING_POWER_CONFIRM, {capital:p.capital, budget:d['매수력']||null});
-  _loadBuyingPower(); _loadShortlist(); _loadLevers(); _loadDashBudget();
+  _loadBuyingPower(); _loadAsks(); _loadPlan(); _loadLevers(); _loadDashBudget();
 }
-// ===== 이번 주 볼 단지 3곳 — 매수력 × 라이프스타일 적합도 =====
-async function _loadShortlist(){
+async function _loadAsks(){
   const wrap=document.getElementById('dashShortlistWrap'); if(!wrap) return;
-  wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>');
-  let d; try{ const r=await fetch('/api/shortlist'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
-    wrap.innerHTML=_dashCard(_dashH('확인할 단지 후보')+'<p>후보 데이터를 불러오지 못했습니다. 후보가 없다는 뜻은 아닙니다.</p><button class="btn" onclick="_loadShortlist()">다시 시도</button>'); return; }
+  wrap.innerHTML=_dashCard(_dashH('상한 안 호가')+'<div style="color:var(--dim);font-size:13px">확인된 호가를 찾는 중…</div>');
+  let d; try{ const r=await fetch('/api/asks'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
+    wrap.innerHTML=_dashCard(_dashH('상한 안 호가')+'<p>호가를 불러오지 못했습니다.</p><button class="btn" onclick="_loadAsks()">다시 시도</button>'); return; }
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH('이번 주 볼 단지')
+    wrap.innerHTML=_dashCard(_dashH('상한 안 호가')
+      +`<div style="font-size:14px;line-height:1.6">${esc(d.message||'상한 안에 확인된 호가가 없습니다.')}
+        <div style="margin-top:8px"><button class="btn primary" onclick="_planGo('levers','dashboard')">같은 돈의 네 갈래</button></div></div>`);
+    return;
+  }
+  const cards=(d.asks||[]).map((c,i)=>`<div style="padding:${i?10:0}px 0 0;${i?'border-top:1px solid var(--line);margin-top:10px':''}">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--dim)">${i+1}</span>
+        <b style="font-size:15px;font-weight:600">${esc(c['단지명'])}</b>
+        <span style="font-size:12px;color:var(--dim)">${esc(c['지역']||'')} · ${esc(c['유형']||'')}</span>
+        <span style="margin-left:auto;font-size:15px;font-weight:600">호가 ${_eok(c['총액'])}</span>
+      </div>
+      <div style="margin-top:6px">${_buyerFourHtml(c, _eok)}</div>
+      ${c.key?`<button type="button" class="btn" data-ask="${i}">이 매물 확인</button>`:''}
+    </div>`).join('');
+  wrap.innerHTML=_dashCard(_dashH('상한 안 호가')
+    +`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">상한 ${_eok(d.budget)} 안에서 가격이 확인되고 현금이 맞는 매물입니다. 지역 평단 추정이 아닙니다.</div>`
+    +cards);
+  wrap.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{ const c=d.asks[Number(b.dataset.ask)]; if(c&&c.key) openListingReport(c.key); });
+}
+// ===== 추정 단지 — 펼침 안에만. 호가가 아니다 =====
+async function _loadShortlist(){
+  const wrap=document.getElementById('dashEstimateWrap'); if(!wrap) return;
+  wrap.innerHTML=_dashCard(_dashH('추정 단지')+'<div style="color:var(--dim);font-size:13px">후보를 좁히는 중…</div>');
+  let d; try{ const r=await fetch('/api/shortlist'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
+    wrap.innerHTML=_dashCard(_dashH('추정 단지')+'<p>후보 데이터를 불러오지 못했습니다. 후보가 없다는 뜻은 아닙니다.</p><button class="btn" onclick="_loadShortlist()">다시 시도</button>'); return; }
+  if(!d.ready){
+    wrap.innerHTML=_dashCard(_dashH('추정 단지')
       +`<div style="color:var(--dim);font-size:13px;line-height:1.6">${d.message||'예산 안에서 볼 만한 단지를 찾지 못했습니다.'}
         ${d['탈락']?`<div style="margin-top:6px;font-size:12px">${_slRejectLine(d)}</div>`:''}
         <div style="margin-top:8px"><span class="btn" style="padding:5px 12px" onclick="switchTab('signal')">시그널 지도에서 ★ 추가 →</span></div></div>`);
@@ -2449,8 +2478,8 @@ async function _loadShortlist(){
       </div></div>`;
   }).join('')
     +`<div style="margin-top:12px;font-size:12.5px;color:var(--dim)">${_slRejectLine(d)}</div>`;
-  const sub=`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">${d.pyeong}평 · 예산 ${_eok(d.budget)}${d['확정예산']?'':' · 잠정'} · 비교 ${d['비교범위']||'예산'}</div>`;
-  wrap.innerHTML=_dashCard(_dashH('확인할 단지 후보')+sub+conclusion
+  const sub=`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">${d.pyeong}평 · 예산 ${_eok(d.budget)} · 지역 평단 추정입니다. 매물 호가가 아닙니다.</div>`;
+  wrap.innerHTML=_dashCard(_dashH('추정 단지')+sub+conclusion
     +`<div style="margin-top:14px"><button class="btn" onclick="openImjang()">현장 방문 계획</button></div>`
     +_dashMore('근거 · 탈락 사유', detail));
   wrap.querySelectorAll('[data-candidate]').forEach(b=>b.onclick=()=>{ const c=d.candidates[Number(b.dataset.candidate)]; openComplex(c['단지'],c.region); });
