@@ -225,6 +225,33 @@ def action_plan(request: Request):
         return {"ok": False, "reason": "error", "detail": str(e), "actions": []}
 
 
+@router.get("/api/asks")
+def asks(request: Request):
+    """상한 안에서 현금이 맞는 확인된 호가. 추정 단지는 넣지 않는다."""
+    from realty_signal import briefing, buying_power
+
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    profile = db.profile_get(uid) or {}
+    params = buying_power.params_from_profile(profile)
+    budget = buying_power.max_purchase(params)[0] if params.capital > 0 else 0
+    if not budget:
+        return {"ready": False, "reason": "no_budget", "asks": [],
+                "message": "매수력을 확정하면 상한 안의 호가를 보여 드립니다."}
+    picked = briefing.asks_within(uid, profile, float(budget))
+    slim = []
+    for row in picked:
+        lines = row.get("lines") or {}
+        slim.append({
+            "단지명": row.get("단지명"), "지역": row.get("지역"), "유형": row.get("유형"),
+            "총액": row.get("총액"), "평형": row.get("평형"), "key": row.get("key"),
+            "lines": lines, "자금": {"가능": (row.get("자금") or {}).get("가능")},
+        })
+    return {"ready": bool(slim), "budget": round(float(budget)), "asks": slim,
+            "message": "" if slim else "상한 안에 확인된 호가가 없습니다. 아래 네 갈래에서 같은 돈을 비교합니다."}
+
+
 @router.get("/api/weekly-issues")
 def weekly_issues(days: int = NEWS_WINDOW_DAYS):
     """이번 주 부동산 이슈 — 최근 N일 뉴스 + 요약.

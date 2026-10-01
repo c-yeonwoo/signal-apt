@@ -99,6 +99,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       if(url.pathname==='/api/listing-watch') data={items:[{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',saved_price:60000,
         price_change:-10000,current:{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',price:50000},
         alternatives:[{key:'급매:synthetic-2',kind:'급매',name:'테스트단지',region:'테스트구',price:52000,reason:'같은 단지의 다른 매물'}]}]};
+      if(url.pathname==='/api/asks') data={ready:true,budget:61000,asks:[
+        {'단지명':'호가단지','지역':'테스트구','유형':'급매','총액':48000,
+          lines:{cash:'필요현금',price:'원천 호가',unknown:'은행 심사',next:'호가 확인'}}]};
       if(url.pathname==='/api/shortlist') data={ready:true,budget:60000,pyeong:25,candidates:[
         {'단지':'테스트 단지 A',region:'테스트구','예상가':50000,'자금':{'필요현금':30000,'총월상환':105},'근거':'현금 여유 우선'}]};
       if(url.pathname==='/api/geocode') {
@@ -115,9 +118,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       _userEmail='synthetic@example.test'; switchTab('dashboard',true);
       window.addEventListener('hashchange',routeFromHash);
     });
-    await page.getByText('단지·실거래 확인',{exact:true}).waitFor();
+    await page.getByText('호가단지',{exact:true}).waitFor();
     assert.equal(await page.locator('#dashShortlistWrap').evaluate(el=>!!el.closest('details')),false);
-    for(const url of ['/api/regime','/api/complex-watch','/api/news']) assert(!calls.includes(url),`eager hidden source ${url}`);
+    for(const url of ['/api/regime','/api/complex-watch','/api/news','/api/shortlist']) assert(!calls.includes(url),`eager hidden source ${url}`);
     const width=await page.evaluate(()=>({viewport:innerWidth,body:document.body.scrollWidth,root:document.documentElement.scrollWidth}));
     assert(width.body<=width.viewport && width.root<=width.viewport,JSON.stringify(width));
     await page.locator('#dashMarketExtra > summary').click();
@@ -126,6 +129,9 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.locator('#dashMarketExtra > summary').click();
     await page.locator('#dashMarketExtra > summary').click();
     assert.equal(calls.filter(x=>x==='/api/regime').length,1);
+    await page.locator('#dashExtra > summary').click();
+    await page.getByText('단지·실거래 확인',{exact:true}).waitFor();
+    assert.equal(calls.filter(x=>x==='/api/shortlist').length,1);
     await page.getByRole('button',{name:'내 조건',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#mypage');
     await page.goBack();

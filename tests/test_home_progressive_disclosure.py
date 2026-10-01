@@ -19,7 +19,12 @@ def test_dashboard_keeps_primary_actions_before_optional_cards():
     extra = markup.index('id="dashExtra"')
     shortlist = markup.index('id="dashShortlistWrap"')
     assert plan < power < shortlist < budget < extra
+    levers = markup.index('id="dashLeversWrap"')
+    assert shortlist < levers < budget
+    assert markup.index('id="dashEstimateWrap"') > extra
     assert '관심 동네·후보 더 보기' in markup
+    assert "fetch('/api/asks')" in HTML
+    assert "지금 예산 안에" not in HTML
 
 
 def test_dashboard_hides_market_evidence_behind_progressive_disclosure():

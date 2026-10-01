@@ -79,7 +79,8 @@ def test_new_candidate_is_reported(uid):
     b = briefing.build(uid)
     assert b["send"] and "후보 변화" in b["text"]
     assert "+ 상계주공7" in b["text"]
-    assert "상계주공7" in b["text"].split("오늘 할 일")[1]   # 할 일도 신규 후보를 가리킨다
+    todo = b["text"].split("오늘 할 일 → ")[1]
+    assert "호가" in todo or "네 갈래" in todo
 
 
 def test_dropped_candidate_is_reported(uid):
