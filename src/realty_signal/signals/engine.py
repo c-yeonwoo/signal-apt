@@ -15,7 +15,7 @@
     THRESHOLDS 로 분리해 두었고 기본값은 KB 표준을 따른다. (사용자 확인 필요)
 
 매매/전세 증감률 (%)
-  최근 N주 평균으로 모멘텀(상승/둔화/하락) 판정.
+  최근 4주 평균. ±0.20% 안은 보합. 0.20%/주가 1년 이어지면 약 10%.
 
 매도·끝물 시그널(입주물량↑, 상급지→하급지 유동성, 신축→구축 전이)은
 입주물량/시장강도 데이터가 필요하므로 여기서는 '교차지역 상승폭 역전'
@@ -52,10 +52,11 @@ class SignalConfig:
     demand_l2: float = 10.0  # 보통
     demand_l3: float = 15.0  # 강함
     demand_buy: float = 20.0  # 매수신호 ("빨리 사야한다")
-    # 모멘텀 산정 주(week) 수, 증감률 임계(%)
+    # 모멘텀 산정 주(week) 수, 증감률 임계(%).
+    # 0.05%는 연 2.6%라 강북이 상승 표를 거의 놓치지 않았다. 0.20%는 연 약 10%.
     momentum_weeks: int = 4
-    momentum_up: float = 0.05
-    momentum_down: float = -0.05
+    momentum_up: float = 0.20
+    momentum_down: float = -0.20
     # 입주물량 공급압력(향후/과거) 임계
     supply_glut: float = 1.3   # 공급과잉 → 매도/하락 압력
     supply_dry: float = 0.7    # 공급부족 → 매수 우호
