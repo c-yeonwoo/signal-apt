@@ -15,6 +15,7 @@ test('inline app scripts parse and browse navigation keeps one list and the sign
   ctx.renderGroupSubnav('browse', 'all');
   assert.match(targets.groupSubTabs.innerHTML, /data-sub="all"/);
   assert.match(targets.groupSubTabs.innerHTML, /data-sub="signal"/);
+  assert.ok(targets.groupSubTabs.innerHTML.indexOf('data-sub="signal"') < targets.groupSubTabs.innerHTML.indexOf('data-sub="all"'));
   assert.doesNotMatch(targets.groupSubTabs.innerHTML, /분석·전략|경매·재건축|data-sub="auction"|data-sub="report"/);
   ctx.renderGroupSubnav('browse', 'auction');
   assert.match(targets.groupSubTabs.innerHTML, /data-sub="all"/);
@@ -263,5 +264,7 @@ test('listing price filter and budget sort keep unknown prices out of the afford
   assert.equal(ctx._laPricePass({총액: 160000}), false);
   assert.match(html, /내 예산 순/);
   assert.doesNotMatch(html, /언제·어디를 볼지/);
-  assert.match(html, /매물 찾기<\/b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다/);
+  assert.match(html, /시그널<\/b> — 이번 주 동네 색깔이 지도에 있고, 매물 목록은 그 옆입니다/);
+  assert.match(html, /id="sigMap"/);
+  assert.match(html, /onclick="switchTab\('signal'\)"[^>]*>시그널</);
 });
