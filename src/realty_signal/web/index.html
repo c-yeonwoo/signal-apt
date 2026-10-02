@@ -166,7 +166,12 @@
                              transition-duration:.001ms !important; scroll-behavior:auto !important; }
   }
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
-  #chart { flex:1; min-height:0; }
+  #chart { flex:1; min-height:220px; }
+  #sigMapWrap { flex:1 1 38%; min-height:240px; max-height:340px; display:flex; flex-direction:column;
+                border-bottom:1px solid var(--line); background:var(--panel); }
+  #sigMap { flex:1; min-height:160px; background:#e8eef5; }
+  #sigMapLegend { flex:0 0 auto; padding:8px 14px 10px; font-size:15px; line-height:1.45; }
+  #haesolPanel { max-height:92px; overflow:auto; }
   .acard { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; cursor:pointer;
            background:var(--panel); display:flex; flex-direction:column; gap:5px; transition:box-shadow .15s,border-color .15s; }
   .acard:hover { box-shadow:var(--shadow); border-color:var(--accent); }
@@ -363,6 +368,7 @@
     #groupSubnav { padding:8px 12px; }
     .side.collapsed { max-height:0; border:none; }
     .main { min-height:64vh; }
+    #sigMapWrap { flex:0 0 auto; height:340px; max-height:none; }
     /* 좌우 분할 → 목록 위 + 지도 아래로 스택 */
     .mapsplit { flex-direction:column; height:auto; min-height:0; }
     .ms-list { width:100% !important; min-width:0; max-width:none; max-height:48vh; }
@@ -406,9 +412,9 @@
   </h1>
   <div class="tabs">
     <button class="tab on" data-group="home" onclick="switchTab('dashboard')" title="다음 할 일과 확인할 후보">홈</button>
+    <button class="tab" data-group="browse" onclick="switchTab('signal')" title="이번 주 시그널 지도와 매물">시그널</button>
     <button class="tab" data-group="criteria" onclick="switchTab('mypage')" title="예산·출퇴근·주거 조건">내 조건</button>
     <button class="tab" data-group="find" onclick="switchTab('watch')" title="찜한 매물·청약과 관심단지">내 후보</button>
-    <button class="tab" data-group="browse" onclick="switchTab('all')" title="매물 목록과 시그널 지도">매물 찾기</button>
   </div>
   <div class="right">
     <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">가이드</button>
@@ -465,7 +471,7 @@
       <div class="chartbar">
         <button id="sideToggle" onclick="toggleSide()" title="지역 목록 접기/펼치기" type="button">◀ 지역</button>
         <span id="sigbadge" style="font-size:18px;font-weight:700"></span>
-        <span id="sigsub" style="color:var(--dim);font-size:12.5px"></span>
+        <span id="sigsub" style="color:var(--dim);font-size:15px"></span>
         <button class="chip" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 매물을 예산 순으로 보기" style="white-space:nowrap;border-color:var(--accent);color:var(--accent)">이 지역 매물 ›</button>
         <button class="chip" onclick="switchTab('mymap')" title="관심 지역과 단지를 지도에서 보기" style="white-space:nowrap">관심 지도</button>
         <button class="chip" onclick="openNbhd(selected)" title="임장 전 동네 파악 — 시그널·가격·미래가치·생활인프라" style="white-space:nowrap">동네 리포트</button>
@@ -481,7 +487,11 @@
           </div>
         </div>
       </div>
-      <div id="haesolPanel" style="padding:9px 14px;border-bottom:1px solid var(--line);font-size:13px;line-height:1.55"></div>
+      <div id="sigMapWrap">
+        <div id="sigMap" role="img" aria-label="이번 주 시군구 시그널 지도"></div>
+        <div id="sigMapLegend">이번 주 시그널을 구 색깔로 보여 줍니다.</div>
+      </div>
+      <div id="haesolPanel" style="padding:10px 14px;border-bottom:1px solid var(--line);font-size:15px;line-height:1.55"></div>
       <div class="haesol-panel" id="histPanel"></div>
       <div id="cycleMini" style="display:none;border-bottom:1px solid var(--line)">
         <div style="font-size:10px;color:var(--dim);padding:5px 10px 0">경기 사이클 파형 — 침체 저점 → 회복 → 상승 고점 → 후퇴 (곡선 위치 = 국면, 색 = 국면 구간)</div>
@@ -783,7 +793,7 @@
       <div class="astep"><b style="color:var(--accent)">1</b> <b>홈</b> — 이번 주 할 일과 살 수 있는 가격을 보고, 예산 안 집부터 봅니다.</div>
       <div class="astep"><b style="color:var(--accent)">2</b> <b>내 조건</b> — 자본·소득·출퇴근을 저장합니다. 추천과 알림이 이 숫자를 따라갑니다.</div>
       <div class="astep"><b style="color:var(--accent)">3</b> <b>내 후보</b> — 찜한 매물·청약과 관심단지의 가격·일정 변화를 봅니다.</div>
-      <div class="astep"><b style="color:var(--accent)">4</b> <b>매물 찾기</b> — 매물은 한 목록이고, 시그널 지도는 그 옆입니다.</div>
+      <div class="astep"><b style="color:var(--accent)">4</b> <b>시그널</b> — 이번 주 동네 색깔이 지도에 있고, 매물 목록은 그 옆입니다.</div>
     </div>
     <p style="color:var(--dim);font-size:11px;margin-top:20px">※ 모든 지표는 참고용입니다. 투자 판단과 실거래 확인은 이용자 책임입니다.</p>
   </div>
@@ -1468,6 +1478,7 @@ window.addEventListener('resize', () => {
   if(macroMini) macroMini.resize();
   if(typeof uvChart!=='undefined' && uvChart) uvChart.resize();
   if(typeof uvMap!=='undefined' && uvMap){ try{ uvMap.invalidateSize(); }catch(e){} }
+  if(typeof sigMap!=='undefined' && sigMap){ try{ sigMap.invalidateSize(); }catch(e){} }
   Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(e){} });
 });
 const SIG_KO={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도'};
@@ -1547,7 +1558,7 @@ function renderMtFilter(hostId, rerender){
 const _GROUPS={
   home:     ['dashboard'],
   criteria: ['mypage'],
-  browse:   ['all','signal'],
+  browse:   ['signal','all'],
   find:     ['watch'],
 };
 const _BROWSE_TOOLS=['auction','redev','general','quicksale','presale','tradeup','report','undervalued'];
@@ -1600,7 +1611,7 @@ function renderGroupSubnav(grp, active){
 }
 const _LOAD={
   dashboard:()=>loadDashboard(),
-  signal:()=>{chart.resize(); renderScoreboard(); renderAha();},
+  signal:()=>{chart.resize(); drawSigMap(); renderScoreboard(); renderAha();},
   undervalued:()=>loadUndervalued(),
   all:()=>loadAllListings(), general:()=>loadGeneralListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev(),
   tradeup:()=>tuPrefill(), watch:()=>loadListingWatch(), mymap:()=>drawMyMap(),
@@ -3552,15 +3563,27 @@ const _REG_COLOR={투기과열지구:'#dc2626', 조정대상지역:'#ea580c', �
 function _regPrimary(t){ for(const k of ['투기과열지구','조정대상지역','토지거래허가구역']) if(t.includes(k)) return k; return null; }
 const _onorm=s=>(s||'').replace(/\s/g,'');
 function _gradeLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s['급지']) m[_onorm(s.region)]=s['급지']; }); return m; }
+function _signalLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s&&s.region) m[_onorm(s.region)]=s; }); return m; }
 async function _ensureGeo(){ if(!_uvGeo){ try{ _uvGeo=await (await fetch('/sudo_gu.geojson')).json(); }catch(e){} } return _uvGeo; }
-function _choStyle(mode, name, gl, sido){
+function _choStyle(mode, name, gl, sido, sl){
+  if(mode==='signal'){
+    const row=sl&&sl[_onorm(name)], col=row&&_SIG_COLOR[row.signal];
+    const on=selected&&_onorm(selected)===_onorm(name);
+    return {color:on?'#0f172a':'#fff',weight:on?3:1,fillColor:col||'#e2e8f0',fillOpacity:col?0.72:0.16};
+  }
   if(mode==='grade'){ const g=gl[_onorm(name)], gd=g&&_REGION_GRADE[g];
     return {color:'#fff',weight:1,fillColor:gd?gd.col:'#e2e8f0',fillOpacity:gd?0.5:0.12}; }
   const t=_regTags(name,sido), c=t?_REG_COLOR[_regPrimary(t)]:null;
   const note=(_REGULATION.notes||{})[name];
   return {color:'#fff',weight:1,fillColor:c||(note?'#fbbf24':'#e2e8f0'),fillOpacity:c?0.5:(note?0.35:0.08)};
 }
-function _choTip(mode, name, gl, sido){
+function _choTip(mode, name, gl, sido, sl){
+  if(mode==='signal'){
+    const row=sl&&sl[_onorm(name)];
+    const ko=row?(SIG_KO[row.signal]||row.signal):'자료 없음';
+    const src=row&&row['수급출처']?` · ${row['수급출처']} 공통`:'';
+    return `${name} · ${ko}${src}`;
+  }
   if(mode==='grade'){ const g=gl[_onorm(name)]; return name+(g&&_REGION_GRADE[g]?' · '+_REGION_GRADE[g].label:''); }
   const t=_regTags(name,sido), note=(_REGULATION.notes||{})[name];
   return name+(t?' · '+t.join(', '):(note?' · '+note:' · 규제 없음'));
@@ -3572,9 +3595,10 @@ async function setOverlay(map, mode, onClick){
   if(!mode) return;
   await _ensureGeo(); if(!_uvGeo) return;
   const gl=_gradeLut();
-  map._ovLayer=L.geoJSON(_uvGeo,{ pane:'tilePane',
-    style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido),
-    onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido),{sticky:true});
+  const sl=mode==='signal'?_signalLut():null;
+  map._ovLayer=L.geoJSON(_uvGeo,{ pane:mode==='signal'?'overlayPane':'tilePane',
+    style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido,sl),
+    onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido,sl),{sticky:true});
       if(onClick) l.on('click',()=>onClick(f.properties.name)); }
   }).addTo(map);
 }
@@ -4489,7 +4513,7 @@ function toggleSide(){
   const s = document.querySelector('#view-signal .side');
   const collapsed = s.classList.toggle('collapsed');
   document.getElementById('sideToggle').textContent = collapsed ? '▶ 지역' : '◀ 지역';
-  setTimeout(()=>chart && chart.resize(), 180);
+  setTimeout(()=>{ chart && chart.resize(); sigMap && sigMap.invalidateSize(); }, 180);
 }
 function toggleHaesol(){
   const p = document.getElementById('haesolPanel');
@@ -4528,15 +4552,18 @@ function toggleOverlayMenu(e){
 }
 async function selectRegion(region){
   selected = region; renderList();
+  drawSigMap();
   const r = allSignals.find(x => x.region===region);
+  if(!r) return;
   document.getElementById('sigbadge').innerHTML = `${region} ${badge(r.signal)}`;
   const ss=document.getElementById('sigsub');
   if(ss) ss.innerHTML = `전세수급 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}` + (r['공급압력']!=null?` · 입주 ${r['공급압력']}x`:'') + gwonLabel(r['수급출처']);
   // 시그널 이유 — 헤더에 상시 노출 (현재 기준)
   const reasons = (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join(' ');
   document.getElementById('haesolPanel').innerHTML =
-    `<div style="margin-bottom:7px"><b style="color:var(--accent)">시그널 이유</b> <span style="color:var(--dim);font-size:11px">· ${meta.last_date} 현재</span><br>${(r['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`
-    + `<div style="display:flex;gap:6px;flex-wrap:wrap">${reasons}</div>`;
+    `<div style="margin-bottom:7px"><b style="color:var(--accent)">시그널 이유</b> <span style="color:var(--dim);font-size:14px">· ${meta.last_date} 현재</span><br>${(r['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`
+    + `<div style="display:flex;gap:6px;flex-wrap:wrap">${reasons}</div>`
+    + _sigScopeNote(r);
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
   _lastM = d.metrics; _lastSig = r; _lastVol = d.volume || null;
   if(_showHist && !_histCache[region]){
@@ -4544,6 +4571,42 @@ async function selectRegion(region){
   }
   renderHistPanel();
   drawChart(region, d.metrics, r);
+}
+let sigMap=null;
+function _sigScopeNote(r){
+  const bits=[];
+  if(r['수급출처']) bits.push(`전세수급·매수우위는 ${r['수급출처']}가 같은 숫자입니다. 이 구만의 차이는 최근 4주 매매입니다.`);
+  const bs=r['매수우위지수'], bar=meta&&meta.zones&&meta.zones.buyer_idx_strong;
+  if(bs!=null && bar!=null){
+    bits.push(bs>=100
+      ? `매수우위 ${Math.round(bs)}은 KB 기준 100을 넘어 매수자가 더 많습니다. 강세 한 표는 ${bar}입니다.`
+      : `매수우위 ${Math.round(bs)}입니다. KB는 100이면 매수자와 매도자가 같다고 봅니다. 이 화면의 강세 한 표는 ${bar}입니다.`);
+  }
+  return bits.length?`<div style="margin-top:8px;color:var(--txt);font-size:15px;line-height:1.55">${bits.join(' ')}</div>`:'';
+}
+async function drawSigMap(){
+  const el=document.getElementById('sigMap');
+  if(!el || typeof L==='undefined') return;
+  if(!sigMap){
+    sigMap=L.map(el,{attributionControl:false, scrollWheelZoom:true, zoomControl:true}).setView([37.55,127.02],9);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'© OpenStreetMap © CARTO'}).addTo(sigMap);
+  }
+  await setOverlay(sigMap, 'signal', name=>{
+    const row=(allSignals||[]).find(s=>_onorm(s.region)===_onorm(name));
+    if(row && row.region!==selected) selectRegion(row.region);
+  });
+  const lg=document.getElementById('sigMapLegend');
+  if(lg){
+    const order=['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK'];
+    const seoul=(allSignals||[]).filter(s=>s.group==='서울' && /구$/.test(s.region) && !s.region.endsWith('개구'));
+    const cnt={};
+    seoul.forEach(s=>{ cnt[s.signal]=(cnt[s.signal]||0)+1; });
+    const chips=order.map(s=>`<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${_SIG_COLOR[s]};display:inline-block"></span>${SIG_KO[s]}${cnt[s]?` ${cnt[s]}`:''}</span>`).join('');
+    const head=seoul.length?`서울 자치구 ${seoul.length}곳 · 이번 주`:'이번 주 색깔';
+    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">${head}</div><div>${chips}</div>
+      <div style="color:var(--dim);margin-top:2px">같은 색이 이어지면 전세수급·매수우위가 강남 11곳 또는 강북 14곳이 같은 숫자입니다. 구마다 다른 건 최근 4주 매매입니다.</div>`;
+  }
+  setTimeout(()=>{ try{sigMap.invalidateSize();}catch(e){} if(typeof chart!=='undefined' && chart) chart.resize(); }, 80);
 }
 function wrapKo(s, n){
   const out=[]; let cur='';
@@ -6798,7 +6861,7 @@ async function loadListingWatch(){
   catch(e){ status.textContent='찜한 후보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'; return; }
   _watchKeys=new Set(items.map(x=>x.key));
   status.textContent=`${items.length}건 · 가격 변화는 찜 당시와 현재 수집값의 차이입니다. 수집 범위에서 사라진 매물은 거래완료로 단정하지 않습니다.`;
-  if(!items.length){ body.innerHTML='<div class="sec" style="padding:20px;font-size:16px;line-height:1.6">아직 찜한 매물이 없습니다. 매물 찾기에서 집을 열고 ☆ 를 눌러 두세요.</div>'; return; }
+  if(!items.length){ body.innerHTML='<div class="sec" style="padding:20px;font-size:16px;line-height:1.6">아직 찜한 매물이 없습니다. 시그널 옆 매물 목록에서 집을 열고 ☆ 를 눌러 두세요.</div>'; return; }
   body.innerHTML=items.map(w=>{
     const c=w.current, change=w.price_change;
     const amount=n=>n==null?'가격 미확인':_eok(n);
