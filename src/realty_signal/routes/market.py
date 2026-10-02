@@ -106,6 +106,7 @@ def meta():
             "jeonse_supply": jeonse_zones,
             "buyer_demand_buy": c.demand_buy,
             "buyer_idx_strong": c.buyeridx_strong,
+            "momentum_up": c.momentum_up,
         },
     }
 

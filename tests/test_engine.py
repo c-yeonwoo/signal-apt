@@ -50,11 +50,14 @@ def test_demand_state_ladder():
 
 
 def test_momentum_labels():
-    c = SignalConfig(momentum_weeks=4, momentum_up=0.05, momentum_down=-0.05)
-    up = pd.Series([0.1, 0.2, 0.15, 0.3])
-    down = pd.Series([-0.1, -0.2, -0.15, -0.3])
+    c = SignalConfig()
+    assert c.momentum_up == 0.20 and c.momentum_down == -0.20
+    up = pd.Series([0.25, 0.30, 0.22, 0.40])
+    mild = pd.Series([0.10, 0.08, 0.12, 0.09])  # 옛 0.05% 선에서는 상승이었다
+    down = pd.Series([-0.30, -0.25, -0.22, -0.40])
     flat = pd.Series([0.0, 0.01, -0.01, 0.0])
     assert _momentum(up, c)[1] == "상승"
+    assert _momentum(mild, c)[1] == "보합"
     assert _momentum(down, c)[1] == "하락"
     assert _momentum(flat, c)[1] == "보합"
 
