@@ -277,16 +277,20 @@ def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dic
                 status_code=422,
             )
         region, name = (part.strip() for part in key.split("|", 1))
+        if not region.startswith("kb:"):
+            identity = _favorite_region_identity(region)
+            if identity["status"] != "ready":
+                return JSONResponse({"ok": False, "error": "unverified_complex_region",
+                                     "message": "현행 지역 코드를 확인할 수 없습니다. 시·군·구를 다시 선택해 주세요."},
+                                    status_code=422)
+            region = identity["region_id"]
         key = f"{region}|{name}"
     db.fav_add(uid, kind, key, identity["label"] if kind == "region" else data.get("label", ""))
     if kind == "complex" and "|" in key:
         region, name = key.split("|", 1)
         if region and name:
             background_tasks.add_task(_warm_complex_after_favorite, region, name)
-            out = {"ok": True, "warming": "queued"}
-            if region.startswith("kb:"):
-                out["key"] = key
-            return out
+            return {"ok": True, "key": key, "warming": "queued"}
     return {"ok": True, "key": key} if kind == "region" else {"ok": True}
 
 

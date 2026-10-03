@@ -5846,10 +5846,13 @@ async function selectComplexFavoriteRegion(oldRegion,name){
 async function favRemove(kind,key,label){ await toggleFav(kind,key,label); renderFavList();
   const mv=document.getElementById('view-mymap'); if(mv && mv.style.display!=='none') drawMyMap(); }
 function cxFavKey(region,name){
+  let legacy=null;
   for(const [key,identity] of _favComplexIdentity){
-    if(identity.status==='ready'&&identity.name===region&&key.endsWith('|'+name)) return key;
+    if(identity.status!=='ready'||identity.name!==region||!key.endsWith('|'+name)) continue;
+    if(key.startsWith('kb:')) return key;
+    legacy=key;
   }
-  return region+'|'+name;
+  return legacy||region+'|'+name;
 }
 const _ambiguousLegacyComplexRegions=new Set(['중구','서구','동구','남구','강서구','북구','인천 중구']);
 async function toggleComplexFav(region,name){

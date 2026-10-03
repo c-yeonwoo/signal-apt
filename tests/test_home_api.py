@@ -125,8 +125,12 @@ def test_complex_watch_ignores_stale_budget_but_keeps_trade_updates(client, monk
 
 
 def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
+    from types import SimpleNamespace
+
     uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
     monkeypatch.setattr(auth_routes.md, "code_of", lambda region: "11680")
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"강남구": "1168000000"}, regions=["강남구"], identity_verified=True))
     client.post("/api/favorites", json={"kind": "complex", "key": "강남구|테스트아파트"})
     payload = {"매매추이": [{"ym": "2026-07", "건수": 1}], "평형별": [], "최근평단가": 4000}
     monkeypatch.setattr(cw, "cache_loader", lambda: lambda region, name: (payload, 1_700_000_000))
@@ -140,14 +144,18 @@ def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
 
 def test_complex_favorite_queues_first_real_trade_warm(client, monkeypatch):
     """★ 등록 직후 워밍을 예약해야 다음 홈 방문에서 '아직 수집 안 됨'이 줄어든다."""
+    from types import SimpleNamespace
+
     called = []
     monkeypatch.setattr(auth_routes.md, "code_of", lambda region: "11680")
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"강남구": "1168000000"}, regions=["강남구"], identity_verified=True))
     monkeypatch.setattr(auth_routes, "_warm_complex_after_favorite",
                         lambda region, name: called.append((region, name)))
 
     r = client.post("/api/favorites", json={"kind": "complex", "key": "강남구|테스트아파트"})
-    assert r.json() == {"ok": True, "warming": "queued"}
-    assert called == [("강남구", "테스트아파트")]
+    assert r.json() == {"ok": True, "key": "kb:1168000000|테스트아파트", "warming": "queued"}
+    assert called == [("kb:1168000000", "테스트아파트")]
 
 
 def test_complex_favorite_rejects_sido_without_creating_false_watch(client, monkeypatch):
