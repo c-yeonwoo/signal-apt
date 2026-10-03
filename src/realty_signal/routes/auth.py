@@ -161,7 +161,10 @@ def usage_get(request: Request):
 
 @router.get("/api/favorites")
 def favorites_get(request: Request):
-    favorites = db.fav_list(deps.uid(request))
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    favorites = db.fav_list(uid)
     for favorite in favorites:
         if favorite["kind"] == "region":
             favorite["region_identity"] = _favorite_region_identity(favorite["key"])
@@ -174,7 +177,22 @@ def _favorite_region_identity(region: str) -> dict:
 
     if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
         return {"status": "needs_reselection",
-                "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 코드 기반 재선택 기능 전까지 알림을 보류합니다."}
+                "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 시그널 목록에서 현행 지역을 다시 선택해 주세요."}
+
+    if region.startswith("kb:"):
+        try:
+            name = md.region_for_ref(region)
+            code = region[3:]
+            if code[:5] in INCHEON_RETIRED_CODES:
+                return {"status": "needs_reselection",
+                        "message": "2026-07 인천 구역 개편 전 코드입니다. 현행 지역을 다시 선택해 주세요."}
+            if name:
+                sido = md.SIDO_LABELS.get(code[:2], "")
+                return {"status": "ready", "name": name, "region_id": region,
+                        "label": f"{sido} · {name}" if sido else name, "message": ""}
+        except Exception:  # noqa: BLE001 — 인증된 지역 자료를 읽을 수 없으면 보류한다.
+            pass
+        return {"status": "unverified", "message": "지역 코드를 확인하지 못해 관심 알림 판정을 보류합니다."}
 
     try:
         kb = md.kb()
@@ -186,7 +204,11 @@ def _favorite_region_identity(region: str) -> dict:
             return {"status": "unverified", "message": "지역 코드 확인 전이라 관심 알림 판정을 보류합니다."}
         if region not in kb.regions:
             return {"status": "no_current_series", "message": "현재 KB 시그널 자료에 없는 지역입니다. 새 지역을 확인해 주세요."}
-        return {"status": "ready", "message": ""}
+        if md.region_for_ref(f"kb:{code}") != region:
+            return {"status": "unverified", "message": "지역 코드가 다른 지역과 겹쳐 관심 알림 판정을 보류합니다."}
+        sido = md.SIDO_LABELS.get(code[:2], "")
+        return {"status": "ready", "name": region, "region_id": f"kb:{code}",
+                "label": f"{sido} · {region}" if sido else region, "message": ""}
     except Exception:  # noqa: BLE001 — KB 장애도 과거 키를 정상으로 단정하지 않는다
         return {"status": "unverified", "message": "지역 자료를 확인하지 못해 관심 알림 판정을 보류합니다."}
 
@@ -218,15 +240,28 @@ def _complex_favorite_error(key: object) -> str | None:
 
 @router.post("/api/favorites")
 def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dict = Body(...)):
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
     kind, key = data.get("kind", "region"), data.get("key", "")
+    if kind == "region" and (not isinstance(key, str) or not 1 <= len(key) <= 80):
+        return JSONResponse({"ok": False, "error": "invalid_region", "message": "지역을 다시 선택해 주세요."},
+                            status_code=422)
     if kind == "region" and key in db.AMBIGUOUS_LEGACY_REGION_KEYS:
         return JSONResponse({"ok": False, "error": "ambiguous_region",
-                             "message": "중구는 이름만으로 등록할 수 없습니다. 코드 기반 관심지역 선택 기능을 준비 중입니다."},
+                             "message": "중구는 이름만으로 등록할 수 없습니다. 시그널 목록에서 지역을 다시 선택해 주세요."},
                             status_code=422)
-    if kind == "region" and _favorite_region_identity(key)["status"] == "needs_reselection":
-        return JSONResponse({"ok": False, "error": "retired_region",
-                             "message": "이 지역은 2026-07 인천 구역 개편 전 이름입니다. 현행 지역을 선택해 주세요."},
-                            status_code=422)
+    if kind == "region":
+        identity = _favorite_region_identity(key)
+        if identity["status"] == "needs_reselection":
+            return JSONResponse({"ok": False, "error": "retired_region",
+                                 "message": "이 지역은 2026-07 인천 구역 개편 전 이름입니다. 현행 지역을 선택해 주세요."},
+                                status_code=422)
+        if identity["status"] != "ready":
+            return JSONResponse({"ok": False, "error": "unverified_region",
+                                 "message": "현재 지역 코드를 확인할 수 없습니다. 지역을 다시 선택해 주세요."},
+                                status_code=422)
+        key = identity["region_id"]
     if kind == "complex":
         error = _complex_favorite_error(key)
         if error:
@@ -234,18 +269,21 @@ def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dic
                 {"ok": False, "error": "untrackable_complex", "message": error},
                 status_code=422,
             )
-    db.fav_add(deps.uid(request), kind, key, data.get("label", ""))
+    db.fav_add(uid, kind, key, identity["label"] if kind == "region" else data.get("label", ""))
     if kind == "complex" and "|" in key:
         region, name = key.split("|", 1)
         if region and name:
             background_tasks.add_task(_warm_complex_after_favorite, region, name)
             return {"ok": True, "warming": "queued"}
-    return {"ok": True}
+    return {"ok": True, "key": key} if kind == "region" else {"ok": True}
 
 
 @router.delete("/api/favorites")
 def favorites_del(request: Request, kind: str, key: str):
-    db.fav_remove(deps.uid(request), kind, key)
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    db.fav_remove(uid, kind, key)
     return {"ok": True}
 
 

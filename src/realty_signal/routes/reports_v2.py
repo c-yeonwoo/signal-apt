@@ -188,16 +188,12 @@ def _discovery_regions() -> list[dict]:
                 or code[2:] == "000" or code in INCHEON_RETIRED_CODES):
             continue
         grouped.setdefault(code, set()).add(name)
-    sido = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주",
-            "30": "대전", "31": "울산", "36": "세종", "41": "경기", "42": "강원",
-            "43": "충북", "44": "충남", "45": "전북", "46": "전남", "47": "경북",
-            "48": "경남", "50": "제주"}
     options = []
     for code, names in grouped.items():
         if len(names) != 1:
             continue
         name = next(iter(names))
-        source_sido = sido.get(code[:2])
+        source_sido = md.SIDO_LABELS.get(code[:2])
         if source_sido:
             options.append({"code": code, "name": name, "sido": source_sido,
                             "label": f"{source_sido} · {name}"})

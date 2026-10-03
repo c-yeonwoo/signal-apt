@@ -401,7 +401,8 @@ def all_fav_regions() -> list[str]:
     c = conn()
     rows = c.execute("SELECT DISTINCT key FROM favorites WHERE kind='region'").fetchall()
     c.close()
-    return [k for (k,) in rows if k and k not in AMBIGUOUS_LEGACY_REGION_KEYS]
+    return list(dict.fromkeys(name for (key,) in rows
+                              if (name := _favorite_region_name(key))))
 
 
 def users_with_telegram() -> list[dict]:
@@ -434,8 +435,8 @@ def users_with_region_favs() -> list[dict]:
     c.close()
     out = []
     for uid, email, keys in rows:
-        regions = [k for k in (keys or "").split("|")
-                   if k and k not in AMBIGUOUS_LEGACY_REGION_KEYS]
+        regions = list(dict.fromkeys(name for key in (keys or "").split("|")
+                                     if (name := _favorite_region_name(key))))
         if regions:
             out.append({"id": uid, "email": email, "regions": regions})
     return out
@@ -447,10 +448,31 @@ def users_with_region_favs() -> list[dict]:
 AMBIGUOUS_LEGACY_REGION_KEYS = frozenset({"중구"})
 
 
+def _favorite_region_name(key: str) -> str | None:
+    """Read verified code favorites by current name without rewriting old rows."""
+    if not key or key in AMBIGUOUS_LEGACY_REGION_KEYS:
+        return None
+    try:
+        from realty_signal.services import market_data as md
+        from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
+        if key.startswith("kb:"):
+            if key[3:8] in INCHEON_RETIRED_CODES:
+                return None
+            return md.region_for_ref(key)
+        source = md.kb()
+        code = str((source.codes or {}).get(key) or "")
+        if (not source.identity_verified or key not in source.regions
+                or not code or code[:5] in INCHEON_RETIRED_CODES):
+            return None
+        return key if md.region_for_ref(f"kb:{code}") == key else None
+    except Exception:  # noqa: BLE001 — 원천 장애 시 과거 이름을 현행 지역으로 추측하지 않는다.
+        return None
+
+
 def actionable_region_favs(uid: int) -> list[str]:
-    """Exclude unrecoverable name collisions; downstream signal gates still apply."""
-    return [f["key"] for f in fav_list(uid)
-            if f["kind"] == "region" and f["key"] not in AMBIGUOUS_LEGACY_REGION_KEYS]
+    """Return only regions with current verified identities; signal gates still apply."""
+    return list(dict.fromkeys(name for f in fav_list(uid) if f["kind"] == "region"
+                              if (name := _favorite_region_name(f["key"]))))
 
 
 # ---------- funnel events ----------

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from types import SimpleNamespace
 
 from realty_signal import api
 
@@ -66,7 +67,7 @@ def test_quicksale_seed_does_not_require_public_data_key(monkeypatch):
     assert calls == ["급매", "찐매물"]
 
 
-def test_scan_regions_keeps_only_owner_favorites_without_kb(tmp_path, monkeypatch):
+def test_scan_regions_keeps_only_owner_favorites_when_signal_calculation_fails(tmp_path, monkeypatch):
     sale = tmp_path / "quicksale.json"
     cert = tmp_path / "certified.json"
     sale.write_text(json.dumps({"regions": ["은평구", "없는지역"]}), encoding="utf-8")
@@ -75,12 +76,15 @@ def test_scan_regions_keeps_only_owner_favorites_without_kb(tmp_path, monkeypatc
     monkeypatch.setattr(api, "CERTIFIED_FILE", cert)
     monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1], "은평구": [37.6, 126.9]})
     monkeypatch.setattr(api, "_signals_df", lambda: (_ for _ in ()).throw(FileNotFoundError("KB cache")))
+    monkeypatch.setattr(api.md, "kb", lambda: SimpleNamespace(
+        codes={"노원구": "1135000000", "은평구": "1138000000"},
+        regions=["노원구", "은평구"], identity_verified=True))
     monkeypatch.setattr(api.config, "personal_listing_email", lambda: "owner@example.com")
     monkeypatch.setattr(api.db, "user_by_email", lambda email: {"id": 1} if email == "owner@example.com" else None)
     monkeypatch.setattr(api.db, "fav_list", lambda uid: [
         {"kind": "region", "key": "노원구"}, {"kind": "region", "key": "없는지역"}])
 
-    assert api._scan_regions() == ["노원구"]  # 과거 캐시는 다른 계정의 관심지역일 수 있다.
+    assert api._scan_regions() == ["노원구"]  # 식별은 검증됐고 판정 계산만 실패한 경우.
 
 
 def test_scan_targets_use_current_assessment_and_skip_retired_favorite(monkeypatch):
