@@ -123,14 +123,18 @@ def report_snapshot_save(request: Request, data: dict = Body(...)):
 
 
 @router.get("/api/v2/report-snapshots")
-def report_snapshots_list(request: Request, key: str | None = None):
+def report_snapshots_list(request: Request, key: str | None = None, cursor: str | None = None):
     uid = deps.uid(request)
     if not uid:
         raise HTTPException(401, "로그인이 필요합니다.")
     if key is not None and (not 1 <= len(key) <= 180 or ":" not in key):
         raise HTTPException(422, "매물 식별자가 올바르지 않습니다.")
-    return JSONResponse({"items": snapshots.list_for(
-        uid, key=key, private_allowed=deps.personal_listings_allowed(request))}, headers=PRIVATE)
+    try:
+        page = snapshots.list_page(uid, key=key,
+                                   private_allowed=deps.personal_listings_allowed(request), cursor=cursor)
+    except ValueError as exc:
+        raise HTTPException(422, "저장본 목록 위치가 올바르지 않습니다. 목록을 처음부터 다시 열어 주세요.") from exc
+    return JSONResponse(page, headers=PRIVATE)
 
 
 @router.get("/api/v2/report-snapshots/{report_id}")

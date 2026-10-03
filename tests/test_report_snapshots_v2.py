@@ -151,3 +151,45 @@ def test_snapshot_routes_require_login_without_reading_data(isolated_db, monkeyp
         with pytest.raises(HTTPException) as denied:
             action()
         assert denied.value.status_code == 401
+
+
+def test_saved_reports_page_through_all_copies_with_tied_timestamps(isolated_db, monkeypatch):
+    monkeypatch.setattr(snapshots.time, "time", lambda: 1_800_000_000)
+    for number in range(55):
+        snapshots.save(7, _region_report(f"{number:064x}"))
+    first = snapshots.list_page(7, private_allowed=False)
+    assert len(first["items"]) == 50 and first["next_cursor"]
+    second = snapshots.list_page(7, private_allowed=False, cursor=first["next_cursor"])
+    assert len(second["items"]) == 5 and second["next_cursor"] is None
+    ids = [item["report_id"] for item in first["items"] + second["items"]]
+    assert len(ids) == len(set(ids)) == 55
+    assert ids == sorted(ids, reverse=True)
+    assert first["policy"]["retention"] == "until_deleted"
+    assert first["policy"]["sharing"] == "private_only"
+    for kwargs in ({"key": "kb:11350", "private_allowed": False},
+                   {"key": None, "private_allowed": True}):
+        with pytest.raises(ValueError, match="invalid_cursor"):
+            snapshots.list_page(7, cursor=first["next_cursor"], **kwargs)
+    with pytest.raises(ValueError, match="invalid_cursor"):
+        snapshots.list_page(8, private_allowed=False, cursor=first["next_cursor"])
+    with pytest.raises(ValueError, match="invalid_cursor"):
+        snapshots.list_page(7, private_allowed=False, cursor="not-a-cursor")
+
+
+def test_saved_report_route_rejects_invalid_cursor(isolated_db, monkeypatch):
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
+    with pytest.raises(HTTPException) as bad:
+        reports_v2.report_snapshots_list(None, cursor="bad")
+    assert bad.value.status_code == 422
+
+
+def test_private_snapshots_do_not_hide_public_region_pages_when_access_revoked(isolated_db, monkeypatch):
+    monkeypatch.setattr(snapshots.time, "time", lambda: 1_800_000_000)
+    for number in range(55):
+        snapshots.save(7, _report(f"{number:064x}"))
+    snapshots.save(7, _region_report("f" * 64))
+    visible = snapshots.list_page(7, private_allowed=False)
+    assert [item["kind"] for item in visible["items"]] == ["지역"]
+    assert visible["next_cursor"] is None
+    assert snapshots.get(7, "0" * 64, private_allowed=False) is None

@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS report_snapshots_v2(
     kind TEXT NOT NULL, data TEXT NOT NULL, saved_at INTEGER NOT NULL,
     PRIMARY KEY(uid, report_id));
 CREATE INDEX IF NOT EXISTS ix_report_snapshots_v2_user ON report_snapshots_v2(uid, saved_at DESC);
+CREATE INDEX IF NOT EXISTS ix_report_snapshots_v2_page ON report_snapshots_v2(uid, saved_at DESC, report_id DESC);
 """
 
 _migrated = [False]

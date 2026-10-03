@@ -15,6 +15,7 @@
   };
   let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0, discoveryRegionGeneration = 0;
   let noteSubject = null, editingNote = null, notesCache = [];
+  let savedReportList = {key:null, items:[], next_cursor:null, policy:null};
 
   async function json(url, options) {
     const response = await fetch(url, options);
@@ -254,24 +255,35 @@
     }
   }
 
-  async function openSavedReports(key = '') {
+  async function openSavedReports(key = '', cursor = null) {
     const generation = ++listingGeneration;
     const dialog = document.getElementById('v2ReportDlg');
     const body = document.getElementById('v2ReportBody');
     if (!dialog.open) dialog.showModal();
     body.textContent = '저장한 리포트를 불러오고 있습니다…';
     try {
-      const query = key ? `?key=${encodeURIComponent(key)}` : '';
-      const data = await json('/api/v2/report-snapshots' + query);
+      const params = new URLSearchParams();
+      if (key) params.set('key', key);
+      if (cursor) params.set('cursor', cursor);
+      const page = await json('/api/v2/report-snapshots' + (params.size ? `?${params}` : ''));
       if (generation !== listingGeneration || !dialog.open) return;
-      body.innerHTML = `<h2>내가 저장한 리포트</h2><p class="v2-muted">최근 50개까지 표시합니다. 저장 당시의 근거이며 현재 판정·매물 상태는 다시 확인하세요.</p>` +
+      savedReportList = {key, items:cursor && savedReportList.key===key
+        ? [...savedReportList.items, ...(page.items||[])] : (page.items||[]),
+        next_cursor:page.next_cursor||null, policy:page.policy||null};
+      if (generation !== listingGeneration || !dialog.open) return;
+      const data=savedReportList;
+      body.innerHTML = `<h2>내가 저장한 리포트</h2><p class="v2-muted">저장 당시의 근거이며 현재 판정·매물 상태는 다시 확인하세요. 내 계정에서 삭제 전까지 보관하며 공개 공유 링크는 만들지 않습니다. 삭제한 저장본도 순환 백업에는 일정 기간 남을 수 있습니다.</p>` +
         ((data.items || []).length ? data.items.map(item => `<div class="v2-row">
           <b>${esc(item.name || '매물')} · ${esc(item.kind?.startsWith('비교') ? '비교' : item.kind)}</b>
           <p class="v2-muted">${item.kind === '지역' ? 'KB 기준' : '수집'} ${esc(item.asof || '시각 미확인')} · 저장 ${esc(new Date(item.saved_at * 1000).toLocaleString('ko-KR'))}</p>
           <button type="button" class="btn" data-saved-report="${esc(item.report_id)}">당시 리포트 보기</button>
           <button type="button" class="btn" data-delete-report="${esc(item.report_id)}">저장본 삭제</button>
-        </div>`).join('') : '<p>저장한 리포트가 없습니다.</p>') + '<p id="v2SavedStatus" role="status"></p>';
+        </div>`).join('') : '<p>저장한 리포트가 없습니다.</p>') +
+        (data.next_cursor?'<button type="button" class="btn" id="v2SavedMore">이전 저장본 더 보기</button>':'') +
+        '<p id="v2SavedStatus" role="status"></p>';
       body.querySelectorAll('[data-saved-report]').forEach(button => button.onclick = () => openSavedReport(button.dataset.savedReport, key));
+      const more=body.querySelector('#v2SavedMore');
+      if (more) more.onclick = () => { more.disabled=true; openSavedReports(key,data.next_cursor); };
       body.querySelectorAll('[data-delete-report]').forEach(button => button.onclick = async () => {
         if (!confirm('이 리포트 저장본 하나를 삭제할까요? 삭제 후 복구할 수 없습니다.')) return;
         button.disabled = true;
