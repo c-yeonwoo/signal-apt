@@ -155,6 +155,25 @@ def test_listing_signal_assessment_failure_fails_closed(monkeypatch):
     assert row["판정상태"] == "held"
 
 
+def test_public_listing_response_drops_audit_only_raw_grade(monkeypatch):
+    from realty_signal.brain import ranking
+
+    internal = [{"유형": "청약", "단지명": "보류 단지", "지역": "보류구",
+                 "시그널": "HELD", "원시시그널": "STRONG_BUY", "기회도": None,
+                 "key": "청약:1"}]
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: internal)
+    monkeypatch.setattr(api, "_attach_card_lines", lambda rows, uid: rows)
+    monkeypatch.setattr(api, "_uid", lambda request: None)
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **_kwargs: False)
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-04")
+    monkeypatch.setattr(api, "_data_age_days", lambda: 1)
+    monkeypatch.setattr(ranking, "engagement_scores", lambda **_kwargs: {})
+    result = api.listings_all(None, "청약")
+    assert result["listings"][0]["시그널"] == "HELD"
+    assert "원시시그널" not in result["listings"][0]
+    assert internal[0]["원시시그널"] == "STRONG_BUY"
+
+
 def test_integrated_listing_does_not_borrow_same_named_other_province_signal(monkeypatch, tmp_path):
     cache = tmp_path / "quicksale.json"
     cache.write_text(json.dumps({"_scan_ver": api._QUICKSALE_SCAN_VER,
