@@ -97,6 +97,29 @@ def test_scan_uses_verified_favorites_and_issued_snapshots_only(monkeypatch):
     assert alerts.list_events(8)["unread"] == 0
 
 
+def test_same_region_name_and_code_favorites_issue_once_but_advance_both(monkeypatch):
+    db.fav_add(7, "region", "노원구", "노원구")
+    db.fav_add(7, "region", "kb:11350", "노원구")
+    monkeypatch.setattr(db, "verified_region_favorite_identity", lambda key: (
+        {"region_id": "kb:11350", "name": "노원구"} if key in {"노원구", "kb:11350"} else None))
+    monkeypatch.setattr(db, "_favorite_region_name", lambda key: (
+        "노원구" if key in {"노원구", "kb:11350"} else None))
+    first = _assessment()
+    _issue(first)
+    assert alerts.scan_issued() == 0
+    second = _assessment("second", asof="2026-09-28", grade="관망", passing=False)
+    _issue(second)
+    assert alerts.scan_issued() == 1
+    assert alerts.scan_issued() == 0
+    assert alerts.list_events(7)["unread"] == 1
+    c = db.conn()
+    try:
+        state = c.execute("SELECT favorite_key,assessment_id FROM region_watch_state_v2 WHERE uid=7").fetchall()
+        assert set(state) == {("노원구", "second"), ("kb:11350", "second")}
+    finally:
+        c.close()
+
+
 def test_region_event_hidden_if_identity_is_no_longer_verified(monkeypatch):
     db.fav_add(7, "region", "kb:11350", "노원구")
     first, second = _assessment(), _assessment("second", asof="2026-09-28", value=182)
