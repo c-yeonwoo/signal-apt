@@ -24,6 +24,7 @@
       response.status === 403 ? '이 매물에 접근할 수 없습니다.' :
       response.status === 404 ? '현재 수집분에서 대상을 찾지 못했습니다.' :
       response.status === 409 ? '자료나 내 조건이 바뀌었습니다. 리포트를 다시 열어 주세요.' :
+      response.status === 429 ? '오늘 AI 설명 요청 한도에 도달했습니다. 기본 근거는 계속 볼 수 있습니다.' :
       '자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
     return response.json();
   }
@@ -63,6 +64,49 @@
     return null;
   }
 
+  function explanationHtml(result, report) {
+    const labels = new Map(report.type === 'region'
+      ? (report.assessment?.reasons || []).map(item => [item.reason_id, item.label || item.reason_id])
+      : report.type === 'listing'
+        ? (report.evidence || []).map(item => [item.id, item.label || item.id])
+        : (report.items || []).map((item, index) => [`item_${index}`, item.listing?.name || '비교 매물']));
+    return `<div class="v2-row"><b>${result.source === 'model_validated' ? '근거를 쉽게 풀어봤어요' : '기본 근거 설명'}</b>
+      <p>${esc(result.summary || '')}</p>
+      ${(result.claims || []).map(claim => `<p>${esc(claim.text)} <small class="v2-muted">근거: ${claim.evidence_ids.map(id => esc(labels.get(id) || id)).join(' · ')}</small></p>`).join('')}
+      ${(result.cautions || []).map(item => `<p class="v2-caution">확인: ${esc(item)}</p>`).join('')}
+      <p class="v2-muted">${esc(result.limit || '')}</p></div>`;
+  }
+
+  async function askExplanation(report, payload, target, isCurrent) {
+    if (!target || !isCurrent()) return;
+    target.textContent = '선택한 리포트의 근거를 확인해 설명을 준비하고 있습니다…';
+    const options = {method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...payload, mode:payload.mode || 'easy'})};
+    try {
+      let job = await json(`/api/v2/reports/${encodeURIComponent(report.report_id)}/explanations`, options);
+      for (const delay of [2000,5000,10000,10000,10000,10000]) {
+        if (!isCurrent()) return;
+        if (document.hidden) {
+          target.textContent = '화면을 다시 볼 때 설명 버튼을 누르면 작업 결과를 이어서 확인합니다.';
+          return;
+        }
+        if (job.status === 'succeeded' || job.status === 'failed') break;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        if (!isCurrent()) return;
+        if (document.hidden) {
+          target.textContent = '화면을 다시 볼 때 설명 버튼을 누르면 작업 결과를 이어서 확인합니다.';
+          return;
+        }
+        job = await json(`/api/v2/report-jobs/${encodeURIComponent(job.job_id)}`);
+      }
+      if (!isCurrent()) return;
+      target.innerHTML = job.result ? explanationHtml(job.result, report) :
+        '<p class="v2-muted">설명을 계속 준비 중입니다. 잠시 뒤 다시 눌러 상태를 확인해 주세요. 기본 리포트는 그대로 사용할 수 있습니다.</p>';
+    } catch (error) {
+      if (isCurrent()) target.textContent = `${error.message} 기본 근거 리포트는 계속 볼 수 있습니다.`;
+    }
+  }
+
   async function paintRegion(region, regionId) {
     const generation = ++regionGeneration;
     const target = document.getElementById('haesolPanel');
@@ -95,6 +139,10 @@
         <p class="v2-muted">${change}</p>
         ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(a.raw_grade)} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
         <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
+        <div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
+          <button type="button" class="btn" id="v2RegionExplain">쉽게 설명</button>
+          <button type="button" class="btn" id="v2RegionCounter">반대 근거 보기</button>
+          <div id="v2RegionExplanation" role="status" aria-live="polite"></div></div>
         <button type="button" class="btn" id="v2RegionDiscover">이 지역 매물 비교</button>
         <button type="button" class="btn" id="v2RegionNote">관심 이유 기록</button>
         <details><summary>이 판정 보관하기</summary><p class="v2-muted">저장 당시 근거로 남습니다. 현재 판정은 위에서 다시 확인하세요.</p>
@@ -103,6 +151,11 @@
           <p id="v2RegionSaveStatus" class="v2-muted" role="status"></p></details>
       </section>`;
       target.querySelector('#v2RegionDiscover').onclick = () => openDiscovery(region);
+      for (const [id, mode] of [['v2RegionExplain','easy'],['v2RegionCounter','counterevidence']]) {
+        target.querySelector(`#${id}`).onclick = () => askExplanation(report,
+          {type:'region',key:ref,mode}, target.querySelector('#v2RegionExplanation'),
+          () => generation === regionGeneration && target.dataset.reportRegion === region);
+      }
       target.querySelector('#v2RegionNote').onclick = () => openNote('region', region, report.report_id);
       target.querySelector('#v2RegionSaved').onclick = () => openSavedReports(report.subject.region_id);
       target.querySelector('#v2RegionSave').onclick = async event => {
@@ -157,6 +210,12 @@
           <button type="button" class="btn" data-v2-quick-question="budget">내 예산에 맞나?</button>
           <button type="button" class="btn" data-v2-quick-question="risk">뭘 조심해야 하나?</button>
           <div id="v2QuickAnswer" role="status" aria-live="polite"></div></div>
+        <div class="v2-row"><b>이 리포트 더 쉽게 보기</b><p class="v2-muted">선택하면 AI가 현재 근거만 다시 풀어 설명합니다. 기본 리포트와 숫자는 바꾸지 않습니다.</p>
+          <button type="button" class="btn" data-v2-explain="easy">쉽게 설명</button>
+          <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
+          <label class="v2-muted">추가 질문 <input id="v2ExplainQuestion" maxlength="300" placeholder="이 근거에서 무엇을 확인할까요?"></label>
+          <button type="button" class="btn" id="v2ExplainQuestionSend">이 근거에 질문</button>
+          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>
         <p>${esc((report.lines || {}).cash || '자금 계산은 확인이 필요합니다.')}</p>
         ${(report.partial_failures || []).includes('buyer_profile_unavailable') ? '<p class="v2-row v2-caution">내 자금 프로필을 불러오지 못해 예산 적합성은 보류했습니다. 가격 근거는 별도로 확인할 수 있습니다.</p>' : ''}
         <p>${esc((report.lines || {}).price || '현재 판매 여부와 실제 호가를 확인하세요.')}</p>
@@ -189,6 +248,17 @@
           <button type="button" class="btn" data-v2-report-feedback="no">아니요, 더 필요해요</button>
           <p id="v2ReportFeedbackStatus" class="v2-muted" role="status"></p></div>`;
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
+      const explanationTarget = body.querySelector('#v2ListingExplanation');
+      const currentExplanation = () => generation === listingGeneration && dialog.open;
+      body.querySelectorAll('[data-v2-explain]').forEach(button => button.onclick = () =>
+        askExplanation(report, {type:'listing',key,mode:button.dataset.v2Explain},
+          explanationTarget, currentExplanation));
+      body.querySelector('#v2ExplainQuestionSend').onclick = () => {
+        const question = body.querySelector('#v2ExplainQuestion').value.trim();
+        if (!question) { explanationTarget.textContent = '질문을 입력해 주세요.'; return; }
+        askExplanation(report, {type:'listing',key,mode:'question',question},
+          explanationTarget, currentExplanation);
+      };
       body.querySelectorAll('[data-v2-quick-question]').forEach(button => button.onclick = () => {
         if (generation !== listingGeneration || !dialog.open) return;
         const answer = listingQuickAnswer(report, button.dataset.v2QuickQuestion);

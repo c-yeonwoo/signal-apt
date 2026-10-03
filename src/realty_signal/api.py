@@ -315,16 +315,43 @@ async def _startup_bg():
     await _auto_refresh_loop()
 
 
+def _narrative_private_allowed(uid: int) -> bool:
+    c = db.conn()
+    try:
+        row = c.execute("SELECT email FROM users WHERE id=?", (uid,)).fetchone()
+        return bool(row) and config.personal_listing_allowed(row[0])
+    finally:
+        c.close()
+
+
+async def _explanation_loop():
+    """Resume explicit explanation jobs after restarts without repeating paid attempts."""
+    import asyncio
+
+    from realty_signal.services import report_narrative
+
+    while True:
+        try:
+            processed = await asyncio.to_thread(
+                report_narrative.run_once, private_user_allowed=_narrative_private_allowed)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("report explanation worker failure: %s", exc)
+            processed = False
+        await asyncio.sleep(0.25 if processed else 3)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
     config.load_env()
     task = asyncio.create_task(_startup_bg())  # 수집·갱신은 백그라운드, 서버는 즉시 서빙
     brief = asyncio.create_task(_briefing_loop())  # 텔레그램 폴링·데일리 브리핑
+    explanation = asyncio.create_task(_explanation_loop())
     yield
     task.cancel()
     brief.cancel()
-    await asyncio.gather(task, brief, return_exceptions=True)
+    explanation.cancel()
+    await asyncio.gather(task, brief, explanation, return_exceptions=True)
 
 
 class SafeJSONResponse(JSONResponse):

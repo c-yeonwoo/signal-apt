@@ -11,7 +11,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
+    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[], explanationPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
@@ -138,12 +138,22 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         price:{'상태':'관측비교','표본수':3},buyer_fit:{status:'unknown'},
         positive:[{text:'동일 조건 실거래가 있습니다.'}],
         cautions:[{text:'현재 판매 여부는 확인되지 않았습니다.'}],
-        next_actions:['실제 호가 확인'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
+        next_actions:['실제 호가 확인'],evidence:[{id:'trades',label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:profile-fail')
         data.partial_failures=['buyer_profile_unavailable'];
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:trade-missing' && !tradeEnriched)
         data.partial_failures=['trade_cache_unavailable'];
       if(url.pathname==='/api/v2/listings/report') reportsByKey.set(url.searchParams.get('key'),data);
+      if(/^\/api\/v2\/reports\/[^/]+\/explanations$/.test(url.pathname)) {
+        const payload=route.request().postDataJSON(); explanationPayloads.push(payload);
+        const region=payload.type==='region';
+        return route.fulfill({status:200,json:{job_id:'test-job',status:'succeeded',result:{
+          report_id:decodeURIComponent(url.pathname.split('/')[4]),mode:payload.mode,source:'model_validated',
+          summary:'현재 리포트의 가격 근거를 확인하세요.',
+          claims:[region?{text:'전세수급 자료와 반대 근거를 함께 확인해야 합니다.',evidence_ids:['jeonse_pressure']}:
+            {text:'거래 표본의 한계를 먼저 확인해야 합니다.',evidence_ids:['trades']}],
+          cautions:['현재 판매 여부는 별도 확인이 필요합니다.'],limit:'현장 확인 전에는 결론을 보류하세요.'}}});
+      }
       if(url.pathname==='/api/v2/comparisons') {
         const keys=route.request().postDataJSON().keys;
         data={type:'comparison',report_id:'c'.repeat(64),basis:'같은 조건 가격 비교',items:keys.map((key,i)=>({
@@ -518,12 +528,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#analysisFixture button').click();
     await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
     assert.equal(nickPayloads.length,0);
+    assert.equal(explanationPayloads.length,0);
     await page.locator('#v2ReportBody').getByRole('button',{name:'가격이 싼가?'}).click();
     assert.match(await page.locator('#v2QuickAnswer').textContent(),/동일 조건 실거래 3건과 비교/);
     await page.locator('#v2ReportBody').getByRole('button',{name:'내 예산에 맞나?'}).click();
     assert.match(await page.locator('#v2QuickAnswer').textContent(),/대출 승인·세금·수리비 확인 전/);
     await page.locator('#v2ReportBody').getByRole('button',{name:'뭘 조심해야 하나?'}).click();
     assert.match(await page.locator('#v2QuickAnswer').textContent(),/현재 판매 여부는 확인되지/);
+    assert.equal(nickPayloads.length,0);
+    assert.equal(explanationPayloads.length,0);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'쉽게 설명',exact:true}).click();
+    await page.locator('#v2ListingExplanation').getByText(/거래 표본의 한계/).waitFor();
+    assert.match(await page.locator('#v2ListingExplanation').textContent(),/근거: 국토부 실거래/);
+    assert.deepEqual(explanationPayloads.at(-1),{type:'listing',key:'일반매물:synthetic-hb-1',mode:'easy'});
     assert.equal(nickPayloads.length,0);
     const locationCalls=calls.filter(path=>path==='/api/listing-location').length;
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
@@ -705,6 +722,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
     await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
+    const explanationCallsBeforeRegion=explanationPayloads.length;
+    await page.locator('#v2RegionCounter').click();
+    await page.locator('#v2RegionExplanation').getByText(/전세수급 자료와 반대 근거/).waitFor();
+    assert.equal(explanationPayloads.length,explanationCallsBeforeRegion+1);
+    assert.deepEqual(explanationPayloads.at(-1),{type:'region',key:'kb:1114000000',mode:'counterevidence'});
     await page.locator('#haesolPanel details').last().locator('summary').click();
     await page.locator('#v2RegionSave').click();
     await page.locator('#v2RegionSaveStatus').getByText(/저장했습니다/).waitFor();
