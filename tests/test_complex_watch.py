@@ -94,6 +94,9 @@ def test_unqueryable_payload_never_looks_quiet():
 
 def test_compute_separates_unavailable_from_quiet(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "t.db")
+    monkeypatch.setattr(db, "complex_favorite_region", lambda region: {
+        "status": "ready", "name": region, "code": "1168000000"} if region == "강남구"
+        else {"status": "unverified", "message": "시·도 단위"})
 
     def loader(region, name):
         if name == "조회불가":
@@ -110,6 +113,8 @@ def test_compute_separates_unavailable_from_quiet(tmp_path, monkeypatch):
 
 def test_snapshot_advances_only_after_show(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "t.db")
+    monkeypatch.setattr(db, "complex_favorite_region", lambda region: {
+        "status": "ready", "name": region, "code": "1168000000"})
 
     def loader(region, name):
         return _data(months=[("2026-08", 2)], ppy=4000, amt=100000), 1_700_000_000
@@ -142,7 +147,13 @@ def test_html_renders_complex_watch():
 
 def test_loader_rejects_sido_level_region(tmp_path, monkeypatch):
     """'서울' 로 등록된 관심단지는 국토부 실거래를 조회할 수 없다 — 이유를 말해야 한다."""
+    from types import SimpleNamespace
+    from realty_signal.services import market_data as md
+
     monkeypatch.setattr(db, "DB", tmp_path / "t.db")
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"서울": "1100000000", "강남구": "1168000000"},
+        regions=["서울", "강남구"], identity_verified=True))
     load = cw.cache_loader()
     data, ts = load("서울", "상계주공9단지아파트")
     assert ts is None

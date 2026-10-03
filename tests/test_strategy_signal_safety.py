@@ -57,7 +57,8 @@ def test_myfeed_recalculates_old_cached_complex_grade_under_current_hold(monkeyp
     monkeypatch.setattr(api, "_display_signal_map", lambda: {"노원구": "HELD"})
     monkeypatch.setattr(api, "_personal_listings_allowed", lambda **kwargs: False)
     monkeypatch.setattr(api, "_presale", lambda: [])
-    monkeypatch.setattr(api, "_code_of", lambda region: "11350")
+    monkeypatch.setattr(api.db, "complex_favorite_region", lambda ref: {
+        "status": "ready", "name": "노원구", "code": "1135000000"})
     monkeypatch.setattr(api.db, "kv_get", lambda *args, **kwargs: {
         "총거래": 8, "단지시그널": {"등급": "STRONG_BUY", "점수": 80},
         "평형별": [], "매매추이": [],
@@ -92,6 +93,9 @@ def test_agent_favorite_context_excludes_ambiguous_complex(monkeypatch):
         {"kind": "complex", "key": "중구|옛 관심단지", "label": "옛 관심단지"},
         {"kind": "complex", "key": "노원구|현재 단지", "label": "현재 단지"}])
     monkeypatch.setattr(deps.db, "actionable_region_favs", lambda _uid: [])
+    monkeypatch.setattr(deps.db, "complex_favorite_region", lambda ref: {
+        "status": "needs_reselection"} if ref == "중구" else {
+            "status": "ready", "name": "노원구", "code": "1135000000"})
     assert deps.fav_context(7)["관심단지"] == ["현재 단지"]
 
 
