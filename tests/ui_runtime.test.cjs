@@ -46,6 +46,23 @@ test('returning to a long-lived tab checks market and visible listings at most o
   assert.doesNotMatch(html,/info\.data_age_days\}일 전 수집/);
 });
 
+test('entering signal from another view rechecks the current market revision', async () => {
+  let checks=0;
+  const ctx=vm.createContext({
+    window:{_signalAppReady:true}, _signalMode:'reasons',
+    setSignalView(){}, renderScoreboard(){}, renderAha(){},
+    loadData:async()=>{checks++;},
+  });
+  vm.runInContext(extract('const _LOAD={', 'function switchTab('),ctx);
+  vm.runInContext('_LOAD.signal()',ctx);
+  await Promise.resolve();
+  assert.equal(checks,1);
+  ctx.window._signalAppReady=false;
+  vm.runInContext('_LOAD.signal()',ctx);
+  await Promise.resolve();
+  assert.equal(checks,1);
+});
+
 test('same named complex pins group only when display coordinates nearly match', () => {
   const ctx=vm.createContext({});
   vm.runInContext(extract('function _pinGroups(', 'function plotPins('),ctx);
