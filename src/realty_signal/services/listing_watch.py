@@ -94,7 +94,8 @@ def build(saved: list[dict], current: list[dict]) -> list[dict]:
             out.append(item)
             continue
         old, now = watch.get("saved_price"), row.get("총액")
-        if old is not None and now is not None and not row.get("stale"):
+        if (watch.get("kind") in PRIVATE and row.get("price_kind") == "asking"
+                and old is not None and now is not None and not row.get("stale")):
             item["price_change"] = now - old
         others = [candidate for candidate in current
                   if candidate.get("key") != watch["key"] and candidate.get("key")

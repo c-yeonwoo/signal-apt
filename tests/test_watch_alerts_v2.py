@@ -62,6 +62,37 @@ def test_missing_or_stale_source_never_becomes_a_sale_or_change():
     assert alerts.materialize(7, saved, [_row(price=44_000)], private_allowed=True) == 1
 
 
+def test_explicit_price_target_only_alerts_on_fresh_downward_crossing():
+    db.listing_watch_add(7, {"key": "일반매물:a", "유형": "일반매물", "단지명": "기준단지",
+                             "지역": "노원구", "총액": 50_000})
+    saved = [_watch()]
+    assert db.listing_watch_price_target_set(7, "일반매물:a", 47_000)
+    assert alerts.materialize(7, saved, [_row(price=50_000)], private_allowed=True) == 0
+    assert alerts.materialize(7, saved, [_row(price=45_000, stale=True)], private_allowed=True) == 0
+    prefs = {"listing_price": False, "listing_target": True, "new_alternative": False}
+    assert alerts.materialize(7, saved, [_row(price=45_000)], private_allowed=True, prefs=prefs) == 1
+    assert alerts.materialize(7, saved, [_row(price=45_000)], private_allowed=True, prefs=prefs) == 0
+    event = alerts.list_events(7, private_allowed=True)["items"][0]
+    assert event["kind"] == "listing_target"
+    assert event["payload"]["target_price"] == 47_000
+    assert event["payload"]["old_price"] == 50_000
+    assert event["payload"]["new_price"] == 45_000
+    assert alerts.materialize(7, saved, [_row(price=49_000)], private_allowed=True, prefs=prefs) == 0
+    assert alerts.materialize(7, saved, [_row(price=46_000)], private_allowed=True, prefs=prefs) == 1
+
+
+def test_muted_target_rule_advances_baseline_without_retroactive_alert():
+    db.listing_watch_add(7, {"key": "일반매물:a", "유형": "일반매물", "단지명": "기준단지",
+                             "지역": "노원구", "총액": 50_000})
+    db.listing_watch_price_target_set(7, "일반매물:a", 47_000)
+    saved = [_watch()]
+    alerts.materialize(7, saved, [_row(price=50_000)], private_allowed=True)
+    prefs = {"listing_price": False, "listing_target": False, "new_alternative": False}
+    assert alerts.materialize(7, saved, [_row(price=45_000)], private_allowed=True, prefs=prefs) == 0
+    assert alerts.materialize(7, saved, [_row(price=45_000)], private_allowed=True) == 0
+    assert alerts.list_events(7, private_allowed=True)["items"] == []
+
+
 def test_muted_rules_advance_baseline_without_retroactive_alert():
     saved = [_watch()]
     alerts.materialize(7, saved, [_row()], private_allowed=True)
@@ -81,11 +112,14 @@ def test_unwatch_deletes_only_own_state_and_events():
     finally:
         c.close()
     for uid in (7, 8):
+        db.listing_watch_price_target_set(uid, "일반매물:a", 46_000)
         alerts.materialize(uid, [_watch()], [_row()], private_allowed=True)
         alerts.materialize(uid, [_watch()], [_row(price=45_000)], private_allowed=True)
     db.listing_watch_remove(7, "일반매물:a")
     assert alerts.list_events(7, private_allowed=True)["items"] == []
-    assert alerts.list_events(8, private_allowed=True)["unread"] == 1
+    assert db.listing_watch_price_targets(7) == {}
+    assert db.listing_watch_price_targets(8) == {"일반매물:a": 46_000}
+    assert alerts.list_events(8, private_allowed=True)["unread"] == 2
     db.listing_watch_add(7, {"key": "일반매물:a", "유형": "일반매물",
                              "단지명": "기준단지", "지역": "노원구", "총액": 45_000})
     assert alerts.materialize(7, [_watch()], [_row(price=45_000)], private_allowed=True) == 0

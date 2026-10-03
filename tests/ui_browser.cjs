@@ -11,8 +11,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[], explanationPayloads=[];
+    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[], explanationPayloads=[], targetPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
+    const watchTargets=new Map();
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
     page.on('pageerror', e=>errors.push(e.message));
@@ -259,8 +260,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           return route.fulfill({json:{ok:true}});
         }
         data={items:[...watched].map(key=>({key,kind:key.split(':')[0],name:'테스트단지',region:'테스트구',saved_price:60000,
+          target_price:watchTargets.get(key)??null,
           price_change:-10000,current:{key,kind:key.split(':')[0],name:'테스트단지',region:'테스트구',price:50000},
           alternatives:key==='급매:synthetic-1'?[{key:'급매:synthetic-2',kind:'급매',name:'테스트단지',region:'테스트구',price:52000,reason:'같은 단지의 다른 매물'}]:[]}))};
+      }
+      if(url.pathname==='/api/listing-watch/price-target') {
+        if(route.request().method()==='PUT') {
+          const payload=route.request().postDataJSON();
+          targetPayloads.push(payload);
+          watchTargets.set(payload.key,payload.target_manwon);
+          return route.fulfill({json:{ok:true,target_manwon:payload.target_manwon}});
+        }
+        watchTargets.delete(url.searchParams.get('key'));
+        return route.fulfill({json:{ok:true}});
       }
       if(url.pathname==='/api/asks') data={ready:true,budget:61000,asks:[
         {'단지명':'호가단지','지역':'테스트구','유형':'급매','총액':48000,
@@ -425,6 +437,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('찜 당시보다 하락 1.0억').waitFor();
     assert.match(await page.locator('#watchList').textContent(),/같은 단지의 다른 매물/);
     assert.equal(await page.locator('#view-watch .watch-btn').getAttribute('aria-pressed'),'true');
+    await page.locator('#view-watch input[type="number"]').fill('47000');
+    await Promise.all([page.waitForResponse(r=>r.url().includes('/api/listing-watch/price-target') && r.request().method()==='PUT'),
+      page.locator('#view-watch').getByRole('button',{name:'목표 저장·해제'}).click()]);
+    assert.deepEqual(targetPayloads,[{key:'급매:synthetic-1',target_manwon:47000}]);
+    await page.locator('#view-watch input[type="number"]').fill('');
+    await Promise.all([page.waitForResponse(r=>r.url().includes('/api/listing-watch/price-target') && r.request().method()==='DELETE'),
+      page.locator('#view-watch').getByRole('button',{name:'목표 저장·해제'}).click()]);
+    assert.equal(watchTargets.size,0);
     const generalCalls=calls.filter(x=>x==='/api/general-listings').length;
     await page.evaluate(()=>{_ms.hbMap={map:{invalidateSize(){}}}; switchTab('general');});
     assert.equal(calls.filter(x=>x==='/api/general-listings').length,generalCalls);

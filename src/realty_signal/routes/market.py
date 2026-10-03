@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from math import isfinite
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -534,6 +535,10 @@ def listing_watch_get(request: Request):
     saved = db.listing_watch_list(uid)
     if not deps.personal_listings_allowed(request):
         saved = [row for row in saved if row["kind"] not in watch.PRIVATE]
+    targets = db.listing_watch_price_targets(uid)
+    for row in saved:
+        if row["kind"] in watch.PRIVATE:
+            row["target_price"] = targets.get(row["key"])
     kinds = {row["kind"] for row in saved}
     # 대안은 저장한 유형뿐 아니라 다른 급매·찐매물도 비교한다. 비소유자에게는 절대 읽지 않는다.
     if kinds & watch.PRIVATE and deps.personal_listings_allowed(request):
@@ -576,6 +581,35 @@ def listing_watch_remove(request: Request, key: str):
     if not key or len(key) > 180:
         raise HTTPException(422, "매물 식별자를 확인해 주세요.")
     db.listing_watch_remove(uid, key)
+    return {"ok": True}
+
+
+@router.put("/api/listing-watch/price-target")
+def listing_watch_price_target_set(request: Request, data: dict = Body(...)):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    key = data.get("key")
+    target = data.get("target_manwon")
+    if not isinstance(key, str) or not 1 <= len(key) <= 180:
+        raise HTTPException(422, "매물 식별자를 확인해 주세요.")
+    if type(target) not in (int, float) or not isfinite(target) or not 0 < target < 1_000_000_000:
+        raise HTTPException(422, "목표 호가를 만원 단위의 양수로 입력해 주세요.")
+    if not deps.personal_listings_allowed(request):
+        raise HTTPException(403, "개인용 매물은 소유 계정에서만 추적할 수 있습니다.")
+    if not db.listing_watch_price_target_set(uid, key, float(target)):
+        raise HTTPException(404, "찜한 매매 매물을 찾지 못했습니다.")
+    return {"ok": True, "target_manwon": float(target)}
+
+
+@router.delete("/api/listing-watch/price-target")
+def listing_watch_price_target_remove(request: Request, key: str):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if not key or len(key) > 180:
+        raise HTTPException(422, "매물 식별자를 확인해 주세요.")
+    db.listing_watch_price_target_remove(uid, key)
     return {"ok": True}
 
 

@@ -8,7 +8,8 @@ from realty_signal.services import listing_watch as watch
 
 def _row(key, name="A", price=50_000, *, kind="급매", region="노원구", complex_no="1"):
     return {"key": key, "유형": kind, "단지명": name, "지역": region,
-            "총액": price, "평형": 25, "ref": {"complex_no": complex_no}}
+            "총액": price, "평형": 25, "price_kind": "asking" if kind in watch.PRIVATE else None,
+            "ref": {"complex_no": complex_no}}
 
 
 def _client(email):
@@ -55,6 +56,9 @@ def test_unseen_listing_is_not_called_sold_and_presale_dday_is_kept():
     stale = _row("급매:missing", price=40_000)
     stale["stale"] = True
     assert watch.build(saved, [stale])[0]["price_change"] is None
+    auction = _row("경매:123", kind="경매", price=50_000)
+    assert watch.build([{"key": "경매:123", "kind": "경매", "saved_price": 60_000}],
+                       [auction])[0]["price_change"] is None
 
 
 def test_private_watch_only_owner_and_save_resolves_source(monkeypatch):
@@ -67,6 +71,11 @@ def test_private_watch_only_owner_and_save_resolves_source(monkeypatch):
     assert owner.post("/api/listing-watch", json={"key": "급매:unknown"}).status_code == 404
     assert owner.post("/api/listing-watch", json={"key": "급매:1"}).json()["ok"]
     assert owner.post("/api/listing-watch", json={"key": "급매:1"}).json()["ok"]
+    assert owner.put("/api/listing-watch/price-target", json={
+        "key": "급매:1", "target_manwon": 47_000}).json()["ok"]
+    assert owner.get("/api/listing-watch").json()["items"][0]["target_price"] == 47_000
+    assert guest.put("/api/listing-watch/price-target", json={
+        "key": "급매:1", "target_manwon": 47_000}).status_code == 403
     assert len(owner.get("/api/listing-watch").json()["items"]) == 1
     assert guest.get("/api/listing-watch").json()["items"] == []
     assert owner.delete("/api/listing-watch", params={"key": "급매:1"}).json()["ok"]
@@ -79,3 +88,42 @@ def test_watch_rows_are_user_scoped():
     assert db.listing_watch_list(2) == []
     db.listing_watch_remove(2, "청약:123")
     assert len(db.listing_watch_list(1)) == 1
+
+
+def test_price_target_api_requires_owner_and_sale_asking_kind(monkeypatch):
+    from realty_signal.routes import market
+
+    db.listing_watch_add(7, _row("일반매물:a", kind="일반매물"))
+    db.listing_watch_add(7, _row("경매:a", kind="경매"))
+    monkeypatch.setattr(market.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(market.deps, "personal_listings_allowed", lambda request: True)
+    assert market.listing_watch_price_target_set(None, {"key": "일반매물:a", "target_manwon": 47_000}) == {
+        "ok": True, "target_manwon": 47_000.0}
+    assert db.listing_watch_price_targets(7) == {"일반매물:a": 47_000}
+    for value in (True, 0, -1, 1_000_000_000):
+        try:
+            market.listing_watch_price_target_set(None, {"key": "일반매물:a", "target_manwon": value})
+            assert False, "invalid target accepted"
+        except Exception as exc:
+            assert getattr(exc, "status_code", None) == 422
+    try:
+        market.listing_watch_price_target_set(None, {"key": "경매:a", "target_manwon": 47_000})
+        assert False, "auction minimum bid cannot be a sale asking target"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 404
+    monkeypatch.setattr(market.deps, "uid", lambda request: 8)
+    try:
+        market.listing_watch_price_target_set(None, {"key": "일반매물:a", "target_manwon": 47_000})
+        assert False, "another account can change a target"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 404
+    assert db.listing_watch_price_targets(8) == {}
+    monkeypatch.setattr(market.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(market.deps, "personal_listings_allowed", lambda request: False)
+    try:
+        market.listing_watch_price_target_set(None, {"key": "일반매물:a", "target_manwon": 44_000})
+        assert False, "revoked private access can set a target"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 403
+    assert market.listing_watch_price_target_remove(None, "일반매물:a") == {"ok": True}
+    assert db.listing_watch_price_targets(7) == {}

@@ -99,6 +99,9 @@ CREATE TABLE IF NOT EXISTS listing_watch_state_v2(
     uid INTEGER NOT NULL, key TEXT NOT NULL, last_price REAL,
     alternative_keys TEXT NOT NULL, revision INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, PRIMARY KEY(uid,key));
+CREATE TABLE IF NOT EXISTS listing_watch_price_targets_v2(
+    uid INTEGER NOT NULL, key TEXT NOT NULL, target_price REAL NOT NULL,
+    updated_at INTEGER NOT NULL, PRIMARY KEY(uid,key));
 CREATE TABLE IF NOT EXISTS alert_outbox_v2(
     id TEXT PRIMARY KEY, uid INTEGER NOT NULL, subject_type TEXT NOT NULL,
     subject_key TEXT NOT NULL, kind TEXT NOT NULL, evidence_revision TEXT NOT NULL,
@@ -420,10 +423,45 @@ def listing_watch_remove(uid: int, key: str) -> None:
     c = conn()
     c.execute("DELETE FROM listing_watch WHERE uid=? AND key=?", (uid, key))
     c.execute("DELETE FROM listing_watch_state_v2 WHERE uid=? AND key=?", (uid, key))
+    c.execute("DELETE FROM listing_watch_price_targets_v2 WHERE uid=? AND key=?", (uid, key))
     c.execute("DELETE FROM alert_outbox_v2 WHERE uid=? AND subject_type='listing' AND subject_key=?",
               (uid, key))
     c.commit()
     c.close()
+
+
+def listing_watch_price_targets(uid: int) -> dict[str, float]:
+    c = conn()
+    try:
+        return dict(c.execute("SELECT key,target_price FROM listing_watch_price_targets_v2 WHERE uid=?",
+                              (uid,)).fetchall())
+    finally:
+        c.close()
+
+
+def listing_watch_price_target_set(uid: int, key: str, target_price: float) -> bool:
+    c = conn()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        watch = c.execute("SELECT kind FROM listing_watch WHERE uid=? AND key=?", (uid, key)).fetchone()
+        if watch is None or watch[0] not in {"일반매물", "급매", "찐매물"}:
+            c.rollback()
+            return False
+        c.execute("INSERT OR REPLACE INTO listing_watch_price_targets_v2 VALUES(?,?,?,?)",
+                  (uid, key, target_price, int(time.time())))
+        c.commit()
+        return True
+    finally:
+        c.close()
+
+
+def listing_watch_price_target_remove(uid: int, key: str) -> None:
+    c = conn()
+    try:
+        c.execute("DELETE FROM listing_watch_price_targets_v2 WHERE uid=? AND key=?", (uid, key))
+        c.commit()
+    finally:
+        c.close()
 
 
 def all_fav_complexes() -> list[tuple[str, str]]:
