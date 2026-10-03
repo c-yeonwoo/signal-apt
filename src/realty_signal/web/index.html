@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+  body.nick-global-disabled #advFab{display:none!important}
   :root {
     /* 표면·텍스트 — 차분한 잉크 톤 */
     /* --dim 은 #6b7280 이었는데 --bg 대비 4.43:1 로 WCAG AA(4.5:1) 미달이었다 → 5.17:1 */
@@ -1773,7 +1774,7 @@ function switchTab(t, fromHistory=false){
   if(t!=='signal' && document.getElementById('view-signal').classList.contains('picker-open')) closeSignalRegions(false);
   const grp=_groupOf(t);
   if(_LISTING.includes(t)) _listingSub=t;   // 매물 하위탭 기억(포커스 헬퍼 호환)
-  document.body.className='tab-'+t;
+  document.body.className='tab-'+t+(window._featureFlags?.nick_global_entry_enabled===false?' nick-global-disabled':'');
   // 상단 메인탭 — 그룹 기준 활성
   document.querySelectorAll('.tabs .tab').forEach(b=>b.classList.toggle('on', b.dataset.group===grp));
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
@@ -6698,6 +6699,7 @@ async function authSubmit(){
   const signup = _authMode==='signup';
   const me = await (await fetch('/api/auth/me')).json();
   _userEmail = me.email||''; _profile = me.profile||{}; _isAdmin = !!me.admin;
+  window._featureFlags = me.features||{};
   hideAuthGate();
   if(signup) track('signup');
   await startApp(signup);
@@ -7451,6 +7453,7 @@ async function toggleFav(kind, key, label){
   return true;
 }
 async function startApp(needOnboard){
+  document.body.classList.toggle('nick-global-disabled', window._featureFlags?.nick_global_entry_enabled===false);
   try{ _mapCfg=await (await fetch('/api/mapconfig')).json(); }catch(e){ _mapCfg=_mapCfg||{}; }   // 지도 타일 설정 선로드
   fetch('/api/regulation').then(r=>r.json()).then(d=>{ if(d&&d.map) _REGULATION=d; }).catch(()=>{});   // 규제지역 정본(백엔드) — 폴백은 위 기본값
   await loadFavs();
@@ -7486,6 +7489,7 @@ async function startApp(needOnboard){
     if(!r.ok){ showAuthGate(); maybePrefillInviteFromUrl(); return; }
     const me = await r.json();
     _userEmail = me.email; _profile = me.profile||{}; _isAdmin = !!me.admin;
+    window._featureFlags = me.features||{};
     await startApp(false);
   }catch(e){ showAuthGate(); maybePrefillInviteFromUrl(); }
 })();
