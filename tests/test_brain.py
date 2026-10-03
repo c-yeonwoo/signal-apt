@@ -67,6 +67,7 @@ def test_alert_route_uses_current_safe_signal_map(monkeypatch):
     from realty_signal.routes import alerts as alerts_route
 
     monkeypatch.setattr(alerts_route.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(alerts_route.deps, "personal_listings_allowed", lambda request: False)
     monkeypatch.setattr(db, "fav_list", lambda uid: [{"kind": "region", "key": "강남구"}])
     monkeypatch.setattr(db, "actionable_region_favs", lambda uid: ["강남구"])
     monkeypatch.setattr(db, "kv_get", lambda key: (

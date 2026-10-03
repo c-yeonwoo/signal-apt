@@ -685,6 +685,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(eventPayloads.some(x=>x.name==='listing_commute_compare'));
     assert(eventPayloads.some(x=>x.name==='listing_compare_open'));
     assert(!JSON.stringify(eventPayloads).includes('synthetic-hb-1'));
+    await page.evaluate(()=>{
+      document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
+      renderAlerts({watch_events:[{subject_type:'listing',subject_key:'일반매물:synthetic-hb-1',
+        kind:'listing_price',created_at:1780000000,seen:false,
+        payload:{name:'<img src=x onerror=alert(1)>',region:'테스트구',old_price:50000,new_price:47000}}],
+        timing:[],nbhd:[],changes:[],digest:[],unread:1,prefs:{listing_price:true,new_alternative:true}});
+      document.getElementById('alertsDlg').showModal();
+    });
+    assert.match(await page.locator('#alertsBody').textContent(),/확인된 호가 5.0억 → 4.7억/);
+    assert.equal(await page.locator('#alertsBody img').count(),0);
+    await page.locator('#alertsBody [data-alert-listing]').click();
+    await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     const held=await page.evaluate(()=>{
       const row={region:'테스트구',region_id:'kb:1234500000',signal:'BUY',display_signal:'HELD',assessment_status:'held',group:'서울'};
       const label=displaySignal(row);

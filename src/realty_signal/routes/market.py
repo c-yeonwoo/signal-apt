@@ -539,6 +539,9 @@ def listing_watch_add(request: Request, data: dict = Body(...)):
     from realty_signal import api as app_api
     from realty_signal.services import listing_watch as watch
 
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
     key = data.get("key")
     if not isinstance(key, str) or len(key) > 180 or ":" not in key:
         raise HTTPException(422, "매물 식별자를 확인해 주세요.")
@@ -553,15 +556,18 @@ def listing_watch_add(request: Request, data: dict = Body(...)):
         raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.")
     if not row.get("단지명"):
         raise HTTPException(422, "단지명이 없는 매물은 찜할 수 없습니다.")
-    db.listing_watch_add(deps.uid(request), row)
+    db.listing_watch_add(uid, row)
     return {"ok": True}
 
 
 @router.delete("/api/listing-watch")
 def listing_watch_remove(request: Request, key: str):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
     if not key or len(key) > 180:
         raise HTTPException(422, "매물 식별자를 확인해 주세요.")
-    db.listing_watch_remove(deps.uid(request), key)
+    db.listing_watch_remove(uid, key)
     return {"ok": True}
 
 

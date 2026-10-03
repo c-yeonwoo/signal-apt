@@ -95,6 +95,18 @@ CREATE INDEX IF NOT EXISTS ix_report_explanation_jobs_v2_user
     ON report_explanation_jobs_v2(uid, created_at);
 CREATE INDEX IF NOT EXISTS ix_report_explanation_jobs_v2_retention
     ON report_explanation_jobs_v2(created_at);
+CREATE TABLE IF NOT EXISTS listing_watch_state_v2(
+    uid INTEGER NOT NULL, key TEXT NOT NULL, last_price REAL,
+    alternative_keys TEXT NOT NULL, revision INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL, PRIMARY KEY(uid,key));
+CREATE TABLE IF NOT EXISTS alert_outbox_v2(
+    id TEXT PRIMARY KEY, uid INTEGER NOT NULL, subject_type TEXT NOT NULL,
+    subject_key TEXT NOT NULL, kind TEXT NOT NULL, evidence_revision TEXT NOT NULL,
+    payload TEXT NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER);
+CREATE INDEX IF NOT EXISTS ix_alert_outbox_v2_user
+    ON alert_outbox_v2(uid,created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_alert_outbox_v2_unread
+    ON alert_outbox_v2(uid,seen_at,created_at DESC);
 """
 
 _migrated = [False]
@@ -384,9 +396,14 @@ def listing_watch_list(uid: int) -> list[dict]:
 
 def listing_watch_add(uid: int, listing: dict) -> None:
     c = conn()
-    c.execute("INSERT OR IGNORE INTO listing_watch VALUES(?,?,?,?,?,?,?)",
-              (uid, listing["key"], listing["유형"], listing["단지명"], listing.get("지역"),
-               listing.get("총액"), int(time.time())))
+    inserted = c.execute("INSERT OR IGNORE INTO listing_watch VALUES(?,?,?,?,?,?,?)",
+                         (uid, listing["key"], listing["유형"], listing["단지명"], listing.get("지역"),
+                          listing.get("총액"), int(time.time())))
+    if inserted.rowcount:
+        # A removed watch may race a background scan. A new save starts a fresh baseline.
+        c.execute("DELETE FROM listing_watch_state_v2 WHERE uid=? AND key=?", (uid, listing["key"]))
+        c.execute("DELETE FROM alert_outbox_v2 WHERE uid=? AND subject_type='listing' AND subject_key=?",
+                  (uid, listing["key"]))
     c.commit()
     c.close()
 
@@ -394,6 +411,9 @@ def listing_watch_add(uid: int, listing: dict) -> None:
 def listing_watch_remove(uid: int, key: str) -> None:
     c = conn()
     c.execute("DELETE FROM listing_watch WHERE uid=? AND key=?", (uid, key))
+    c.execute("DELETE FROM listing_watch_state_v2 WHERE uid=? AND key=?", (uid, key))
+    c.execute("DELETE FROM alert_outbox_v2 WHERE uid=? AND subject_type='listing' AND subject_key=?",
+              (uid, key))
     c.commit()
     c.close()
 

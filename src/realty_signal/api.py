@@ -231,6 +231,10 @@ async def _auto_refresh_loop():
         if backup.enabled() and backup.run_backup() is None:
             raise RuntimeError("backup_failed")
 
+    def watch_alert_job():
+        from realty_signal.services import watch_alerts_v2
+        return watch_alerts_v2.scan_cached_sources()
+
     specs = [
         ("kb", kb_job, 6*3600),
         ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
@@ -241,6 +245,7 @@ async def _auto_refresh_loop():
         ("school_zones", school_zone_job, 7*86400),
         ("digest", digest_job, 6*3600),
         ("backup", backup_job, 86400),
+        ("watch_alerts", watch_alert_job, 900),
     ]
     # Each loop owns a renewable lease and its own retry/due clock.
     async def serve(name, fn, interval):
