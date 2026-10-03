@@ -236,12 +236,11 @@ def strength(
 ):
     """시장강도 프록시 요약 (거래량비+급매)."""
     from realty_signal.ingest import pipeline
-    if rebuild or not pipeline.STRENGTH_FILE.exists():
+    if rebuild or not pipeline.load_market_strength():
         if not store.CACHE_FILE.exists():
             console.print("[yellow]캐시 없음 — signal fetch 먼저[/yellow]")
             raise typer.Exit(1)
-        df = evaluate(store.load(), SignalConfig(), store.load_supply())
-        data = pipeline.build_market_strength(dict(zip(df["region"], df["signal"])))
+        data = pipeline.build_market_strength()
         console.print(f"[green]재계산[/green] {data.get('count')}지역 → {pipeline.STRENGTH_FILE}")
     else:
         data = pipeline.load_market_strength()
