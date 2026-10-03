@@ -14,7 +14,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const reportsByKey=new Map(), savedReports=new Map();
-    let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null;
+    let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -97,6 +97,18 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           finance_context:finance?{status:noProfile?'no_confirmed_profile':'ready',policy_status:'unverified'}:null,
           groups:{matched:finance||noMatch?[]:[candidate],verify:finance?[candidate]:[],explore:[],
             exceeded:spec.include_exceeded?[exceededCandidate]:[]}};
+        if(spec.move_in_by){
+          candidate.constraints=[{field:'move_in_by',status:occupancyChecked?'pass':'unknown'}];
+          candidate.listing.move_in=occupancyChecked?{status:'dated',date:'2026-12-08'}:null;
+          candidate.eligibility=occupancyChecked?'matched':'verify';
+          data.counts={matched:occupancyChecked?1:0,verify:occupancyChecked?0:1,explore:0,exceeded:0};
+          data.groups={matched:occupancyChecked?[candidate]:[],verify:occupancyChecked?[]:[candidate],explore:[],exceeded:[]};
+          data.next_cursor=null;
+        }
+      }
+      if(url.pathname==='/api/v2/discovery/occupancy') {
+        occupancyChecked=true;
+        data={status:'dated',date:'2026-12-08',source:'hanbang_detail'};
       }
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
         return route.fulfill({status:403,json:{detail:'forbidden'}});
@@ -750,6 +762,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(discoveryPayloads.at(-1).min_rooms,3);
     assert.match(await page.locator('#v2DiscoverResults [data-v2-card]').first().textContent(),/방 3개/);
     await page.locator('#v2DiscoverForm [name=min_rooms]').fill('');
+    await page.locator('#v2DiscoverForm [name=move_in_by]').fill('2026-12-31');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    assert.equal(discoveryPayloads.at(-1).move_in_by,'2026-12-31');
+    await page.locator('#v2DiscoverResults [data-v2-group="verify"] [data-v2-occupancy]').click();
+    await page.getByText(/원천 표시: 2026-12-08 입주 가능/).waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-group="matched"] [data-v2-card]').count(),1);
+    await page.locator('#v2DiscoverForm [name=move_in_by]').fill('');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/총 월 상환 약 120만원/).waitFor();

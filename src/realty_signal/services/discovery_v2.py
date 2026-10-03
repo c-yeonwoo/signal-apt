@@ -11,9 +11,9 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-9"
+VERSION = "discovery-v2-10"
 KINDS = {"일반매물", "급매", "찐매물"}
-FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "max_monthly_manwon", "region", "prefer_region",
+FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "move_in_by", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
 PRIORITIES = {"balanced", "region", "price", "area"}
 
@@ -45,6 +45,17 @@ def validate(spec: dict) -> dict:
         if type(value) is not int or not 1 <= value <= 15:
             raise ValueError("invalid_condition_value")
         cleaned["min_rooms"] = value
+    if spec.get("move_in_by") is not None:
+        value = spec["move_in_by"]
+        if not isinstance(value, str):
+            raise ValueError("invalid_move_in_date")
+        try:
+            day = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("invalid_move_in_date") from exc
+        if value != day.isoformat() or not 2020 <= day.year <= 2100:
+            raise ValueError("invalid_move_in_date")
+        cleaned["move_in_by"] = value
     if spec.get("region") is not None:
         if not isinstance(spec["region"], str) or len(spec["region"]) > 80:
             raise ValueError("invalid_region")
@@ -108,6 +119,19 @@ def _monthly(finance: dict | None) -> float | None:
     return float(value)
 
 
+def _move_date(occupancy: dict | None) -> str | None:
+    if not isinstance(occupancy, dict) or occupancy.get("status") not in {"dated", "immediate"}:
+        return None
+    value = occupancy.get("date")
+    if not isinstance(value, str):
+        return None
+    try:
+        day = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return value if value == day.isoformat() else None
+
+
 def _region_code(listing: dict) -> str | None:
     code = str(listing.get("region_code") or "")
     return code if len(code) == 5 and code.isdigit() else None
@@ -157,8 +181,10 @@ def _freshness(listing: dict) -> int:
 
 
 def classify(row: dict, spec: dict, *, finance: dict | None = None,
-             region_hint: dict | None = None) -> dict:
+             region_hint: dict | None = None, occupancy: dict | None = None) -> dict:
     listing = snapshot(row)
+    if "move_in_by" in spec:
+        listing["move_in"] = occupancy
     price = listing["asking_manwon"]
     area = listing["exclusive_m2"]
     rooms = listing["rooms"]
@@ -175,6 +201,11 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
         checks.append({"field": "min_rooms", "status": "unknown" if rooms is None
                        else "pass" if rooms >= spec["min_rooms"] else "fail",
                        "value": rooms, "limit": spec["min_rooms"]})
+    if "move_in_by" in spec:
+        move_date = _move_date(occupancy)
+        checks.append({"field": "move_in_by", "status": "unknown" if move_date is None
+                       else "pass" if move_date <= spec["move_in_by"] else "fail",
+                       "value": move_date, "limit": spec["move_in_by"]})
     if "max_monthly_manwon" in spec:
         monthly = _monthly(finance)
         assessed = (finance or {}).get("status") == "assessed" and monthly is not None
@@ -211,6 +242,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
         reason = {"max_price_manwon": "설정한 호가 상한 안입니다.",
                   "min_area_m2": "원하는 전용면적 이상입니다.",
                   "min_rooms": "원하는 방 개수 이상입니다.",
+                  "move_in_by": "표시된 입주 가능일이 원하는 시점 이내입니다.",
                   "max_monthly_manwon": "입력 가정의 월 부담 상한 안입니다.",
                   "region": "선택한 지역입니다.", "region_code": "선택한 지역입니다."}[passed[0]["field"]]
     else:
@@ -222,6 +254,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
     failed_reason = {"max_price_manwon": "호가가 설정한 상한보다 높습니다.",
                      "min_area_m2": "전용면적이 원하는 최소 면적보다 작습니다.",
                      "min_rooms": "방 개수가 원하는 최소보다 적습니다.",
+                     "move_in_by": "표시된 입주 가능일이 원하는 시점보다 늦습니다.",
                      "max_monthly_manwon": "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다.",
                      "region": "선택한 필수 지역 밖의 매물입니다.",
                      "region_code": "선택한 필수 지역 밖의 매물입니다."}
@@ -231,6 +264,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
               finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
               "매물의 시군구 코드를 확인하세요." if missing and missing[0]["field"] == "region_code" else
               "매물의 방 개수를 확인하세요." if missing and missing[0]["field"] == "min_rooms" else
+              "입주 가능일이 시기 표현이거나 미확인입니다. 중개사에게 실제 입주일을 확인하세요." if missing and missing[0]["field"] == "move_in_by" else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else
               "실제 자금·매물 상태를 확인하세요.")
     return {"listing": listing, "eligibility": tier, "constraints": checks,
@@ -242,7 +276,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
 
 
 def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_of=None,
-             region_hint: dict | None = None) -> dict:
+             region_hint: dict | None = None, occupancy_by_key: dict | None = None) -> dict:
     spec = validate(spec)
     cursor = spec.pop("cursor", None)
     query_hash = _hash({"conditions": spec, "region_hint": region_hint})
@@ -253,7 +287,8 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
             continue
         seen.add(row["key"])
         finance = finance_of(row) if finance_of and "max_monthly_manwon" in spec else None
-        item = classify(row, spec, finance=finance, region_hint=region_hint)
+        item = classify(row, spec, finance=finance, region_hint=region_hint,
+                        occupancy=(occupancy_by_key or {}).get(row["key"]))
         groups[item["eligibility"]].append(item)
     def order(item):
         snap = item["listing"]
