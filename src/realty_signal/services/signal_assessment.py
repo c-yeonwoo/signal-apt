@@ -17,8 +17,9 @@ from realty_signal.ingest.kb_weekly import KBWeekly
 from realty_signal.signals.engine import SignalConfig
 
 VERSION = "signal-assessment-v1"
-GUARD_VERSION = "source-and-price-v2"
+GUARD_VERSION = "source-and-price-v3"
 MAX_OBSERVATION_AGE_DAYS = 8
+INCHEON_RETIRED_CODES = frozenset({"28110", "28140", "28170", "28260"})
 LABELS = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
           "NEUTRAL": "중립", "SELL_RISK": "매도주의"}
 
@@ -55,6 +56,9 @@ def _metric(reason_id: str, label: str, value: float | None, unit: str,
 
 
 def _held_summary(flags: list[str], asof: date, today: date) -> str:
+    if "region_boundary_obsolete" in flags:
+        return ("2026-07 인천 행정구역 개편 전 권역의 통계입니다. 새 구역으로 과거 값을 임의 분할하지 않으며, "
+                "현재 매수·매도 판정으로 사용하지 않습니다.")
     if "source_stale" in flags:
         return (f"KB {asof.isoformat()} 관측 후 {(today - asof).days}일이 지났습니다. "
                 "새 기준일을 확인하기 전에는 과거 매수·매도 등급을 현재 판단으로 사용하지 않습니다.")
@@ -76,6 +80,7 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     today = today or datetime.now(timezone.utc).date()
     region = str(row["region"])
     code = str((kb.codes or {}).get(region) or "")
+    boundary_obsolete = today >= date(2026, 7, 1) and code[:5] in INCHEON_RETIRED_CODES
     # 이름만 보존한 과거 캐시는 코드가 있어도 어느 중구의 가격 행인지 증명하지 못한다.
     collision_sensitive = region in {"중구", "인천 중구"}
     parent_conflict = ((region == "중구" and not code.startswith("11"))
@@ -116,6 +121,8 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
         risk_flags.append("market_inputs_stale")
     if ambiguous:
         risk_flags.append("region_identity_ambiguous")
+    if boundary_obsolete:
+        risk_flags.append("region_boundary_obsolete")
     if (today - asof).days > MAX_OBSERVATION_AGE_DAYS:
         risk_flags.append("source_stale")
     raw = str(row.get("signal") or "NEUTRAL")

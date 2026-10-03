@@ -126,6 +126,32 @@ def test_complex_favorite_rejects_sido_without_creating_false_watch(client, monk
     assert client.get("/api/favorites").json()["favorites"] == []
 
 
+def test_pre_reform_region_favorite_is_preserved_but_needs_reselection(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(auth_routes.md, "kb", lambda: SimpleNamespace(
+        codes={"서구": "2826000000", "강남구": "1168000000", "제물포구": "2812500000"},
+        regions=["서구", "강남구"], identity_verified=True))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "region", "서구", "서구")  # 기존 저장본은 자동 삭제·이전하지 않는다.
+    response = client.post("/api/favorites", json={"kind": "region", "key": "서구"})
+    assert response.status_code == 422 and response.json()["error"] == "retired_region"
+    assert client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()["ok"]
+    db.fav_add(uid, "region", "제물포구", "제물포구")
+    favorites = {f["key"]: f for f in client.get("/api/favorites").json()["favorites"]}
+    assert favorites["서구"]["region_identity"]["status"] == "needs_reselection"
+    assert favorites["강남구"]["region_identity"]["status"] == "ready"
+    assert favorites["제물포구"]["region_identity"]["status"] == "no_current_series"
+
+
+def test_region_favorite_identity_failure_does_not_claim_ready(client, monkeypatch):
+    monkeypatch.setattr(auth_routes.md, "kb", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "region", "강남구", "강남구")
+    favorite = client.get("/api/favorites").json()["favorites"][0]
+    assert favorite["region_identity"]["status"] == "unverified"
+
+
 def test_action_plan_requires_login(client):
     client.cookies.clear()
     assert client.get("/api/action-plan").status_code == 401
