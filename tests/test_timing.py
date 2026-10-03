@@ -15,7 +15,7 @@ def test_listing_timing_quicksale_source_gap_does_not_raise_score():
     d = r.to_dict()
     assert d["기회도"] == d["타이밍점수"]
     assert d["asof"] == "2026-07-14"
-    assert d["timing_version"] == "v3-source-gap-unranked"
+    assert d["timing_version"] == "v4-safe-region-signal"
 
 
 def test_listing_timing_unrealistic_gap_low_confidence():
@@ -52,6 +52,15 @@ def test_region_timing_with_backtest():
 def test_listing_timing_no_signal():
     r = listing_timing("경매", {"시세차익률": 20}, None, None, asof="2026-07-14")
     assert r.confidence < 0.72
+
+
+def test_held_signal_has_no_buy_bonus_and_states_the_limit():
+    held = listing_timing("급매", {"급매갭": -5}, "HELD", None)
+    buy = listing_timing("급매", {"급매갭": -5}, "BUY", None)
+    assert held.score < buy.score
+    assert "지역 판정 보류" in held.reasons_text
+    assert "시그널 가산 없음" in held.reasons_text
+    assert held.confidence < buy.confidence
 
 
 def test_auction_no_bid_cannot_regain_opportunity_score_from_region_signal():

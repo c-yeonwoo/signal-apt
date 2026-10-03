@@ -2916,16 +2916,28 @@ def _listing_key(kind: str, raw: dict, ref: dict, name: str | None, region: str 
 
 def _build_listings(want: set[str], *, include_private: bool = False) -> list[dict]:
     """통합 매물 정규화. 외부 제휴 매물은 명시적 허용 없으면 읽지 않는다."""
+    from datetime import date
+
     if not include_private:
         want = want - {"급매", "찐매물", "일반매물"}
     grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
+    try:
+        assessed = md.assessed_signal_labels(date.today().isoformat())
+    except Exception as exc:  # noqa: BLE001 — 판정 불가 시 원시 등급으로 되돌아가지 않는다.
+        log.warning("listing signal assessment unavailable: %s", exc)
+        assessed = {}
     out = []
 
     def add(kind, name, region, signal, mlabel, mval, munit, raw, lat, lng, ref, total=None):
         from realty_signal.signals.timing import listing_timing
 
-        tr = listing_timing(kind, raw, signal, grade.get(region), asof=_timing_asof())
-        row = {"유형": kind, "단지명": name, "지역": region, "시그널": signal or "",
+        assessment = assessed.get(region) or {}
+        safe_signal = assessment.get("display_signal") if assessment.get("assessment_status") == "ready" else "HELD"
+        if safe_signal not in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK", "HELD"}:
+            safe_signal = "HELD"
+        tr = listing_timing(kind, raw, safe_signal, grade.get(region), asof=_timing_asof())
+        row = {"유형": kind, "단지명": name, "지역": region, "시그널": safe_signal,
+               "원시시그널": signal or "", "판정상태": assessment.get("assessment_status") or "held",
                "지역급지": grade.get(region), "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
                "총액": total, "평형": _listing_pyeong(kind, raw, ref),
                "lat": lat, "lng": lng, "ref": ref,

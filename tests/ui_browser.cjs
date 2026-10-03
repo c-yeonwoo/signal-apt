@@ -311,7 +311,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(eventPayloads.some(x=>x.name==='listing_compare_open'));
     assert(!JSON.stringify(eventPayloads).includes('synthetic-hb-1'));
     const held=await page.evaluate(()=>{
-      const row={region:'테스트구',signal:'BUY',display_signal:'HELD',group:'서울'};
+      const row={region:'테스트구',signal:'BUY',display_signal:'HELD',assessment_status:'held',group:'서울'};
       const label=displaySignal(row);
       return {label,badge:badge(label),style:_choStyle('signal','테스트구',{},null,{테스트구:row}),
         tip:_choTip('signal','테스트구',{},null,{테스트구:row})};
@@ -320,11 +320,20 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(held.badge,/판단 보류/);
     assert.equal(held.style.fillColor,'#5f6875');
     assert.match(held.tip,/판단 보류/);
+    const guarded=await page.evaluate(()=>{
+      allSignals=[{region:'테스트구',signal:'BUY',display_signal:'BUY',assessment_status:'held'}];
+      _mtBuyOnly=true;
+      const result={badge:safeMarketSignal('테스트구'),buyOnlyPass:_mtPass('테스트구'),
+        unknown:displaySignal({region:'미확인구',signal:'STRONG_BUY'})};
+      _mtBuyOnly=false;
+      return result;
+    });
+    assert.deepEqual(guarded,{badge:'HELD',buyOnlyPass:false,unknown:'HELD'});
     await page.evaluate(()=>{
       document.getElementById('advPanel').style.display='none';
       document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
       meta={last_date:'2026-09-28',zones:{jeonse_supply:[],buyer_idx_strong:70,buyer_demand_buy:20}};
-      allSignals=[{region:'테스트구',group:'서울',signal:'BUY',display_signal:'BUY',급지:'B',전세수급:180,매수우위지수:68}];
+      allSignals=[{region:'테스트구',group:'서울',signal:'BUY',display_signal:'BUY',assessment_status:'ready',급지:'B',전세수급:180,매수우위지수:68}];
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
     await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
