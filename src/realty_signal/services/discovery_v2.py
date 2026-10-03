@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from datetime import datetime, timezone
+from hashlib import sha256
+import json
 from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-1"
+VERSION = "discovery-v2-2"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region"}
 
@@ -23,7 +27,7 @@ def _number(value):
 def validate(spec: dict) -> dict:
     if not isinstance(spec, dict):
         raise ValueError("invalid_conditions")
-    unknown = set(spec) - FIELDS - {"limit", "include_exceeded"}
+    unknown = set(spec) - FIELDS - {"limit", "include_exceeded", "cursor"}
     if unknown:
         raise ValueError("unsupported_condition")
     cleaned = {}
@@ -48,7 +52,33 @@ def validate(spec: dict) -> dict:
         raise ValueError("invalid_limit")
     cleaned["limit"] = limit
     cleaned["include_exceeded"] = spec.get("include_exceeded") is True
+    if spec.get("cursor") is not None:
+        cursor = spec["cursor"]
+        if not isinstance(cursor, str) or not 1 <= len(cursor) <= 1024 or not cursor.isascii():
+            raise ValueError("invalid_cursor")
+        cleaned["cursor"] = cursor
     return cleaned
+
+
+def _hash(value) -> str:
+    return sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
+                             separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def _encode_cursor(payload: dict) -> str:
+    return base64.urlsafe_b64encode(json.dumps(payload, sort_keys=True,
+        separators=(",", ":")).encode()).decode().rstrip("=")
+
+
+def _decode_cursor(value: str) -> dict:
+    try:
+        raw = base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
+        payload = json.loads(raw)
+        if not isinstance(payload, dict) or set(payload) != {"version", "query", "snapshot", "offset"}:
+            raise ValueError("invalid_cursor")
+        return payload
+    except (ValueError, UnicodeError, binascii.Error) as exc:
+        raise ValueError("invalid_cursor") from exc
 
 
 def _monthly(row: dict) -> float | None:
@@ -110,8 +140,10 @@ def classify(row: dict, spec: dict) -> dict:
             "rank_version": VERSION}
 
 
-def discover(rows: list[dict], spec: dict) -> dict:
+def discover(rows: list[dict], spec: dict, *, source_fingerprint=None) -> dict:
     spec = validate(spec)
+    cursor = spec.pop("cursor", None)
+    query_hash = _hash(spec)
     seen = set()
     groups = {"matched": [], "verify": [], "exceeded": [], "explore": []}
     for row in rows:
@@ -140,10 +172,27 @@ def discover(rows: list[dict], spec: dict) -> dict:
                 overflow.append(item)
         items[:] = selected + overflow
     counts = {k: len(v) for k, v in groups.items()}
+    snapshot_hash = _hash({"groups": groups, "sources": source_fingerprint})
     if not spec["include_exceeded"]:
         groups["exceeded"] = []
     limit = spec["limit"]
-    return {"version": VERSION, "groups": {k: v[:limit] for k, v in groups.items()},
+    offset = 0
+    if cursor:
+        decoded = _decode_cursor(cursor)
+        offset = decoded["offset"]
+        if (decoded["version"] != VERSION or decoded["query"] != query_hash
+                or type(offset) is not int or offset < 0 or offset % limit):
+            raise ValueError("invalid_cursor")
+        if decoded["snapshot"] != snapshot_hash:
+            raise ValueError("stale_cursor")
+        if offset >= max((len(items) for items in groups.values()), default=0):
+            raise ValueError("invalid_cursor")
+    next_offset = offset + limit
+    more = any(len(items) > next_offset for items in groups.values())
+    next_cursor = _encode_cursor({"version": VERSION, "query": query_hash,
+                                  "snapshot": snapshot_hash, "offset": next_offset}) if more else None
+    return {"version": VERSION, "groups": {k: v[offset:next_offset] for k, v in groups.items()},
             "counts": counts,
+            "page": offset // limit + 1, "next_cursor": next_cursor,
             "basis": "수집된 일반·급매·찐매물의 호가와 확인 가능한 조건만 비교합니다. 구매 가능 확정이 아닙니다.",
             "generated_at": datetime.now(timezone.utc).isoformat()}

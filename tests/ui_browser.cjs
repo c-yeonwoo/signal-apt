@@ -50,7 +50,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
-      if(url.pathname==='/api/v2/discovery') data={private_access:false,groups:{},counts:{}};
+      if(url.pathname==='/api/v2/discovery') {
+        const next=!!route.request().postDataJSON()?.cursor;
+        data={private_access:true,source_state:'partial',coverage:{regions:['테스트구']},
+          sources:[{kind:'일반매물',state:'partial'},{kind:'급매',state:'failed'}],
+          counts:{matched:2,verify:0,explore:0},next_cursor:next?null:'synthetic-next',
+          groups:{matched:[{listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
+            name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
+            recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
+            preference:{region:'테스트구',matched:true,coverage:100}}],verify:[],explore:[]}};
+      }
       if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
         subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
           kind:'일반매물',asking_manwon:50000,collected_at:'2026-09-29'},
@@ -380,6 +389,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert((await page.locator('#signalPanelReasons').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
+    await page.evaluate(()=>SignalV2.openDiscovery('테스트구'));
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText('첫번째 후보').waitFor();
+    assert.match(await page.locator('#v2DiscoverResults').textContent(),/일부 원천이 실패·제한/);
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),1);
+    await page.locator('#v2DiscoverResults [data-v2-next]').click();
+    await page.getByText('두번째 후보').waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),2);
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-next]').count(),0);
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }

@@ -98,13 +98,63 @@ def discovery(request: Request, data: dict = Body(...)):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     allowed = deps.personal_listings_allowed(request)
-    rows = app_api._build_listings(discovery_v2.KINDS, include_private=allowed) if allowed else []
-    result = discovery_v2.discover(rows, spec)
+    rows, sources = [], []
+    if allowed:
+        for kind, read_cache in (("일반매물", app_api.hanbang),
+                                 ("급매", app_api.quicksale),
+                                 ("찐매물", app_api.certified)):
+            cache = read_cache()
+            state = cache.get("state") or "never_scanned"
+            sources.append({"kind": kind, "state": state, "count": 0,
+                            "regions": cache.get("regions") or [],
+                            "expected_count": len(cache.get("listings") or []),
+                            "last_success_at": cache.get("last_success_at"),
+                            "failed_requests": (cache.get("refresh") or {}).get("failed_requests") or 0,
+                            "limited_regions": (cache.get("refresh") or {}).get("limited_regions") or []})
+        readable = {source["kind"] for source in sources
+                    if source["state"] not in {"failed", "never_scanned"}}
+        by_kind = {kind: [] for kind in readable}
+        if readable:
+            try:
+                combined = app_api._build_listings(readable, include_private=True)
+                for row in combined:
+                    if row.get("유형") in by_kind:
+                        by_kind[row["유형"]].append(row)
+            except Exception:  # noqa: BLE001 — 한 원천의 손상 시 나머지 원천을 독립적으로 재시도한다.
+                for kind in readable:
+                    try:
+                        by_kind[kind] = app_api._build_listings({kind}, include_private=True)
+                    except Exception:  # noqa: BLE001
+                        next(source for source in sources if source["kind"] == kind)["state"] = "failed"
+        for source in sources:
+            kind, state = source["kind"], source["state"]
+            source_rows = by_kind.get(kind, []) if state != "failed" else []
+            if source["expected_count"] and not source_rows:
+                state = source["state"] = "failed"
+            if state in {"stale", "stale_failed", "unverified"}:
+                source_rows = [{**row, "stale": True} for row in source_rows]
+            rows.extend(source_rows)
+            source["count"] = len(source_rows)
+            del source["expected_count"]
+            if not source["regions"]:
+                source["regions"] = sorted({row.get("지역") for row in source_rows if row.get("지역")})
+    try:
+        result = discovery_v2.discover(rows, spec, source_fingerprint=sources)
+    except ValueError as exc:
+        if str(exc) == "stale_cursor":
+            raise HTTPException(409, "수집 결과가 바뀌었습니다. 처음부터 다시 검색하세요.") from exc
+        raise HTTPException(422, str(exc)) from exc
     result["private_access"] = allowed
-    result["source_state"] = ("forbidden" if not allowed else "ready" if rows else
-                              "empty" if any(path.exists() for path in (
-                                  app_api.HANBANG_FILE, app_api.QUICKSALE_FILE,
-                                  app_api.CERTIFIED_FILE)) else "unavailable")
+    states = [source["state"] for source in sources]
+    degraded = any(state not in {"ready", "empty"} for state in states)
+    result["source_state"] = ("forbidden" if not allowed else
+                              "unavailable" if all(state == "never_scanned" for state in states) else
+                              "partial" if rows and degraded else "ready" if rows else
+                              "partial_empty" if degraded else "empty")
+    result["sources"] = sources
+    result["coverage"] = {"scope": "collected_sample", "regions": sorted({region for source in sources
+                                                                            for region in source["regions"]}),
+                          "source_count": len(sources)}
     return JSONResponse(result, headers=PRIVATE)
 
 

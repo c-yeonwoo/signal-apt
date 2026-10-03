@@ -128,10 +128,12 @@
   }
 
   function openDiscovery(region = '') {
+    discoveryGeneration++;
     const dialog = document.getElementById('v2DiscoverDlg');
     const form = document.getElementById('v2DiscoverForm');
     if (region) form.elements.region.value = region;
     if (!dialog.open) dialog.showModal();
+    document.getElementById('v2DiscoverResults').textContent = '조건을 입력하면 현재 수집된 매물을 비교합니다.';
     form.elements.max_price_manwon.focus();
   }
 
@@ -234,10 +236,19 @@
     }
   }
 
-  async function submitDiscovery(event) {
-    event.preventDefault();
+  function discoveryCard(x) {
+    return `<div class="v2-row" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
+      <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}</p>
+      <p>추천 이유: ${esc(x.recommendation_reason)}</p>
+      ${x.preference?.region ? `<p>지역 선호: ${x.preference.matched ? '부합' : x.preference.coverage ? '다른 지역' : '자료 미확인'}</p>` : ''}
+      <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
+      <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
+      <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button></div>`;
+  }
+
+  async function runDiscovery(cursor = null) {
     const generation = ++discoveryGeneration;
-    const form = event.currentTarget;
+    const form = document.getElementById('v2DiscoverForm');
     const result = document.getElementById('v2DiscoverResults');
     const spec = {};
     for (const field of ['max_price_manwon', 'min_area_m2', 'region']) {
@@ -245,38 +256,65 @@
       if (value) spec[field === 'region' && form.elements.region_mode.value === 'prefer' ?
         'prefer_region' : field] = field === 'region' ? value : Number(value);
     }
-    result.textContent = '조건에 맞는 후보를 확인하고 있습니다…';
+    if (cursor) spec.cursor = cursor;
+    if (!cursor) result.textContent = '조건에 맞는 후보를 확인하고 있습니다…';
+    else result.querySelector('[data-v2-next]')?.setAttribute('disabled', '');
     try {
-      const data = await json('/api/v2/discovery', {
+      const response = await fetch('/api/v2/discovery', {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec),
       });
-      if (generation !== discoveryGeneration) return;
+      if (response.status === 409) throw new Error('수집 결과가 바뀌었습니다. 다시 후보 찾기를 눌러 주세요.');
+      if (response.status === 422 && cursor) throw new Error('검색 조건이 바뀌었습니다. 다시 후보 찾기를 눌러 주세요.');
+      if (!response.ok) throw new Error('후보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      const data = await response.json();
+      if (generation !== discoveryGeneration || !document.getElementById('v2DiscoverDlg').open) return;
       if (!data.private_access) {
         result.textContent = '일반·급매 매물은 지정된 개인 계정에서만 보입니다.';
         return;
       }
-      if (data.source_state === 'unavailable') {
-        result.textContent = '현재 수집된 일반·급매 매물 파일이 없습니다. 0건으로 단정하지 않고 수집 상태를 확인해 주세요.';
-        return;
+      if (!cursor) {
+        const regions = data.coverage?.regions || [];
+        const labels = {ready:'정상',empty:'조회 0건',partial:'일부 제한',partial_empty:'일부 실패',
+          stale:'지난 수집',stale_failed:'갱신 실패',unverified:'검증 대기',failed:'조회 실패',never_scanned:'미수집'};
+        const sources = (data.sources || []).map(s => `${esc(s.kind)} ${labels[s.state] || '상태 미확인'}`).join(' · ');
+        const warning = data.source_state === 'unavailable' ? '아직 수집된 원천이 없습니다. 전국 매물 0건이라는 뜻은 아닙니다.' :
+          data.source_state === 'partial_empty' ? '원천 일부가 실패하거나 제한돼 0건을 확정할 수 없습니다.' :
+          data.source_state === 'partial' ? '일부 원천이 실패·제한됐습니다. 아래 후보는 전체 시장이 아닙니다.' :
+          data.source_state === 'empty' ? '이번 수집분은 0건입니다. 전체 시장의 매물 수는 아닙니다.' : '';
+        const requested = spec.region || spec.prefer_region;
+        const outside = requested && regions.length && !regions.includes(requested) ?
+          `<p class="v2-muted">${esc(requested)}은(는) 현재 확인된 수집 지역에 없습니다.</p>` : '';
+        result.innerHTML = `<p class="v2-muted">현재 수집된 ${regions.length}개 지역 · ${sources || '원천 상태 미확인'} · 전체 시장 아님</p>
+          ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}${outside}
+          <div id="v2DiscoveryGroups"></div><div id="v2DiscoveryPaging"></div>`;
       }
-      if (data.source_state === 'empty') {
-        result.textContent = '현재 수집분의 매물이 0건입니다. 원천이 빈 것인지 수집 실패인지는 별도 확인이 필요합니다.';
-        return;
-      }
+      const groupHost = result.querySelector('#v2DiscoveryGroups');
       const sections = [['matched','조건 부합'],['verify','확인 필요'],['explore','탐색 후보']];
-      result.innerHTML = sections.map(([name,label]) => {
+      for (const [name,label] of sections) {
         const rows = data.groups[name] || [];
-        if (!rows.length) return '';
-        return `<h3>${label} · ${data.counts[name]}건</h3>` + rows.map(x =>
-          `<div class="v2-row"><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
-          <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}</p>
-          <p>추천 이유: ${esc(x.recommendation_reason)}</p>
-          ${x.preference?.region ? `<p>지역 선호: ${x.preference.matched ? '부합' : x.preference.coverage ? '다른 지역' : '자료 미확인'}</p>` : ''}
-          <p>양보할 점: ${esc(x.tradeoff)}</p>
-          <p>확인할 점: ${esc(x.verify_next)}</p>
-          <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
-          <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button></div>`).join('');
-      }).join('') || '<p>조건에 맞는 매물이 없습니다. 가격·면적·지역을 하나씩 조정해 보세요.</p>';
+        if (!rows.length) continue;
+        let section = groupHost.querySelector(`[data-v2-group="${name}"]`);
+        if (!section) {
+          section = document.createElement('section');
+          section.dataset.v2Group = name;
+          section.innerHTML = `<h3>${label} · ${data.counts[name]}건</h3><div data-v2-items></div>`;
+          groupHost.appendChild(section);
+        }
+        section.querySelector('[data-v2-items]').insertAdjacentHTML('beforeend', rows.map(discoveryCard).join(''));
+      }
+      if (!groupHost.querySelector('[data-v2-card]') && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty')
+        groupHost.innerHTML = '<p>현재 조건의 후보가 없습니다. 가격·면적·지역을 하나씩 조정해 보세요.</p>';
+      const total = (data.counts.matched || 0) + (data.counts.verify || 0) + (data.counts.explore || 0);
+      const shown = groupHost.querySelectorAll('[data-v2-card]').length;
+      const paging = result.querySelector('#v2DiscoveryPaging');
+      paging.innerHTML = `<p class="v2-muted">현재 수집분 ${total}건 중 ${shown}건 표시</p>`;
+      if (data.next_cursor) {
+        const more = document.createElement('button');
+        more.type = 'button'; more.className = 'btn'; more.dataset.v2Next = '';
+        more.textContent = '다음 후보 더 보기';
+        more.onclick = () => runDiscovery(data.next_cursor);
+        paging.appendChild(more);
+      }
       result.querySelectorAll('[data-v2-listing]').forEach(button => button.onclick = () => {
         document.getElementById('v2DiscoverDlg').close();
         openListing(button.dataset.v2Listing);
@@ -285,18 +323,25 @@
         button.textContent = addCompare(button.dataset.v2Compare);
       });
       if (_listingCompareKeys().length >= 2) {
-        const button = document.createElement('button');
+        const button = result.querySelector('[data-v2-open-compare]') || document.createElement('button');
         button.className = 'btn primary';
+        button.dataset.v2OpenCompare = '';
         button.textContent = '선택 매물 비교하기';
         button.onclick = () => { document.getElementById('v2DiscoverDlg').close(); listingCompareOpen(); };
-        result.prepend(button);
+        if (!button.isConnected) result.prepend(button);
       }
     } catch (error) {
-      if (generation === discoveryGeneration) result.textContent = error.message;
+      if (generation === discoveryGeneration) {
+        if (cursor) {
+          const paging = result.querySelector('#v2DiscoveryPaging');
+          if (paging) paging.textContent = error.message;
+        }
+        else result.textContent = error.message;
+      }
     }
   }
 
-  document.getElementById('v2DiscoverForm')?.addEventListener('submit', submitDiscovery);
+  document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
   document.getElementById('v2NoteForm')?.addEventListener('submit', saveNote);
   window.SignalV2 = {paintRegion, openListing, openDiscovery, openNote, openNotes};
   if (typeof selected === 'string' && selected) paintRegion(selected);
