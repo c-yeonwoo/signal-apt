@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from math import isfinite
 
-VERSION = "v3-source-gap-unranked"
+VERSION = "v4-safe-region-signal"
 
 _SIG_BONUS = {"STRONG_BUY": 25, "BUY": 15, "WATCH": 5, "NEUTRAL": 0, "SELL_RISK": -20}
 _GRADE_BONUS = {"A": 8, "B": 4, "C": 0, "D": -4}
@@ -110,7 +110,10 @@ def listing_timing(
     base, why, conf = _listing_base(kind, raw)
     sb = _SIG_BONUS.get(signal or "", 0)
     gb = _GRADE_BONUS.get(grade or "", 0)
-    if signal:
+    if signal == "HELD":
+        why.append("지역 판정 보류 · 시그널 가산 없음")
+        conf = max(0.3, conf - 0.12)
+    elif signal:
         why.append(f"{signal}({sb:+d})")
         if signal in ("STRONG_BUY", "BUY"):
             conf = min(0.95, conf + 0.08)
