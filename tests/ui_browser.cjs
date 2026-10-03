@@ -380,6 +380,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(held.badge,/판단 보류/);
     assert.equal(held.style.fillColor,'#5f6875');
     assert.match(held.tip,/판단 보류/);
+    const complexHeld=await page.evaluate(()=>_cxSigBanner({등급:'HELD',점수:null,판정상태:'held',주의:'지역 판정 보류'}));
+    assert.match(complexHeld,/판단 보류/);
+    assert.match(complexHeld,/지역 판정 보류/);
+    assert.doesNotMatch(complexHeld,/null|undefined|지역 <b/);
     const guarded=await page.evaluate(()=>{
       allSignals=[{region:'테스트구',signal:'BUY',display_signal:'BUY',assessment_status:'held'}];
       _mtBuyOnly=true;

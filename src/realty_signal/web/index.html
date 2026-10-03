@@ -5389,7 +5389,7 @@ async function loadCxSig(btn, name, region){
   catch(e){ btn.textContent='조회 실패'; btn.style.pointerEvents=''; return; }
   const cs=d&&d['단지시그널'];
   if(cs){ const p=cs['분해']||{};
-    btn.outerHTML=`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px">단지 ${badge(cs['등급'])} <b>${cs['점수']}</b> <span style="color:var(--dim);font-size:10px">사이클${p['사이클']}·지역${p['지역']}·단지${p['단지']}·가격${p['가격']} · 참고용</span></span>`;
+    btn.outerHTML=`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px">단지 ${badge(cs['등급'])} ${cs['점수']==null?'':`<b>${cs['점수']}</b>`} <span style="color:var(--dim);font-size:10px">${cs['판정상태']==='held'?esc(cs['주의']||'지역 판정 보류'): `사이클${p['사이클']}·지역${p['지역']}·단지${p['단지']}·가격${p['가격']} · 참고용`}</span></span>`;
   } else { btn.textContent = d&&d['거래없음']?'실거래 없음' : (d&&d['지원안함']?'미지원 지역':'데이터 없음'); }
 }
 function cxBtn(name, region){
@@ -5514,7 +5514,7 @@ function renderCompareTable(){
   const cell=(c,fn)=> c.d===undefined ? '<span style="color:var(--sig-neutral)">–</span>' : (fn(c.d,main(c.d))??'–');
   // rows: 급지·시그널(맥락) → 평단가 → 추세 → 전세가율 → 갭 → 주력평형 → 최근매매 → 총거래
   const rows=[
-    {crit:null, label:'단지 시그널', get:d=>{ const cs=d&&d['단지시그널']; return cs?`${badge(cs['등급'])} <b>${cs['점수']}</b>`:null; }},
+    {crit:null, label:'단지 시그널', get:d=>{ const cs=d&&d['단지시그널']; return cs?`${badge(cs['등급'])}${cs['점수']==null?'':` <b>${cs['점수']}</b>`}`:null; }},
     {crit:null, label:'지역 급지', get:d=>_cmpGradeTag(d&&d['급지'])},
     {crit:null, label:'시그널', get:d=>_cmpSigTag(d&&d['시그널'])},
     {crit:'가격', label:'최근 평단가', val:d=>d&&d['최근평단가'], get:d=>d&&d['최근평단가']?d['최근평단가'].toLocaleString()+'만':null},
@@ -5663,12 +5663,12 @@ function _cxSigBanner(cs){
   const p=cs['분해']||{};
   const bar=(lab,v)=>`<span style="font-size:11px;color:var(--dim)">${lab} <b style="color:var(--txt)">${v??'–'}</b></span>`;
   const note=cs['주의']
-    ? `<span style="flex-basis:100%;font-size:10px;color:#b45309">${cs['주의']}</span>`
+    ? `<span style="flex-basis:100%;font-size:10px;color:#b45309">${esc(cs['주의'])}</span>`
     : `<span style="flex-basis:100%;font-size:10px;color:var(--dim)">사이클15%·지역40%·단지25%·가격20% 종합 · 참고용 — 전세가율 없으면 단지↓·지역↑. 지역 KB 시그널과 별개.</span>`;
   return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--accent-weak);border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin-bottom:12px">
     <span style="font-size:12px;color:var(--dim)">단지 시그널</span>
-    ${badge(cs['등급'])} <b style="font-size:15px">${cs['점수']}</b>
-    <span style="margin-left:auto;display:flex;gap:12px">${bar('사이클',p['사이클'])}${bar('지역',p['지역'])}${bar('단지',p['단지'])}${bar('가격',p['가격'])}</span>
+    ${badge(cs['등급'])} ${cs['점수']==null?'':`<b style="font-size:15px">${cs['점수']}</b>`}
+    ${cs['판정상태']==='held'?'':`<span style="margin-left:auto;display:flex;gap:12px">${bar('사이클',p['사이클'])}${bar('지역',p['지역'])}${bar('단지',p['단지'])}${bar('가격',p['가격'])}</span>`}
     ${note}
   </div>`;
 }
