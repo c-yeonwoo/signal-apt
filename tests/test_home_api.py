@@ -233,6 +233,21 @@ def test_complex_favorite_verified_code_keeps_old_jung_gu_separate(client, monke
     assert bad.status_code == 422
 
 
+def test_old_name_complex_is_held_when_kb_identity_cannot_be_verified(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"강남구": "1168000000"}, regions=["강남구"], identity_verified=False))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "complex", "강남구|옛 단지", "옛 단지")
+    assert db.complex_favorite_region("강남구")["status"] == "unverified"
+    record = client.get("/api/favorites").json()["favorites"][0]
+    assert record["complex_identity"]["status"] == "unverified"
+    watched = client.get("/api/complex-watch").json()
+    assert watched["unavailable"][0]["key"] == "강남구|옛 단지"
+    assert watched["moved_total"] == 0
+
+
 def test_pre_reform_region_favorite_is_preserved_but_needs_reselection(client, monkeypatch):
     from types import SimpleNamespace
 

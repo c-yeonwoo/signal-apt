@@ -469,10 +469,11 @@ def complex_favorite_region(ref: str) -> dict:
         return {"status": "unverified", "message": "저장한 지역 코드를 현재 자료에서 확인할 수 없습니다."}
     try:
         from realty_signal.services import market_data as md
+        name = _favorite_region_name(ref)
         code = str(md.code_of(ref) or "")
         if code[:5].isdigit() and code[2:5] == "000":
             return {"status": "unverified", "message": f"'{ref}' 처럼 시·도 단위로 등록된 단지는 실거래를 특정할 수 없습니다 — 시군구로 다시 등록해 주세요"}
-        if code[:5].isdigit() and code[2:5] != "000":
+        if name == ref and code[:5].isdigit() and code[2:5] != "000":
             return {"status": "ready", "name": ref, "code": code,
                     "sido": md.SIDO_LABELS.get(code[:2], ""), "label": ref}
     except Exception:  # noqa: BLE001
