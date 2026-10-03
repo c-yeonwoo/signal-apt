@@ -11,9 +11,9 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-11"
+VERSION = "discovery-v2-12"
 KINDS = {"일반매물", "급매", "찐매물"}
-FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "move_in_by", "max_monthly_manwon", "region", "prefer_region",
+FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "move_in_by", "max_commute_minutes", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
 PRIORITIES = {"balanced", "region", "price", "area"}
 
@@ -45,6 +45,11 @@ def validate(spec: dict) -> dict:
         if type(value) is not int or not 1 <= value <= 15:
             raise ValueError("invalid_condition_value")
         cleaned["min_rooms"] = value
+    if spec.get("max_commute_minutes") is not None:
+        value = spec["max_commute_minutes"]
+        if type(value) is not int or not 1 <= value <= 240:
+            raise ValueError("invalid_condition_value")
+        cleaned["max_commute_minutes"] = value
     if spec.get("move_in_by") is not None:
         value = spec["move_in_by"]
         if not isinstance(value, str):
@@ -181,10 +186,15 @@ def _freshness(listing: dict) -> int:
 
 
 def classify(row: dict, spec: dict, *, finance: dict | None = None,
-             region_hint: dict | None = None, occupancy: dict | None = None) -> dict:
+             region_hint: dict | None = None, occupancy: dict | None = None,
+             commute: dict | None = None) -> dict:
     listing = snapshot(row)
     if "move_in_by" in spec:
         listing["move_in"] = occupancy
+    if "max_commute_minutes" in spec:
+        listing["commute"] = ({key: commute.get(key) for key in (
+            "status", "minutes", "checked_at", "origin_quality", "source", "source_url")}
+            if isinstance(commute, dict) else None)
     price = listing["asking_manwon"]
     area = listing["exclusive_m2"]
     rooms = listing["rooms"]
@@ -206,6 +216,11 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
         checks.append({"field": "move_in_by", "status": "unknown" if move_date is None
                        else "pass" if move_date <= spec["move_in_by"] else "fail",
                        "value": move_date, "limit": spec["move_in_by"]})
+    if "max_commute_minutes" in spec:
+        minutes = commute.get("minutes") if isinstance(commute, dict) and commute.get("status") == "observed" else None
+        checks.append({"field": "max_commute_minutes", "status": "unknown" if type(minutes) is not int
+                       else "pass" if minutes <= spec["max_commute_minutes"] else "fail",
+                       "value": minutes, "limit": spec["max_commute_minutes"]})
     if "max_monthly_manwon" in spec:
         monthly = _monthly(finance)
         assessed = (finance or {}).get("status") == "assessed" and monthly is not None
@@ -243,6 +258,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
                   "min_area_m2": "원하는 전용면적 이상입니다.",
                   "min_rooms": "원하는 방 개수 이상입니다.",
                   "move_in_by": "표시된 입주 가능일이 원하는 시점 이내입니다.",
+                  "max_commute_minutes": "매물 표시 좌표 기준 대중교통 안내시간이 설정한 상한 안입니다.",
                   "max_monthly_manwon": "입력 가정의 월 부담 상한 안입니다.",
                   "region": "선택한 지역입니다.", "region_code": "선택한 지역입니다."}[passed[0]["field"]]
     else:
@@ -255,6 +271,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
                      "min_area_m2": "전용면적이 원하는 최소 면적보다 작습니다.",
                      "min_rooms": "방 개수가 원하는 최소보다 적습니다.",
                      "move_in_by": "표시된 입주 가능일이 원하는 시점보다 늦습니다.",
+                     "max_commute_minutes": "매물 표시 좌표 기준 대중교통 안내시간이 설정한 상한보다 깁니다.",
                      "max_monthly_manwon": "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다.",
                      "region": "선택한 필수 지역 밖의 매물입니다.",
                      "region_code": "선택한 필수 지역 밖의 매물입니다."}
@@ -265,6 +282,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
               "매물의 시군구 코드를 확인하세요." if missing and missing[0]["field"] == "region_code" else
               "매물의 방 개수를 확인하세요." if missing and missing[0]["field"] == "min_rooms" else
               "입주 가능일이 시기 표현이거나 미확인입니다. 중개사에게 실제 입주일을 확인하세요." if missing and missing[0]["field"] == "move_in_by" else
+              "저장된 직장까지의 대중교통 경로를 확인하세요." if missing and missing[0]["field"] == "max_commute_minutes" else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else
               "실제 자금·매물 상태를 확인하세요.")
     return {"listing": listing, "eligibility": tier, "constraints": checks,
@@ -276,7 +294,8 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
 
 
 def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_of=None,
-             region_hint: dict | None = None, occupancy_by_key: dict | None = None) -> dict:
+             region_hint: dict | None = None, occupancy_by_key: dict | None = None,
+             commute_by_key: dict | None = None) -> dict:
     spec = validate(spec)
     cursor = spec.pop("cursor", None)
     query_hash = _hash({"conditions": spec, "region_hint": region_hint})
@@ -288,7 +307,8 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
         seen.add(row["key"])
         finance = finance_of(row) if finance_of and "max_monthly_manwon" in spec else None
         item = classify(row, spec, finance=finance, region_hint=region_hint,
-                        occupancy=(occupancy_by_key or {}).get(row["key"]))
+                        occupancy=(occupancy_by_key or {}).get(row["key"]),
+                        commute=(commute_by_key or {}).get(row["key"]))
         groups[item["eligibility"]].append(item)
     def order(item):
         snap = item["listing"]
@@ -296,9 +316,12 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
         # 사용자가 실제로 상세 확인할 수 있는 한방 후보를 먼저 보여 준다.
         move_lookup = (0 if "move_in_by" in spec and item["eligibility"] == "verify"
                        and snap["kind"] == "일반매물" and snap.get("move_in") is None else 1)
+        commute_lookup = (0 if "max_commute_minutes" in spec and item["eligibility"] == "verify"
+                          and snap.get("coordinate") and snap.get("commute") is None else 1)
         return (-(item["preference"]["score"] or 0),
                 -(item["preference"]["coverage"] or 0),
                 move_lookup,
+                commute_lookup,
                 -_freshness(snap),
                 snap["key"])
     for items in groups.values():
