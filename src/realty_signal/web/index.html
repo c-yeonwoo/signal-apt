@@ -540,7 +540,7 @@
 <!-- 대시보드 홈 -->
 <div id="view-dashboard" style="display:none;padding:24px 28px 48px;max-width:1440px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto;box-sizing:border-box;width:100%">
   <div id="dashHello" style="font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-bottom:6px"></div>
-  <div id="dashSub" class="page-sub" style="margin-bottom:20px">이번 주 할 일과 살 수 있는 집</div>
+  <div id="dashSub" class="page-sub" style="margin-bottom:20px">이번 주 할 일과 예산 범위 후보</div>
   <div id="dashBody"></div>
 </div>
 
@@ -2559,11 +2559,11 @@ async function bpConfirm(){
 }
 async function _loadAsks(){
   const wrap=document.getElementById('dashShortlistWrap'); if(!wrap) return;
-  wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')+'<div style="color:var(--dim);font-size:13px">매물을 찾는 중…</div>');
+  wrap.innerHTML=_dashCard(_dashH('예산 범위 매물 후보')+'<div style="color:var(--dim);font-size:13px">매물을 찾는 중…</div>');
   let d; try{ const r=await fetch('/api/asks'); if(!r.ok) throw new Error('load'); d=await r.json(); }catch(e){
-    wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')+'<p>매물을 불러오지 못했습니다.</p><button class="btn" onclick="_loadAsks()">다시 시도</button>'); return; }
+    wrap.innerHTML=_dashCard(_dashH('예산 범위 매물 후보')+'<p>매물을 불러오지 못했습니다.</p><button class="btn" onclick="_loadAsks()">다시 시도</button>'); return; }
   if(!d.ready){
-    wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')
+    wrap.innerHTML=_dashCard(_dashH('예산 범위 매물 후보')
       +`<div style="font-size:14px;line-height:1.6">${esc(d.message||'예산 안에 맞는 매물이 없습니다.')}
         <div style="margin-top:8px"><button class="btn primary" onclick="_planGo('levers','dashboard')">다른 방법으로 보기</button></div></div>`);
     return;
@@ -2578,8 +2578,8 @@ async function _loadAsks(){
       <div style="margin-top:6px">${_buyerFourHtml(c, _eok)}</div>
       ${c.key?`<button type="button" class="btn" data-ask="${i}">이 매물 확인</button>`:''}
     </div>`).join('');
-  wrap.innerHTML=_dashCard(_dashH('지금 살 수 있는 집')
-    +`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">예산 ${_eok(d.budget)} 안에서 매물 가격이 있고, 가진 돈으로 되는 집입니다. 동네 평균으로 짐작한 가격은 빼 두었습니다.</div>`
+  wrap.innerHTML=_dashCard(_dashH('예산 범위 매물 후보')
+    +`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">저장한 가격 상한 ${_eok(d.budget)} 아래에서 호가가 확인된 후보입니다. 동네 평균으로 짐작한 가격은 제외했습니다. 대출 승인·규제·권리·판매 여부는 별도 확인이 필요합니다.</div>`
     +cards);
   wrap.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{ const c=d.asks[Number(b.dataset.ask)]; if(c&&c.key) openListingReport(c.key); });
 }
