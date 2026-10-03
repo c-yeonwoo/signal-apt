@@ -56,6 +56,19 @@ def test_complex_signal_reduces_comp_weight_without_jeonse(monkeypatch):
     assert with_j["점수"] >= no_j["점수"]
 
 
+def test_complex_grade_held_when_region_assessment_is_unsafe(monkeypatch):
+    monkeypatch.setattr(
+        "realty_signal.services.complex_signal.md.regime",
+        lambda: (_ for _ in ()).throw(AssertionError("held grade must not calculate")),
+    )
+    for signal in ("HELD", None, ""):
+        result = complex_signal("마포구", {"총거래": 24, "추세pct": 5}, signal)
+        assert result["등급"] == "HELD"
+        assert result["점수"] is None
+        assert result["판정상태"] == "held"
+        assert "지역 안전 판정" in result["근거부족"]
+
+
 def test_region_price_context_labels(monkeypatch):
     monkeypatch.setattr(
         "realty_signal.services.complex_signal.locality_map",

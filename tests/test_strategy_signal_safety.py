@@ -1,6 +1,7 @@
 """User-facing strategy cards must never revive an unsafe raw BUY grade."""
 
 import pandas as pd
+from types import SimpleNamespace
 
 from realty_signal import api
 
@@ -37,3 +38,24 @@ def test_strategy_cards_do_not_promote_held_raw_buy(monkeypatch):
     assert api.undervalued()["listings"][0]["시그널"] == "HELD"
     result = api.tradeup("현재구", current_value=50_000)
     assert result["cards"][0]["시그널"] == "HELD"
+
+
+def test_myfeed_recalculates_old_cached_complex_grade_under_current_hold(monkeypatch):
+    monkeypatch.setattr(api, "_uid", lambda request: 1)
+    monkeypatch.setattr(api.db, "fav_list", lambda uid: [
+        {"kind": "region", "key": "노원구"},
+        {"kind": "complex", "key": "노원구|테스트단지"},
+    ])
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {"노원구": "HELD"})
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **kwargs: False)
+    monkeypatch.setattr(api, "_presale", lambda: [])
+    monkeypatch.setattr(api, "_code_of", lambda region: "11350")
+    monkeypatch.setattr(api.db, "kv_get", lambda *args, **kwargs: {
+        "총거래": 8, "단지시그널": {"등급": "STRONG_BUY", "점수": 80},
+        "평형별": [], "매매추이": [],
+    })
+    monkeypatch.setattr(api, "_kb", lambda: SimpleNamespace(last_date=pd.Timestamp("2026-09-28")))
+    items = api.myfeed(object())["items"]
+    assert items[0]["signal"] == "HELD"
+    assert items[1]["단지등급"] == "HELD"
+    assert items[1]["단지점수"] is None

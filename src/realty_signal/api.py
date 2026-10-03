@@ -395,7 +395,7 @@ def myfeed(request: Request):
     complexes = [f["key"] for f in favs if f["kind"] == "complex"]   # "region|name"
     if not regions and not complexes:
         return {"ok": True, "empty": True, "items": []}
-    sig = _signal_map()
+    sig = _display_signal_map()
     # 급매(지역별)
     qs = []
     try:
@@ -425,8 +425,8 @@ def myfeed(request: Request):
         d = db.kv_get(f"complex:{code[:5]}:{name}", max_age=30 * 86400) if code[:5].isdigit() else None
         metrics = _main_flat_metrics(d or {})
         # 캐시에 단지시그널이 없어도 지역시그널+실거래로 즉시 산출(공시비율은 myfeed에서 생략 — 느림)
-        cs = (d or {}).get("단지시그널") or {}
-        if d and not cs.get("등급") and (d.get("총거래") or d.get("매매추이")):
+        cs = {}
+        if d and (d.get("총거래") or d.get("매매추이")):
             cs = _complex_signal(region, d, sig.get(region, ""), None)
         items.append({"type": "complex", "region": region, "name": name,
                       "최근평단가": (d or {}).get("최근평단가"), "추세pct": (d or {}).get("추세pct"),
@@ -2021,7 +2021,7 @@ def complex_detail(region: str, name: str):
     from realty_signal import db
     from realty_signal.services.complex_signal import region_price_context
     grade = (_regime().get("regions", {}).get(region) or {}).get("급지")
-    signal = _signal_map().get(region)
+    signal = _display_signal_map().get(region, "HELD")
 
     def deco(d):   # 급지·시그널·공시가격·단지시그널·지역대비는 응답 시점에 부착(각자 캐시)
         out = {**d, "region": region, "급지": grade, "시그널": signal}

@@ -72,6 +72,11 @@ def main_flat_metrics(data: dict) -> dict:
 def complex_signal(region: str, data: dict, signal: str | None,
                    gongsi_ratio: float | None = None) -> dict:
     """단지 시그널 — 사이클·지역·단지·가격 정규화 가중합(참고용)."""
+    if signal not in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}:
+        return {"등급": "HELD", "점수": None, "판정상태": "held",
+                "근거부족": ["지역 안전 판정"],
+                "주의": "지역 판정이 보류되어 지역 가중치를 포함한 단지 등급도 보류합니다. 실거래 자료는 별도로 확인하세요."}
+
     def clamp(v, lo=0.0, hi=100.0):
         return max(lo, min(hi, v))
 
@@ -111,6 +116,7 @@ def complex_signal(region: str, data: dict, signal: str | None,
     total = round(cyc * 0.15 + reg * w_reg + comp * w_comp + price * 0.20)
     grade = next(g for th, g in _CX_SIG_GRADE if total >= th)
     out = {"등급": grade, "점수": total,
+           "판정상태": "ready",
            "분해": {"사이클": round(cyc), "지역": round(reg), "단지": round(comp), "가격": round(price)}}
     if not has_jeonse:
         out["근거부족"] = ["전세가율"]
