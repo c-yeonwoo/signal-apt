@@ -142,7 +142,7 @@ def test_shortlist_needs_budget(client):
 
 def test_shortlist_uses_confirmed_budget(client, monkeypatch):
     client.post("/api/buying-power/confirm", json={"capital": 50000, "income": 8000})
-    monkeypatch.setattr(app_api, "_signal_map", lambda: {"노원구": "BUY"})
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "BUY"})
     monkeypatch.setattr(app_api, "_region_grades",
                         lambda r: [{"단지": "상계주공", "평단가": 2000, "급지": 3, "상위": 45}])
     monkeypatch.setattr(sl, "_locality_map", lambda: {"노원구": {"region": "노원구", "저평가도": 10}})

@@ -131,7 +131,7 @@ def build(profile: dict, budget: float, *, limit: int = 3,
     """예산 안에서 라이프스타일 적합도 상위 단지 + 탈락 사유 집계."""
     from realty_signal import api as app_api
 
-    signal_map = app_api._signal_map()
+    signal_map = app_api._display_signal_map()
     loc = _locality_map()
     uid_favs = list(profile.get("_favs") or [])
     profile_region = (((profile.get("매수력") or {}).get("가정") or {}).get("지역")
@@ -174,10 +174,9 @@ def build(profile: dict, budget: float, *, limit: int = 3,
         # 지역 중심점 통근은 단지 통근이 아니다. 단정적인 탈락 기준으로 쓰지 않는다.
         lr = loc.get(region, {})
         uv = lr.get("저평가도") or 0
-        parts = {
-            "시그널": float(SIGNAL_SCORE.get(sig, 45)),
-            "저평가": _clamp(50 + uv * 2.5),
-        }
+        parts = {"저평가": _clamp(50 + uv * 2.5)}
+        if sig in SIGNAL_SCORE:
+            parts["시그널"] = float(SIGNAL_SCORE[sig])
         cs = _commute_score(cmin)
         if "통근" in w and cs is not None:
             parts["통근"] = cs
@@ -255,6 +254,8 @@ def _reason(c: dict) -> str:
                  "NEUTRAL": "중립"}.get(c.get("시그널") or "", "")
     if sig_label:
         bits.append(f"지역 {sig_label}")
+    elif c.get("시그널") == "HELD":
+        bits.append("지역 판정 보류")
     if (c.get("저평가도") or 0) > 0:
         bits.append(f"저평가 {c['저평가도']}")
     if c.get("통근") and c["통근"].get("min"):

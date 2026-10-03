@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
@@ -896,6 +897,23 @@ def _signal_map() -> dict:
     return md.signal_map()
 
 
+def _display_signal_map() -> dict:
+    """User-facing grades fail closed while preserving candidate-region coverage."""
+    raw = _signal_map()
+    try:
+        labels = md.assessed_signal_labels(date.today().isoformat())
+    except Exception as exc:  # noqa: BLE001 — 판정 실패는 원시 BUY 노출 사유가 아니다.
+        log.warning("display signal assessment unavailable: %s", exc)
+        labels = {}
+    allowed = {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}
+    visible = {}
+    for region in raw:
+        label = labels.get(region) or {}
+        grade = label.get("display_signal")
+        visible[region] = grade if label.get("assessment_status") == "ready" and grade in allowed else "HELD"
+    return visible
+
+
 def signals(only: str | None = None):
     """시그널 레코드 리스트 — Nick·동네 리포트·advisor tool 공용 (라우트는 market router)."""
     from realty_signal.routes.market import signals as _market_signals
@@ -943,7 +961,7 @@ def undervalued():
         permitted = config.odsay_analysis_approved() and config.odsay_cache_approved()
         return {"ready": False, "listings": [],
                 "reason": "insufficient_verified_data" if permitted else "source_permission_required"}
-    sig = _signal_map()
+    sig = _display_signal_map()
     recs = json.loads(df.to_json(orient="records", force_ascii=False))
     for r in recs:
         r["시그널"] = sig.get(r["region"], "")
@@ -1481,7 +1499,7 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
     capital = net_equity + max(0.0, extra_cash)           # 갈아타기 가용 자기자본
     budget, budget_detail = _max_purchase(capital, ltv, income, rate, years)
 
-    sig = _signal_map()
+    sig = _display_signal_map()
     df = store.load_localities()
     locmap = {}
     if not df.empty:
