@@ -247,7 +247,9 @@ async def _auto_refresh_loop():
         while True:
             try:
                 await asyncio.to_thread(jobs.run, name, fn, interval=interval, retry=3600,
-                                        expedite=name == "kb" and _kb_due_now())
+                                        expedite=(name == "kb" and _kb_due_now()) or
+                                                 (name == "hanbang" and bool(config.personal_listing_email())
+                                                  and _hanbang_stale()))
             except Exception:
                 log.error("job state failure: %s", name)
             await asyncio.sleep(60)
@@ -786,10 +788,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             out["가격근거주의"] = "급매갭·시세갭은 공급사 중위시세 기준의 표시값이며, 국토부 실거래로 검증한 할인율이 아닙니다."
         safe_signals = _display_signal_map() if private_allowed and kind in ("급매", "찐매물", "전체") else {}
         if kind in ("일반매물", "전체") and private_allowed:
-            try:
-                hb = json.loads(HANBANG_FILE.read_text(encoding="utf-8")).get("listings", []) if HANBANG_FILE.exists() else []
-            except Exception:  # noqa: BLE001
-                hb = []
+            hb = _hanbang_verified_rows()
             if region:
                 hb = [m for m in hb if region in (m.get("지역") or "")]
             out["일반매물"] = [{"매물키": _listing_key("일반매물", m, {"hanbang_id": m.get("hanbang_id")},
@@ -1626,7 +1625,7 @@ CERTIFIED_FILE = store.CACHE_DIR / "certified.json"
 HANBANG_FILE = store.CACHE_DIR / "hanbang_general.json"
 _QUICKSALE_SCAN_VER = 4   # 4=원천 장애를 빈 캐시로 덮어쓰지 않고 상태를 노출
 _CERTIFIED_SCAN_VER = 2   # 2=위 원천 장애 보호 적용
-_HANBANG_SCAN_VER = 1
+_HANBANG_SCAN_VER = 2   # 2=원천 시도·시군구와 목록 행의 지역을 함께 검증
 _RADAR_MAX_AGE = 86400     # 급매·찐매물 캐시 TTL(1일)
 
 
@@ -3071,7 +3070,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                 total=m.get("호가"))
     if "일반매물" in want and HANBANG_FILE.exists():
         source_failed = _radar_refresh_status(HANBANG_FILE).get("ok") is False
-        for m in json.loads(HANBANG_FILE.read_text(encoding="utf-8")).get("listings", []):
+        for m in _hanbang_verified_rows():
             if source_failed:
                 m = {**m, "stale": True}
             add("일반매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
@@ -3140,7 +3139,24 @@ def certified():
 
 def hanbang():
     """한방 일반 아파트 매매 — 개인 계정용, 최대 3개 시군구·페이지 제한."""
-    return _radar_cached_response(HANBANG_FILE, _HANBANG_SCAN_VER)
+    out = _radar_cached_response(HANBANG_FILE, _HANBANG_SCAN_VER)
+    if out.get("last_success_at") is not None and out.get("_scan_ver", 0) < _HANBANG_SCAN_VER:
+        out["listings"] = []
+        out["regions"] = []
+        out["count"] = 0
+        out["state"] = "identity_unverified"
+    return out
+
+
+def _hanbang_verified_rows() -> list[dict]:
+    """구버전 지역 출처가 증명되지 않은 매물은 어떤 소비자에도 내보내지 않는다."""
+    try:
+        cached = json.loads(HANBANG_FILE.read_text(encoding="utf-8"))
+        if not isinstance(cached, dict) or cached.get("_scan_ver", 0) < _HANBANG_SCAN_VER:
+            return []
+        return cached.get("listings") or []
+    except (FileNotFoundError, ValueError, TypeError):
+        return []
 
 
 
@@ -3199,9 +3215,15 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
         queryable += 1
         rows, status = fetch_region_with_status(*point)
         source_region = (status.get("source_sgg") or "").replace(" ", "")
-        if not status.get("ok") or not source_region or not region.replace(" ", "").endswith(source_region):
+        source_sido = (status.get("source_ctpv") or "").strip()
+        expected_sido = _sido_of(region)
+        if (not status.get("ok") or not source_region or not region.replace(" ", "").endswith(source_region)
+                or not expected_sido or not source_sido.startswith(expected_sido)):
             failures.append({"region": region,
-                             "error": status.get("error") or "원천 시군구와 요청 지역이 다름"})
+                             "error": status.get("error") or "원천 시도·시군구와 요청 지역이 다름"})
+            continue
+        if any((item.get("지역") or "").replace(" ", "") != source_region for item in rows):
+            failures.append({"region": region, "error": "원천 목록에 다른 시군구 매물이 섞여 있음"})
             continue
         succeeded.append(region)
         (complete if status["complete"] else limited).append(region)
@@ -3229,10 +3251,7 @@ def _hanbang_preserve_unscanned(listings: list[dict], scan: dict) -> list[dict]:
     import time
     if not HANBANG_FILE.exists():
         return listings
-    try:
-        previous = jsonx.loads(HANBANG_FILE.read_text(encoding="utf-8")).get("listings", [])
-    except Exception:  # noqa: BLE001
-        return listings
+    previous = _hanbang_verified_rows()
     ids = {row["hanbang_id"] for row in listings}
     complete = set(scan["complete_regions"])
     requested = set(scan["regions"])

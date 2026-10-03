@@ -199,7 +199,7 @@ def discovery(request: Request, data: dict = Body(...)):
                             "failed_requests": (cache.get("refresh") or {}).get("failed_requests") or 0,
                             "limited_regions": (cache.get("refresh") or {}).get("limited_regions") or []})
         readable = {source["kind"] for source in sources
-                    if source["state"] not in {"failed", "never_scanned"}}
+                    if source["state"] not in {"failed", "never_scanned", "identity_unverified"}}
         by_kind = {kind: [] for kind in readable}
         if readable:
             try:

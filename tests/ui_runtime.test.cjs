@@ -82,6 +82,7 @@ test('general listing status distinguishes personal-only, source failure, and li
   const ctx = vm.createContext({});
   vm.runInContext(extract('function generalStatusText(data){', 'async function loadGeneralListings('), ctx);
   assert.match(ctx.generalStatusText({state:'personal_only'}), /개인 계정/);
+  assert.match(ctx.generalStatusText({state:'identity_unverified'}), /시·도 출처를 확인할 수 없어/);
   assert.match(ctx.generalStatusText({state:'failed',listings:[],refresh:{error:'timeout'}}), /0건이라는 뜻이 아닙니다/);
   const text = ctx.generalStatusText({state:'partial',listings:[{}],regions:['노원구'],
     last_success_at:1,refresh:{limited_regions:['노원구'],failed_requests:0}});
