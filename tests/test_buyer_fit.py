@@ -51,6 +51,24 @@ def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypat
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
 
 
+def test_listing_alternatives_do_not_borrow_stale_saved_budget(monkeypatch):
+    from realty_signal.routes import market
+
+    row = _row("일반매물:a")
+    budgets = []
+    monkeypatch.setattr(market.deps, "personal_listings_allowed", lambda _request: True)
+    monkeypatch.setattr(market.deps, "uid", lambda _request: 7)
+    monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
+    monkeypatch.setattr(db, "profile_get", lambda _uid: {
+        "매수력": {"최대매수가": 100_000}})
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: [row])
+    monkeypatch.setattr(db, "news_list", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(listing_discovery, "alternatives", lambda _row, _rows, budget: (
+        budgets.append(budget) or []))
+    market.listing_discovery(None, row["key"])
+    assert budgets == [None]
+
+
 def test_commute_is_on_demand_bounded_and_does_not_expose_work_coordinates(monkeypatch):
     calls = []
     def route(lat, lng, wlat, wlng, mode, key):

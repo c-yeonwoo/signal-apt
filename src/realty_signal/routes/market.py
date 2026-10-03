@@ -476,7 +476,8 @@ def listing_discovery(request: Request, key: str):
     except LookupError as exc:
         raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
     profile = db.profile_get(deps.uid(request)) or {}
-    budget = discovery._positive((profile.get("매수력") or {}).get("최대매수가"))
+    fit = analysis.buyer_fit(analysis.snapshot(row), profile)
+    budget = fit.get("budget_manwon") if fit["status"] in {"within", "above"} else None
     candidates = app_api._build_listings({"일반매물", "급매", "찐매물"}, include_private=allowed) if allowed else []
     out = {"alternatives": discovery.alternatives(row, candidates, budget),
            "headlines": discovery.news(row, db.news_list(None, limit=300)),
@@ -504,7 +505,8 @@ def listing_discovery_commute(request: Request, key: str):
     uid = deps.uid(request)
     profile = db.profile_get(uid) or {}
     candidates = app_api._build_listings({"일반매물", "급매", "찐매물"}, include_private=True) if allowed else []
-    budget = discovery._positive((profile.get("매수력") or {}).get("최대매수가"))
+    fit = analysis.buyer_fit(analysis.snapshot(row), profile)
+    budget = fit.get("budget_manwon") if fit["status"] in {"within", "above"} else None
     selected = discovery.alternatives(row, candidates, budget)
     by_key = {candidate.get("key"): candidate for candidate in candidates}
     rows = [by_key[x["listing"]["key"]] for x in selected if x["listing"]["key"] in by_key]
