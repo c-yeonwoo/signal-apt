@@ -21,7 +21,7 @@ def uid(tmp_path, monkeypatch):
     db._migrated[0] = False
     for k in ("INVITE_CODES", "STUDENT_ALLOWLIST", "RAILWAY_ENVIRONMENT", "APP_ENV"):
         monkeypatch.delenv(k, raising=False)
-    monkeypatch.setattr(app_api, "_signal_map", lambda: {"노원구": "BUY", "금천구": "BUY"})
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "BUY", "금천구": "BUY"})
     monkeypatch.setattr(app_api, "_region_grades", lambda r: GRADES.get(r, []))
     monkeypatch.setattr(sl, "_locality_map",
                         lambda: {"노원구": {"region": "노원구", "저평가도": 10},
@@ -115,6 +115,20 @@ def test_signal_change_is_reported(uid, monkeypatch):
     db.kv_set(briefing.SNAP_KEY.format(uid=uid), snap)
     b = briefing.build(uid)
     assert "↑ 노원구: 관망 → 매수" in b["text"]
+
+
+def test_held_signal_never_becomes_daily_buy_upgrade(uid, monkeypatch):
+    snap = briefing.build(uid)["snapshot"]
+    snap["signals"]["노원구"] = "WATCH"
+    db.kv_set(briefing.SNAP_KEY.format(uid=uid), snap)
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "HELD", "금천구": "BUY"})
+    held = briefing.build(uid, force=True)
+    assert held["snapshot"]["signals"]["노원구"] == "HELD"
+    assert "↑ 노원구:" not in held["text"]
+    db.kv_set(briefing.SNAP_KEY.format(uid=uid), held["snapshot"])
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "BUY", "금천구": "BUY"})
+    restored = briefing.build(uid, force=True)
+    assert "↑ 노원구:" not in restored["text"]
 
 
 def test_imminent_bid_leads_the_todo(uid, monkeypatch, tmp_path):

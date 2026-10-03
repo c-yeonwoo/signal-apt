@@ -19,7 +19,7 @@ SNAP_KEY = "briefing_snap:{uid}"
 MOVE_MIN = 100          # 예상가 변동 표시 최소폭(만원)
 QUICKSALE_FILE = Path("data/cache/quicksale.json")
 
-SIG_LABEL = {"STRONG_BUY": "적극매수", "BUY": "매수", "WATCH": "관망",
+SIG_LABEL = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
              "NEUTRAL": "중립", "SELL_RISK": "매도주의"}
 SIG_RANK = {"SELL_RISK": 0, "NEUTRAL": 1, "WATCH": 2, "BUY": 3, "STRONG_BUY": 4}
 WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
@@ -120,7 +120,8 @@ def _diff_signals(cur: dict, prev: dict) -> list[dict]:
     out = []
     for region, sig in cur.items():
         old = (prev or {}).get(region)
-        if old and old != sig:
+        # HELD는 새 매수/매도 등급도, 복구 후 승급의 출발 등급도 아니다.
+        if old in SIG_RANK and sig in SIG_RANK and old != sig:
             out.append({"region": region, "from": old, "to": sig,
                         "up": SIG_RANK.get(sig, 0) > SIG_RANK.get(old, 0)})
     return out
@@ -283,9 +284,9 @@ def build(uid: int, *, force: bool = False) -> dict:
     data = sl.build(profile, float(budget), limit=3, budget_is_ceiling=False)
     cands = data.get("candidates") or []
     from realty_signal import api as app_api
-    signal_map = app_api._signal_map()
+    signal_map = app_api._display_signal_map()
     watch = set(profile["_favs"]) | {c["region"] for c in cands}
-    cur_sigs = {r: signal_map[r] for r in watch if r in signal_map}
+    cur_sigs = {r: signal_map.get(r, "HELD") for r in watch}
 
     prev = db.kv_get(SNAP_KEY.format(uid=uid)) or {}
     first = not prev
