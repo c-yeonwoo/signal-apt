@@ -68,3 +68,15 @@ def get(uid: int, report_id: str, *, private_allowed: bool) -> dict | None:
     if row is None or row[0] in PRIVATE_KINDS and not private_allowed:
         return None
     return {"report": json.loads(row[1]), "saved_at": row[2]}
+
+
+def delete(uid: int, report_id: str) -> bool:
+    """Owner may erase a copy even after source-read permission was revoked."""
+    c = db.conn()
+    try:
+        changed = c.execute("DELETE FROM report_snapshots_v2 WHERE uid=? AND report_id=?",
+                            (uid, report_id)).rowcount
+        c.commit()
+        return changed == 1
+    finally:
+        c.close()

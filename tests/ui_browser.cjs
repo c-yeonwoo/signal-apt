@@ -105,7 +105,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           kind:saved.report.subject.kind,name:saved.report.subject.name,asof:saved.report.asof,
           saved_at:saved.saved_at}))};
       if(url.pathname.startsWith('/api/v2/report-snapshots/')) {
-        const saved=savedReports.get(decodeURIComponent(url.pathname.split('/').at(-1)));
+        const id=decodeURIComponent(url.pathname.split('/').at(-1));
+        if(route.request().method()==='DELETE') {
+          const deleted=savedReports.delete(id);
+          return route.fulfill(deleted?{json:{deleted:true}}:{status:404,json:{}});
+        }
+        const saved=savedReports.get(id);
         return route.fulfill(saved?{json:saved}:{status:404,json:{}});
       }
       if(url.pathname==='/api/general-listings') data={ready:true,state:'partial',regions:['테스트구'],last_success_at:1780000000,
@@ -337,6 +342,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#v2ReportBody').textContent(),/현재 호가·판매 여부/);
     assert.equal(calls.filter(path=>path==='/api/v2/listings/report').length,reportFetches);
     assert.equal(nickPayloads.length,0);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'저장본 목록으로'}).click();
+    page.once('dialog', dialog=>dialog.dismiss());
+    await page.locator('#v2ReportBody').getByRole('button',{name:'저장본 삭제'}).click();
+    assert.equal(await page.locator('#v2ReportBody').getByRole('button',{name:'당시 리포트 보기'}).count(),1);
+    page.once('dialog', dialog=>dialog.accept());
+    await page.locator('#v2ReportBody').getByRole('button',{name:'저장본 삭제'}).click();
+    await page.locator('#v2ReportBody').getByText('저장한 리포트가 없습니다.').waitFor();
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
     await page.locator('#v2ReportBody').getByRole('button',{name:'내 계정에서 열기 링크 복사'}).waitFor();

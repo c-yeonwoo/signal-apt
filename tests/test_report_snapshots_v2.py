@@ -70,6 +70,11 @@ def test_save_route_rechecks_current_report_and_permission(isolated_db, monkeypa
         reports_v2.report_snapshot_get(None, report["report_id"])
     assert hidden.value.status_code == 404
     assert json.loads(reports_v2.report_snapshots_list(None).body)["items"] == []
+    assert json.loads(reports_v2.report_snapshot_delete(None, report["report_id"]).body) == {"deleted": True}
+    assert snapshots.get(7, report["report_id"], private_allowed=True) is None
+    with pytest.raises(HTTPException) as already_deleted:
+        reports_v2.report_snapshot_delete(None, report["report_id"])
+    assert already_deleted.value.status_code == 404
 
 
 def test_snapshot_routes_require_login_without_reading_data(isolated_db, monkeypatch):

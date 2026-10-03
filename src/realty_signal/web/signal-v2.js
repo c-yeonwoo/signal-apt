@@ -173,8 +173,22 @@
           <b>${esc(item.name || '매물')} · ${esc(item.kind)}</b>
           <p class="v2-muted">수집 ${esc(item.asof || '시각 미확인')} · 저장 ${esc(new Date(item.saved_at * 1000).toLocaleString('ko-KR'))}</p>
           <button type="button" class="btn" data-saved-report="${esc(item.report_id)}">당시 리포트 보기</button>
-        </div>`).join('') : '<p>저장한 리포트가 없습니다.</p>');
+          <button type="button" class="btn" data-delete-report="${esc(item.report_id)}">저장본 삭제</button>
+        </div>`).join('') : '<p>저장한 리포트가 없습니다.</p>') + '<p id="v2SavedStatus" role="status"></p>';
       body.querySelectorAll('[data-saved-report]').forEach(button => button.onclick = () => openSavedReport(button.dataset.savedReport, key));
+      body.querySelectorAll('[data-delete-report]').forEach(button => button.onclick = async () => {
+        if (!confirm('이 리포트 저장본 하나를 삭제할까요? 삭제 후 복구할 수 없습니다.')) return;
+        button.disabled = true;
+        try {
+          await json(`/api/v2/report-snapshots/${encodeURIComponent(button.dataset.deleteReport)}`, {method:'DELETE'});
+          if (generation === listingGeneration && dialog.open) openSavedReports(key);
+        } catch (error) {
+          if (generation === listingGeneration && dialog.open) {
+            body.querySelector('#v2SavedStatus').textContent = error.message;
+            button.disabled = false;
+          }
+        }
+      });
     } catch (error) {
       if (generation === listingGeneration) body.textContent = error.message;
     }
