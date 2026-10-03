@@ -11,7 +11,7 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-7"
+VERSION = "discovery-v2-8"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
@@ -151,7 +151,8 @@ def _freshness(listing: dict) -> int:
         return 0
 
 
-def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
+def classify(row: dict, spec: dict, *, finance: dict | None = None,
+             region_hint: dict | None = None) -> dict:
     listing = snapshot(row)
     price = listing["asking_manwon"]
     area = listing["exclusive_m2"]
@@ -176,8 +177,18 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
                        "value": listing["region"], "limit": spec["region"]})
     if "region_code" in spec:
         region_code = _region_code(listing)
-        checks.append({"field": "region_code", "status": "unknown" if region_code is None else
-                       "pass" if region_code == spec["region_code"] else "fail",
+        status = "pass" if region_code == spec["region_code"] else "fail" if region_code else "unknown"
+        if status == "unknown" and region_hint:
+            # A missing code cannot establish a match, but a source-verified
+            # different district/province can safely rule one out.
+            actual = "".join((listing.get("region") or "").split())
+            expected = "".join((region_hint.get("name") or "").split())
+            actual_sido = listing.get("region_sido")
+            expected_sido = region_hint.get("sido")
+            if (actual and expected and actual != expected) or (
+                    actual_sido and expected_sido and actual_sido != expected_sido):
+                status = "fail"
+        checks.append({"field": "region_code", "status": status,
                        "value": region_code, "limit": spec["region_code"]})
     preference = _preference(listing, spec)
     tier = "exceeded" if any(x["status"] == "fail" for x in checks) else (
@@ -217,10 +228,11 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
             "rank_version": VERSION}
 
 
-def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_of=None) -> dict:
+def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_of=None,
+             region_hint: dict | None = None) -> dict:
     spec = validate(spec)
     cursor = spec.pop("cursor", None)
-    query_hash = _hash(spec)
+    query_hash = _hash({"conditions": spec, "region_hint": region_hint})
     seen = set()
     groups = {"matched": [], "verify": [], "exceeded": [], "explore": []}
     for row in rows:
@@ -228,7 +240,7 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
             continue
         seen.add(row["key"])
         finance = finance_of(row) if finance_of and "max_monthly_manwon" in spec else None
-        item = classify(row, spec, finance=finance)
+        item = classify(row, spec, finance=finance, region_hint=region_hint)
         groups[item["eligibility"]].append(item)
     def order(item):
         snap = item["listing"]
