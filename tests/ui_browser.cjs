@@ -14,7 +14,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const reportsByKey=new Map(), savedReports=new Map();
-    let entranceChosen=false;
+    let entranceChosen=false, tradeEnriched=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -100,7 +100,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         next_actions:['실제 호가 확인'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:profile-fail')
         data.partial_failures=['buyer_profile_unavailable'];
+      if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:trade-missing' && !tradeEnriched)
+        data.partial_failures=['trade_cache_unavailable'];
       if(url.pathname==='/api/v2/listings/report') reportsByKey.set(url.searchParams.get('key'),data);
+      if(url.pathname==='/api/v2/listings/report-enrich') {
+        tradeEnriched=true;
+        data={ok:true};
+      }
       if(url.pathname==='/api/v2/report-snapshots' && route.request().method()==='POST') {
         const request=route.request().postDataJSON(), report=reportsByKey.get(request.key);
         if(!report || request.report_id!==report.report_id) return route.fulfill({status:409,json:{}});
@@ -398,6 +404,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>SignalV2.openListing('일반매물:profile-fail'));
     await page.locator('#v2ReportBody').getByText(/내 자금 프로필을 불러오지 못해/).waitFor();
     assert.match(await page.locator('#v2ReportBody').textContent(),/가격 근거/);
+    await page.evaluate(()=>SignalV2.openListing('일반매물:trade-missing'));
+    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 근거 새로 확인'}).waitFor();
+    assert.equal(calls.filter(path=>path==='/api/v2/listings/report-enrich').length,0);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 근거 새로 확인'}).click();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 근거 새로 확인'}).waitFor({state:'hidden'});
+    assert.equal(calls.filter(path=>path==='/api/v2/listings/report-enrich').length,1);
     await page.evaluate(()=>SignalV2.openListing('일반매물:location-slow'));
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-2'));

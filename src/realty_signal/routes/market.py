@@ -278,7 +278,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
 
 
 @router.get("/api/listing-analysis")
-def listing_analysis(request: Request, key: str, stage: str = "full"):
+def listing_analysis(request: Request, key: str, stage: str = "full", cache_only: bool = False):
     """선택 매물을 서버 스냅샷에서 재조회하고 개인 매물 권한을 검사한다."""
     from realty_signal import api as app_api
     from realty_signal.services import property_analysis as analysis
@@ -307,7 +307,8 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
         detail = None
         if row.get("지역") and row.get("단지명"):
             try:
-                detail = app_api.complex_detail(row["지역"], row["단지명"])
+                detail = (app_api.complex_detail(row["지역"], row["단지명"], cache_only=True)
+                          if cache_only else app_api.complex_detail(row["지역"], row["단지명"]))
             except Exception:  # noqa: BLE001
                 detail = {"status": "failed", "degraded": True}
         zones = []
@@ -319,6 +320,9 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
             zones = []
         schedule = analysis.official_schedule(row.get("단지명"), zones)
         out = {"status": "ready", **analysis.build(row, detail, profile=profile, schedule=schedule)}
+        if detail and detail.get("status") in {"unavailable", "stale", "failed"}:
+            out["partial_failures"] = ["trade_cache_unavailable" if cache_only else
+                                       "trade_source_unavailable"]
         if not profile_unavailable:
             try:
                 from realty_signal.services import buyer_decision
@@ -331,7 +335,7 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
                 pass
     if profile_unavailable:
         out["buyer_fit"] = {"status": "unknown", "reason": "내 자금 프로필을 불러오지 못했습니다. 가격 근거와 별도로 다시 확인하세요."}
-        out["partial_failures"] = ["buyer_profile_unavailable"]
+        out.setdefault("partial_failures", []).append("buyer_profile_unavailable")
     return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
 
 
