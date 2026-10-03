@@ -280,10 +280,11 @@
       ? `${esc(finance.monthly_manwon)}만원` : '미계산';
     const cash = finance && Number.isFinite(Number(finance.cash_manwon))
       ? `${esc(finance.cash_manwon)}만원` : '미계산';
-    return `<div class="v2-row" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
+    return `<div class="v2-row${x.eligibility === 'exceeded' ? ' v2-caution' : ''}" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
       <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}</p>
+      ${x.eligibility === 'exceeded' ? '<p>설정한 필수 조건을 넘는 비교용 후보입니다. 구매 가능 추천이 아닙니다.</p>' : ''}
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
-      <p>${x.eligibility === 'verify' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
+      <p>${x.eligibility === 'verify' || x.eligibility === 'exceeded' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
       ${preference.total ? `<p>선호 ${preference.satisfied}/${preference.total}개 충족 · ${preference.known}/${preference.total}개 자료 확인${priorityLabel ? ` · ${priorityLabel} 우선(2배): 적합도 ${esc(preference.score)}/100 · 확인도 ${esc(preference.coverage)}/100` : ''}${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p>` : ''}
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
@@ -307,6 +308,7 @@
         'prefer_region' : field] = field === 'region' ? value : Number(value);
     }
     if (form.elements.priority.value !== 'balanced') spec.priority = form.elements.priority.value;
+    if (form.elements.include_exceeded.checked) spec.include_exceeded = true;
     if (cursor) spec.cursor = cursor;
     if (!cursor) result.textContent = '조건에 맞는 후보를 확인하고 있습니다…';
     else result.querySelector('[data-v2-next]')?.setAttribute('disabled', '');
@@ -355,7 +357,8 @@
       const groupHost = result.querySelector('#v2DiscoveryGroups');
       const setup = result.querySelector('[data-v2-finance-setup]');
       if (setup) setup.onclick = () => { document.getElementById('v2DiscoverDlg').close(); switchTab('mypage'); };
-      const sections = [['matched','조건 부합'],['verify','확인 필요'],['explore','탐색 후보']];
+      const sections = [['matched','조건 부합'],['verify','확인 필요'],['explore','탐색 후보'],
+        ['exceeded','조건 초과 · 비교용']];
       for (const [name,label] of sections) {
         const rows = data.groups[name] || [];
         if (!rows.length) continue;
@@ -369,11 +372,12 @@
         section.querySelector('[data-v2-items]').insertAdjacentHTML('beforeend', rows.map(discoveryCard).join(''));
       }
       if (!groupHost.querySelector('[data-v2-card]') && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty')
-        groupHost.innerHTML = '<p>현재 조건의 후보가 없습니다. 가격·면적·지역을 하나씩 조정해 보세요.</p>';
-      const total = (data.counts.matched || 0) + (data.counts.verify || 0) + (data.counts.explore || 0);
+        groupHost.innerHTML = `<p>현재 조건의 기본 후보가 없습니다.${data.counts.exceeded && !spec.include_exceeded ? ` 조건 초과 ${esc(data.counts.exceeded)}건을 비교용으로 보려면 위 선택란을 켜세요.` : ' 가격·면적·지역을 하나씩 조정해 보세요.'}</p>`;
+      const total = (data.counts.matched || 0) + (data.counts.verify || 0) + (data.counts.explore || 0)
+        + (spec.include_exceeded ? data.counts.exceeded || 0 : 0);
       const shown = groupHost.querySelectorAll('[data-v2-card]').length;
       const paging = result.querySelector('#v2DiscoveryPaging');
-      paging.innerHTML = `<p class="v2-muted">현재 수집분 ${total}건 중 ${shown}건 표시</p>`;
+      paging.innerHTML = `<p class="v2-muted">현재 수집분 ${total}건 중 ${shown}건 표시${!spec.include_exceeded && data.counts.exceeded ? ` · 조건 초과 ${esc(data.counts.exceeded)}건은 기본 숨김` : ''}</p>`;
       if (data.next_cursor) {
         const more = document.createElement('button');
         more.type = 'button'; more.className = 'btn'; more.dataset.v2Next = '';
