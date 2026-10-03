@@ -532,6 +532,22 @@
       }
       if (!groupHost.querySelector('[data-v2-card]') && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty')
         groupHost.innerHTML = `<p>현재 조건의 기본 후보가 없습니다.${data.counts.exceeded && !spec.include_exceeded ? ` 조건 초과 ${esc(data.counts.exceeded)}건을 비교용으로 보려면 위 선택란을 켜세요.` : ' 가격·면적·지역을 하나씩 조정해 보세요.'}</p>`;
+      if (!cursor && !data.counts.matched && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty') {
+        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',
+          max_monthly_manwon:'월 상환 상한',region:'필수 지역'};
+        const options = Object.entries(data.single_condition_relaxations || {}).filter(([field,count]) => labels[field] && count > 0);
+        if (options.length) {
+          const tip = document.createElement('div');
+          tip.className = 'v2-row';
+          tip.innerHTML = `<b>한 조건씩 다시 보기</b><p class="v2-muted">현재 수집분에서 다른 필수 조건을 확인한 후보만 셌습니다. 조건은 자동으로 바뀌지 않습니다.</p>`
+            + options.map(([field,count]) => `<button type="button" class="btn" data-v2-relax="${field}">${esc(labels[field])} 조정 시 ${esc(count)}건 확인</button>`).join('');
+          groupHost.prepend(tip);
+          tip.querySelectorAll('[data-v2-relax]').forEach(button => button.onclick = () => {
+            const input = form.elements[button.dataset.v2Relax];
+            input?.focus();
+          });
+        }
+      }
       const total = (data.counts.matched || 0) + (data.counts.verify || 0) + (data.counts.explore || 0)
         + (spec.include_exceeded ? data.counts.exceeded || 0 : 0);
       const shown = groupHost.querySelectorAll('[data-v2-card]').length;
