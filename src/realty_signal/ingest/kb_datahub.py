@@ -90,7 +90,8 @@ def _change_rows(
 def fetch_macro() -> dict:
     """거시지표: 전국 아파트 주택구매력지수 + 주택담보대출금리 (월간, 키 불필요).
 
-    주택구매력↑ = 살 여력 좋음(부담↓). 대출금리 = 구입부담의 핵심 변수.
+    KB 주택구매력↑ = 살 여력 좋음(부담↓). HF의 주택구입부담지수와 혼동하지 않는다.
+    대출금리는 같은 KB 응답의 주담보월소득리스트에서 읽는다.
     """
     url = _BASE + "HAI"
     req = urllib.request.Request(url, headers={"User-Agent": _UA})

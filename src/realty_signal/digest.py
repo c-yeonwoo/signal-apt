@@ -50,7 +50,7 @@ def build_user_digest(
         if macro.get("대출금리") is not None:
             bits.append(f"주담대 {macro['대출금리']}%")
         if macro.get("구매력") is not None:
-            bits.append(f"구매력 {macro['구매력']}")
+            bits.append(f"전국 아파트 구매력지수 {macro['구매력']:.1f}")
         if macro.get("기준"):
             bits.append(f"기준 {macro['기준']}")
         extra_lines.append("거시: " + " · ".join(bits))

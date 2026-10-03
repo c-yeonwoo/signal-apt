@@ -6,6 +6,15 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/index.html'), 'utf8');
 const extract = (start, end) => html.slice(html.indexOf(start), html.indexOf(end));
 
+test('KB national affordability is not presented as the opposite HF burden index or a district metric', () => {
+  assert.match(html, /전국 아파트 주택구매력지수/);
+  assert.match(html, /전국 구매력지수/);
+  assert.match(html, /높을수록 구매력 증가/);
+  assert.match(html, /이 지역이나 개인의 구매력은 아닙니다/);
+  assert.doesNotMatch(html, /한국주택금융공사 K-HAI|높을수록 비쌈/);
+  assert.match(html, /\['주택담보대출금리','KB부동산 데이터허브/);
+});
+
 test('inline app scripts parse and browse navigation keeps one list and the signal map', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));
