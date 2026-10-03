@@ -178,6 +178,62 @@ def comparison_report(request: Request, data: dict = Body(...)):
     return JSONResponse(report, headers=PRIVATE)
 
 
+@router.post("/api/v2/reports/{report_id}/explanations")
+def explanation_request(request: Request, report_id: str, data: dict = Body(...)):
+    """Explicit paid explanation request against the current authorized report."""
+    from realty_signal.services import report_narrative as narrative
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if (len(report_id) != 64 or any(ch not in "0123456789abcdef" for ch in report_id)
+            or not isinstance(data, dict)):
+        raise HTTPException(422, "리포트 요청을 확인해 주세요.")
+    kind = data.get("type")
+    key = data.get("key")
+    keys = data.get("keys")
+    if kind == "region" and isinstance(key, str) and 1 <= len(key) <= 180:
+        current = json.loads(region_report(key).body)
+        private_source = False
+    elif kind == "listing" and isinstance(key, str) and 1 <= len(key) <= 180 and ":" in key:
+        private_source = key.split(":", 1)[0] in snapshots.PRIVATE_LISTING_KINDS
+        if private_source and not deps.personal_listings_allowed(request):
+            raise HTTPException(403, "개인 매물 접근권이 필요합니다.")
+        current = json.loads(listing_report(request, key).body)
+    elif (kind == "comparison" and isinstance(keys, list) and len(keys) in (2, 3)
+          and len(set(str(item) for item in keys)) == len(keys)
+          and all(isinstance(item, str) and 1 <= len(item) <= 180 and ":" in item for item in keys)):
+        private_source = any(item.split(":", 1)[0] in snapshots.PRIVATE_LISTING_KINDS for item in keys)
+        if private_source and not deps.personal_listings_allowed(request):
+            raise HTTPException(403, "개인 매물 접근권이 필요합니다.")
+        current = json.loads(comparison_report(request, {"keys": keys}).body)
+    else:
+        raise HTTPException(422, "리포트 대상을 확인해 주세요.")
+    if current["report_id"] != report_id:
+        raise HTTPException(409, "근거가 바뀌었습니다. 리포트를 다시 열어 주세요.")
+    try:
+        result, status = narrative.enqueue(uid, current, data.get("mode"), data.get("question"),
+                                           private_source=private_source)
+    except ValueError as exc:
+        raise HTTPException(422, "설명 요청을 확인해 주세요.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(429, "오늘 요청 가능 횟수에 도달했습니다.") from exc
+    return JSONResponse(result, status_code=status, headers=PRIVATE)
+
+
+@router.get("/api/v2/report-jobs/{job_id}")
+def explanation_job(request: Request, job_id: str):
+    from realty_signal.services import report_narrative as narrative
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    result = narrative.get(uid, job_id, private_allowed=deps.personal_listings_allowed(request))
+    if result is None:
+        raise HTTPException(404, "설명 작업을 찾지 못했습니다.")
+    return JSONResponse(result, headers=PRIVATE)
+
+
 def _discovery_regions() -> list[dict]:
     """Only offer current, uniquely identified KB districts for listing filters."""
     from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES

@@ -82,6 +82,19 @@ CREATE TABLE IF NOT EXISTS report_snapshots_v2(
     PRIMARY KEY(uid, report_id));
 CREATE INDEX IF NOT EXISTS ix_report_snapshots_v2_user ON report_snapshots_v2(uid, saved_at DESC);
 CREATE INDEX IF NOT EXISTS ix_report_snapshots_v2_page ON report_snapshots_v2(uid, saved_at DESC, report_id DESC);
+CREATE TABLE IF NOT EXISTS report_explanation_jobs_v2(
+    id TEXT PRIMARY KEY, dedupe_key TEXT NOT NULL UNIQUE, uid INTEGER NOT NULL,
+    report_id TEXT NOT NULL, report_kind TEXT NOT NULL, private_source INTEGER NOT NULL,
+    mode TEXT NOT NULL, question TEXT NOT NULL, report_data TEXT NOT NULL,
+    status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    lease_until INTEGER NOT NULL DEFAULT 0, result TEXT,
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_report_explanation_jobs_v2_queue
+    ON report_explanation_jobs_v2(status, created_at);
+CREATE INDEX IF NOT EXISTS ix_report_explanation_jobs_v2_user
+    ON report_explanation_jobs_v2(uid, created_at);
+CREATE INDEX IF NOT EXISTS ix_report_explanation_jobs_v2_retention
+    ON report_explanation_jobs_v2(created_at);
 """
 
 _migrated = [False]
