@@ -76,7 +76,11 @@ def _change_rows(
         if region == "중구" and region_code.startswith("28"):
             region = "인천 중구"
         if code_sink is not None:
-            code_sink[region] = rec.get("지역코드")
+            previous = code_sink.get(region)
+            if previous and region_code and str(previous) != region_code:
+                raise ValueError(f"KB 지역명 코드 충돌: {region} ({previous}, {region_code})")
+            if region_code or region not in code_sink:
+                code_sink[region] = region_code or None
         for i, v in enumerate(rec["dataList"]):
             if v is not None and i < len(dates):
                 rows.append((dates[i], region, metric, float(v)))
@@ -142,9 +146,11 @@ def fetch(expand_sudogwon: bool = True) -> KBWeekly:
             rows += [r for r in all_rows if r[1] in keep]
             for r in keep:
                 if r in tmp:
+                    if codes.get(r) and tmp[r] and codes[r] != tmp[r]:
+                        raise ValueError(f"KB 지역명 코드 충돌: {r} ({codes[r]}, {tmp[r]})")
                     codes[r] = tmp[r]
 
     long = pd.DataFrame(rows, columns=["date", "region", "metric", "value"])
     # 시군구가 광역과 이름이 겹치지 않으나, 혹시 모를 중복(date·region·metric) 제거
     long = long.drop_duplicates(subset=["date", "region", "metric"], keep="last")
-    return KBWeekly(long=long, codes=codes)
+    return KBWeekly(long=long, codes=codes, identity_verified=True)

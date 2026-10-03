@@ -60,10 +60,13 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     today = today or datetime.now(timezone.utc).date()
     region = str(row["region"])
     code = str((kb.codes or {}).get(region) or "")
-    # Legacy caches lost one of the two Jung-gu identities. Never serve it as a
-    # verified district until fresh source rows have the correct parent code.
-    ambiguous = region == "중구" and not code.startswith("11")
-    region_id = f"kb:{code}" if code and not ambiguous else f"ambiguous:{region}"
+    # 이름만 보존한 과거 캐시는 코드가 있어도 어느 중구의 가격 행인지 증명하지 못한다.
+    collision_sensitive = region in {"중구", "인천 중구"}
+    parent_conflict = ((region == "중구" and not code.startswith("11"))
+                       or (region == "인천 중구" and not code.startswith("28")))
+    ambiguous = parent_conflict or (collision_sensitive and not kb.identity_verified)
+    region_id = (f"ambiguous:{region}" if ambiguous else
+                 f"kb:{code}" if code and kb.identity_verified else f"unverified:{region}")
     weeks, complete = _last_four(kb, region, asof)
     momentum = round(sum(x["value"] for x in weeks) / 4, 4) if complete else None
     js, bs = _finite(row.get("전세수급")), _finite(row.get("매수우위지수"))

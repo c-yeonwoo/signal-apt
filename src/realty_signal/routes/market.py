@@ -115,7 +115,8 @@ def meta():
 def freshness(request: Request):
     from realty_signal.auction import AUCTION_FILE
     from realty_signal import api as app_api
-    last_date = str(md.kb().last_date.date())
+    kb_data = md.kb()
+    last_date = str(kb_data.last_date.date())
     qs = getattr(app_api, "QUICKSALE_FILE", store.CACHE_DIR / "quicksale.json")
     cert = getattr(app_api, "CERTIFIED_FILE", store.CACHE_DIR / "certified.json")
     hanbang = getattr(app_api, "HANBANG_FILE", store.CACHE_DIR / "hanbang_general.json")
@@ -154,6 +155,9 @@ def freshness(request: Request):
         sources = [source for source in sources if source["key"] not in {"quicksale", "certified", "hanbang"}]
     return {"기준일": last_date, "now": int(__import__("time").time()),
             "sources": sources, "pipeline": pipeline.cache_health(include_private=private),
+            "kb_identity": {"verified": kb_data.identity_verified,
+                            "collision_sensitive": [name for name in ("중구", "인천 중구")
+                                                    if name in kb_data.regions and not kb_data.identity_verified]},
             # 수집이 멈췄을 때 '왜' 를 화면이 말할 수 있어야 한다. 로그를 볼 수 없는 사용자도 본다.
             "kb_fetch": app_api.kb_fetch_health()}
 

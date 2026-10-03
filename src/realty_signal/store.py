@@ -7,6 +7,7 @@ load()      → KBWeekly  (캐시에서 즉시 로드)
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +20,8 @@ CACHE_DIR = Path("data/cache")
 CACHE_FILE = CACHE_DIR / "long.parquet"
 SUPPLY_FILE = CACHE_DIR / "supply.parquet"
 CODES_FILE = CACHE_DIR / "codes.json"
+IDENTITY_FILE = CACHE_DIR / "identity.json"
+IDENTITY_VERSION = "kb-datahub-identity-v1"
 LOCALITY_FILE = CACHE_DIR / "locality.parquet"
 LOCALITY_MODEL_VERSION = "locality-complete-v2"
 MACRO_FILE = CACHE_DIR / "macro.json"
@@ -87,8 +90,18 @@ def load_volumes(cache: Path = VOLUME_FILE) -> dict:
 
 def _save(kb: KBWeekly, out: Path) -> KBWeekly:
     out.parent.mkdir(parents=True, exist_ok=True)
+    if out == CACHE_FILE:
+        IDENTITY_FILE.unlink(missing_ok=True)  # 새 parquet와 기존 증명이 섞이지 않게 한다.
     kb.long.to_parquet(out, index=False)
     return kb
+
+
+def _digest(path: Path) -> str:
+    h = sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def build(xlsx_path: str | Path, out: Path = CACHE_FILE) -> KBWeekly:
@@ -103,6 +116,12 @@ def fetch(out: Path = CACHE_FILE, with_supply: bool = True) -> KBWeekly:
     if kb.codes:
         CODES_FILE.parent.mkdir(parents=True, exist_ok=True)
         CODES_FILE.write_text(json.dumps(kb.codes, ensure_ascii=False), encoding="utf-8")
+    if out == CACHE_FILE and kb.identity_verified and kb.codes:
+        manifest = {"version": IDENTITY_VERSION, "long_sha256": _digest(out),
+                    "codes_sha256": _digest(CODES_FILE)}
+        tmp = IDENTITY_FILE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(IDENTITY_FILE)
     try:
         MACRO_FILE.write_text(json.dumps(kb_datahub.fetch_macro(), ensure_ascii=False), encoding="utf-8")
     except Exception:
@@ -121,7 +140,17 @@ def load(cache: Path = CACHE_FILE) -> KBWeekly:
             f"캐시 없음: {cache}. 먼저 `signal fetch` 또는 `signal build <xlsx>` 로 생성하세요."
         )
     codes = json.loads(CODES_FILE.read_text(encoding="utf-8")) if CODES_FILE.exists() else {}
-    return KBWeekly(long=pd.read_parquet(cache), codes=codes)
+    verified = False
+    if cache == CACHE_FILE and IDENTITY_FILE.exists() and CODES_FILE.exists():
+        try:
+            proof = json.loads(IDENTITY_FILE.read_text(encoding="utf-8"))
+            verified = (proof.get("version") == IDENTITY_VERSION
+                        and proof.get("long_sha256") == _digest(cache)
+                        and proof.get("codes_sha256") == _digest(CODES_FILE))
+        except (OSError, ValueError, TypeError):
+            verified = False
+    return KBWeekly(long=pd.read_parquet(cache), codes=codes,
+                    identity_verified=verified)
 
 
 def load_supply(cache: Path = SUPPLY_FILE) -> pd.DataFrame:

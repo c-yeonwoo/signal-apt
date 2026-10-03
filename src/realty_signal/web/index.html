@@ -4791,7 +4791,7 @@ async function selectRegion(region){
   if(ss) ss.textContent = `KB ${meta?.last_date||'기준일 미확인'} 기준 · 지역 시장 신호, 개별 매물 판정 아님`;
   document.getElementById('haesolPanel').textContent = '판정 근거를 확인하고 있습니다…';
   document.getElementById('signalPanelReasons').scrollTop=0;
-  window.SignalV2?.paintRegion(region);
+  window.SignalV2?.paintRegion(region, r.region_id);
 }
 let sigMap=null;
 function _sigScopeNote(r){
@@ -5008,7 +5008,7 @@ async function doRefresh(){
     btn.textContent = `✓ ${r.last_date}`; } catch(e){ btn.textContent = '갱신 실패'; }
   setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
 }
-const _MARKET_CACHE_KEY='signal-apt-market-v2', _DAY_MS=86400000;
+const _MARKET_CACHE_KEY='signal-apt-market-v3', _DAY_MS=86400000;
 let _marketRevalidation=null, _marketGeneration=0;
 function _marketCached(){
   try{ const entry=JSON.parse(localStorage.getItem(_MARKET_CACHE_KEY));
