@@ -145,7 +145,7 @@ def _snapshot_signals(asof: str) -> list[dict]:
         log.warning("signal assessment issuance skip: %s", e)
     try:
         from realty_signal.ingest import pipeline
-        pipeline.build_market_strength(cur)
+        pipeline.build_market_strength()
     except Exception as e:  # noqa: BLE001
         log.warning("market strength rebuild skip: %s", e)
     return changes
@@ -2686,8 +2686,7 @@ def _nbhd_week() -> str:
 
 def neighborhood(request: Request, region: str):
     """동네 딥다이브 — 보유 데이터 재조립 + 생활인프라. 로그인 시 주간 스냅샷 저장·지난 대비 diff."""
-    sigrow = next((r for r in signals() if r.get("region") == region), None) \
-        or next((r for r in signals() if region and region in (r.get("region") or "")), None)
+    sigrow = next((r for r in signals() if r.get("region") == region), None)
     if not sigrow:
         return {"ok": False, "reason": "no_region"}
     region = sigrow["region"]
@@ -2745,8 +2744,11 @@ def neighborhood(request: Request, region: str):
     from realty_signal import personal_layer as pl
     vol = pl.volume_summary(region)
     out = {
-        "ok": True, "region": region, "시그널": sigrow.get("signal"),
-        "급지": sigrow.get("급지"), "해설": sigrow.get("해설"), "근거": sigrow.get("근거"),
+        "ok": True, "region": region, "시그널": sigrow.get("display_signal", "HELD"),
+        "판정상태": sigrow.get("assessment_status", "held"),
+        "급지": sigrow.get("급지"),
+        "해설": sigrow.get("해설") if sigrow.get("assessment_status") == "ready" else "현재 지역 판정 보류 · 최신 근거를 다시 확인해 주세요.",
+        "근거": sigrow.get("근거") if sigrow.get("assessment_status") == "ready" else None,
         "전세수급": sigrow.get("전세수급"), "매수우위지수": sigrow.get("매수우위지수"),
         "매매모멘텀": sigrow.get("매매모멘텀"), "공급압력": sigrow.get("공급압력"),
         "수급출처": sigrow.get("수급출처"),
@@ -2769,7 +2771,7 @@ def neighborhood(request: Request, region: str):
     }
     try:
         from realty_signal.ingest import pipeline
-        ent = pipeline.region_entity(region, signal=sigrow.get("signal"))
+        ent = pipeline.region_entity(region, signal=sigrow.get("display_signal", "HELD"))
         out["시장강도"] = ent.market_strength
         out["시장강도라벨"] = ent.market_strength_label
         out["급매건수"] = ent.quicksale_count
@@ -3038,38 +3040,49 @@ def _region_timing_row(region: str) -> dict:
     from realty_signal.signals.timing import region_timing
 
     rows = signals()
-    hit = next((r for r in rows if r.get("region") == region), None) \
-        or next((r for r in rows if region and region in (r.get("region") or "")), None)
+    hit = next((r for r in rows if r.get("region") == region), None)
     if not hit:
         return {"error": f"'{region}' 지역 데이터를 찾지 못했습니다."}
+    signal = hit.get("display_signal", "HELD")
+    if hit.get("assessment_status") != "ready":
+        return {"region": hit.get("region") or region, "signal": "HELD",
+                "assessment_status": "held", "status": "held", "타이밍점수": None,
+                "기회도": None, "타이밍근거": "현재 지역 판정 보류 · 타이밍 점수 미산출",
+                "기회도근거": "현재 지역 판정 보류 · 타이밍 점수 미산출",
+                "asof": _timing_asof()}
     bt_up = None
     try:
         by_sig = {r["signal"]: r for r in (_backtest().get("by_signal") or []) if r.get("signal")}
-        sig = hit.get("signal")
+        sig = signal
         if sig and sig in by_sig:
             bt_up = by_sig[sig].get("적중률")
     except Exception:  # noqa: BLE001
         pass
     strength = (pipeline.load_market_strength().get("regions") or {}).get(hit.get("region") or region)
     if not strength:
-        ent = pipeline.region_entity(hit.get("region") or region, signal=hit.get("signal"))
+        ent = pipeline.region_entity(hit.get("region") or region, signal=signal)
         strength = {
             "시장강도": ent.market_strength, "시장강도라벨": ent.market_strength_label,
             "거래량비": ent.volume_ratio, "급매건수": ent.quicksale_count,
+            "거래량기준일": ent.provenance.asof if ent.provenance else None,
         }
     tr = region_timing(
-        hit.get("signal"),
+        signal,
         asof=_timing_asof(),
         jeonse_supply=hit.get("전세수급"),
         sale_momentum=hit.get("매매모멘텀"),
         backtest_up_pct=float(bt_up) if bt_up is not None else None,
-        market_strength=strength.get("시장강도") if strength else None,
+        # 월별 거래량은 시점이 다른 독립 관측값이다. 미검증 타이밍 점수에 합산하지 않는다.
+        market_strength=None,
     )
-    out = {**tr.to_dict(), "region": hit.get("region") or region, "signal": hit.get("signal")}
+    out = {**tr.to_dict(), "region": hit.get("region") or region, "signal": signal,
+           "assessment_status": "ready", "status": "ready"}
     if strength:
         out["시장강도"] = strength.get("시장강도")
         out["시장강도라벨"] = strength.get("시장강도라벨")
         out["거래량비"] = strength.get("거래량비")
+        out["시장강도기준일"] = strength.get("거래량기준일")
+        out["시장강도설명"] = "별도 월별 거래량 참고값 · 타이밍 점수에 미합산"
         out["급매건수"] = strength.get("급매건수")
     return out
 

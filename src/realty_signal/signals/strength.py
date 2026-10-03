@@ -1,4 +1,4 @@
-"""시장강도 프록시 — 거래량비 + 급매 밀도 (부동산지인/아실 대체).
+"""시장강도 프록시 — 관측된 거래량비 + 선택적 급매 밀도.
 
 공식 크롤 없이 보유 데이터만으로 0~100 점수·라벨 산출.
 """
@@ -16,7 +16,7 @@ class StrengthResult:
     volume_ratio: float | None = None
     quicksale_count: int | None = None
     confidence: float = 0.6
-    source: str = "volume_quicksale_proxy"
+    source: str = "volume_only_proxy_v2"
 
     def to_dict(self) -> dict:
         return {
@@ -46,9 +46,8 @@ def market_strength(
     *,
     volume_ratio: float | None,
     quicksale_count: int | None = None,
-    signal: str | None = None,
 ) -> StrengthResult:
-    """거래량비(주) + 급매 건수(보조) + 시그널(소폭)."""
+    """시그널 판정과 독립적인 관측 프록시. 순환 가산을 막는다."""
     why: list[str] = []
     score = 45.0
     conf = 0.45
@@ -91,16 +90,10 @@ def market_strength(
         else:
             why.append(f"급매 {qc}건")
 
-    if signal in ("STRONG_BUY", "BUY"):
-        score = min(100, score + 5)
-        why.append(f"시그널 {signal}")
-    elif signal == "SELL_RISK":
-        score = max(0, score - 10)
-        why.append(f"시그널 {signal}")
-
     s = max(0, min(100, round(score)))
     return StrengthResult(
         score=s, label=_label(s), reasons=why,
         volume_ratio=volume_ratio, quicksale_count=quicksale_count,
         confidence=conf,
+        source="volume_quicksale_proxy" if quicksale_count is not None else "volume_only_proxy_v2",
     )

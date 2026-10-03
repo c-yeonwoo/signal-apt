@@ -2,6 +2,7 @@
 
 import json
 from datetime import date
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -40,6 +41,73 @@ def test_signal_api_assessment_failure_still_returns_held_rows(monkeypatch):
     assert result[0]["signal"] == "STRONG_BUY"
     assert result[0]["display_signal"] == "HELD"
     assert market.signals(only="STRONG_BUY") == []
+
+
+def test_region_timing_never_resurrects_raw_buy_when_assessment_is_held(monkeypatch):
+    monkeypatch.setattr(api, "signals", lambda: [
+        {"region": "보류구", "signal": "STRONG_BUY", "display_signal": "HELD",
+         "assessment_status": "held"}])
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-03")
+    held = api._region_timing_row("보류구")
+    assert held["signal"] == "HELD"
+    assert held["타이밍점수"] is None and held["기회도"] is None
+    assert held["assessment_status"] == "held"
+    assert api._region_timing_row("구")["error"]
+
+
+def test_region_timing_uses_only_ready_display_signal(monkeypatch):
+    from realty_signal.ingest import pipeline
+
+    monkeypatch.setattr(api, "signals", lambda: [
+        {"region": "확인구", "signal": "STRONG_BUY", "display_signal": "BUY",
+         "assessment_status": "ready"}])
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-03")
+    monkeypatch.setattr(api, "_backtest", lambda: {"by_signal": []})
+    monkeypatch.setattr(pipeline, "load_market_strength", lambda: {"regions": {
+        "확인구": {"시장강도": 55, "시장강도라벨": "활발"}}})
+    ready = api._region_timing_row("확인구")
+    assert ready["signal"] == "BUY" and ready["assessment_status"] == "ready"
+    assert "지역시그널 BUY" in ready["타이밍근거"]
+    assert "STRONG_BUY" not in ready["타이밍근거"]
+    assert ready["타이밍점수"] == 72
+    assert ready["시장강도"] == 55
+    assert "미합산" in ready["시장강도설명"]
+
+
+def test_neighborhood_hides_raw_buy_explanation_when_held(monkeypatch):
+    from realty_signal import personal_layer as pl
+    from realty_signal.ingest import pipeline
+
+    monkeypatch.setattr(api, "signals", lambda: [
+        {"region": "보류구", "signal": "STRONG_BUY", "display_signal": "HELD",
+         "assessment_status": "held", "해설": "지금 강력 매수", "근거": "원시 매수 근거"}])
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(api.store, "load_localities", lambda: pd.DataFrame())
+    monkeypatch.setattr(api, "_presale", lambda: [])
+    monkeypatch.setattr(api, "db_has_redev_cache", lambda _region: False)
+    monkeypatch.setattr(api.db, "policy_search", lambda *_a, **_k: [])
+    monkeypatch.setattr(api, "_region_centroid", lambda *_a: None)
+    monkeypatch.setattr(api, "_code_of", lambda _region: None)
+    monkeypatch.setattr(api.db, "kv_get", lambda *_a, **_k: None)
+    monkeypatch.setattr(api.config, "load_env", lambda: None)
+    monkeypatch.setattr(api.config, "odsay_analysis_approved", lambda: False)
+    monkeypatch.setattr(api, "_kb", lambda: SimpleNamespace(last_date=pd.Timestamp("2026-10-03")))
+    monkeypatch.setattr(api, "_nbhd_week", lambda: "2026-W40")
+    monkeypatch.setattr(api, "_regulation_of", lambda _region: "미확인")
+    monkeypatch.setattr(api, "_uid", lambda _request: None)
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **_kwargs: False)
+    monkeypatch.setattr(pl, "volume_summary", lambda _region: {})
+    monkeypatch.setattr(pl, "macro_latest", lambda: {})
+    monkeypatch.setattr(pl, "locality_bits", lambda _data: {})
+    monkeypatch.setattr(pl, "ext_links", lambda _region: [])
+    monkeypatch.setattr(pipeline, "region_entity", lambda *_a, **_k: SimpleNamespace(
+        market_strength=None, market_strength_label=None, quicksale_count=None, provenance=None))
+
+    out = api.neighborhood(None, "보류구")
+    assert out["시그널"] == "HELD" and out["판정상태"] == "held"
+    assert "지금 강력 매수" not in json.dumps(out, ensure_ascii=False)
+    assert "원시 매수 근거" not in json.dumps(out, ensure_ascii=False)
+    assert api.neighborhood(None, "구")["reason"] == "no_region"
 
 
 def test_listing_cards_and_timing_use_guarded_region_signal(monkeypatch):

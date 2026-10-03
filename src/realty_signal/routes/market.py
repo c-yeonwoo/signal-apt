@@ -149,7 +149,7 @@ def freshness(request: Request):
          "cycle": "signal volumes 시", "note": "시군구 월별 거래건수·거래량비. 시장강도 프록시 입력."},
         {"key": "strength", "label": "시장강도 프록시",
          "ts": _file_mtime(store.CACHE_DIR / "market_strength.json"),
-         "cycle": "KB 갱신 시 자동", "note": "공공 거래량비+시장 시그널 프록시. 개인 외부 매물 제외."},
+         "cycle": "KB 갱신 시 자동", "note": "공공 거래량비만 반영한 참고 프록시. 시그널·개인 외부 매물 제외."},
     ]
     from realty_signal.ingest import pipeline
     private = deps.personal_listings_allowed(request)
@@ -206,17 +206,19 @@ def strength_api(region: str | None = None):
     regions = data.get("regions") or {}
     if not regions:
         try:
-            data = pipeline.build_market_strength(md.signal_map())
+            data = pipeline.build_market_strength()
             regions = data.get("regions") or {}
         except Exception:  # noqa: BLE001
             regions = {}
     if region and region.strip():
         r = region.strip()
-        hit = regions.get(r) or next((v for k, v in regions.items() if r in k), None)
+        hit = regions.get(r)
         if not hit:
-            ent = pipeline.region_entity(r, signal=md.signal_map().get(r))
-            return ent.to_dict()
-        return {"region": r, **hit, "asof": data.get("asof"), "source": data.get("source")}
+            ent = pipeline.region_entity(r)
+            return {**ent.to_dict(), "status": "ready" if ent.market_strength is not None else "unavailable",
+                    "reason": None if ent.market_strength is not None else "관측 거래량비가 없어 시장강도를 산출하지 않았습니다."}
+        return {"region": r, **hit, "asof": hit.get("거래량기준일"),
+                "source": data.get("source"), "status": "ready"}
     top = sorted(regions.items(), key=lambda kv: kv[1].get("시장강도") or 0, reverse=True)[:30]
     return {"asof": data.get("asof"), "source": data.get("source"),
             "regions": [{"region": k, **v} for k, v in top]}

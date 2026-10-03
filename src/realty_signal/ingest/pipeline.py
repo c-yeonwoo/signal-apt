@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -70,25 +72,41 @@ def cache_health(*, include_private: bool = True) -> dict[str, Any]:
     return {"status": worst, "sources": sources, "ts": int(time.time())}
 
 
-def build_market_strength(
-    signal_map: dict[str, str] | None = None,
-    *,
-    out: Path = STRENGTH_FILE,
-) -> dict[str, Any]:
-    """공유 시장강도는 공공 거래량·시그널만 사용한다(개인 외부 매물 제외)."""
-    vols = store.load_volumes()
-    sig = signal_map or {}
-    regions = set(vols) | set(sig)
-    by_region: dict[str, Any] = {}
-    for region in regions:
-        vr = (vols.get(region) or {}).get("거래량비")
-        if vr is None and region not in sig:
+def _volume_asof(row: dict) -> str | None:
+    dates = row.get("dates") or []
+    if not isinstance(dates, list):
+        return None
+    valid = []
+    for value in dates:
+        try:
+            valid.append(date.fromisoformat(value).isoformat())
+        except (TypeError, ValueError):
             continue
-        r = market_strength(volume_ratio=vr, quicksale_count=None, signal=sig.get(region))
-        by_region[region] = r.to_dict()
+    return max(valid, default=None)
+
+
+def _volume_ratio(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
+        return None
+    return float(value)
+
+
+def build_market_strength(*, out: Path | None = None) -> dict[str, Any]:
+    """공유 시장강도는 관측 거래량만 사용한다(시그널·개인 매물 제외)."""
+    out = out or STRENGTH_FILE
+    vols = store.load_volumes()
+    by_region: dict[str, Any] = {}
+    for region in vols:
+        vr = _volume_ratio((vols.get(region) or {}).get("거래량비"))
+        if vr is None:
+            continue
+        r = market_strength(volume_ratio=vr)
+        by_region[region] = {**r.to_dict(), "거래량기준일": _volume_asof(vols[region])}
+    observed = [row["거래량기준일"] for row in by_region.values() if row["거래량기준일"]]
     payload = {
-        "asof": time.strftime("%Y-%m-%d"),
-        "source": "volume_signal_proxy",
+        "asof": max(observed, default=None),
+        "computed_at": time.strftime("%Y-%m-%d"),
+        "source": "volume_only_proxy_v2",
         "count": len(by_region),
         "regions": by_region,
         "ts": int(time.time()),
@@ -99,12 +117,13 @@ def build_market_strength(
     return payload
 
 
-def load_market_strength(cache: Path = STRENGTH_FILE) -> dict[str, Any]:
+def load_market_strength(cache: Path | None = None) -> dict[str, Any]:
+    cache = cache or STRENGTH_FILE
     if not cache.exists():
         return {}
     try:
         payload = jsonx.loads(cache.read_text(encoding="utf-8"))
-        return payload if payload.get("source") == "volume_signal_proxy" else {}
+        return payload if payload.get("source") == "volume_only_proxy_v2" else {}
     except Exception:  # noqa: BLE001
         return {}
 
@@ -117,15 +136,18 @@ def region_entity(
 ) -> RegionEntity:
     """지역 Entity 조립 (캐시 기반)."""
     vols = store.load_volumes().get(region) or {}
-    vr = vols.get("거래량비")
+    vr = _volume_ratio(vols.get("거래량비"))
     qc = None  # 개인 외부 매물 집계는 공유 시장강도/지역 응답에 섞지 않는다.
     strength_cache = (load_market_strength().get("regions") or {}).get(region)
     if strength_cache:
         ms, msl = strength_cache.get("시장강도"), strength_cache.get("시장강도라벨")
         conf = strength_cache.get("confidence", 0.6)
     else:
-        sr = market_strength(volume_ratio=vr, quicksale_count=qc, signal=signal)
-        ms, msl, conf = sr.score, sr.label, sr.confidence
+        if vr is None:
+            ms, msl, conf = None, None, 0.0
+        else:
+            sr = market_strength(volume_ratio=vr, quicksale_count=qc)
+            ms, msl, conf = sr.score, sr.label, sr.confidence
     sp = None
     try:
         sdf = store.load_supply()
@@ -135,19 +157,13 @@ def region_entity(
                 sp = float(hit.iloc[0].get("supply_pressure"))
     except Exception:  # noqa: BLE001
         pass
-    asof = None
-    if store.CACHE_FILE.exists():
-        try:
-            asof = str(store.load().last_date.date())
-        except Exception:  # noqa: BLE001
-            pass
     return RegionEntity(
         region=region, signal=signal, timing_score=timing_score,
         market_strength=ms, market_strength_label=msl,
         volume_ratio=vr, quicksale_count=qc, supply_pressure=sp,
         provenance=Provenance(
-            source="kb_weekly+volume",
-            asof=asof,
+            source="volume_monthly",
+            asof=_volume_asof(vols),
             status="ok" if vr is not None else "partial",
             confidence=float(conf),
         ),
