@@ -616,9 +616,15 @@
     }
   }
 
-  function discoveryCard(x) {
+  function discoveryCard(x, spec) {
     const finance = x.finance;
     const preference = x.preference || {};
+    const move = x.listing.move_in;
+    const moveCheck = (x.constraints || []).find(check => check.field === 'move_in_by');
+    const moveText = move?.status === 'immediate' ? '원천 표시: 즉시 입주' :
+      move?.status === 'dated' ? `원천 표시: ${esc(move.date)} 입주 가능` :
+      move?.status === 'approximate' ? '원천이 초·중·하순 등 시기로 표시 · 날짜 확인 필요' :
+      spec.move_in_by ? '입주 가능일 미확인' : '';
     const preferred = (preference.details || []).filter(p => p.status === 'matched').map(p => esc(p.label));
     const unknownPreference = (preference.details || []).filter(p => p.status === 'unknown').map(p => esc(p.label));
     const priorityLabel = {region:'지역',price:'호가',area:'면적'}[preference.priority];
@@ -628,12 +634,14 @@
       ? `${esc(finance.cash_manwon)}만원` : '미계산';
     return `<div class="v2-row${x.eligibility === 'exceeded' ? ' v2-caution' : ''}" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
       <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}${x.listing.rooms != null ? ` · 방 ${esc(x.listing.rooms)}개` : ''}</p>
+      ${moveText ? `<p>${moveText}${moveCheck?.status === 'fail' ? ' · 요청한 입주일보다 늦음' : ''}</p>` : ''}
       ${x.eligibility === 'exceeded' ? '<p>설정한 필수 조건을 넘는 비교용 후보입니다. 구매 가능 추천이 아닙니다.</p>' : ''}
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
       <p>${x.eligibility === 'verify' || x.eligibility === 'exceeded' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
       ${preference.total ? `<p>선호 ${preference.satisfied}/${preference.total}개 충족 · ${preference.known}/${preference.total}개 자료 확인${priorityLabel ? ` · ${priorityLabel} 우선(2배): 적합도 ${esc(preference.score)}/100 · 확인도 ${esc(preference.coverage)}/100` : ''}${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p>` : ''}
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
+      ${spec.move_in_by && x.listing.kind === '일반매물' && !move ? `<button type="button" class="btn" data-v2-occupancy="${esc(x.listing.key)}">입주일 확인</button>` : ''}
       <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button>
       ${watchAction(x.listing)}</div>`;
   }
@@ -673,6 +681,7 @@
       const value = form.elements[field].value.trim();
       if (value) spec[field] = Number(value);
     }
+    if (form.elements.move_in_by.value) spec.move_in_by = form.elements.move_in_by.value;
     if (form.elements.region_code.value) spec[form.elements.region_mode.value === 'prefer' ?
       'prefer_region_code' : 'region_code'] = form.elements.region_code.value;
     if (form.elements.priority.value !== 'balanced') spec.priority = form.elements.priority.value;
@@ -720,6 +729,7 @@
           <p class="v2-muted">정렬: ${hasPreference ? '입력한 선호 충족·자료 확인도 → 수집일' : '최근 수집일'}${priorityApplied ? ' · 중요 선호 2배' : spec.priority ? ' · 선택한 중요 선호는 아직 입력되지 않아 균등 적용' : ''} · 호가가 저렴하다는 이유만으로 우선하지 않습니다.</p>
           ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}
           ${financeNotice ? `<p class="v2-row v2-caution">${financeNotice}</p>` : ''}
+          ${spec.move_in_by ? '<p class="v2-row v2-caution">입주일은 한방 후보 카드의 ‘입주일 확인’을 눌러 상세 원천을 확인한 뒤에만 조건 부합으로 분류합니다. 실제 입주 가능 여부는 중개사에게 다시 확인하세요.</p>' : ''}
           ${spec.max_monthly_manwon && data.finance_context?.status !== 'ready' && data.finance_context?.status !== 'profile_unavailable' ?
             '<button type="button" class="btn" data-v2-finance-setup>매수력 설정으로 이동</button>' : ''}${outside}
           <div id="v2DiscoveryGroups"></div><div id="v2DiscoveryPaging"></div>`;
@@ -739,12 +749,12 @@
           section.innerHTML = `<h3>${label} · ${data.counts[name]}건</h3><div data-v2-items></div>`;
           groupHost.appendChild(section);
         }
-        section.querySelector('[data-v2-items]').insertAdjacentHTML('beforeend', rows.map(discoveryCard).join(''));
+        section.querySelector('[data-v2-items]').insertAdjacentHTML('beforeend', rows.map(x => discoveryCard(x, spec)).join(''));
       }
       if (!groupHost.querySelector('[data-v2-card]') && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty')
         groupHost.innerHTML = `<p>현재 조건의 기본 후보가 없습니다.${data.counts.exceeded && !spec.include_exceeded ? ` 조건 초과 ${esc(data.counts.exceeded)}건을 비교용으로 보려면 위 선택란을 켜세요.` : ' 가격·면적·지역을 하나씩 조정해 보세요.'}</p>`;
       if (!cursor && !data.counts.matched && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty') {
-        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',min_rooms:'최소 방 개수',
+        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',min_rooms:'최소 방 개수',move_in_by:'입주 필요일',
           max_monthly_manwon:'월 상환 상한',region_code:'필수 지역'};
         const options = Object.entries(data.single_condition_relaxations || {}).filter(([field,count]) => labels[field] && count > 0);
         if (options.length) {
@@ -774,6 +784,19 @@
       result.querySelectorAll('[data-v2-listing]').forEach(button => button.onclick = () => {
         document.getElementById('v2DiscoverDlg').close();
         openListing(button.dataset.v2Listing);
+      });
+      result.querySelectorAll('[data-v2-occupancy]').forEach(button => button.onclick = async () => {
+        button.disabled = true;
+        button.textContent = '입주일 확인 중…';
+        try {
+          const response = await fetch('/api/v2/discovery/occupancy', {method:'POST',
+            headers:{'Content-Type':'application/json'},body:JSON.stringify({key:button.dataset.v2Occupancy})});
+          if (!response.ok) throw new Error('상세 원천을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+          await runDiscovery();
+        } catch (error) {
+          button.textContent = error.message;
+          button.disabled = false;
+        }
       });
       result.querySelectorAll('[data-v2-compare]').forEach(button => button.onclick = () => {
         button.textContent = addCompare(button.dataset.v2Compare);

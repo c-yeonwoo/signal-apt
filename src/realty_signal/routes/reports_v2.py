@@ -236,6 +236,7 @@ def discovery(request: Request, data: dict = Body(...)):
     from realty_signal import api as app_api
     from realty_signal.services import discovery_v2
     from realty_signal.services import discovery_finance
+    from realty_signal.services import discovery_occupancy
 
     try:
         spec = _canonical_discovery_region(discovery_v2.validate(data))
@@ -301,10 +302,14 @@ def discovery(request: Request, data: dict = Body(...)):
     if selected_code := spec.get("region_code"):
         region_hint = next(({"name": option["name"], "sido": option["sido"]}
                             for option in _discovery_regions() if option["code"] == selected_code), None)
+    occupancy = {}
+    if allowed and "move_in_by" in spec and (uid := deps.uid(request)):
+        occupancy = discovery_occupancy.cached(uid, {row["key"]: row.get("fetched_at") or 0
+            for row in rows if row.get("유형") == "일반매물" and row.get("key")})
     try:
         result = discovery_v2.discover(rows, spec, source_fingerprint=fingerprint,
                                        finance_of=scenario.for_row if scenario else None,
-                                       region_hint=region_hint)
+                                       region_hint=region_hint, occupancy_by_key=occupancy)
     except ValueError as exc:
         if str(exc) == "stale_cursor":
             raise HTTPException(409, "수집 결과가 바뀌었습니다. 처음부터 다시 검색하세요.") from exc
@@ -325,6 +330,32 @@ def discovery(request: Request, data: dict = Body(...)):
                                                                             for region in source["regions"]}),
                           "source_count": len(sources)}
     return JSONResponse(result, headers=PRIVATE)
+
+
+@router.post("/api/v2/discovery/occupancy")
+def discovery_occupancy_lookup(request: Request, data: dict = Body(...)):
+    """사용자가 고른 한방 매물 하나의 입주 가능일만 상세 조회한다."""
+    from realty_signal.services import discovery_occupancy, property_analysis
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if not deps.personal_listings_allowed(request):
+        raise HTTPException(403, "개인용 매물 접근 권한이 없습니다.")
+    try:
+        row = property_analysis.resolve(data.get("key"), private_allowed=True)
+    except ValueError as exc:
+        raise HTTPException(422, "매물 키를 확인해 주세요.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집분에서 매물을 찾지 못했습니다.") from exc
+    if row.get("유형") != "일반매물" or not (source_id := (row.get("ref") or {}).get("hanbang_id")):
+        raise HTTPException(422, "한방 일반 매물만 입주일 상세 조회가 가능합니다.")
+    try:
+        value = discovery_occupancy.lookup(uid, row["key"], str(source_id),
+                                            fresh_after=row.get("fetched_at") or 0)
+    except Exception as exc:  # noqa: BLE001 — 외부 상세 장애를 입주 가능일 부재로 단정하지 않는다.
+        raise HTTPException(502, "입주 가능일 상세 원천을 확인하지 못했습니다.") from exc
+    return JSONResponse(value, headers=PRIVATE)
 
 
 def _note_subject(request: Request, kind: str, key: str) -> None:
