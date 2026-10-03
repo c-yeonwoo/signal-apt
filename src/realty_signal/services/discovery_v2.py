@@ -177,9 +177,12 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
         reason = "선호 지역과 " + reason if passed else "선호 지역입니다."
     elif not passed and preference["satisfied"]:
         reason = "입력한 선호 조건 일부에 부합합니다."
-    tradeoff = ("현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다." if not failed else
-                "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다." if failed[0]["field"] == "max_monthly_manwon" else
-                f"{failed[0]['field']} 조건을 넘습니다.")
+    failed_reason = {"max_price_manwon": "호가가 설정한 상한보다 높습니다.",
+                     "min_area_m2": "전용면적이 원하는 최소 면적보다 작습니다.",
+                     "max_monthly_manwon": "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다.",
+                     "region": "선택한 필수 지역 밖의 매물입니다."}
+    tradeoff = (" ".join(failed_reason[x["field"]] for x in failed) if failed else
+                "현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다.")
     verify = ("매물 판매 여부와 실제 호가를 확인하세요." if listing["stale"] else
               finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else

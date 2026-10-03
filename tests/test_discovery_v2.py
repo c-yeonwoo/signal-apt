@@ -18,6 +18,7 @@ def test_price_area_and_unknown_are_separate_tiers():
     assert [x["listing"]["name"] for x in result["groups"]["matched"]] == ["good"]
     assert [x["listing"]["name"] for x in result["groups"]["verify"]] == ["unknown"]
     assert [x["listing"]["name"] for x in result["groups"]["exceeded"]] == ["small"]
+    assert result["groups"]["exceeded"][0]["tradeoff"] == "전용면적이 원하는 최소 면적보다 작습니다."
     assert result["groups"]["matched"][0]["signal_context"] == "SELL_RISK"
 
 
@@ -97,6 +98,20 @@ def test_priority_without_corresponding_preference_has_no_hidden_bonus():
     for value in ("unknown", None, [], {}):
         with pytest.raises(ValueError, match="invalid_priority"):
             discovery.validate({"priority": value})
+
+
+def test_exceeded_candidates_are_hidden_by_default_and_explicitly_labeled():
+    rows = [_row("expensive", price=70_000, area=50)]
+    spec = {"max_price_manwon": 60_000, "min_area_m2": 60}
+    hidden = discovery.discover(rows, spec)
+    assert hidden["counts"]["exceeded"] == 1
+    assert hidden["groups"]["exceeded"] == []
+    shown = discovery.discover(rows, {**spec, "include_exceeded": True})
+    candidate = shown["groups"]["exceeded"][0]
+    assert candidate["eligibility"] == "exceeded"
+    assert candidate["tradeoff"] == ("호가가 설정한 상한보다 높습니다. "
+                                    "전용면적이 원하는 최소 면적보다 작습니다.")
+    assert not shown["groups"]["matched"]
 
 
 def test_unrequested_low_price_is_not_a_ranking_bonus():

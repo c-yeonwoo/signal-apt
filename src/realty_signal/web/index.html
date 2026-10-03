@@ -7228,6 +7228,8 @@ async function startApp(needOnboard){
         </div>
         <p class="v2-muted">선택한 중요 조건은 정렬에서 2배로 셉니다. 입력하지 않은 조건은 우선순위에 영향을 주지 않습니다. 자료가 없으면 충족으로 세지 않습니다.</p>
       </details>
+      <label style="width:100%;display:flex;align-items:center;gap:8px"><input name="include_exceeded" type="checkbox" style="width:20px;min-height:20px">조건 초과 후보도 비교용으로 보기</label>
+      <p class="v2-muted">조건 초과 후보는 매수 가능 추천이 아닙니다. 기본 검색에서는 숨깁니다.</p>
       <button class="btn primary" type="submit">후보 찾기</button>
     </form>
     <div id="v2DiscoverResults" aria-live="polite"></div>

@@ -55,6 +55,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         const spec=route.request().postDataJSON()||{};
         discoveryPayloads.push(spec);
         const next=!!spec.cursor, finance=!!spec.max_monthly_manwon;
+        const noMatch=spec.region==='조건없음';
         const noProfile=finance&&spec.prefer_region==='프로필없음';
         const preferred=!!spec.prefer_max_price_manwon||!!spec.prefer_min_area_m2;
         const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
@@ -70,12 +71,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           finance:finance?noProfile?{status:'no_confirmed_profile',reason:'매수력 확정 필요'}:
             {status:'policy_unverified',monthly_manwon:120,cash_manwon:20000,
               reason:'대출 규제·세율 최신성 미검증'}:null};
+        const exceededCandidate={...candidate,listing:{...candidate.listing,key:'일반매물:synthetic-exceeded',
+          name:'조건초과 후보',asking_manwon:70000},eligibility:'exceeded',
+          tradeoff:noMatch?'선택한 필수 지역 밖의 매물입니다.':'호가가 설정한 상한보다 높습니다.'};
         data={private_access:true,source_state:'partial',coverage:{regions:['테스트구']},
           sources:[{kind:'일반매물',state:'partial'},{kind:'급매',state:'failed'}],
-          counts:finance?{matched:0,verify:1,explore:0}:{matched:2,verify:0,explore:0},
+          counts:finance?{matched:0,verify:1,explore:0,exceeded:1}:{matched:noMatch?0:2,verify:0,explore:0,exceeded:1},
           next_cursor:finance||next?null:'synthetic-next',
           finance_context:finance?{status:noProfile?'no_confirmed_profile':'ready',policy_status:'unverified'}:null,
-          groups:{matched:finance?[]:[candidate],verify:finance?[candidate]:[],explore:[]}};
+          groups:{matched:finance||noMatch?[]:[candidate],verify:finance?[candidate]:[],explore:[],
+            exceeded:spec.include_exceeded?[exceededCandidate]:[]}};
       }
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
         return route.fulfill({status:403,json:{detail:'forbidden'}});
@@ -486,6 +491,20 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/호가 우선\(2배\): 적합도 75\/100 · 확인도 75\/100/).waitFor();
     assert.equal(discoveryPayloads.at(-1).priority,'price');
+    assert.equal(await page.getByText('조건초과 후보').count(),0);
+    await page.locator('#v2DiscoverForm [name=include_exceeded]').check();
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText('조건초과 후보').waitFor();
+    assert.match(await page.locator('#v2DiscoverResults [data-v2-group="exceeded"]').textContent(),/구매 가능 추천이 아닙니다/);
+    assert.equal(discoveryPayloads.at(-1).include_exceeded,true);
+    await page.locator('#v2DiscoverForm [name=include_exceeded]').uncheck();
+    await page.locator('#v2DiscoverForm [name=region_mode]').selectOption('must');
+    await page.locator('#v2DiscoverForm [name=region]').fill('조건없음');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText(/조건 초과 1건을 비교용으로 보려면/).waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),0);
+    await page.locator('#v2DiscoverForm [name=region_mode]').selectOption('prefer');
+    await page.locator('#v2DiscoverForm [name=region]').fill('테스트구');
     await page.locator('#v2DiscoverForm [name=region]').fill('프로필없음');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
