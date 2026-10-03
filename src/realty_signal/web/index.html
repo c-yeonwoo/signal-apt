@@ -1227,8 +1227,8 @@
     <label>기존 대출 포함 월 상환 한도(만원)<br><input id="bp_monthly" type="number" min="0" class="ctrl" style="width:100%" placeholder="선택 입력" oninput="bpPreview()"></label>
     <label>주택 보유<br><select id="bp_homes" class="ctrl" style="width:100%" onchange="bpPreview()">
       <option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
-    <label>매수 예정 지역<br><input id="bp_region" list="bp_regions" class="ctrl" style="width:100%" placeholder="예: 강남구 / 성남시 분당구" oninput="bpPreview()">
-      <datalist id="bp_regions"></datalist></label>
+    <label>매수 예정 지역<br><input id="bp_region" list="bp_regions" class="ctrl" style="width:100%" placeholder="예: 강남구 / 성남시 분당구" oninput="this.dataset.regionCode='';bpPreview()">
+      <datalist id="bp_regions"></datalist><span id="bp_region_help" style="display:block;color:var(--dim);font-size:12px;margin-top:4px" aria-live="polite">목록의 지역은 검증된 코드로 계산합니다. 같은 이름의 시군구는 다시 선택해야 합니다.</span></label>
     <label>금리유형<br><select id="bp_ratetype" class="ctrl" style="width:100%" onchange="bpPreview()">
       <option value="혼합">혼합형 (5년 고정 후 변동)</option><option value="주기">주기형 (5년 주기)</option>
       <option value="변동">변동형</option><option value="고정">순수 고정</option></select></label>
@@ -2473,10 +2473,12 @@ async function _loadBuyingPower(){
     <div style="font-size:17px;color:var(--txt);margin-top:8px;line-height:1.5">매달 ${(d['월상환']||0).toLocaleString()}만 · 필요한 돈 ${_eok(d['필요현금'])}</div>`;
   const detail=`<div style="font-size:13px;color:var(--dim);line-height:1.55">대출 ${_eok(d['대출'])}${d['DSR']!=null?` · DSR ${d['DSR']}%`:''}</div>
     <div style="margin-top:8px">${_bpRegBadge(d['규제'])}</div>`;
+  const regionCaution=['reselection_required','unverified_name'].includes(d['지역식별'])
+    ?'<div style="font-size:12px;color:var(--warn);margin-top:8px">이전 매수지역을 확인할 수 없어 보수 계산했습니다. 지역을 다시 선택해 주세요.</div>':'';
   const cta=(confirmed && !stale)
     ? `<div style="margin-top:12px"><span class="btn" style="padding:6px 14px" onclick="openBuyingPower()">조건 바꾸기</span></div>`
     : `<div style="margin-top:12px"><span class="btn primary" style="padding:7px 16px" onclick="openBuyingPower()">${stale?'다시 저장':'이 계산 저장'}</span></div>`;
-  wrap.innerHTML=_dashCard(_dashH('내가 살 수 있는 가격')+conclusion+cta+_dashMore('대출 자세히', detail));
+  wrap.innerHTML=_dashCard(_dashH('내가 살 수 있는 가격')+conclusion+regionCaution+cta+_dashMore('대출 자세히', detail));
 }
 function openBuyingPower(){
   const p=_profile||{}, g=(_bp&&_bp['가정'])||{};
@@ -2492,7 +2494,16 @@ function openBuyingPower(){
   document.getElementById('bp_temp2').checked=!!g['일시적2주택'];
   document.getElementById('bp_big').checked=!!g['전용85초과'];
   document.getElementById('bp_bangong').checked=g['방공제적용']!==false;
-  set('bp_region', g['지역']||p['매수지역']||'');
+  const regionField=document.getElementById('bp_region');
+  const savedRegion=g['지역']||p['매수지역']||'';
+  const savedCode=g['지역코드']||p['매수지역코드']||'';
+  const needsReselection=['reselection_required','unverified_name'].includes(_bp?.['지역식별'])
+    ||(!savedCode&&['중구','서구','동구','남구','강서구','북구','인천 중구'].includes(savedRegion));
+  regionField.value=needsReselection?'':savedRegion;
+  regionField.dataset.regionCode=needsReselection?'':savedCode;
+  document.getElementById('bp_region_help').textContent=needsReselection
+    ?`이전에 저장한 ${savedRegion?`‘${savedRegion}’ `:'지역 '}의 시·도를 확인할 수 없습니다. 지역을 다시 입력해 주세요.`
+    :'목록의 지역은 검증된 코드로 계산합니다. 같은 이름의 시군구는 다시 선택해야 합니다.';
   set('bp_ratetype', g['금리유형']||'혼합');
   set('bp_rate', g['금리']?(g['금리']*100).toFixed(1):'4');
   set('bp_years', g['만기']||30);
@@ -2505,6 +2516,10 @@ function openBuyingPower(){
 function _bpParams(){
   const n=id=>{const v=document.getElementById(id).value; return v===''?null:+v;};
   const homes=+document.getElementById('bp_homes').value;
+  const regionField=document.getElementById('bp_region');
+  const region=regionField.value.trim()||null;
+  const matches=(allSignals||[]).filter(s=>s.region===region&&/^kb:\d+$/.test(s.region_id||''));
+  const regionCode=regionField.dataset.regionCode||(matches.length===1?matches[0].region_id:null);
   document.getElementById('bp_disposeWrap').style.display = homes===1?'':'none';
   document.getElementById('bp_tempWrap').style.display = homes>=1?'':'none';
   return {capital:n('bp_capital'), income:n('bp_income')||0, existing_debt_annual:n('bp_debt')||0,
@@ -2514,7 +2529,7 @@ function _bpParams(){
     temp_two_home:document.getElementById('bp_temp2').checked,
     big_area:document.getElementById('bp_big').checked,
     apply_bangongje:document.getElementById('bp_bangong').checked,
-    region:document.getElementById('bp_region').value.trim()||null,
+    region, region_code:regionCode,
     dispose:document.getElementById('bp_dispose').checked,
     rate_type:document.getElementById('bp_ratetype').value,
     ltv:n('bp_ltv')!=null?n('bp_ltv')/100:null,
@@ -2530,13 +2545,15 @@ function bpPreview(){
     const q=new URLSearchParams(Object.entries(p).filter(([,v])=>v!=null&&v!==''));
     if(p.monthly_budget==null) q.set('clear_monthly_budget','true');
     try{
-      const d=await (await fetch('/api/buying-power?'+q)).json();
+      const r=await fetch('/api/buying-power?'+q);
+      const d=await r.json();
       if(generation!==_bpGeneration) return;
-      if(!d.ready){ el.textContent=d.message||'계산할 수 없습니다.'; return; }
+      if(!r.ok||!d.ready){ el.textContent=d.detail||d.message||'계산할 수 없습니다.'; return; }
       const c=d['비용']||{};
       const bg=d['방공제']||0;
       el.innerHTML=`<div style="color:var(--txt);font-size:15px;font-weight:700;margin-bottom:6px">${_eok(d['최대매수가'])}까지 · 월 ${(d['월상환']||0).toLocaleString()}만</div>
         ${_bpRegBadge(d['규제'])}
+        ${d['지역식별']==='reselection_required'?'<div style="color:var(--danger);margin:6px 0">이전 지역 이름의 시·도를 확인할 수 없어 지역 미정으로 보수 계산했습니다. 매수 예정 지역을 다시 선택해 주세요.</div>':d['지역식별']==='unverified_name'?'<div style="color:var(--warn);margin:6px 0">입력한 지역의 코드를 확인하지 못해 지역 미정으로 보수 계산했습니다. 이 이름으로는 저장할 수 없습니다.</div>':''}
         <div style="color:var(--warn);margin:6px 0">규제·세율의 최신 적용은 별도 확인이 필요합니다. 은행 승인 전 참고 계산입니다.</div>
         대출 ${_eok(d['대출'])}${bg?` <span style="color:var(--dim)">(승인 ${_eok(d['승인액'])} − 방공제 ${_eok(bg)})</span>`:''}
         (LTV ${Math.round((d['실효LTV']||0)*100)}% · 상한 ${Math.round((d['LTV상한']||0)*100)}%)${d['DSR']!=null?` · DSR ${d['DSR']}%`:''} · 제약 ${d['제약']}<br>
@@ -2551,7 +2568,7 @@ async function bpConfirm(){
   if(!p.capital){ toast('가용자본을 입력해 주세요'); return; }
   const r=await fetch('/api/buying-power/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
   const d=await r.json();
-  if(!d.ok){ toast(d.error||'확정에 실패했습니다'); return; }
+  if(!d.ok){ toast(d.error||d.detail||'확정에 실패했습니다'); return; }
   _profile['매수력']=d['매수력'];
   if(p.capital) _profile['가용자본']=p.capital;
   _profile['연소득']=p.income||0;

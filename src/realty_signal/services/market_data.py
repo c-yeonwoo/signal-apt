@@ -53,6 +53,23 @@ def region_for_ref(ref: str) -> str | None:
     return ref if ref in source.regions else None
 
 
+def current_region_identity(ref: str) -> dict | None:
+    """Resolve a current, source-proven KB code for user-entered region assumptions."""
+    from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
+
+    if not isinstance(ref, str) or not ref.startswith("kb:"):
+        return None
+    code = ref[3:]
+    sido = SIDO_LABELS.get(code[:2])
+    if len(code) != 10 or not code.isdigit() or code[:5] in INCHEON_RETIRED_CODES or not sido:
+        return None
+    name = region_for_ref(ref)
+    if name is None:
+        return None
+    return {"region_id": ref, "code": code, "name": name,
+            "sido": sido}
+
+
 @lru_cache(maxsize=1)
 def regime():
     from realty_signal.signals.regime import compute_regime

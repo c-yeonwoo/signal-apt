@@ -102,6 +102,51 @@ test('old ambiguous Jung-gu can be explicitly reselected with the verified Seoul
   assert.deepEqual(calls,[['region','kb:1114000000','중구']]);
 });
 
+test('buyer region keeps old ambiguous name unselected until the user types a verified region', () => {
+  const elements=new Map();
+  const get=id=>{
+    if(!elements.has(id)) elements.set(id,{value:'',checked:false,style:{},dataset:{},children:[],showModal(){}});
+    return elements.get(id);
+  };
+  const signals=[{region:'중구',region_id:'kb:1114000000'}];
+  const ctx=vm.createContext({
+    document:{getElementById:get},
+    _profile:{매수력:{가정:{지역:'중구'}}}, _bp:{가정:{지역:'중구'}},
+    _sizeSel:{}, allSignals:signals, window:{allSignals:signals},
+    bpPreview(){},
+  });
+  vm.runInContext(extract('function openBuyingPower()', 'let _bpTimer'),ctx);
+  ctx.openBuyingPower();
+  assert.equal(get('bp_region').value,'');
+  assert.match(get('bp_region_help').textContent,/시·도를 확인할 수 없습니다/);
+  get('bp_region').value='중구'; // 사용자가 현행 지역을 다시 입력했다.
+  assert.equal(ctx._bpParams().region_code,'kb:1114000000');
+});
+
+test('buyer preview renders a verified response and shows region validation errors', async () => {
+  const preview={textContent:'',innerHTML:''};
+  const callbacks=[];
+  const responses=[
+    {ok:true,json:async()=>({ready:true,최대매수가:80000,월상환:120,필요현금:30000,
+      대출:50000,LTV상한:0.7,실효LTV:0.6,규제:{},비용:{},안내:[]})},
+    {ok:false,json:async()=>({detail:'지역을 다시 선택해 주세요.'})},
+  ];
+  const ctx=vm.createContext({
+    document:{getElementById:()=>preview},
+    _bpParams:()=>({capital:50000,region:'중구',region_code:'kb:1114000000'}),
+    _bpRegBadge:()=>'',_eok:n=>String(n),
+    URLSearchParams,clearTimeout:()=>{},setTimeout:fn=>{callbacks.push(fn);return callbacks.length;},
+    fetch:async()=>responses.shift(),
+  });
+  vm.runInContext(extract('let _bpTimer=null', 'async function bpConfirm()'),ctx);
+  ctx.bpPreview();
+  await callbacks.shift()();
+  assert.match(preview.innerHTML,/80000까지/);
+  ctx.bpPreview();
+  await callbacks.shift()();
+  assert.match(preview.textContent,/지역을 다시 선택해 주세요/);
+});
+
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
   const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
   vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);

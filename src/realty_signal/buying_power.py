@@ -550,6 +550,9 @@ def pyeong_of(관심평수) -> float:
     return _PYEONG_BY_AREA["84"]
 
 
+AMBIGUOUS_PROFILE_REGIONS = frozenset({"중구", "서구", "동구", "남구", "강서구", "북구", "인천 중구"})
+
+
 def params_from_profile(profile: dict | None, **override) -> Params:
     """프로필 → Params.
 
@@ -586,7 +589,32 @@ def params_from_profile(profile: dict | None, **override) -> Params:
         "rate_type": conf.get("금리유형") or reg.DEFAULT_RATE_TYPE,
         "years": int(conf.get("만기") or DEFAULTS["만기"]),
     }
+    saved_region_code = p.get("매수지역코드") or conf.get("지역코드")
+    if saved_region_code:
+        try:
+            from realty_signal.services import market_data as md
+            identity = md.current_region_identity(saved_region_code)
+        except Exception:  # noqa: BLE001 — 코드 출처 장애 시 이름으로 되돌리지 않는다.
+            identity = None
+        base["region"] = identity["name"] if identity else None
+        base["sido"] = identity["sido"] if identity else None
+    elif base["region"]:
+        # A name-only legacy profile may be ambiguous or outside verified KB
+        # coverage. Neither case may silently receive optimistic local limits.
+        try:
+            from realty_signal.services import market_data as md
+            name = base["region"]
+            code = md.code_of(name)
+            identity = (md.current_region_identity(f"kb:{code}")
+                        if code and name not in AMBIGUOUS_PROFILE_REGIONS else None)
+        except Exception:  # noqa: BLE001 — 출처 장애 시 지역 미정 보수 가정.
+            identity = None
+        base["region"] = identity["name"] if identity and identity["name"] == name else None
+        base["sido"] = identity["sido"] if identity and identity["name"] == name else None
     base.update({k: v for k, v in override.items() if v is not None})
+    for key in ("region", "sido"):
+        if key in override:
+            base[key] = override[key]
     valid = set(Params.__dataclass_fields__)
     return Params(**{k: v for k, v in base.items() if k in valid})
 

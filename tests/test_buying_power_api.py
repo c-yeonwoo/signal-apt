@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
 from realty_signal import api as app_api
 from realty_signal import auth, db
+from realty_signal.services import market_data as md
 from realty_signal.services import shortlist as sl
 
 
@@ -95,29 +98,137 @@ def test_confirmed_assumptions_survive_reload(client):
     assert d["확정"] == d["최대매수가"]
 
 
-def test_region_query_applies_current_regulation(client):
+def test_region_query_applies_current_regulation(client, monkeypatch):
+    source = SimpleNamespace(codes={"강남구": "1168000000"},
+                             regions=["강남구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
     seoul = client.get("/api/buying-power",
                        params={"capital": 80000, "income": 15000, "first_time": True,
-                               "region": "강남구"}).json()
+                                   "region": "강남구"}).json()
+    assert seoul["지역식별"] == "verified"
+    assert seoul["가정"]["지역코드"] == "kb:1168000000"
     assert seoul["규제"]["규제지역"] is True
     assert seoul["규제"]["절대한도"] == 60_000        # 시가 15억 이하 → 6억
     assert seoul["규제"]["적용만기"] == 30
     assert seoul["LTV상한"] == 0.70
     local = client.get("/api/buying-power",
                        params={"capital": 80000, "income": 15000, "first_time": True,
-                               "region": "해운대구"}).json()
-    assert local["규제"]["규제지역"] is False
-    assert local["LTV상한"] == 0.80
-    assert local["최대매수가"] > seoul["최대매수가"]
+                                   "region": "해운대구"}).json()
+    assert local["지역식별"] == "unverified_name"
+    assert local["가정"]["지역"] is None
+    assert local["규제"]["지역가정"] is True
+    assert local["LTV상한"] == 0.70
+    assert client.post("/api/buying-power/confirm", json={
+        "capital": 80000, "income": 15000, "region": "해운대구"}).status_code == 422
 
 
-def test_confirm_remembers_region(client):
-    client.post("/api/buying-power/confirm",
-                json={"capital": 50000, "income": 9000, "region": "성남시 분당구"})
+def test_confirm_remembers_region(client, monkeypatch):
+    source = SimpleNamespace(codes={"성남시 분당구": "4113500000"},
+                             regions=["성남시 분당구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    saved = client.post("/api/buying-power/confirm", json={
+        "capital": 50000, "income": 9000, "region": "성남시 분당구",
+        "region_code": "kb:4113500000"})
+    assert saved.status_code == 200
     d = client.get("/api/buying-power").json()
     assert d["가정"]["지역"] == "성남시 분당구"
+    assert d["가정"]["지역코드"] == "kb:4113500000"
     assert d["규제"]["규제지역"] is True
     assert d["확정"] == d["최대매수가"]
+
+
+def test_ambiguous_jung_gu_requires_verified_code_for_finance(client, monkeypatch):
+    source = SimpleNamespace(codes={"중구": "1114000000", "강남구": "1168000000"},
+                             regions=["중구", "강남구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    params = {"capital": 50000, "income": 9000, "region": "중구"}
+    assert client.get("/api/buying-power", params=params).status_code == 422
+    assert client.post("/api/buying-power/confirm", json=params).status_code == 422
+
+    selected = {**params, "region_code": "kb:1114000000"}
+    preview = client.get("/api/buying-power", params=selected).json()
+    assert preview["지역식별"] == "verified"
+    assert preview["가정"]["지역"] == "중구"
+    assert preview["가정"]["지역코드"] == "kb:1114000000"
+    saved = client.post("/api/buying-power/confirm", json=selected).json()
+    assert saved["ok"] is True
+    assert saved["매수력"]["가정"]["지역코드"] == "kb:1114000000"
+    assert client.get("/api/buying-power").json()["재확인필요"] is False
+
+    mismatched = {**selected, "region": "인천 중구"}
+    assert client.get("/api/buying-power", params=mismatched).status_code == 422
+    assert client.post("/api/buying-power/confirm", json=mismatched).status_code == 422
+
+
+def test_old_or_unverified_profile_region_uses_conservative_assumption(client, monkeypatch):
+    source = SimpleNamespace(codes={"중구": "1114000000"},
+                             regions=["중구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.profile_set(uid, {"가용자본": 50000, "연소득": 9000, "매수지역": "중구",
+                         "매수력": {"가정": {"지역": "중구"}}})
+    old = client.get("/api/buying-power").json()
+    assert old["가정"]["지역"] is None
+    assert old["규제"]["지역가정"] is True
+    assert old["지역식별"] == "reselection_required"
+
+    db.profile_set(uid, {"가용자본": 50000, "연소득": 9000, "매수지역": "중구",
+                         "매수력": {"가정": {"지역": "중구", "지역코드": "kb:1114000000"}}})
+    source.identity_verified = False
+    unverified = client.get("/api/buying-power").json()
+    assert unverified["가정"]["지역"] is None
+    assert unverified["지역식별"] == "reselection_required"
+
+
+def test_direct_profile_consumers_never_reuse_unverified_region(client, monkeypatch):
+    source = SimpleNamespace(codes={"강남구": "1168000000"},
+                             regions=["강남구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    for profile in (
+        {"가용자본": 50000, "매수지역": "해운대구"},
+        {"가용자본": 50000, "매수지역": "강남구", "매수지역코드": "kb:2811000000"},
+    ):
+        params = app_api.buying_power.params_from_profile(profile)
+        assert params.region is None
+        assert params.sido is None
+        assert params.regulated is True
+        assert params.metro is True
+
+
+def test_finance_region_override_does_not_keep_previous_province(client, monkeypatch):
+    source = SimpleNamespace(codes={"강남구": "1168000000"},
+                             regions=["강남구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    saved = client.post("/api/buying-power/confirm", json={
+        "capital": 80000, "income": 15000, "region": "강남구",
+        "region_code": "kb:1168000000"})
+    assert saved.status_code == 200
+    local = client.get("/api/buying-power", params={"region": "해운대구"}).json()
+    assert local["가정"]["지역"] is None
+    assert local["지역식별"] == "unverified_name"
+    assert local["규제"]["지역가정"] is True
+    assert local["가정"]["지역코드"] is None
+
+
+def test_price_scenario_rejects_name_only_collision(client, monkeypatch):
+    source = SimpleNamespace(codes={"중구": "1114000000"},
+                             regions=["중구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    client.post("/api/buying-power/confirm", json={"capital": 50000, "income": 9000})
+    assert client.get("/api/buying-power/scenario", params={"price": 90000, "region": "중구"}).status_code == 422
+    verified = client.get("/api/buying-power/scenario", params={
+        "price": 90000, "region": "중구", "region_code": "kb:1114000000"}).json()
+    assert verified["지역식별"] == "verified"
+    assert verified["지역코드"] == "kb:1114000000"
+
+
+def test_explicit_finance_code_does_not_fall_back_during_kb_outage(client, monkeypatch):
+    monkeypatch.setattr(md, "kb", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
+    payload = {"capital": 50000, "income": 9000, "region": "중구",
+               "region_code": "kb:1114000000"}
+    assert client.get("/api/buying-power", params=payload).status_code == 503
+    assert client.post("/api/buying-power/confirm", json=payload).status_code == 503
+    assert "매수력" not in (client.get("/api/auth/me").json()["profile"] or {})
 
 
 def test_regulation_api_lists_current_designations(client):
