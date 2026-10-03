@@ -165,6 +165,8 @@ def cache_loader():
     from realty_signal import api as app_api
 
     def _load(region: str, name: str):
+        if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+            return {"_unavailable": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 관심 기록은 유지하되 실거래 변화는 보류합니다"}, None
         code = app_api._code_of(region) or ""
         if not (len(code) >= 5 and code[:5].isdigit()):
             return {"_unavailable": f"'{region}' 의 지역코드를 찾지 못했습니다"}, None
@@ -201,6 +203,10 @@ def scan(favorites: list[tuple[str, str]], loader, prev_all: dict,
 
     for region, name in favorites:
         key = f"{region}|{name}"
+        if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+            unavailable.append({"key": key, "단지명": name, "지역": region,
+                                "reason": "이름만 저장된 중구의 시·도를 확인할 수 없어 실거래 변화를 보류합니다. 원래 관심 기록은 유지됩니다."})
+            continue
         data, ts = loader(region, name)
         snap = snapshot_of(data or {})
         if not snap:

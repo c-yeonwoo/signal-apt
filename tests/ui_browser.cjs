@@ -325,6 +325,23 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(priceUi.filtered,['low']);
     assert.deepEqual(priceUi.restored,priceUi.all);
     assert.match(priceUi.note,/가격 미상 1건 제외/);
+    const ambiguousFavorite=await page.evaluate(async()=>{
+      const originalFetch=window.fetch, oldFavorites=_favs;
+      _favs=new Set(['complex:중구|옛 관심단지']);
+      window.fetch=(input,...args)=>String(input)==='/api/myfeed'
+        ? Promise.resolve({json:async()=>({ok:true,items:[{type:'complex',region:'중구',name:'옛 관심단지',
+            지역확인필요:true,데이터없음:true}]})}) : originalFetch(input,...args);
+      try {
+        await renderFavList(); await _loadDashFeed();
+        return {favorite:document.getElementById('favListBody').innerHTML,
+          feed:document.getElementById('dashFeedWrap').innerHTML};
+      }
+      finally { window.fetch=originalFetch; _favs=oldFavorites; }
+    });
+    assert.match(ambiguousFavorite.favorite,/시·도를 확인할 수 없어 변화 판정을 보류합니다/);
+    assert.doesNotMatch(ambiguousFavorite.favorite,/＋비교|>상세</);
+    assert.match(ambiguousFavorite.feed,/지역 확인 전 · 변화 판정 보류/);
+    assert.doesNotMatch(ambiguousFavorite.feed,/openComplex/);
     await page.evaluate(()=>{window.__generalRows=[]; mapSplit=(listId,mapId,items,opt)=>{
       window.__generalRows=items; document.getElementById(listId).innerHTML=opt.summary(items[0]).nm+opt.detail(items[0]);
     }; switchTab('general');});

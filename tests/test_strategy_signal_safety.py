@@ -2,6 +2,7 @@
 
 import json
 import pandas as pd
+import pytest
 from types import SimpleNamespace
 
 from realty_signal import api
@@ -66,6 +67,32 @@ def test_myfeed_recalculates_old_cached_complex_grade_under_current_hold(monkeyp
     assert items[0]["signal"] == "HELD"
     assert items[1]["단지등급"] == "HELD"
     assert items[1]["단지점수"] is None
+
+
+def test_myfeed_holds_ambiguous_old_complex_without_using_trade_cache(monkeypatch):
+    monkeypatch.setattr(api, "_uid", lambda request: 1)
+    monkeypatch.setattr(api.db, "fav_list", lambda uid: [
+        {"kind": "complex", "key": "중구|옛 관심단지"}])
+    monkeypatch.setattr(api.db, "actionable_region_favs", lambda uid: [])
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {})
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **kwargs: False)
+    monkeypatch.setattr(api, "_presale", lambda: [])
+    monkeypatch.setattr(api, "_code_of", lambda region: pytest.fail("모호한 단지 코드를 추정하면 안 됩니다"))
+    monkeypatch.setattr(api.db, "kv_get", lambda *args, **kwargs: pytest.fail("옛 단지 캐시를 읽으면 안 됩니다"))
+    monkeypatch.setattr(api, "_kb", lambda: SimpleNamespace(last_date=pd.Timestamp("2026-09-28")))
+    item = api.myfeed(object())["items"][0]
+    assert item["지역확인필요"] is True and item["데이터없음"] is True
+    assert item.get("단지등급") is None
+
+
+def test_agent_favorite_context_excludes_ambiguous_complex(monkeypatch):
+    from realty_signal.routes import deps
+
+    monkeypatch.setattr(deps.db, "fav_list", lambda _uid: [
+        {"kind": "complex", "key": "중구|옛 관심단지", "label": "옛 관심단지"},
+        {"kind": "complex", "key": "노원구|현재 단지", "label": "현재 단지"}])
+    monkeypatch.setattr(deps.db, "actionable_region_favs", lambda _uid: [])
+    assert deps.fav_context(7)["관심단지"] == ["현재 단지"]
 
 
 def test_nick_filters_and_describes_only_safe_grades(monkeypatch):

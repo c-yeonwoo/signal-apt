@@ -162,6 +162,26 @@ def test_complex_favorite_rejects_sido_without_creating_false_watch(client, monk
     assert client.get("/api/favorites").json()["favorites"] == []
 
 
+def test_complex_favorite_rejects_name_only_jung_gu(client, monkeypatch):
+    monkeypatch.setattr(auth_routes.md, "code_of", lambda region: pytest.fail(
+        "모호한 이름은 코드 조회 전에 거부해야 합니다"))
+    response = client.post("/api/favorites", json={
+        "kind": "complex", "key": "중구|옛 관심단지"})
+    assert response.status_code == 422
+    assert response.json()["error"] == "untrackable_complex"
+    assert "서울·개편 전 인천" in response.json()["message"]
+    assert client.get("/api/favorites").json()["favorites"] == []
+
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "complex", "중구|옛 관심단지", "옛 관심단지")
+    old = client.get("/api/favorites").json()["favorites"][0]
+    assert old["key"] == "중구|옛 관심단지"
+    assert old["complex_identity"]["status"] == "needs_reselection"
+    watched = client.get("/api/complex-watch").json()
+    assert watched["unavailable"][0]["key"] == old["key"]
+    assert watched["moved_total"] == 0
+
+
 def test_pre_reform_region_favorite_is_preserved_but_needs_reselection(client, monkeypatch):
     from types import SimpleNamespace
 

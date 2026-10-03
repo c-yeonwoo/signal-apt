@@ -451,6 +451,10 @@ def myfeed(request: Request):
                       "청약단지": (rp[0].get("단지명") if rp else None)})
     for key in complexes:
         region, _, name = key.partition("|")
+        if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+            items.append({"type": "complex", "region": region, "name": name,
+                          "지역확인필요": True, "데이터없음": True})
+            continue
         code = _code_of(region)
         d = db.kv_get(f"complex:{code[:5]}:{name}", max_age=30 * 86400) if code[:5].isdigit() else None
         metrics = _main_flat_metrics(d or {})
@@ -2328,6 +2332,8 @@ def warm_favorite_complex(region: str, name: str) -> dict:
     """관심단지 하나의 실거래 캐시를 준비한다. 등록 직후와 주간 워밍이 함께 쓴다."""
     from realty_signal import db
     from realty_signal.ingest import complex as cx
+    if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        return {"status": "unavailable", "reason": "ambiguous_region"}
     config.load_env()
     pk = config.public_data_key()
     if not pk:
