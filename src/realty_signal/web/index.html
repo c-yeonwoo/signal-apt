@@ -7132,12 +7132,17 @@ function renderAlerts(d){
           ?`확인된 호가 ${price(p.old_price)} → ${price(p.new_price)}. 현재 판매 여부·가격은 다시 확인하세요.`
           :ev.kind==='new_alternative'
             ?`새로 확인한 대안 ${(p.alternatives||[]).map(x=>esc(x.name||'이름 미확인')).join(' · ')||'매물'} · 같은 단지·지역 후보이며 더 유리하다는 뜻은 아닙니다.`
+            :ev.kind==='presale_deadline'
+              ?`공고상 다음 일정이 오늘(${esc(p.date||'날짜 미확인')})입니다. ${esc(p.status||'상태 미확인')} · 접수 자격과 변경 공고를 청약홈에서 다시 확인하세요.`
             :'새 근거를 확인해 주세요.';
+        const action=ev.kind==='presale_deadline'
+          ?`<button type="button" class="btn" onclick="document.getElementById('alertsDlg').close();switchTab('presale')">청약 일정 목록 보기</button>`
+          :`<button type="button" class="btn" data-alert-listing="${esc(ev.subject_key)}" onclick="document.getElementById('alertsDlg').close();SignalV2.openListing(this.dataset.alertListing)">현재 리포트 보기</button>`;
         return `<div class="v2-row${ev.seen?'':' v2-caution'}" style="margin-bottom:6px"><b>${name}</b> · ${esc(p.region||'지역 미확인')}
           <div>${description}</div><div class="analysis-muted">${new Date(ev.created_at*1000).toLocaleDateString('ko-KR')} · 현재 수집분 기준</div>
-          <button type="button" class="btn" data-alert-listing="${esc(ev.subject_key)}" onclick="document.getElementById('alertsDlg').close();SignalV2.openListing(this.dataset.alertListing)">현재 리포트 보기</button></div>`;
+          ${action}</div>`;
       };
-    html += `<div style="font-weight:700;font-size:13px;margin:8px 0">찜한 매물 변화</div>`
+    html += `<div style="font-weight:700;font-size:13px;margin:8px 0">찜한 매물·청약 알림</div>`
       +watchEvents.slice(0,5).map(eventHtml).join('')
       +(watchEvents.length>5?`<details><summary>지난 알림 ${watchEvents.length-5}건 더 보기</summary>${watchEvents.slice(5).map(eventHtml).join('')}</details>`:'');
   }
@@ -7183,6 +7188,7 @@ function renderAlerts(d){
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apListingPrice" ${p.listing_price!==false?'checked':''}> 찜한 매물의 확인된 호가 변화</label>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apNewAlternative" ${p.new_alternative!==false?'checked':''}> 찜한 매물의 새 대안</label>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apRegionEvidence" ${p.region_evidence!==false?'checked':''}> 관심지역의 발행 근거 변화</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apPresaleDeadline" ${p.presale_deadline!==false?'checked':''}> 찜한 청약의 다음 일정 D-0</label>
     <span class="btn" style="padding:4px 10px;font-size:11px;margin-top:6px;display:inline-block" onclick="saveAlertPrefs()">저장</span></div>`;
   html += `<div id="tgBox" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"></div>`;
   document.getElementById('alertsBody').innerHTML=html;
@@ -7243,6 +7249,7 @@ async function saveAlertPrefs(){
     listing_price:!!document.getElementById('apListingPrice')?.checked,
     new_alternative:!!document.getElementById('apNewAlternative')?.checked,
     region_evidence:!!document.getElementById('apRegionEvidence')?.checked,
+    presale_deadline:!!document.getElementById('apPresaleDeadline')?.checked,
     timing_min:(_alerts.prefs&&_alerts.prefs.timing_min)||70};
   try{ await fetch('/api/alerts/prefs',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({prefs})});
     toast('알림 규칙을 저장했습니다.'); await loadAlerts(); renderAlerts(_alerts);

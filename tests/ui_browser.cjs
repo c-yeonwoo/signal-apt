@@ -695,13 +695,18 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           created_at:1780000001,seen:true,
           payload:{region:'테스트구',region_id:'kb:1114000000',asof:'2026-09-28',old_grade:'매수',
             new_grade:'관망',changed_reasons:[{label:'전세수급 압력'}]}}],
-        watch_events:[{subject_type:'listing',subject_key:'일반매물:synthetic-hb-1',
+        watch_events:[{subject_type:'listing',subject_key:'청약:123',
+          kind:'presale_deadline',created_at:1780000000,seen:false,
+          payload:{name:'테스트 청약',region:'테스트구',date:'2026-10-04',status:'접수중'}},
+        {subject_type:'listing',subject_key:'일반매물:synthetic-hb-1',
         kind:'listing_price',created_at:1780000000,seen:false,
         payload:{name:'<img src=x onerror=alert(1)>',region:'테스트구',old_price:50000,new_price:47000}}],
         timing:[],nbhd:[],changes:[],digest:[],unread:1,prefs:{listing_price:true,new_alternative:true}});
       document.getElementById('alertsDlg').showModal();
     });
     assert.match(await page.locator('#alertsBody').textContent(),/확인된 호가 5.0억 → 4.7억/);
+    assert.match(await page.locator('#alertsBody').textContent(),/다음 일정이 오늘\(2026-10-04\)/);
+    assert.equal(await page.locator('#alertsBody').getByRole('button',{name:'청약 일정 목록 보기'}).count(),1);
     assert.match(await page.locator('#alertsBody').textContent(),/과거 발행 기록은 현재 매수 신호가 아닙니다/);
     assert.equal(await page.locator('#alertsBody img').count(),0);
     await page.evaluate(()=>{

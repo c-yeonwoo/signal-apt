@@ -5,6 +5,19 @@
 
 from __future__ import annotations
 
+from datetime import date
+
+
+def _dday(ref: dict):
+    raw = ref.get("다음일정")
+    if raw:
+        try:
+            from realty_signal.services.presale_alerts_v2 import korea_today
+            return (date.fromisoformat(raw) - korea_today()).days
+        except (TypeError, ValueError):
+            return None
+    return ref.get("Dday")
+
 
 WATCHABLE = {"급매", "찐매물", "일반매물", "청약", "경매"}
 PRIVATE = {"급매", "찐매물", "일반매물"}
@@ -31,7 +44,8 @@ def public_fields(row: dict) -> dict:
             "region": row.get("지역"), "region_sido": row.get("시도"),
             "region_code": row.get("지역코드"),
             "price": row.get("총액"), "pyeong": row.get("평형"),
-            "dday": ref.get("Dday"), "status": row.get("지표값") if row.get("유형") == "청약" else None,
+            "dday": _dday(ref) if row.get("유형") == "청약" else ref.get("Dday"),
+            "status": row.get("지표값") if row.get("유형") == "청약" else None,
             "stale": bool(row.get("stale")), "fetched_at": row.get("fetched_at")}
 
 
