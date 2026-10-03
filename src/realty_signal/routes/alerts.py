@@ -48,7 +48,7 @@ def alerts(request: Request):
     return alert_engine.evaluate(
         favs, prefs,
         signal_changes=log_,
-        signal_map=md.signal_map(),
+        signal_map=app_api._display_signal_map(),
         listings=listings,
         nbhd_diffs=nbhd_diffs,
         seen_before=seen,

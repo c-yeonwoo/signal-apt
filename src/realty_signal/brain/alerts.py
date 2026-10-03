@@ -36,7 +36,10 @@ def merge_prefs(stored: dict | None) -> dict:
     return out
 
 
-def filter_signal_changes(changes: list[dict], fav_regions: set[str], *, upgrade_only: bool) -> list[dict]:
+def filter_signal_changes(
+    changes: list[dict], fav_regions: set[str], *, upgrade_only: bool,
+    current_signals: dict[str, str] | None = None,
+) -> list[dict]:
     out = []
     for c in changes:
         if c.get("region") not in fav_regions:
@@ -46,7 +49,11 @@ def filter_signal_changes(changes: list[dict], fav_regions: set[str], *, upgrade
             delta = _SIG_RANK.get(to, 1) - _SIG_RANK.get(fr, 1)
             if delta <= 0 and to != "SELL_RISK":
                 continue
-        out.append({**c, "kind": "signal_upgrade"})
+        current = (current_signals or {}).get(c.get("region"), "HELD")
+        # Legacy change logs record raw grades. Keep their history, but only a
+        # matching, currently assessed grade may create a new action alert.
+        out.append({**c, "kind": "signal_upgrade", "current_signal": current,
+                    "actionable": current in _SIG_RANK and current == c.get("to")})
     return out
 
 
@@ -111,7 +118,8 @@ def evaluate(
 ) -> dict:
     """알림 페이로드 — changes / timing / nbhd / digest / unread."""
     p = merge_prefs(prefs)
-    changes = filter_signal_changes(signal_changes, fav_regions, upgrade_only=True) if p["signal_upgrade"] else []
+    changes = filter_signal_changes(signal_changes, fav_regions, upgrade_only=True,
+                                    current_signals=signal_map) if p["signal_upgrade"] else []
     timing = high_timing_listings(listings or [], fav_regions, timing_min=p["timing_min"]) if p["high_timing"] else []
     nbhd = nbhd_change_items(nbhd_diffs or {}) if p["nbhd_change"] else []
 
@@ -120,7 +128,7 @@ def evaluate(
     def _fresh(d: str | None) -> bool:
         return bool(d and (not seen_before or d > seen_before))
 
-    unread = sum(1 for c in changes if _fresh(c.get("date")))
+    unread = sum(1 for c in changes if c["actionable"] and _fresh(c.get("date")))
     unread += len(timing) if seen_before else min(len(timing), 5)
     unread += len(nbhd) if not seen_before else 0
 
