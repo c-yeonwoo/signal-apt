@@ -94,13 +94,19 @@ def test_scan_rejects_mixed_source_district_without_claiming_empty_success(monke
 
 
 def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
     monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
     cache = tmp_path / "hanbang.json"
     cache.write_text(json.dumps({"ready": True, "listings": [
-        {**hanbang.normalize(_raw()), "지역": "노원구", "fetched_at": time.time()}],
+        {**hanbang.normalize(_raw()), "지역": "노원구", "시도": "서울", "fetched_at": time.time()}],
         "regions": ["노원구"], "_scan_ver": api._HANBANG_SCAN_VER}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(api, "HANBANG_FILE", cache)
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {"노원구": {"급지": "C"}}})
+    last_date = api._kb().last_date
+    monkeypatch.setattr(api, "_kb", lambda: SimpleNamespace(identity_verified=True,
+                                                            regions={"노원구": None}, last_date=last_date))
+    monkeypatch.setattr(api, "_code_of", lambda region: "1135000000" if region == "노원구" else "")
     owner, guest = _client("owner@example.com"), _client("guest@example.com")
     assert len(owner.get("/api/general-listings").json()["listings"]) == 1
     assert guest.get("/api/general-listings").json()["listings"] == []
@@ -110,6 +116,7 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     assert private["meta"]["private_access"] is True
     listing = private["listings"][0]
     assert listing["key"] == "일반매물:1" and listing["총액"] == 53_000
+    assert listing["지역코드"] == "11350"
     assert not listing["stale"]
     api._record_radar_refresh(cache, {"ok": False, "attempted_at": time.time()})
     assert owner.get("/api/listings/all?types=일반매물").json()["listings"][0]["stale"]

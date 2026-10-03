@@ -174,6 +174,60 @@ def comparison_report(request: Request, data: dict = Body(...)):
     return JSONResponse(report, headers=PRIVATE)
 
 
+def _discovery_regions() -> list[dict]:
+    """Only offer current, uniquely identified KB districts for listing filters."""
+    from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
+
+    source = md.kb()
+    if not source.identity_verified:
+        return []
+    grouped = {}
+    for name, raw_code in (source.codes or {}).items():
+        code = str(raw_code)[:5]
+        if (name not in source.regions or len(code) != 5 or not code.isdigit()
+                or code[2:] == "000" or code in INCHEON_RETIRED_CODES):
+            continue
+        grouped.setdefault(code, set()).add(name)
+    sido = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주",
+            "30": "대전", "31": "울산", "36": "세종", "41": "경기", "42": "강원",
+            "43": "충북", "44": "충남", "45": "전북", "46": "전남", "47": "경북",
+            "48": "경남", "50": "제주"}
+    options = []
+    for code, names in grouped.items():
+        if len(names) != 1:
+            continue
+        name = next(iter(names))
+        options.append({"code": code, "name": name, "label": f"{sido.get(code[:2], '지역')} · {name}"})
+    options.sort(key=lambda item: (item["label"], item["code"]))
+    return options
+
+
+@router.get("/api/v2/discovery/regions")
+def discovery_regions():
+    options = _discovery_regions()
+    return JSONResponse({"status": "ready" if options else "unverified", "regions": options}, headers=PRIVATE)
+
+
+def _canonical_discovery_region(spec: dict) -> dict:
+    if not any(spec.get(key) for key in ("region", "prefer_region", "region_code", "prefer_region_code")):
+        return spec
+    options = _discovery_regions()
+    by_code = {option["code"]: option for option in options}
+    for key in ("region_code", "prefer_region_code"):
+        if key in spec and spec[key] not in by_code:
+            raise HTTPException(422, "현재 지역 코드를 확인할 수 없습니다. 지역을 다시 선택해 주세요.")
+    for old, new in (("region", "region_code"), ("prefer_region", "prefer_region_code")):
+        if not spec.get(old):
+            continue
+        matching = [option for option in options if option["name"] == spec[old]]
+        same_tail = [option for option in options if option["name"].split()[-1] == spec[old]]
+        if len(matching) != 1 or len(same_tail) > 1:
+            raise HTTPException(422, "지역 이름만으로는 확인할 수 없습니다. 목록에서 지역을 다시 선택해 주세요.")
+        spec[new] = matching[0]["code"]
+        del spec[old]
+    return spec
+
+
 @router.post("/api/v2/discovery")
 def discovery(request: Request, data: dict = Body(...)):
     from realty_signal import api as app_api
@@ -181,7 +235,7 @@ def discovery(request: Request, data: dict = Body(...)):
     from realty_signal.services import discovery_finance
 
     try:
-        spec = discovery_v2.validate(data)
+        spec = _canonical_discovery_region(discovery_v2.validate(data))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     allowed = deps.personal_listings_allowed(request)

@@ -180,6 +180,22 @@ def test_listing_region_requires_matching_kb_code_and_source_province(monkeypatc
     assert not api._listing_region_matches_kb("제물포구", None)
 
 
+def test_verified_hanbang_sido_can_resolve_current_code_without_guessing(monkeypatch):
+    from types import SimpleNamespace
+
+    source = SimpleNamespace(identity_verified=True, regions={"중구": None})
+    monkeypatch.setattr(api, "_kb", lambda: source)
+    monkeypatch.setattr(api, "_code_of", lambda region: "1114000000" if region == "중구" else "")
+    assert api._verified_listing_region_code("중구", "서울") == "11140"
+    assert api._verified_listing_region_code("중구", "인천") is None
+    assert api._verified_listing_region_code("중구", None) is None
+    source.identity_verified = False
+    assert api._verified_listing_region_code("중구", "서울") is None
+    source.identity_verified = True
+    source.regions = {}
+    assert api._verified_listing_region_code("중구", "서울") is None
+
+
 def test_partial_refresh_keeps_unscanned_regions_with_stale_flag(tmp_path):
     from realty_signal.storage import atomic_json
     path = tmp_path / "quicksale.json"

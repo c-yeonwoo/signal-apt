@@ -1182,6 +1182,25 @@ def _listing_region_matches_kb(region: str | None, source_sido: str | None,
     return bool(expected and source_sido == expected)
 
 
+def _verified_listing_region_code(region: str | None, source_sido: str | None) -> str | None:
+    """Map a previously source-verified sido/district pair to a current KB district code."""
+    from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
+
+    if not region or not source_sido:
+        return None
+    try:
+        source = _kb()
+        if not source.identity_verified or region not in source.regions:
+            return None
+        code = str(_code_of(region))[:5]
+        if (len(code) == 5 and code.isdigit() and code not in INCHEON_RETIRED_CODES
+                and _SIDO.get(code[:2]) == source_sido):
+            return code
+    except Exception:  # noqa: BLE001 — KB 식별 장애는 코드 미확인으로 남긴다.
+        pass
+    return None
+
+
 def _default_region(request: Request, profile: dict) -> str | None:
     """매수 예정 지역 기본값 — 지난 확정 시 지역 > ★관심지역 첫 번째."""
     saved = ((profile.get("매수력") or {}).get("가정") or {}).get("지역")
@@ -3064,8 +3083,13 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
         from realty_signal.signals.timing import listing_timing
 
         assessment = assessed.get(region) or {}
+        source_code = raw.get("지역코드")
+        # 한방 v2 캐시는 원천 시·도/시군구를 검증했지만 5자리 코드는 저장하지 않았다.
+        # 검증된 현재 KB 식별과 시·도가 일치할 때만 읽기 모델에서 코드를 보강한다.
+        if kind == "일반매물" and not source_code:
+            source_code = _verified_listing_region_code(region, raw.get("시도"))
         identity_ok = (kind not in {"일반매물", "급매", "찐매물"}
-                       or _listing_region_matches_kb(region, raw.get("시도"), raw.get("지역코드")))
+                       or _listing_region_matches_kb(region, raw.get("시도"), source_code))
         safe_signal = assessment.get("display_signal") if assessment.get("assessment_status") == "ready" else "HELD"
         if not identity_ok:
             safe_signal = "HELD"
@@ -3077,7 +3101,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                            else "name_only" if identity_ok else "held")
         tr = listing_timing(kind, raw, safe_signal, safe_grade, asof=_timing_asof())
         row = {"유형": kind, "단지명": name, "지역": region, "시도": raw.get("시도"),
-               "지역코드": raw.get("지역코드"), "시그널": safe_signal,
+               "지역코드": source_code, "시그널": safe_signal,
                "원시시그널": signal or "", "판정상태": (assessment.get("assessment_status") or "held") if identity_ok else "held",
                "지역식별상태": identity_status,
                "지역급지": safe_grade, "지표라벨": mlabel, "지표값": mval, "지표단위": munit,

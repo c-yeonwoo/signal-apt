@@ -48,6 +48,25 @@ def test_preferred_region_ranks_first_without_excluding_other_regions():
     assert result["counts"]["matched"] == 2
 
 
+def test_region_code_separates_same_named_districts_and_unknown_identity():
+    rows = [_row("seoul", price=50_000, region="중구"),
+            _row("incheon", price=50_000, region="중구"),
+            _row("no-code", price=50_000, region="중구")]
+    rows[0]["지역코드"] = "11140"
+    rows[1]["지역코드"] = "28110"
+    result = discovery.discover(rows, {"region_code": "11140", "include_exceeded": True})
+    assert [x["listing"]["name"] for x in result["groups"]["matched"]] == ["seoul"]
+    assert [x["listing"]["name"] for x in result["groups"]["verify"]] == ["no-code"]
+    assert [x["listing"]["name"] for x in result["groups"]["exceeded"]] == ["incheon"]
+    assert result["groups"]["verify"][0]["verify_next"] == "매물의 시군구 코드를 확인하세요."
+    preferred = discovery.discover(rows, {"prefer_region_code": "11140"})["groups"]["explore"]
+    assert [x["preference"]["score"] for x in preferred] == [100, 0, 0]
+    assert [x["preference"]["coverage"] for x in preferred] == [100, 100, 0]
+    for code in ("11", "kb:11140", "1114x", 11140):
+        with pytest.raises(ValueError, match="invalid_region_code"):
+            discovery.validate({"region_code": code})
+
+
 def test_one_complex_cannot_fill_initial_diversified_candidates():
     rows = [_row("same-1", price=40000), _row("same-2", price=41000),
             _row("same-3", price=42000), _row("other", price=45000)]

@@ -2,6 +2,7 @@
 
 import json
 from datetime import date
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -38,6 +39,26 @@ def test_region_code_route_rejects_unverified_legacy_cache(monkeypatch):
     with pytest.raises(HTTPException) as error:
         reports_v2.region_report("kb:1114000000")
     assert error.value.status_code == 404
+
+
+def test_discovery_region_choices_require_verified_current_unique_codes(monkeypatch):
+    source = SimpleNamespace(identity_verified=True,
+        codes={"중구": "1114000000", "부산 중구": "2611000000",
+               "인천 중구": "2811000000", "이름만": "", "겹침A": "1115000000", "겹침B": "1115000000"},
+        regions={"중구": None, "부산 중구": None, "인천 중구": None,
+                 "이름만": None, "겹침A": None, "겹침B": None})
+    monkeypatch.setattr(md, "kb", lambda: source)
+    options = json.loads(reports_v2.discovery_regions().body)["regions"]
+    assert {option["code"] for option in options} == {"11140", "26110"}
+    assert reports_v2._canonical_discovery_region({"region_code": "11140"}) == {"region_code": "11140"}
+    with pytest.raises(HTTPException, match="지역 이름만으로는"):
+        reports_v2._canonical_discovery_region({"region": "중구"})
+    with pytest.raises(HTTPException, match="현재 지역 코드를"):
+        reports_v2._canonical_discovery_region({"region_code": "28110"})
+    source.identity_verified = False
+    assert json.loads(reports_v2.discovery_regions().body)["status"] == "unverified"
+    with pytest.raises(HTTPException):
+        reports_v2._canonical_discovery_region({"region_code": "11140"})
 
 
 def test_listing_report_keeps_price_evidence_when_buyer_profile_fails(monkeypatch):

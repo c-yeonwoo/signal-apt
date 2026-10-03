@@ -13,7 +13,7 @@
     source_stale:'KB 관측 기준일이 8일을 넘어서 현재 판정을 보류합니다',
     price_direction_conflict:'매수 신호와 최근 가격 하락이 충돌합니다',
   };
-  let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0;
+  let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0, discoveryRegionGeneration = 0;
   let noteSubject = null, editingNote = null, notesCache = [];
 
   async function json(url, options) {
@@ -421,12 +421,60 @@
   });
   document.getElementById('onbDlg')?.addEventListener('close', openInitialLink);
 
+  async function loadDiscoveryRegions(requested = '') {
+    const generation = ++discoveryRegionGeneration;
+    const form = document.getElementById('v2DiscoverForm');
+    const field = form.elements.region_code;
+    const submit = form.querySelector('[type="submit"]');
+    const status = document.getElementById('v2DiscoverRegionStatus');
+    const previous = requested ? '' : field.value;
+    field.disabled = true;
+    submit.disabled = true;
+    status.textContent = '지역 목록을 확인하고 있습니다…';
+    try {
+      const data = await json('/api/v2/discovery/regions');
+      if (generation !== discoveryRegionGeneration || !document.getElementById('v2DiscoverDlg').open) return;
+      const options = data.regions || [];
+      field.replaceChildren(new Option('전체 지역 · 선택 안 함', ''));
+      for (const option of options) {
+        const node = new Option(option.label, option.code);
+        node.dataset.regionName = option.name;
+        field.add(node);
+      }
+      const chosen = requested ? options.filter(option => option.name === requested || option.label === requested) :
+        options.filter(option => option.code === previous);
+      if (chosen.length === 1) field.value = chosen[0].code;
+      field.disabled = !options.length;
+      submit.disabled = !!(requested && chosen.length !== 1);
+      status.textContent = !options.length ? '지역 코드가 확인되지 않아 지역 필터를 잠시 사용할 수 없습니다.' :
+        requested && chosen.length !== 1 ? '선택한 지역을 확인할 수 없습니다. 목록에서 다시 선택해 주세요.' :
+        '서울·인천처럼 이름이 같은 지역도 코드로 구별합니다.';
+      if (!options.length && requested) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'btn'; button.textContent = '지역 조건 없이 찾기';
+        button.onclick = () => { submit.disabled = false; status.textContent = '지역 조건을 제외하고 검색합니다.'; };
+        status.append(' ', button);
+      }
+    } catch (_) {
+      if (generation !== discoveryRegionGeneration || !document.getElementById('v2DiscoverDlg').open) return;
+      field.disabled = true;
+      submit.disabled = !!requested;
+      status.textContent = '지역 목록을 불러오지 못했습니다. 다시 열어 주세요.';
+      if (requested) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'btn'; button.textContent = '지역 조건 없이 찾기';
+        button.onclick = () => { submit.disabled = false; status.textContent = '지역 조건을 제외하고 검색합니다.'; };
+        status.append(' ', button);
+      }
+    }
+  }
+
   function openDiscovery(region = '') {
     discoveryGeneration++;
     const dialog = document.getElementById('v2DiscoverDlg');
     const form = document.getElementById('v2DiscoverForm');
-    if (region) form.elements.region.value = region;
     if (!dialog.open) dialog.showModal();
+    loadDiscoveryRegions(region);
     document.getElementById('v2DiscoverResults').textContent = '조건을 입력하면 현재 수집된 매물을 비교합니다.';
     form.elements.max_price_manwon.focus();
   }
@@ -583,11 +631,12 @@
     const result = document.getElementById('v2DiscoverResults');
     const spec = {};
     for (const field of ['max_price_manwon', 'min_area_m2', 'max_monthly_manwon',
-                         'prefer_max_price_manwon', 'prefer_min_area_m2', 'region']) {
+                         'prefer_max_price_manwon', 'prefer_min_area_m2']) {
       const value = form.elements[field].value.trim();
-      if (value) spec[field === 'region' && form.elements.region_mode.value === 'prefer' ?
-        'prefer_region' : field] = field === 'region' ? value : Number(value);
+      if (value) spec[field] = Number(value);
     }
+    if (form.elements.region_code.value) spec[form.elements.region_mode.value === 'prefer' ?
+      'prefer_region_code' : 'region_code'] = form.elements.region_code.value;
     if (form.elements.priority.value !== 'balanced') spec.priority = form.elements.priority.value;
     if (form.elements.include_exceeded.checked) spec.include_exceeded = true;
     if (cursor) spec.cursor = cursor;
@@ -599,6 +648,7 @@
       });
       if (response.status === 409) throw new Error('수집 결과가 바뀌었습니다. 다시 후보 찾기를 눌러 주세요.');
       if (response.status === 422 && cursor) throw new Error('검색 조건이 바뀌었습니다. 다시 후보 찾기를 눌러 주세요.');
+      if (response.status === 422) throw new Error('지역 코드나 검색 조건이 바뀌었습니다. 지역을 다시 선택해 주세요.');
       if (!response.ok) throw new Error('후보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       const data = await response.json();
       if (generation !== discoveryGeneration || !document.getElementById('v2DiscoverDlg').open) return;
@@ -616,7 +666,7 @@
           data.source_state === 'partial_empty' ? '원천 일부가 실패하거나 제한돼 0건을 확정할 수 없습니다.' :
           data.source_state === 'partial' ? '일부 원천이 실패·제한됐습니다. 아래 후보는 전체 시장이 아닙니다.' :
           data.source_state === 'empty' ? '이번 수집분은 0건입니다. 전체 시장의 매물 수는 아닙니다.' : '';
-        const requested = spec.region || spec.prefer_region;
+        const requested = form.elements.region_code.selectedOptions[0]?.dataset.regionName;
         const outside = requested && regions.length && !regions.includes(requested) ?
           `<p class="v2-muted">${esc(requested)}은(는) 현재 확인된 수집 지역에 없습니다.</p>` : '';
         const financeNotice = spec.max_monthly_manwon ?
@@ -624,8 +674,8 @@
           data.finance_context?.status !== 'ready' ? '매수력을 설정·확정해야 월 부담을 계산할 수 있습니다.' :
           data.finance_context?.policy_status !== 'verified' ? `대출 규제·세율 최신성이 검증되지 않았습니다(${esc(data.finance_context?.policy_declared_asof || '기준일 미확인')} 기준 가정). 월 부담은 참고용이며 후보는 확인 필요로 분류됩니다.` :
           '월 부담은 입력 가정의 추정치이며 대출 승인이 아닙니다.' : '';
-        const hasPreference = !!(spec.prefer_region || spec.prefer_max_price_manwon || spec.prefer_min_area_m2);
-        const priorityApplied = spec.priority === 'region' ? !!spec.prefer_region :
+        const hasPreference = !!(spec.prefer_region_code || spec.prefer_max_price_manwon || spec.prefer_min_area_m2);
+        const priorityApplied = spec.priority === 'region' ? !!spec.prefer_region_code :
           spec.priority === 'price' ? !!spec.prefer_max_price_manwon :
           spec.priority === 'area' ? !!spec.prefer_min_area_m2 : false;
         result.innerHTML = `<p class="v2-muted">현재 수집된 ${regions.length}개 지역 · ${sources || '원천 상태 미확인'} · 전체 시장 아님</p>
@@ -657,7 +707,7 @@
         groupHost.innerHTML = `<p>현재 조건의 기본 후보가 없습니다.${data.counts.exceeded && !spec.include_exceeded ? ` 조건 초과 ${esc(data.counts.exceeded)}건을 비교용으로 보려면 위 선택란을 켜세요.` : ' 가격·면적·지역을 하나씩 조정해 보세요.'}</p>`;
       if (!cursor && !data.counts.matched && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty') {
         const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',
-          max_monthly_manwon:'월 상환 상한',region:'필수 지역'};
+          max_monthly_manwon:'월 상환 상한',region_code:'필수 지역'};
         const options = Object.entries(data.single_condition_relaxations || {}).filter(([field,count]) => labels[field] && count > 0);
         if (options.length) {
           const tip = document.createElement('div');
@@ -710,6 +760,11 @@
   }
 
   document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
+  document.getElementById('v2DiscoverForm')?.elements.region_code.addEventListener('change', () => {
+    document.getElementById('v2DiscoverForm').querySelector('[type="submit"]').disabled = false;
+    document.getElementById('v2DiscoverRegionStatus').textContent =
+      '서울·인천처럼 이름이 같은 지역도 코드로 구별합니다.';
+  });
   document.getElementById('v2NoteForm')?.addEventListener('submit', saveNote);
   window.SignalV2 = {paintRegion, openListing, openSavedReports, openDiscovery, openNote, openNotes, openInitialLink, saveComparison};
   if (window._signalAppReady && !document.getElementById('onbDlg')?.open) openInitialLink();
