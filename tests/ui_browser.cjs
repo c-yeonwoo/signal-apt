@@ -279,6 +279,35 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>{mapSplit=()=>{}; switchTab('all');});
     await page.getByText('일반·급매 매물은 지정된 개인 계정에서만 보입니다.',{exact:false}).waitFor();
     assert.match(await page.locator('#laStatus').textContent(),/지정된 개인 계정만/);
+    const budgetUi=await page.evaluate(()=>{
+      mapSplit=(_list,_map,items,opt)=>{window.__budgetItems=items;window.__budgetOpt=opt;};
+      const row={key:'일반매물:budget',유형:'일반매물',단지명:'예산테스트단지',지역:'테스트구',
+        시도:'서울',총액:50000,기회도:50,지표라벨:'등록일',지표값:'2026-10-03',
+        lines:{cash:'계산상 됩니다',price:'호가',unknown:'확인 필요',next:'확인'}};
+      _laApplyResponse('일반매물',{listings:[{...row,budget_fit:{status:'unknown',reason:'가정 변경'}}],
+        asof:'2026-09-28',meta:{confirmed_budget:false,private_access:true}});
+      const held={note:document.getElementById('laBudgetNote').textContent,
+        sort:document.querySelector('#laSort option[value="budget"]').textContent,
+        label:window.__budgetOpt.summary(window.__budgetItems[0]).sub,
+        cash:_buyerFour(window.__budgetItems[0],_eok).cash};
+      _laApplyResponse('일반매물',{listings:[
+        {...row,key:'above',총액:60000,budget_fit:{status:'above'}},
+        {...row,key:'within',총액:40000,budget_fit:{status:'within'}},
+        {...row,key:'unknown',총액:30000,budget_fit:{status:'unknown',reason:'지역 확인 필요'}}],
+        asof:'2026-09-28',meta:{confirmed_budget:true,private_access:true}});
+      return {held,order:window.__budgetItems.map(x=>x.key),
+        within:window.__budgetOpt.summary(window.__budgetItems[0]).sub,
+        above:window.__budgetOpt.summary(window.__budgetItems[2]).sub,
+        cash:_buyerFour(window.__budgetItems[2],_eok).cash};
+    });
+    assert.match(budgetUi.held.note,/매수력 확정 가정·지역이 없거나 바뀌었습니다/);
+    assert.match(budgetUi.held.sort,/예산 미확정/);
+    assert.match(budgetUi.held.label,/예산 비교 보류/);
+    assert.doesNotMatch(budgetUi.held.cash,/계산상 됩니다/);
+    assert.deepEqual(budgetUi.order,['within','unknown','above']);
+    assert.match(budgetUi.within,/호가·확정상한 이내/);
+    assert.match(budgetUi.above,/호가·확정상한 초과/);
+    assert.match(budgetUi.cash,/상한보다 높습니다/);
     await page.evaluate(()=>{window.__generalRows=[]; mapSplit=(listId,mapId,items,opt)=>{
       window.__generalRows=items; document.getElementById(listId).innerHTML=opt.summary(items[0]).nm+opt.detail(items[0]);
     }; switchTab('general');});

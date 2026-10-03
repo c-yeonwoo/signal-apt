@@ -633,6 +633,7 @@
       <button type="button" class="chip" onclick="SignalV2.openDiscovery()">내 조건으로 찾기</button>
       <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
     </div>
+    <div id="laBudgetNote" style="display:none;font-size:12px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
     <div id="laMoreFilters" class="la-more">
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
@@ -2571,6 +2572,7 @@ async function bpConfirm(){
   const d=await r.json();
   if(!d.ok){ toast(d.error||d.detail||'확정에 실패했습니다'); return; }
   _profile['매수력']=d['매수력'];
+  _laInvalidateCache();
   if(p.capital) _profile['가용자본']=p.capital;
   _profile['연소득']=p.income||0;
   document.getElementById('bpDlg').close();
@@ -3340,6 +3342,7 @@ function openQuicksaleEvidence(btn){
 const _LA_TYPES=['일반매물','경매','급매','찐매물','청약','재건축'];
 const _LA_COLOR={일반매물:'#2563eb', 경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null, _laAccessDenied=false;   // _laPrice={lo,hi,min,max} 만원, null=미적용
+let _laConfirmedBudget=false;
 const _laCache=new Map(), _laRevalidating=new Set();
 let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
@@ -3351,6 +3354,15 @@ function _laApplyResponse(types,d,preservePrice=false){
   const price=preservePrice && _laPrice ? {..._laPrice} : null;
   _laCurrentTypes=types; _laData=d.listings||[];
   const info=d.meta||{};
+  _laConfirmedBudget=info.confirmed_budget===true;
+  const note=document.getElementById('laBudgetNote');
+  const hasAsking=(_laData||[]).some(x=>['일반매물','급매','찐매물'].includes(x['유형']));
+  if(note){
+    note.style.display=_laConfirmedBudget||!hasAsking?'none':'block';
+    note.innerHTML=_laConfirmedBudget||!hasAsking?'':`매수력 확정 가정·지역이 없거나 바뀌었습니다. 표시 가격이 낮은 순으로 보여 드리며 예산 적합성은 보류합니다. <button type="button" class="btn" onclick="openBuyingPower()" style="padding:2px 8px;font-size:11px">매수력 확인</button>`;
+  }
+  const budgetOption=document.querySelector('#laSort option[value="budget"]');
+  if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
   document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전 수집`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`;
   initLaPriceFilter();
@@ -3453,26 +3465,20 @@ function renderLaTypeChips(){
   el.querySelectorAll('[data-t]').forEach(c=>c.onclick=()=>{ const t=c.dataset.t;
     _laSel.has(t)?_laSel.delete(t):_laSel.add(t); if(!_laSel.size)_laSel.add(t); loadAllListings(); });
 }
-function _laBudgetCap(){
-  const saved=Number((((_profile||{})['매수력']||{})['최대매수가'])||(_bp&&_bp['최대매수가'])||0);
-  return saved>0?saved:0;
-}
 function _laAsk(x){
   const v=x&&x['총액'];
   return (v!=null&&+v>0)?+v:null;
 }
-// 2=상한 이내(상한이 없으면 가격이 있는 매물), 1=가격 미상, 0=상한 초과.
+// 2=검증된 확정상한 이내, 1=비교 보류, 0=확정상한 초과.
 function _laBudgetTier(x){
-  const price=_laAsk(x), cap=_laBudgetCap();
-  if(price==null) return 1;
-  if(!cap||price<=cap) return 2;
-  return 0;
+  const status=x.budget_fit?.status;
+  return status==='within'?2:status==='above'?0:1;
 }
 function _laBudgetLabel(x){
-  const price=_laAsk(x), cap=_laBudgetCap();
-  if(price==null) return '가격 미상';
-  if(!cap) return '';
-  return price<=cap?'상한 이내':'상한 초과';
+  const status=x.budget_fit?.status;
+  if(status==='within') return '호가·확정상한 이내';
+  if(status==='above') return '호가·확정상한 초과';
+  return ['일반매물','급매','찐매물'].includes(x['유형'])?'예산 비교 보류':'';
 }
 function _laPricePass(x){
   if(!_laPrice) return true;
@@ -3514,7 +3520,7 @@ function renderAllListings(){
         : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
       const priced=['일반매물','급매','찐매물','경매'].includes(x['유형']) && x['총액'];
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
-      return `${_buyerFourHtml(x, _eok)}<div class="kv" style="margin-top:8px"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
+      return `${_buyerFourHtml(x, _eok)}${x.budget_fit?.status==='unknown'?`<div style="font-size:11px;color:var(--warn);margin-top:6px">예산 비교 보류 · ${esc(x.budget_fit.reason||'확정 매수력과 호가를 다시 확인해 주세요.')}</div>`:''}<div class="kv" style="margin-top:8px"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
         ${x['유형']==='일반매물'?`<div style="font-size:11px;color:var(--dim);margin-top:5px">한방 매물번호 ${esc(x['ref']?.['hanbang_id']||'–')} · 최신 표본, 현재 판매 여부 미확인</div>`:''}
         ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">자료 확인 필요 · 규칙 기반 참고 점수</div>`:''}
@@ -4107,6 +4113,14 @@ function _holdBlock(h){
   return `<div style="margin-top:10px;font-size:13px;line-height:1.55"><b>지난주에 미뤄 둔 것</b>${items.map(it=>`<div style="margin-top:6px"><b>${esc(it.name||'후보')}</b> ${esc(it.region||'')}<div style="color:var(--dim)">${(it.changes||[]).map(esc).join(' · ')}</div></div>`).join('')}</div>`;
 }
 function _buyerFour(L, eok){
+  if(L.budget_fit){
+    const base=_buyerFour({...L,budget_fit:null},eok);
+    const state=L.budget_fit.status;
+    base.cash=state==='within'?'호가가 확정 매수력 상한 안입니다. 은행 승인 전입니다'
+      :state==='above'?'호가가 확정 매수력 상한보다 높습니다'
+      :'호가와 확정 매수력 비교를 보류합니다';
+    return base;
+  }
   if(L.lines&&L.lines.cash) return {cash:L.lines.cash, price:L.lines.price, unknown:L.lines.unknown, next:L.lines.next};
   const money=eok||(n=>n==null?'–':String(n));
   const d=L.decision||{};
@@ -4115,7 +4129,6 @@ function _buyerFour(L, eok){
   const src=L['가격출처']||'';
   const modeled=src==='지역평단추정'||src==='단지평단추정';
   const ask=(L['총액']!=null&&+L['총액']>0)?+L['총액']:null;
-  const cap=(typeof _laBudgetCap==='function')?_laBudgetCap():0;
   let cash;
   if(z['필요현금']!=null){
     const month=z['총월상환']!=null?z['총월상환']:z['월상환'];
@@ -4123,10 +4136,8 @@ function _buyerFour(L, eok){
     cash=`필요한 돈 ${money(z['필요현금'])}${month!=null?` · 매달 ${Number(month).toLocaleString()}만`:''} · ${state}`;
   }else if(kind==='경매'&&L['입찰상태']&&L['입찰상태']!=='conditional_bid'){
     cash='아직 입찰하지 않습니다. 필요한 돈은 계산 전입니다';
-  }else if(L['예산내']||(cap&&ask!=null&&ask<=cap)){
+  }else if(L['예산내']){
     cash='예산 안 가격입니다. 세금과 중개비는 따로입니다';
-  }else if(cap&&ask!=null&&ask>cap){
-    cash='예산보다 비쌉니다';
   }else if(ask==null){
     cash='가격이 없어 필요한 돈을 계산하지 못했습니다';
   }else{
@@ -6889,6 +6900,7 @@ function saveMyPage(){
     생애최초:v('mp_firsthome')===''?null:+v('mp_firsthome'),
   } : {무주택기간:null, 부양가족:null, 청약통장개월:null, 자녀수:null, 혼인상태:null, 세대주:null, 생애최초:null});
   if(prevPower) _profile['매수력']=prevPower;   // 확정 매수력은 프로필 저장으로 지워지지 않는다
+  _laInvalidateCache();
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
   if(_profile['가용자본']) track('profile_complete',{capital:_profile['가용자본']});
   renderMyPageSummary(); applyProfileHeader(); applyProfileDefaults(); renderAha();

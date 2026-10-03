@@ -435,16 +435,16 @@ test('buyer candidate card distinguishes inquiry from infeasibility and expands 
   assert.doesNotMatch(lined, /매수 상한을 확정하면/);
 });
 
-test('listing price filter and budget sort keep unknown prices out of the affordable tier', () => {
+test('listing price filter and budget sort require server-validated buyer fit', () => {
   const ctx = vm.createContext({
-    _profile: {매수력: {최대매수가: 50000}},
-    _bp: null,
     _laPrice: {lo: 0, hi: 200000, min: 0, max: 150000},
   });
-  vm.runInContext(extract('function _laBudgetCap(){', 'function renderAllListings(){'), ctx);
-  assert.equal(ctx._laBudgetTier({총액: 40000}), 2);
+  vm.runInContext(extract('function _laAsk(x){', 'function renderAllListings(){'), ctx);
+  assert.equal(ctx._laBudgetTier({총액: 40000,budget_fit:{status:'within'}}), 2);
   assert.equal(ctx._laBudgetTier({총액: null}), 1);
-  assert.equal(ctx._laBudgetTier({총액: 80000}), 0);
+  assert.equal(ctx._laBudgetTier({총액: 80000,budget_fit:{status:'above'}}), 0);
+  assert.equal(ctx._laBudgetTier({총액: 40000}), 1);
+  assert.match(ctx._laBudgetLabel({총액: 40000,유형:'일반매물'}), /예산 비교 보류/);
   assert.equal(ctx._laPricePass({총액: null}), false);
   assert.equal(ctx._laPricePass({총액: 10000}), true);
   assert.equal(ctx._laPricePass({총액: 160000}), false);
