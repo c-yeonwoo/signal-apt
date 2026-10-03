@@ -11,7 +11,7 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-10"
+VERSION = "discovery-v2-11"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "move_in_by", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
@@ -292,8 +292,13 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
         groups[item["eligibility"]].append(item)
     def order(item):
         snap = item["listing"]
+        # 입주일 조건을 요청한 경우에만, 같은 선호 적합도·확인도 안에서
+        # 사용자가 실제로 상세 확인할 수 있는 한방 후보를 먼저 보여 준다.
+        move_lookup = (0 if "move_in_by" in spec and item["eligibility"] == "verify"
+                       and snap["kind"] == "일반매물" and snap.get("move_in") is None else 1)
         return (-(item["preference"]["score"] or 0),
                 -(item["preference"]["coverage"] or 0),
+                move_lookup,
                 -_freshness(snap),
                 snap["key"])
     for items in groups.values():
