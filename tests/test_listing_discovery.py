@@ -52,6 +52,23 @@ def test_headlines_are_candidates_not_project_facts():
     assert "단지명·지역명" in out[0]["match"]
 
 
+def test_same_named_district_news_needs_matching_province_context():
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    recent = (now-timedelta(days=1)).strftime("%a, %d %b %Y")
+    articles = [
+        {"title": "인천 중구 사업", "descr": "", "link": "https://news.example/incheon", "pubdate": recent},
+        {"title": "중구 사업", "descr": "", "link": "https://news.example/unknown", "pubdate": recent},
+        {"title": "서울특별시 중구 사업", "descr": "", "link": "https://news.example/seoul", "pubdate": recent},
+    ]
+    seoul = {**_row("일반매물:seoul", name="별도단지"), "지역": "중구", "시도": "서울"}
+    incheon = {**_row("일반매물:incheon", name="별도단지"), "지역": "중구", "시도": "인천"}
+    assert [x["url"] for x in listing_discovery.news(seoul, articles, now=now)] == [
+        "https://news.example/seoul"]
+    assert [x["url"] for x in listing_discovery.news(incheon, articles, now=now)] == [
+        "https://news.example/incheon"]
+    assert listing_discovery.news({**seoul, "시도": None}, articles, now=now) == []
+
+
 def test_discovery_endpoint_private_access(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "discovery.db")
     db._migrated[0] = False
