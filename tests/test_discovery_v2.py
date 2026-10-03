@@ -53,8 +53,44 @@ def test_one_complex_cannot_fill_initial_diversified_candidates():
     for row in rows[:3]:
         row["단지명"] = "같은 단지"
     result = discovery.discover(rows, {"max_price_manwon": 60000, "limit": 3})
-    assert [item["listing"]["name"] for item in result["groups"]["matched"]] == [
-        "같은 단지", "같은 단지", "other"]
+    assert sorted(item["listing"]["name"] for item in result["groups"]["matched"]) == [
+        "other", "같은 단지", "같은 단지"]
+
+
+def test_preferences_keep_unknown_in_denominator_and_do_not_exclude():
+    rows = [_row("a", price=45_000, area=None, region="노원구"),
+            _row("b", price=None, area=90, region="강남구"),
+            _row("c", price=55_000, area=60, region="노원구")]
+    out = discovery.discover(rows, {"prefer_region": "노원구",
+                                    "prefer_max_price_manwon": 50_000,
+                                    "prefer_min_area_m2": 84})
+    assert out["counts"]["explore"] == 3
+    by_name = {x["listing"]["name"]: x["preference"] for x in out["groups"]["explore"]}
+    assert (by_name["a"]["score"], by_name["a"]["coverage"]) == (67, 67)
+    assert (by_name["b"]["score"], by_name["b"]["coverage"]) == (33, 67)
+    assert (by_name["c"]["score"], by_name["c"]["coverage"]) == (33, 100)
+    assert [x["listing"]["name"] for x in out["groups"]["explore"]] == ["a", "c", "b"]
+
+
+def test_unrequested_low_price_is_not_a_ranking_bonus():
+    rows = [_row("z-cheap", price=10_000), _row("a-costly", price=50_000)]
+    out = discovery.discover(rows, {"max_price_manwon": 60_000})
+    assert [x["listing"]["name"] for x in out["groups"]["matched"]] == [
+        "a-costly", "z-cheap"]
+    rows[0]["fetched_at"] += 86400
+    fresh = discovery.discover(rows, {"max_price_manwon": 60_000})
+    assert fresh["groups"]["matched"][0]["listing"]["name"] == "z-cheap"
+
+
+def test_broad_discovery_diversifies_region_without_dropping_overflow():
+    rows = [_row(f"a-{i}", price=40_000, region="노원구") for i in range(5)]
+    rows.append(_row("b-0", price=40_000, region="강남구"))
+    first = discovery.discover(rows, {"max_price_manwon": 50_000, "limit": 5})
+    names = [x["listing"]["name"] for x in first["groups"]["matched"]]
+    assert "b-0" in names and "a-4" not in names
+    second = discovery.discover(rows, {"max_price_manwon": 50_000, "limit": 5,
+                                       "cursor": first["next_cursor"]})
+    assert [x["listing"]["name"] for x in second["groups"]["matched"]] == ["a-4"]
 
 
 def test_pages_are_stable_without_duplicates_and_reject_changed_snapshot():
