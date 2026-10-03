@@ -52,6 +52,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
+      if(url.pathname==='/api/freshness') {
+        const now=Date.parse('2026-10-03T12:00:00Z')/1000;
+        data={now,'기준일':'2026-09-21',sources:[
+          {key:'signal',label:'시장 시그널 (KB)',asof:'2026-09-21',ts:now-3600,cycle:'주 1회',note:'KB 자료'},
+          {key:'trade',label:'국토부 실거래',ts:now-3600,cycle:'조회 시',note:'거래 자료'}]};
+      }
       if(url.pathname==='/api/v2/discovery') {
         const spec=route.request().postDataJSON()||{};
         discoveryPayloads.push(spec);
@@ -213,6 +219,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     for(const url of ['/api/regime','/api/complex-watch','/api/news','/api/shortlist']) assert(!calls.includes(url),`eager hidden source ${url}`);
     const width=await page.evaluate(()=>({viewport:innerWidth,body:document.body.scrollWidth,root:document.documentElement.scrollWidth}));
     assert(width.body<=width.viewport && width.root<=width.viewport,JSON.stringify(width));
+    await page.locator('#date').click();
+    await page.locator('#freshBox').getByText(/관측 12일 전/).waitFor();
+    assert.match(await page.locator('#freshBox').textContent(),/관측 2026-09-21 · 최종 수집 1시간 전/);
+    assert.match(await page.locator('#freshBox').textContent(),/최신 공표를 확인하기 전까지/);
+    await page.keyboard.press('Escape');
     await page.locator('#dashMarketExtra > summary').click();
     await page.waitForFunction(()=>document.getElementById('dashRegimeWrap').textContent.length>0);
     assert.equal(calls.filter(x=>x==='/api/regime').length,1);
