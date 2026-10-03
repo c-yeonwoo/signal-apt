@@ -16,6 +16,9 @@ def same_region(a: dict, b: dict) -> bool:
     region = a.get("지역")
     if not region or region != b.get("지역"):
         return False
+    a_code, b_code = a.get("지역코드"), b.get("지역코드")
+    if a_code and b_code:
+        return str(a_code) == str(b_code)
     a_sido, b_sido = a.get("시도"), b.get("시도")
     if a_sido and b_sido:
         return a_sido == b_sido
@@ -26,6 +29,7 @@ def public_fields(row: dict) -> dict:
     ref = row.get("ref") or {}
     return {"key": row.get("key"), "kind": row.get("유형"), "name": row.get("단지명"),
             "region": row.get("지역"), "region_sido": row.get("시도"),
+            "region_code": row.get("지역코드"),
             "price": row.get("총액"), "pyeong": row.get("평형"),
             "dday": ref.get("Dday"), "status": row.get("지표값") if row.get("유형") == "청약" else None,
             "stale": bool(row.get("stale")), "fetched_at": row.get("fetched_at")}

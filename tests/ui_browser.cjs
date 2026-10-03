@@ -508,15 +508,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(eventPayloads.some(x=>x.name==='listing_compare_open'));
     assert(!JSON.stringify(eventPayloads).includes('synthetic-hb-1'));
     const held=await page.evaluate(()=>{
-      const row={region:'테스트구',signal:'BUY',display_signal:'HELD',assessment_status:'held',group:'서울'};
+      const row={region:'테스트구',region_id:'kb:1234500000',signal:'BUY',display_signal:'HELD',assessment_status:'held',group:'서울'};
       const label=displaySignal(row);
-      return {label,badge:badge(label),style:_choStyle('signal','테스트구',{},null,{테스트구:row}),
-        tip:_choTip('signal','테스트구',{},null,{테스트구:row})};
+      return {label,badge:badge(label),style:_choStyle('signal','테스트구',{},null,{테스트구:row},'12345'),
+        tip:_choTip('signal','테스트구',{},null,{테스트구:row},'12345'),
+        otherStyle:_choStyle('signal','테스트구',{},null,{테스트구:row},'28110'),
+        otherTip:_choTip('signal','테스트구',{},null,{테스트구:row},'28110')};
     });
     assert.equal(held.label,'HELD');
     assert.match(held.badge,/판단 보류/);
     assert.equal(held.style.fillColor,'#5f6875');
     assert.match(held.tip,/판단 보류/);
+    assert.equal(held.otherStyle.fillColor,'#e2e8f0');
+    assert.match(held.otherTip,/자료 없음/);
     const complexHeld=await page.evaluate(()=>_cxSigBanner({등급:'HELD',점수:null,판정상태:'held',주의:'지역 판정 보류'}));
     assert.match(complexHeld,/판단 보류/);
     assert.match(complexHeld,/지역 판정 보류/);

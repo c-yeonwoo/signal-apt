@@ -29,7 +29,7 @@ def test_radar_api_and_integrated_listing_do_not_leak_to_other_users(tmp_path, m
     monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
     sale = tmp_path / "quicksale.json"
     cert = tmp_path / "certified.json"
-    listing = {"단지명": "개인 매물", "지역": "노원구", "호가": 50000,
+    listing = {"단지명": "개인 매물", "지역": "노원구", "시도": "서울", "지역코드": "11350", "호가": 50000,
                "평형": 25, "급매갭": -8, "시그널": "BUY", "naver_id": "personal-1"}
     for path in (sale, cert):
         path.write_text(json.dumps({"ready": True, "listings": [listing], "regions": ["노원구"],

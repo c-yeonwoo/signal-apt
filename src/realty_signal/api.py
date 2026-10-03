@@ -439,7 +439,7 @@ def myfeed(request: Request):
     except Exception:  # noqa: BLE001
         ps = []
     items = []
-    qs = [m for m in qs if _listing_region_matches_kb(m.get("지역"), m.get("시도"))]
+    qs = [m for m in qs if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드"))]
     for r in regions:
         rq = [m for m in qs if r in (m.get("지역") or "")]
         gap = min([m.get("급매갭") for m in rq if m.get("급매갭") is not None], default=None)
@@ -811,7 +811,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
                           "호가": m.get("호가"), "급매갭": m.get("급매갭"),
                           "시그널": safe_signals.get(m.get("지역"), "HELD")
-                          if _listing_region_matches_kb(m.get("지역"), m.get("시도")) else "HELD"} for m in qs]
+                          if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드")) else "HELD"} for m in qs]
         if kind in ("찐매물", "전체") and private_allowed:
             try:
                 cs = _radar_verified_rows(CERTIFIED_FILE, _CERTIFIED_SCAN_VER)
@@ -823,7 +823,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             out["찐매물"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
                             "호가": m.get("호가"), "시세갭": m.get("급매갭"),
                           "시그널": safe_signals.get(m.get("지역"), "HELD")
-                          if _listing_region_matches_kb(m.get("지역"), m.get("시도")) else "HELD"} for m in cs]
+                          if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드")) else "HELD"} for m in cs]
         if kind in ("경매", "전체"):
             from realty_signal.auction import AUCTION_FILE
             try:
@@ -1161,16 +1161,24 @@ def _sido_of(region: str | None) -> str | None:
     return reg.sido_hint(region) or _SIDO.get((_code_of(region) or "")[:2])
 
 
-_COLLIDING_DISTRICTS = frozenset({"중구", "강서구", "서구", "동구", "남구", "북구"})
-
-
-def _listing_region_matches_kb(region: str | None, source_sido: str | None) -> bool:
-    """이름 키 KB 신호는 확인된 시도가 일치할 때만 외부 매물에 결합한다."""
+def _listing_region_matches_kb(region: str | None, source_sido: str | None,
+                               source_code: str | None = None) -> bool:
+    """외부 매물의 경계 코드(없으면 시도)를 현재 KB 지역과 대조한다."""
     if not region:
         return False
-    if not source_sido:
-        return region not in _COLLIDING_DISTRICTS
-    expected = _sido_of(region)
+    try:
+        if source_code:
+            code = str(source_code)
+            if len(code) != 5 or not code.isdigit():
+                return False
+            if source_sido and _SIDO.get(code[:2]) != source_sido:
+                return False
+            return str(_code_of(region))[:5] == code
+        if not source_sido:
+            return False
+        expected = _sido_of(region)
+    except Exception:  # noqa: BLE001 - KB 코드 장애는 이름만으로 통과시키지 않는다
+        return False
     return bool(expected and source_sido == expected)
 
 
@@ -1641,8 +1649,8 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
 QUICKSALE_FILE = store.CACHE_DIR / "quicksale.json"
 CERTIFIED_FILE = store.CACHE_DIR / "certified.json"
 HANBANG_FILE = store.CACHE_DIR / "hanbang_general.json"
-_QUICKSALE_SCAN_VER = 5   # 5=좌표 경계의 시도 출처를 함께 검증
-_CERTIFIED_SCAN_VER = 3   # 3=좌표 경계의 시도 출처를 함께 검증
+_QUICKSALE_SCAN_VER = 6   # 6=2026-07 행정구역 경계·시군구 코드
+_CERTIFIED_SCAN_VER = 4   # 4=2026-07 행정구역 경계·시군구 코드
 _HANBANG_SCAN_VER = 2   # 2=원천 시도·시군구와 목록 행의 지역을 함께 검증
 _RADAR_MAX_AGE = 86400     # 급매·찐매물 캐시 TTL(1일)
 
@@ -2193,7 +2201,7 @@ def _complex_backtest(sample: int = 30, months: int = 36) -> dict:
     if QUICKSALE_FILE.exists():                       # 급매 단지 풀에서 표본 추출
         for m in _radar_verified_rows(QUICKSALE_FILE, _QUICKSALE_SCAN_VER):
             r, n = m.get("지역"), m.get("단지명")
-            if not _listing_region_matches_kb(r, m.get("시도")):
+            if not _listing_region_matches_kb(r, m.get("시도"), m.get("지역코드")):
                 continue
             code = _code_of(r)
             if r and n and (r, n) not in seen and code[:5].isdigit() and len(code) >= 5:
@@ -2623,7 +2631,7 @@ def neighborhood(request: Request, region: str):
             qs = (_radar_verified_rows(QUICKSALE_FILE, _QUICKSALE_SCAN_VER)
                   if _personal_listings_allowed(request=request) else [])
             return sum(1 for m in qs if region in (m.get("지역") or "")
-                       and _listing_region_matches_kb(m.get("지역"), m.get("시도")))
+                       and _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드")))
         except Exception:  # noqa: BLE001
             return 0
     ps_cnt = 0
@@ -2813,7 +2821,7 @@ def region_centroids(regions: str):
 
 @lru_cache(maxsize=1)
 def _sigungu_polys():
-    """수도권 시군구 경계 폴리곤 → [(name, sido, outer_rings, bbox)]."""
+    """2026-07 수도권 시군구 경계 → [(name, sido, code, outer_rings, bbox)]."""
     try:
         g = json.loads((WEB_DIR / "sudo_gu.geojson").read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
@@ -2822,8 +2830,8 @@ def _sigungu_polys():
     for f in g.get("features", []):
         props = f.get("properties") or {}
         nm = props.get("name")
-        # 이 경계 파일은 옛 행정코드(23=인천, 31=경기)를 사용한다.
-        sido = {"11": "서울", "23": "인천", "31": "경기"}.get(str(props.get("sido") or ""))
+        sido = {"11": "서울", "28": "인천", "41": "경기"}.get(str(props.get("sido") or ""))
+        code = str(props.get("code") or "")
         geom = f.get("geometry") or {}
         polys = geom.get("coordinates") or []
         if geom.get("type") == "Polygon":
@@ -2833,7 +2841,7 @@ def _sigungu_polys():
         if not pts:
             continue
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
-        out.append((nm, sido, rings, (min(xs), min(ys), max(xs), max(ys))))
+        out.append((nm, sido, code, rings, (min(xs), min(ys), max(xs), max(ys))))
     return out
 
 
@@ -2849,13 +2857,13 @@ def _pip(lng: float, lat: float, ring: list) -> bool:
     return inside
 
 
-def _sigungu_identity_at(lat, lng) -> tuple[str, str] | None:
-    """좌표 → 시도·시군구를 함께 보존한다. 동명이 구는 이름만으로 매칭하지 않는다."""
+def _sigungu_identity_at(lat, lng) -> tuple[str, str, str] | None:
+    """좌표 → 현재 시군구명·시도·코드. 동명이 구는 이름만으로 매칭하지 않는다."""
     if not lat or not lng:
         return None
-    for nm, sido, rings, (x0, y0, x1, y1) in _sigungu_polys():
-        if nm and sido and x0 <= lng <= x1 and y0 <= lat <= y1 and any(_pip(lng, lat, r) for r in rings):
-            return nm, sido
+    for nm, sido, code, rings, (x0, y0, x1, y1) in _sigungu_polys():
+        if nm and sido and len(code) == 5 and x0 <= lng <= x1 and y0 <= lat <= y1 and any(_pip(lng, lat, r) for r in rings):
+            return nm, sido, code
     return None
 
 
@@ -2902,18 +2910,19 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
             if kind == "찐매물" and not m.get("찐매물"):
                 continue
             location = _sigungu_identity_at(m.get("lat"), m.get("lng"))
-            actual, source_sido = location if location else (region, None)
-            key = (source_sido, actual, m.get("complex_no"), m.get("평형"), m.get("층"), m.get("호가"))
+            actual, source_sido, source_code = location if location else (region, None, None)
+            key = (source_code, actual, m.get("complex_no"), m.get("평형"), m.get("층"), m.get("호가"))
             if key in seen:
                 continue
             seen.add(key)
             m["지역"] = actual
             m["시도"] = source_sido
+            m["지역코드"] = source_code
             import time
             m["fetched_at"] = time.time()
             m["source"] = "baroezip"
             # KB 판정은 이름 키이므로, 출처 시도가 다르거나 불명이면 동명이 구에 결합하지 않는다.
-            m["시그널"] = sig.get(actual, "") if _listing_region_matches_kb(actual, source_sido) else ""
+            m["시그널"] = sig.get(actual, "") if _listing_region_matches_kb(actual, source_sido, source_code) else ""
             out.append(m)
     out.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
     # 단일 지역 수동 갱신은 한 번의 성공으로 충분하고, 전체 갱신은 절반 이상 원천 응답을
@@ -3056,7 +3065,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
 
         assessment = assessed.get(region) or {}
         identity_ok = (kind not in {"일반매물", "급매", "찐매물"}
-                       or _listing_region_matches_kb(region, raw.get("시도")))
+                       or _listing_region_matches_kb(region, raw.get("시도"), raw.get("지역코드")))
         safe_signal = assessment.get("display_signal") if assessment.get("assessment_status") == "ready" else "HELD"
         if not identity_ok:
             safe_signal = "HELD"
@@ -3067,7 +3076,8 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                            else "matched" if raw.get("시도") and identity_ok
                            else "name_only" if identity_ok else "held")
         tr = listing_timing(kind, raw, safe_signal, safe_grade, asof=_timing_asof())
-        row = {"유형": kind, "단지명": name, "지역": region, "시도": raw.get("시도"), "시그널": safe_signal,
+        row = {"유형": kind, "단지명": name, "지역": region, "시도": raw.get("시도"),
+               "지역코드": raw.get("지역코드"), "시그널": safe_signal,
                "원시시그널": signal or "", "판정상태": (assessment.get("assessment_status") or "held") if identity_ok else "held",
                "지역식별상태": identity_status,
                "지역급지": safe_grade, "지표라벨": mlabel, "지표값": mval, "지표단위": munit,

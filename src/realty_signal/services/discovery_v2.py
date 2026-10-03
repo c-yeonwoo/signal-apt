@@ -220,7 +220,7 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
         selected, overflow, complex_counts = [], [], {}
         for item in items:
             listing = item["listing"]
-            complex_key = (listing["region_sido"], listing["region"], listing["name"])
+            complex_key = (listing["region_code"] or listing["region_sido"], listing["region"], listing["name"])
             if complex_counts.get(complex_key, 0) < 2:
                 selected.append(item)
                 complex_counts[complex_key] = complex_counts.get(complex_key, 0) + 1
