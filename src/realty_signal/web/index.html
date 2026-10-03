@@ -1755,7 +1755,9 @@ function renderGroupSubnav(grp, active){
 }
 const _LOAD={
   dashboard:()=>loadDashboard(),
-  signal:()=>{setSignalView(_signalMode); renderScoreboard(); renderAha();},
+  signal:()=>{setSignalView(_signalMode); renderScoreboard(); renderAha();
+    // 오래 열린 탭에서 다른 화면을 보다가 돌아와도 현재 관측일·안전 판정을 다시 확인한다.
+    if(window._signalAppReady) loadData().catch(()=>{});},
   undervalued:()=>loadUndervalued(),
   all:()=>loadAllListings(), general:()=>loadGeneralListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev(),
   tradeup:()=>tuPrefill(), watch:()=>loadListingWatch(), mymap:()=>drawMyMap(),
