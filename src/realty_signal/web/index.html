@@ -3706,29 +3706,33 @@ function _regTags(name, sido){
 const _REG_COLOR={투기과열지구:'#dc2626', 조정대상지역:'#ea580c', 토지거래허가구역:'#7c3aed'};
 function _regPrimary(t){ for(const k of ['투기과열지구','조정대상지역','토지거래허가구역']) if(t.includes(k)) return k; return null; }
 const _onorm=s=>(s||'').replace(/\s/g,'');
-function _gradeLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s['급지']) m[_onorm(s.region)]=s['급지']; }); return m; }
+function _gradeLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s['급지']) m[_onorm(s.region)]=s; }); return m; }
 function _signalLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s&&s.region) m[_onorm(s.region)]=s; }); return m; }
-async function _ensureGeo(){ if(!_uvGeo){ try{ _uvGeo=await (await fetch('/sudo_gu.geojson')).json(); }catch(e){} } return _uvGeo; }
-function _choStyle(mode, name, gl, sido, sl){
+async function _ensureGeo(){ if(!_uvGeo){ try{ _uvGeo=await (await fetch('/sudo_gu.geojson?v=20260701')).json(); }catch(e){} } return _uvGeo; }
+function _geoRow(lut, name, code){
+  const row=lut&&lut[_onorm(name)];
+  return row&&code&&row.region_id===`kb:${code}00000`?row:null;
+}
+function _choStyle(mode, name, gl, sido, sl, code){
   if(mode==='signal'){
-    const row=sl&&sl[_onorm(name)], col=row&&_SIG_COLOR[displaySignal(row)];
+    const row=_geoRow(sl,name,code), col=row&&_SIG_COLOR[displaySignal(row)];
     const on=selected&&_onorm(selected)===_onorm(name);
     return {color:on?'#0f172a':'#fff',weight:on?3:1,fillColor:col||'#e2e8f0',fillOpacity:col?0.72:0.16};
   }
-  if(mode==='grade'){ const g=gl[_onorm(name)], gd=g&&_REGION_GRADE[g];
+  if(mode==='grade'){ const row=_geoRow(gl,name,code), gd=row&&_REGION_GRADE[row['급지']];
     return {color:'#fff',weight:1,fillColor:gd?gd.col:'#e2e8f0',fillOpacity:gd?0.5:0.12}; }
   const t=_regTags(name,sido), c=t?_REG_COLOR[_regPrimary(t)]:null;
   const note=(_REGULATION.notes||{})[name];
   return {color:'#fff',weight:1,fillColor:c||(note?'#fbbf24':'#e2e8f0'),fillOpacity:c?0.5:(note?0.35:0.08)};
 }
-function _choTip(mode, name, gl, sido, sl){
+function _choTip(mode, name, gl, sido, sl, code){
   if(mode==='signal'){
-    const row=sl&&sl[_onorm(name)];
+    const row=_geoRow(sl,name,code);
     const ko=row?(SIG_KO[displaySignal(row)]||displaySignal(row)):'자료 없음';
     const src=row&&row['수급출처']?` · ${row['수급출처']} 공통`:'';
     return `${name} · ${ko}${src}`;
   }
-  if(mode==='grade'){ const g=gl[_onorm(name)]; return name+(g&&_REGION_GRADE[g]?' · '+_REGION_GRADE[g].label:''); }
+  if(mode==='grade'){ const row=_geoRow(gl,name,code); return name+(row&&_REGION_GRADE[row['급지']]?' · '+_REGION_GRADE[row['급지']].label:' · 자료 없음'); }
   const t=_regTags(name,sido), note=(_REGULATION.notes||{})[name];
   return name+(t?' · '+t.join(', '):(note?' · '+note:' · 규제 없음'));
 }
@@ -3741,8 +3745,8 @@ async function setOverlay(map, mode, onClick){
   const gl=_gradeLut();
   const sl=mode==='signal'?_signalLut():null;
   map._ovLayer=L.geoJSON(_uvGeo,{ pane:mode==='signal'?'overlayPane':'tilePane',
-    style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido,sl),
-    onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido,sl),{sticky:true});
+    style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido,sl,f.properties.code),
+    onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido,sl,f.properties.code),{sticky:true});
       if(onClick) l.on('click',()=>onClick(f.properties.name)); }
   }).addTo(map);
 }

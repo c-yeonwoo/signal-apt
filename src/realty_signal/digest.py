@@ -116,7 +116,7 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
             qs = api._radar_verified_rows(qs_path, api._QUICKSALE_SCAN_VER)
             for m in qs:
                 r = m.get("지역") or ""
-                if r and api._listing_region_matches_kb(r, m.get("시도")):
+                if r and api._listing_region_matches_kb(r, m.get("시도"), m.get("지역코드")):
                     qs_by[r] = qs_by.get(r, 0) + 1
     except Exception:  # noqa: BLE001
         qs_by = {}

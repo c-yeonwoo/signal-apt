@@ -60,7 +60,8 @@ def snapshot(row: dict) -> dict:
         coords = [lat, lng]
     return {
         "key": row.get("key"), "kind": kind, "name": row.get("단지명"),
-        "region": row.get("지역"), "region_sido": row.get("시도"), "asking_manwon": price,
+        "region": row.get("지역"), "region_sido": row.get("시도"),
+        "region_code": row.get("지역코드"), "asking_manwon": price,
         "exclusive_m2": area, "floor": floor, "source": row.get("source") or kind,
         "published_at": row.get("published_at") or ref.get("등록일"),
         "collected_at": _date(row.get("fetched_at")), "stale": bool(row.get("stale")),

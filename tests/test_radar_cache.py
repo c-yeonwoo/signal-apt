@@ -91,7 +91,7 @@ def test_radar_fetches_bundled_region_when_kb_signal_is_unavailable(monkeypatch)
     monkeypatch.setattr(api, "_code_of", lambda region: (_ for _ in ()).throw(AssertionError("not needed")))
     monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
     monkeypatch.setattr(api, "_region_centroid", lambda region, code: (37.6, 127.1))
-    monkeypatch.setattr(api, "_sigungu_identity_at", lambda lat, lng: ("노원구", "서울"))
+    monkeypatch.setattr(api, "_sigungu_identity_at", lambda lat, lng: ("노원구", "서울", "11350"))
     monkeypatch.setattr(baroezip, "fetch_market_with_status", lambda *args, **kwargs: ([
         {"단지명": "테스트", "complex_no": "1", "평형": "25", "층": 10,
          "호가": 50000, "급매": True, "급매갭": -5, "lat": 37.6, "lng": 127.1}], None))
@@ -108,24 +108,47 @@ def test_same_named_district_keeps_province_and_does_not_borrow_seoul_signal(mon
     monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.56, 126.99]})
     monkeypatch.setattr(api, "_region_centroid", lambda *_: (37.56, 126.99))
     monkeypatch.setattr(api, "_sido_of", lambda *_: "서울")
-    monkeypatch.setattr(api, "_sigungu_identity_at", lambda *_: ("중구", "인천"))
+    monkeypatch.setattr(api, "_code_of", lambda *_: "1114000000")
+    monkeypatch.setattr(api, "_sigungu_identity_at", lambda *_: ("중구", "인천", "28110"))
     monkeypatch.setattr(baroezip, "fetch_market_with_status", lambda *args, **kwargs: ([
         {"단지명": "동명단지", "complex_no": "1", "평형": 25, "층": 10,
          "호가": 50000, "급매": True, "급매갭": -5, "lat": 37.48, "lng": 126.62}], None))
     rows, status = api._radar_scan_with_status(["중구"])
     assert status["usable"] and rows[0]["지역"] == "중구"
-    assert rows[0]["시도"] == "인천" and rows[0]["시그널"] == ""
+    assert rows[0]["시도"] == "인천" and rows[0]["지역코드"] == "28110"
+    assert rows[0]["시그널"] == ""
 
 
 def test_geojson_province_identity_separates_same_named_polygons(monkeypatch):
-    actual = {entry[1] for entry in api._sigungu_polys() if entry[0] == "중구"}
-    assert actual == {"서울", "인천"}
+    current = {entry[0]: entry[2] for entry in api._sigungu_polys() if entry[1] == "인천"}
+    assert current["제물포구"] == "28125" and current["영종구"] == "28155"
+    assert current["서해구"] == "28275" and current["검단구"] == "28290"
+    assert not {"중구", "동구", "남구", "서구"} & current.keys()
     ring = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]
     other = [[3, 0], [5, 0], [5, 2], [3, 2], [3, 0]]
-    monkeypatch.setattr(api, "_sigungu_polys", lambda: [("중구", "서울", [ring], (0, 0, 2, 2)),
-                                                          ("중구", "인천", [other], (3, 0, 5, 2))])
-    assert api._sigungu_identity_at(1, 1) == ("중구", "서울")
-    assert api._sigungu_identity_at(1, 4) == ("중구", "인천")
+    monkeypatch.setattr(api, "_sigungu_polys", lambda: [("중구", "서울", "11140", [ring], (0, 0, 2, 2)),
+                                                          ("중구", "인천", "28110", [other], (3, 0, 5, 2))])
+    assert api._sigungu_identity_at(1, 1) == ("중구", "서울", "11140")
+    assert api._sigungu_identity_at(1, 4) == ("중구", "인천", "28110")
+
+
+def test_2026_incheon_centroids_resolve_inside_new_districts():
+    expected = {"제물포구": "28125", "영종구": "28155", "미추홀구": "28177",
+                "서해구": "28275", "검단구": "28290"}
+    for name, code in expected.items():
+        lat, lng = api._bundled_centroids()[name]
+        assert api._sigungu_identity_at(lat, lng) == (name, "인천", code)
+    lat, lng = api._bundled_centroids()["중구"]
+    assert api._sigungu_identity_at(lat, lng) == ("중구", "서울", "11140")
+
+
+def test_listing_region_requires_matching_kb_code_and_source_province(monkeypatch):
+    monkeypatch.setattr(api, "_code_of", lambda region: "2812500000")
+    assert api._listing_region_matches_kb("제물포구", "인천", "28125")
+    assert not api._listing_region_matches_kb("제물포구", "서울", "28125")
+    assert not api._listing_region_matches_kb("제물포구", "인천", "28110")
+    assert not api._listing_region_matches_kb("제물포구", "인천", "2812500000")
+    assert not api._listing_region_matches_kb("제물포구", None)
 
 
 def test_partial_refresh_keeps_unscanned_regions_with_stale_flag(tmp_path):
