@@ -233,6 +233,22 @@ def asks_within(uid: int, profile: dict, budget: float, *, limit: int = 3) -> li
     return known_asks(rows, params, float(budget), uid=uid, sido_of=app_api._sido_of, limit=limit)
 
 
+def _safe_weekly_changes(weekly_result: dict) -> list[dict]:
+    """지난 KB 변화는 현재 유효한 동일 등급일 때만 행동 카드가 된다."""
+    stale_days = weekly_result.get("stale_days")
+    if (not weekly_result.get("ready") or type(stale_days) not in (int, float)
+            or not 0 <= stale_days <= 8):
+        return []
+    from realty_signal import api as app_api
+    try:
+        current = app_api._display_signal_map()
+    except Exception:  # noqa: BLE001 - 현재 판정을 확인할 수 없으면 원시 변화로 대체하지 않는다.
+        return []
+    return [row for row in weekly_result.get("mine") or []
+            if row.get("to") in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}
+            and current.get(row.get("region")) == row.get("to")]
+
+
 def plan(uid: int) -> dict:
     """홈 '다음 할 일'. 브리핑과 같은 `actions()` 를 쓰되, 변화 기준은 **이번 주 KB 갱신**이다.
 
@@ -263,7 +279,7 @@ def plan(uid: int) -> dict:
     wk = weekly.for_user(watch)
     prev = db.kv_get(SNAP_KEY.format(uid=uid)) or {}
     diff = _diff_candidates(cands, prev.get("candidates") or {}) if prev else {"new": [], "dropped": [], "moved": []}
-    acts = actions(diff, wk["mine"], qs, cands, db.imjang_latest(uid), _auction_alerts(),
+    acts = actions(diff, _safe_weekly_changes(wk), qs, cands, db.imjang_latest(uid), _auction_alerts(),
                    profile=profile, confirmed=confirmed, budget=float(budget or 0), asks=asks)
     return {"actions": acts, "budget": round(float(budget)) if budget else 0,
             "confirmed": confirmed, "candidates": len(cands), "asks": len(asks),

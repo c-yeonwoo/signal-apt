@@ -110,6 +110,16 @@ def test_neighborhood_hides_raw_buy_explanation_when_held(monkeypatch):
     assert api.neighborhood(None, "구")["reason"] == "no_region"
 
 
+def test_default_redevelopment_warm_uses_only_ready_buy_regions(monkeypatch):
+    seen = []
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {"보류구": "HELD", "확인구": "BUY"})
+    monkeypatch.setattr(api, "_redev_zones", lambda: None)
+    monkeypatch.setattr(api.db, "kv_get", lambda *_a, **_k: None)
+    monkeypatch.setattr(api, "_redev_candidates", lambda region: seen.append(region))
+    result = api.redev_warm({})
+    assert seen == ["확인구"] and result["warmed"] == ["확인구"]
+
+
 def test_listing_cards_and_timing_use_guarded_region_signal(monkeypatch):
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
     monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-03")

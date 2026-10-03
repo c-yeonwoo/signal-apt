@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from realty_signal import briefing, db, weekly
+from realty_signal import api as app_api, briefing, db, weekly
 from realty_signal.brain import snapshots
 from realty_signal.ingest.kb_weekly import KBWeekly
 from realty_signal.signals import history
@@ -89,6 +89,22 @@ def test_for_user_separates_my_regions(monkeypatch):
     assert [s["region"] for s in out["mine"]] == ["강남구"]
     assert [s["region"] for s in out["rest"]] == ["제주"]
     assert [m["region"] for m in out["my_movers"]] == ["강남구"]
+
+
+def test_action_plan_weekly_changes_require_current_ready_assessment(monkeypatch):
+    change = {"region": "노원구", "from": "WATCH", "to": "BUY", "up": True}
+    week = {"ready": True, "stale_days": 3, "mine": [change]}
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "BUY"})
+    assert briefing._safe_weekly_changes(week) == [change]
+    assert briefing._safe_weekly_changes({**week, "stale_days": 9}) == []
+    assert briefing._safe_weekly_changes({**week, "stale_days": None}) == []
+    assert briefing._safe_weekly_changes({**week, "ready": False}) == []
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "HELD"})
+    assert briefing._safe_weekly_changes(week) == []
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "WATCH"})
+    assert briefing._safe_weekly_changes(week) == []
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: (_ for _ in ()).throw(OSError()))
+    assert briefing._safe_weekly_changes(week) == []
 
 
 # ------------------------------------------------------------- 변화 로그 구멍

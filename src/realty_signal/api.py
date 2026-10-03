@@ -296,7 +296,7 @@ def _seed_if_missing():
         try:
             log.warning("재건축 워밍 중(BUY+ 지역)…")
             _redev_zones()
-            for r in (r for r, s in _signal_map().items() if s in ("STRONG_BUY", "BUY")):
+            for r in (r for r, s in _display_signal_map().items() if s in ("STRONG_BUY", "BUY")):
                 if db.kv_get(f"redev_cand:{r}", max_age=30 * 86400) is None:
                     try:
                         _redev_candidates(r)
@@ -1889,7 +1889,7 @@ def redev_warm(data: dict = Body(default={})):
     from realty_signal import db
     regions = data.get("regions")
     if not regions:  # 기본: 매수 시그널(BUY+) 지역만
-        sig = _signal_map()
+        sig = _display_signal_map()
         regions = [r for r, s in sig.items() if s in ("STRONG_BUY", "BUY")]
     _redev_zones()
     done, skipped = [], []

@@ -131,6 +131,18 @@ def test_held_signal_never_becomes_daily_buy_upgrade(uid, monkeypatch):
     assert "↑ 노원구:" not in restored["text"]
 
 
+def test_home_action_plan_does_not_turn_old_raw_upgrade_into_current_advice(uid, monkeypatch):
+    from realty_signal import weekly
+
+    db.fav_add(uid, "region", "노원구", "노원구")
+    monkeypatch.setattr(weekly, "for_user", lambda _watch: {
+        "ready": True, "stale_days": 9, "as_of": "2026-09-21",
+        "mine": [{"region": "노원구", "from": "WATCH", "to": "BUY", "up": True}]})
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"노원구": "HELD"})
+    result = briefing.plan(uid)
+    assert not any(action["key"] == "signal_up" for action in result["actions"])
+
+
 def test_imminent_bid_leads_the_todo(uid, monkeypatch, tmp_path):
     from datetime import timedelta
 
