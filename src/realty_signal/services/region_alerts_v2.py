@@ -113,8 +113,6 @@ def materialize(uid: int, favorite_key: str, current: dict, *, prefs: dict | Non
 
 def scan_issued() -> int:
     """Read issued snapshots only; no KB refresh, crawler or paid model call."""
-    from realty_signal.services import market_data as md
-
     c = db.conn()
     try:
         favorites = c.execute("SELECT uid,key FROM favorites WHERE kind='region'").fetchall()
@@ -129,12 +127,11 @@ def scan_issued() -> int:
         return 0
     count = 0
     for uid, key in favorites:
-        name = db._favorite_region_name(key)
-        if not name:
+        identity = db.verified_region_favorite_identity(key)
+        if not identity:
             continue
-        region_id = key if key.startswith("kb:") else f"kb:{(md.kb().codes or {}).get(name) or ''}"
-        current = by_id.get(region_id)
-        if current and current.get("region") == name:
+        current = by_id.get(identity["region_id"])
+        if current and current.get("region") == identity["name"]:
             count += materialize(uid, key, current, prefs=db.alert_prefs_get(uid))
     return count
 

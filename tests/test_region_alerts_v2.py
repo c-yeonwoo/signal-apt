@@ -84,7 +84,8 @@ def test_age_only_revision_and_older_source_do_not_alert():
 def test_scan_uses_verified_favorites_and_issued_snapshots_only(monkeypatch):
     db.fav_add(7, "region", "kb:11350", "노원구")
     db.fav_add(8, "region", "중구", "중구")
-    monkeypatch.setattr(db, "_favorite_region_name", lambda key: "노원구" if key == "kb:11350" else None)
+    monkeypatch.setattr(db, "verified_region_favorite_identity", lambda key: (
+        {"region_id": "kb:11350", "name": "노원구"} if key == "kb:11350" else None))
     first = _assessment()
     _issue(first)
     assert alerts.scan_issued() == 0

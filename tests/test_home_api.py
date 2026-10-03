@@ -297,6 +297,7 @@ def test_legacy_jung_gu_favorite_is_archived_not_personalized_as_seoul(client, m
     assert client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()["ok"]
     assert db.actionable_region_favs(uid) == ["강남구"]
     assert db.users_with_region_favs()[0]["regions"] == ["강남구"]
+    assert db.users_with_region_favs()[0]["region_ids"] == ["kb:1168000000"]
 
 
 def test_verified_code_favorite_reselects_jung_gu_without_rewriting_legacy(client, monkeypatch):
@@ -321,6 +322,7 @@ def test_verified_code_favorite_reselects_jung_gu_without_rewriting_legacy(clien
     assert db.actionable_region_favs(uid) == ["중구"]
     assert db.all_fav_regions() == ["중구"]
     assert db.users_with_region_favs()[0]["regions"] == ["중구"]
+    assert db.users_with_region_favs()[0]["region_ids"] == ["kb:1114000000"]
 
     source.identity_verified = False
     assert db.actionable_region_favs(uid) == []
@@ -332,6 +334,19 @@ def test_verified_code_favorite_reselects_jung_gu_without_rewriting_legacy(clien
     assert client.delete("/api/favorites", params={"kind": "region", "key": "kb:1114000000"}).json()["ok"]
     assert db.actionable_region_favs(uid) == []
     assert [f["key"] for f in client.get("/api/favorites").json()["favorites"]] == ["중구"]
+
+
+def test_region_digest_deduplicates_legacy_name_and_current_code(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"강남구": "1168000000"}, regions=["강남구"], identity_verified=True))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "region", "강남구", "강남구")
+    db.fav_add(uid, "region", "kb:1168000000", "강남구")
+    digest_user = db.users_with_region_favs()[0]
+    assert digest_user["regions"] == ["강남구"]
+    assert digest_user["region_ids"] == ["kb:1168000000"]
 
 
 def test_unverified_code_favorite_is_rejected_not_saved(client, monkeypatch):
