@@ -361,6 +361,36 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#testList .ms-row').count(),60);
     await page.locator('#testList').getByRole('button',{name:/더 보기/}).click();
     assert.equal(await page.locator('#testList .ms-row').count(),120);
+    await page.evaluate(()=>{
+      const common={유형:'일반매물',지역코드:'11350',단지명:'한 단지',source:'hanbang',
+        ref:{hanbang_complex_id:'c1'},평형:25};
+      _ms.test.items=[{...common,id:'A'},{...common,id:'B'},
+        {...common,id:'C',지역코드:'28110'}];
+      _ms.test.opt={summary:x=>({nm:x.id}),detail:x=>`<button>확인 ${x.id}</button>`,
+        groupKey:window.__budgetOpt.groupKey,groupLabel:window.__budgetOpt.groupLabel};
+      _ms.test.listLimit=60; _ms.test.openGroupKeys=new Set();
+      _ms.test.viewIndices=[0,1,2];
+      const marker={getElement:()=>null,getLatLng:()=>[37,127],openPopup(){},closePopup(){}};
+      _ms.test.markers={0:marker,1:marker,2:marker};
+      renderMsList('test',[0,1,2]);
+    });
+    assert.equal(await page.locator('#testList .ms-group').count(),1);
+    const groupHead=page.locator('#testList .ms-group-head');
+    assert.match(await groupHead.textContent(),/2개 매물/);
+    assert.equal(await groupHead.getAttribute('aria-expanded'),'false');
+    await groupHead.click();
+    const groupedRow=page.locator('#testList .ms-group .ms-row[data-i="1"]');
+    await groupedRow.click();
+    assert.equal(await groupedRow.getAttribute('aria-expanded'),'true');
+    await groupedRow.click();
+    assert.equal(await groupedRow.getAttribute('aria-expanded'),'false');
+    await groupHead.click();
+    assert.equal(await groupHead.getAttribute('aria-expanded'),'false');
+    await page.evaluate(()=>selectMsRow('test',1));
+    assert.equal(await groupHead.getAttribute('aria-expanded'),'true');
+    assert.equal(await groupedRow.getAttribute('aria-expanded'),'true');
+    await groupHead.click();
+    assert.equal(await page.evaluate(()=>_ms.test.sel),null);
     await page.evaluate(async()=>{
       loadComplexAgents=()=>{}; loadCxBuilding=()=>{}; loadCxLoanScen=()=>{}; loadCxTxCosts=()=>{};
       await openComplex('테스트단지','테스트구');
