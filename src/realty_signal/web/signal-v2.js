@@ -21,6 +21,7 @@
     if (!response.ok) throw new Error(response.status === 401 ? '로그인이 필요합니다.' :
       response.status === 403 ? '이 매물에 접근할 수 없습니다.' :
       response.status === 404 ? '현재 수집분에서 대상을 찾지 못했습니다.' :
+      response.status === 409 ? '자료나 내 조건이 바뀌었습니다. 리포트를 다시 열어 주세요.' :
       '자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
     return response.json();
   }
@@ -119,6 +120,9 @@
         <button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
         <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>
         ${watchAction(item)}
+        <button type="button" class="btn" id="v2SaveReport">이 리포트 저장</button>
+        <button type="button" class="btn" id="v2SavedReports">저장본 보기</button>
+        <p id="v2SaveReportStatus" class="v2-muted" role="status"></p>
         <button type="button" class="btn" id="v2ListingLink">내 계정에서 열기 링크 복사</button>
         <p class="v2-muted">이 링크는 현재 수집분을 다시 조회합니다. 지금 보이는 리포트의 고정 사본은 아닙니다.</p>
         <p id="v2ListingLinkStatus" class="v2-muted" role="status"></p>`;
@@ -132,6 +136,72 @@
       };
       body.querySelector('#v2ListingLink').onclick = () => copyListingLink(item.key);
       body.querySelector('#v2ListingLocation').onclick = () => loadLocation(key, generation);
+      body.querySelector('#v2SaveReport').onclick = async event => {
+        const status = body.querySelector('#v2SaveReportStatus');
+        const button = event.currentTarget;
+        button.disabled = true;
+        status.textContent = '현재 리포트를 저장하고 있습니다…';
+        try {
+          await json('/api/v2/report-snapshots', {method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({key:item.key,report_id:report.report_id})});
+          if (generation === listingGeneration && dialog.open) status.textContent = '이 시점의 리포트를 저장했습니다. 저장본 보기에서 다시 확인할 수 있습니다.';
+        } catch (error) {
+          if (generation === listingGeneration && dialog.open) status.textContent = error.message;
+        } finally {
+          if (generation === listingGeneration) button.disabled = false;
+        }
+      };
+      body.querySelector('#v2SavedReports').onclick = () => openSavedReports(item.key);
+    } catch (error) {
+      if (generation === listingGeneration) body.textContent = error.message;
+    }
+  }
+
+  async function openSavedReports(key = '') {
+    const generation = ++listingGeneration;
+    const dialog = document.getElementById('v2ReportDlg');
+    const body = document.getElementById('v2ReportBody');
+    if (!dialog.open) dialog.showModal();
+    body.textContent = '저장한 리포트를 불러오고 있습니다…';
+    try {
+      const query = key ? `?key=${encodeURIComponent(key)}` : '';
+      const data = await json('/api/v2/report-snapshots' + query);
+      if (generation !== listingGeneration || !dialog.open) return;
+      body.innerHTML = `<h2>내가 저장한 리포트</h2><p class="v2-muted">최근 50개까지 표시합니다. 저장 당시의 근거이며 현재 판매 여부·호가·판정은 다시 확인하세요.</p>` +
+        ((data.items || []).length ? data.items.map(item => `<div class="v2-row">
+          <b>${esc(item.name || '매물')} · ${esc(item.kind)}</b>
+          <p class="v2-muted">수집 ${esc(item.asof || '시각 미확인')} · 저장 ${esc(new Date(item.saved_at * 1000).toLocaleString('ko-KR'))}</p>
+          <button type="button" class="btn" data-saved-report="${esc(item.report_id)}">당시 리포트 보기</button>
+        </div>`).join('') : '<p>저장한 리포트가 없습니다.</p>');
+      body.querySelectorAll('[data-saved-report]').forEach(button => button.onclick = () => openSavedReport(button.dataset.savedReport, key));
+    } catch (error) {
+      if (generation === listingGeneration) body.textContent = error.message;
+    }
+  }
+
+  async function openSavedReport(reportId, listKey = '') {
+    const generation = ++listingGeneration;
+    const dialog = document.getElementById('v2ReportDlg');
+    const body = document.getElementById('v2ReportBody');
+    body.textContent = '저장본을 불러오고 있습니다…';
+    try {
+      const saved = await json(`/api/v2/report-snapshots/${encodeURIComponent(reportId)}`);
+      if (generation !== listingGeneration || !dialog.open) return;
+      const report = saved.report || {}, item = report.subject || {};
+      const rows = (items, caution = false) => (items || []).map(x =>
+        `<div class="v2-row${caution ? ' v2-caution' : ''}">${esc(x.text)}</div>`).join('');
+      const evidence = (report.evidence || []).map(x => `${esc(x.label)} · ${esc(x.asof || '기준일 미확인')} · ${esc(x.status)}`).join('<br>');
+      body.innerHTML = `<h2>저장 당시 · ${esc(item.name || '매물')} · ${money(item.asking_manwon)}</h2>
+        <p class="v2-muted">${esc(item.region)} · 수집 ${esc(report.asof || '시각 미확인')} · 저장 ${esc(new Date(saved.saved_at * 1000).toLocaleString('ko-KR'))}</p>
+        <p class="v2-caution">이 자료는 저장 후 바뀌지 않습니다. 현재 호가·판매 여부·내 예산·시그널을 뜻하지 않습니다.</p>
+        <p>${esc((report.lines || {}).cash || '자금 계산은 확인이 필요합니다.')}</p>
+        <h3>당시 가격 근거</h3><div class="v2-row">${esc((report.price || {})['이유'] || '동일 조건 실거래와의 비교를 확인하세요.')}</div>
+        <h3>당시 장점</h3>${rows(report.positive) || '<p>확인된 장점이 없습니다.</p>'}
+        <h3>당시 주의할 점</h3>${rows(report.cautions, true) || '<p>당시 확인된 주의 항목이 없습니다.</p>'}
+        <details><summary>당시 자료와 기준일</summary><p class="v2-muted">${evidence || '자료 기준일을 확인할 수 없습니다.'}</p></details>
+        <button type="button" class="btn" id="v2BackSavedReports">저장본 목록으로</button>`;
+      body.querySelector('#v2BackSavedReports').onclick = () => openSavedReports(listKey);
     } catch (error) {
       if (generation === listingGeneration) body.textContent = error.message;
     }
@@ -465,7 +535,7 @@
 
   document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
   document.getElementById('v2NoteForm')?.addEventListener('submit', saveNote);
-  window.SignalV2 = {paintRegion, openListing, openDiscovery, openNote, openNotes, openInitialLink};
+  window.SignalV2 = {paintRegion, openListing, openSavedReports, openDiscovery, openNote, openNotes, openInitialLink};
   if (window._signalAppReady && !document.getElementById('onbDlg')?.open) openInitialLink();
   if (typeof selected === 'string' && selected) paintRegion(selected);
 })();
