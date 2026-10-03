@@ -113,7 +113,8 @@
           fit.status === 'above' ? '저장된 가격 상한을 넘습니다.' : '예산 적합성은 아직 확인되지 않았습니다.'}</p>
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
         <button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
-        <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>`;
+        <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>
+        ${watchAction(item)}`;
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
       body.querySelector('#v2ListingCompare').onclick = event => {
         event.currentTarget.textContent = addCompare(key);
@@ -252,7 +253,12 @@
       ${preference.total ? `<p>선호 ${preference.satisfied}/${preference.total}개 충족 · ${preference.known}/${preference.total}개 자료 확인${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p>` : ''}
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
-      <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button></div>`;
+      <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button>
+      ${watchAction(x.listing)}</div>`;
+  }
+
+  function watchAction(listing) {
+    return listing?.key && listing.name && typeof watchBtn === 'function' ? watchBtn(listing.key) : '';
   }
 
   async function runDiscovery(cursor = null) {

@@ -12,6 +12,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[];
+    const watched=new Set(['급매:synthetic-1']);
     let entranceChosen=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
@@ -138,9 +139,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         nickPayloads.push(route.request().postDataJSON());
         return route.fulfill({contentType:'text/event-stream',body:'data: {"type":"delta","text":"선택 매물의 가격을 확인하세요."}\n\ndata: {"type":"done","used":["get_selected_listing_report"]}\n\n'});
       }
-      if(url.pathname==='/api/listing-watch') data={items:[{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',saved_price:60000,
-        price_change:-10000,current:{key:'급매:synthetic-1',kind:'급매',name:'테스트단지',region:'테스트구',price:50000},
-        alternatives:[{key:'급매:synthetic-2',kind:'급매',name:'테스트단지',region:'테스트구',price:52000,reason:'같은 단지의 다른 매물'}]}]};
+      if(url.pathname==='/api/listing-watch') {
+        if(route.request().method()==='POST') {
+          watched.add(route.request().postDataJSON().key);
+          return route.fulfill({json:{ok:true}});
+        }
+        if(route.request().method()==='DELETE') {
+          watched.delete(url.searchParams.get('key'));
+          return route.fulfill({json:{ok:true}});
+        }
+        data={items:[...watched].map(key=>({key,kind:key.split(':')[0],name:'테스트단지',region:'테스트구',saved_price:60000,
+          price_change:-10000,current:{key,kind:key.split(':')[0],name:'테스트단지',region:'테스트구',price:50000},
+          alternatives:key==='급매:synthetic-1'?[{key:'급매:synthetic-2',kind:'급매',name:'테스트단지',region:'테스트구',price:52000,reason:'같은 단지의 다른 매물'}]:[]}))};
+      }
       if(url.pathname==='/api/asks') data={ready:true,budget:61000,asks:[
         {'단지명':'호가단지','지역':'테스트구','유형':'급매','총액':48000,
           lines:{cash:'필요현금',price:'원천 호가',unknown:'은행 심사',next:'호가 확인'}}]};
@@ -408,10 +419,26 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('첫번째 후보').waitFor();
     assert.match(await page.locator('#v2DiscoverResults').textContent(),/일부 원천이 실패·제한/);
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),1);
+    const firstWatch=page.locator('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]');
+    await firstWatch.click();
+    await page.waitForFunction(()=>document.querySelector('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]')?.getAttribute('aria-pressed')==='true');
+    assert(watched.has('일반매물:synthetic-1'));
     await page.locator('#v2DiscoverResults [data-v2-next]').click();
     await page.getByText('두번째 후보').waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),2);
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-next]').count(),0);
+    await page.locator('#v2DiscoverResults [data-v2-listing="일반매물:synthetic-1"]').click();
+    const reportWatch=page.locator('#v2ReportBody [data-watch-key="일반매물:synthetic-1"]');
+    await reportWatch.waitFor();
+    assert.equal(await reportWatch.getAttribute('aria-pressed'),'true');
+    await reportWatch.click();
+    await page.waitForFunction(()=>document.querySelector('#v2ReportBody [data-watch-key="일반매물:synthetic-1"]')?.getAttribute('aria-pressed')==='false');
+    assert.equal(watched.has('일반매물:synthetic-1'),false);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>SignalV2.openDiscovery());
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText('첫번째 후보').waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]').getAttribute('aria-pressed'),'false');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/총 월 상환 약 120만원/).waitFor();
