@@ -445,6 +445,9 @@ test('listing price filter and budget sort require server-validated buyer fit', 
   assert.equal(ctx._laBudgetTier({총액: 80000,budget_fit:{status:'above'}}), 0);
   assert.equal(ctx._laBudgetTier({총액: 40000}), 1);
   assert.match(ctx._laBudgetLabel({총액: 40000,유형:'일반매물'}), /예산 비교 보류/);
+  assert.equal(ctx._laPricePass({총액: null}), true);
+  assert.equal(ctx._laPricePass({총액: 160000}), true);
+  ctx._laPrice.active = true;
   assert.equal(ctx._laPricePass({총액: null}), false);
   assert.equal(ctx._laPricePass({총액: 10000}), true);
   assert.equal(ctx._laPricePass({총액: 160000}), false);

@@ -658,6 +658,7 @@
           <input id="laPriceMax" type="range" min="0" max="100" value="100" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
         </div>
         <span id="laPriceNote" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
+        <button type="button" class="btn" id="laPriceReset" onclick="resetLaPrice()" style="display:none;padding:3px 8px;font-size:11px">가격 필터 해제</button>
       </div>
     </div>
   </div>
@@ -3353,7 +3354,7 @@ let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
 function _laViewKey(types){
   return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_laSort,
-    _laPrice?.min,_laPrice?.max]);
+    _laPrice?.min,_laPrice?.max,_laPrice?.active]);
 }
 function _laApplyResponse(types,d,preservePrice=false){
   const price=preservePrice && _laPrice ? {..._laPrice} : null;
@@ -3372,8 +3373,9 @@ function _laApplyResponse(types,d,preservePrice=false){
   document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전 수집`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`;
   initLaPriceFilter();
   if(price && _laPrice){
-    _laPrice.min=Math.min(price.min,_laPrice.hi);
-    _laPrice.max=Math.min(Math.max(price.max,_laPrice.min),_laPrice.hi);
+    _laPrice.active=!!price.active;
+    _laPrice.min=_laPrice.active?Math.min(price.min,_laPrice.hi):_laPrice.lo;
+    _laPrice.max=_laPrice.active?Math.min(Math.max(price.max,_laPrice.min),_laPrice.hi):_laPrice.hi;
     document.getElementById('laPriceMin').value=_laPrice.min;
     document.getElementById('laPriceMax').value=_laPrice.max;
     drawLaPrice();
@@ -3413,21 +3415,25 @@ function initLaPriceFilter(){
   const lo=0;
   const hi=Math.max(p95, CAP, 10000);                            // 트랙은 데이터·15억 중 큰 쪽
   const step=Math.max(1000, Math.round(hi/100/1000)*1000);       // ~100틱, 1000만원 단위
-  const defMax=Math.min(CAP, hi);
-  _laPrice={lo,hi,min:lo,max:defMax};
+  _laPrice={lo,hi,min:lo,max:hi,active:false,unknownCount:_laData.length-priced.length};
   const mn=document.getElementById('laPriceMin'), mx=document.getElementById('laPriceMax');
   [mn,mx].forEach(r=>{ r.min=lo; r.max=hi; r.step=step; });
-  mn.value=lo; mx.value=defMax;
+  mn.value=lo; mx.value=hi;
   box.style.display='flex';
-  const nNull=_laData.length-priced.length;
-  document.getElementById('laPriceNote').textContent =
-    nNull?`가격 미상 ${nNull}건은 이 목록에서 빼 둠`:'';
   drawLaPrice();
 }
 function onLaPrice(){
   if(!_laPrice) return;
   const a=+document.getElementById('laPriceMin').value, b=+document.getElementById('laPriceMax').value;
   _laPrice.min=Math.min(a,b); _laPrice.max=Math.max(a,b);
+  _laPrice.active=_laPrice.min>_laPrice.lo || _laPrice.max<_laPrice.hi;
+  drawLaPrice(); renderAllListings();
+}
+function resetLaPrice(){
+  if(!_laPrice) return;
+  _laPrice.min=_laPrice.lo; _laPrice.max=_laPrice.hi; _laPrice.active=false;
+  document.getElementById('laPriceMin').value=_laPrice.lo;
+  document.getElementById('laPriceMax').value=_laPrice.hi;
   drawLaPrice(); renderAllListings();
 }
 function drawLaPrice(){
@@ -3437,7 +3443,10 @@ function drawLaPrice(){
   fill.style.left=(min-lo)/span*100+'%'; fill.style.width=(max-min)/span*100+'%';
   const eok=v=>(v/10000).toFixed(1)+'억';
   const top = max>=hi ? `${(hi/10000).toFixed(1)}억+` : eok(max);   // 상한 끝이면 '이상'
-  document.getElementById('laPriceLabel').textContent=`${eok(min)} ~ ${top}`;
+  document.getElementById('laPriceLabel').textContent=_laPrice.active?`${eok(min)} ~ ${top}`:'전체 가격';
+  document.getElementById('laPriceNote').textContent=_laPrice.unknownCount?
+    `가격 미상 ${_laPrice.unknownCount}건 ${_laPrice.active?'제외':'포함'}`:'';
+  document.getElementById('laPriceReset').style.display=_laPrice.active?'inline-block':'none';
 }
 async function loadAllListings(){
   _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
@@ -3486,7 +3495,7 @@ function _laBudgetLabel(x){
   return ['일반매물','급매','찐매물'].includes(x['유형'])?'예산 비교 보류':'';
 }
 function _laPricePass(x){
-  if(!_laPrice) return true;
+  if(!_laPrice||!_laPrice.active) return true;
   const v=_laAsk(x);
   if(v==null) return false;
   const cap = _laPrice.max>=_laPrice.hi ? Infinity : _laPrice.max;  // 상한 끝 = 그 이상 전부 포함
