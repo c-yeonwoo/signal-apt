@@ -69,9 +69,31 @@
         <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
         <button type="button" class="btn" id="v2RegionDiscover">이 지역 매물 비교</button>
         <button type="button" class="btn" id="v2RegionNote">관심 이유 기록</button>
+        <details><summary>이 판정 보관하기</summary><p class="v2-muted">저장 당시 근거로 남습니다. 현재 판정은 위에서 다시 확인하세요.</p>
+          <button type="button" class="btn" id="v2RegionSave">현재 판정 저장</button>
+          <button type="button" class="btn" id="v2RegionSaved">저장본 보기</button>
+          <p id="v2RegionSaveStatus" class="v2-muted" role="status"></p></details>
       </section>`;
       target.querySelector('#v2RegionDiscover').onclick = () => openDiscovery(region);
       target.querySelector('#v2RegionNote').onclick = () => openNote('region', region, report.report_id);
+      target.querySelector('#v2RegionSaved').onclick = () => openSavedReports(report.subject.region_id);
+      target.querySelector('#v2RegionSave').onclick = async event => {
+        const button = event.currentTarget, status = target.querySelector('#v2RegionSaveStatus');
+        button.disabled = true;
+        status.textContent = '현재 판정을 저장하고 있습니다…';
+        try {
+          await json('/api/v2/report-snapshots', {method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({type:'region',region:ref,report_id:report.report_id})});
+          if (generation === regionGeneration && target.dataset.reportRegion === region)
+            status.textContent = '이 시점의 지역 판정을 저장했습니다.';
+        } catch (error) {
+          if (generation === regionGeneration && target.dataset.reportRegion === region)
+            status.textContent = error.message;
+        } finally {
+          if (generation === regionGeneration) button.disabled = false;
+        }
+      };
     } catch (_) {
       if (generation === regionGeneration && target.dataset.reportRegion === region) {
         const note = document.createElement('p');
@@ -191,10 +213,10 @@
       const query = key ? `?key=${encodeURIComponent(key)}` : '';
       const data = await json('/api/v2/report-snapshots' + query);
       if (generation !== listingGeneration || !dialog.open) return;
-      body.innerHTML = `<h2>내가 저장한 리포트</h2><p class="v2-muted">최근 50개까지 표시합니다. 저장 당시의 근거이며 현재 판매 여부·호가·판정은 다시 확인하세요.</p>` +
+      body.innerHTML = `<h2>내가 저장한 리포트</h2><p class="v2-muted">최근 50개까지 표시합니다. 저장 당시의 근거이며 현재 판정·매물 상태는 다시 확인하세요.</p>` +
         ((data.items || []).length ? data.items.map(item => `<div class="v2-row">
           <b>${esc(item.name || '매물')} · ${esc(item.kind)}</b>
-          <p class="v2-muted">수집 ${esc(item.asof || '시각 미확인')} · 저장 ${esc(new Date(item.saved_at * 1000).toLocaleString('ko-KR'))}</p>
+          <p class="v2-muted">${item.kind === '지역' ? 'KB 기준' : '수집'} ${esc(item.asof || '시각 미확인')} · 저장 ${esc(new Date(item.saved_at * 1000).toLocaleString('ko-KR'))}</p>
           <button type="button" class="btn" data-saved-report="${esc(item.report_id)}">당시 리포트 보기</button>
           <button type="button" class="btn" data-delete-report="${esc(item.report_id)}">저장본 삭제</button>
         </div>`).join('') : '<p>저장한 리포트가 없습니다.</p>') + '<p id="v2SavedStatus" role="status"></p>';
@@ -229,6 +251,18 @@
       const rows = (items, caution = false) => (items || []).map(x =>
         `<div class="v2-row${caution ? ' v2-caution' : ''}">${esc(x.text)}</div>`).join('');
       const evidence = (report.evidence || []).map(x => `${esc(x.label)} · ${esc(x.asof || '기준일 미확인')} · ${esc(x.status)}`).join('<br>');
+      if (report.type === 'region') {
+        const assessment = report.assessment || {};
+        body.innerHTML = `<h2>저장 당시 · ${esc(item.region || '지역')} · ${esc(assessment.display_grade || '판단 보류')}</h2>
+          <p class="v2-muted">KB ${esc(report.asof || '기준일 미확인')} 기준 · 저장 ${esc(new Date(saved.saved_at * 1000).toLocaleString('ko-KR'))}</p>
+          <p class="v2-caution">저장 후 바뀌지 않은 당시 판단입니다. 현재 시그널·자료 신선도·매물 가격을 뜻하지 않습니다.</p>
+          <p>${esc(assessment.summary || '당시 근거를 확인하세요.')}</p>
+          <h3>당시 긍정 근거</h3>${(report.positive || []).map(reason).join('') || '<p>확인된 긍정 근거가 없습니다.</p>'}
+          <h3>당시 반대 근거·한계</h3>${(report.cautions || []).map(reason).join('') || '<p>당시 별도 반대 근거가 기록되지 않았습니다.</p>'}
+          <button type="button" class="btn" id="v2BackSavedReports">저장본 목록으로</button>`;
+        body.querySelector('#v2BackSavedReports').onclick = () => openSavedReports(listKey);
+        return;
+      }
       body.innerHTML = `<h2>저장 당시 · ${esc(item.name || '매물')} · ${money(item.asking_manwon)}</h2>
         <p class="v2-muted">${esc(item.region)} · 수집 ${esc(report.asof || '시각 미확인')} · 저장 ${esc(new Date(saved.saved_at * 1000).toLocaleString('ko-KR'))}</p>
         <p class="v2-caution">이 자료는 저장 후 바뀌지 않습니다. 현재 호가·판매 여부·내 예산·시그널을 뜻하지 않습니다.</p>

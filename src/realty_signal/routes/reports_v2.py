@@ -94,14 +94,17 @@ def report_snapshot_save(request: Request, data: dict = Body(...)):
     uid = deps.uid(request)
     if not uid:
         raise HTTPException(401, "로그인이 필요합니다.")
-    key, expected = data.get("key"), data.get("report_id")
-    if (not isinstance(key, str) or not 1 <= len(key) <= 180 or ":" not in key
+    kind = data.get("type", "listing")
+    key = data.get("region") if kind == "region" else data.get("key")
+    expected = data.get("report_id")
+    if (not isinstance(kind, str) or kind not in {"listing", "region"} or not isinstance(key, str)
+            or not 1 <= len(key) <= 180 or (kind == "listing" and ":" not in key)
             or not isinstance(expected, str) or len(expected) != 64
             or any(ch not in "0123456789abcdef" for ch in expected)):
         raise HTTPException(422, "저장할 리포트를 확인해 주세요.")
-    if key.split(":", 1)[0] in snapshots.PRIVATE_KINDS and not deps.personal_listings_allowed(request):
+    if kind == "listing" and key.split(":", 1)[0] in snapshots.PRIVATE_KINDS and not deps.personal_listings_allowed(request):
         raise HTTPException(403, "개인 매물 접근권이 필요합니다.")
-    current = json.loads(listing_report(request, key).body)
+    current = json.loads((region_report(key) if kind == "region" else listing_report(request, key)).body)
     if current["report_id"] != expected:
         raise HTTPException(409, "매물 자료나 내 조건이 바뀌었습니다. 리포트를 다시 열어 주세요.")
     try:

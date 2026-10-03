@@ -14,7 +14,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const reportsByKey=new Map(), savedReports=new Map();
-    let entranceChosen=false, tradeEnriched=false;
+    let entranceChosen=false, tradeEnriched=false, regionReport=null;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -32,7 +32,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         return route.fulfill({json:{ok:true}});
       }
       const decoded=decodeURIComponent(url.pathname);
-      if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) data={type:'region',asof:'2026-09-28',
+      if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) data={type:'region',report_id:'b'.repeat(64),
+        subject:{region:'테스트구',region_id:'kb:1114000000'},asof:'2026-09-28',
         assessment:{display_grade:'매수',assessment_status:'ready',scope_note:'테스트 권역 자료',
           summary:'지역 신호만 보여 줍니다. 개별 매물의 가격 판단은 별도입니다.',raw_grade:'BUY',
           reasons:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
@@ -40,6 +41,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
         cautions:[{reason_id:'buyer_interest',label:'매수심리 관찰선 미충족',value:68,threshold:70,unit:'지수',role:'driver',passing:false}],
         unknowns:[]};
+      if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) regionReport=data;
       if(decoded==='/api/series/테스트구') data={metrics:{},volume:null};
       if(decoded==='/api/complex/테스트구/테스트단지') data={단지명:'테스트단지',identity_status:'single_observed',
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
@@ -109,15 +111,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         data={ok:true};
       }
       if(url.pathname==='/api/v2/report-snapshots' && route.request().method()==='POST') {
-        const request=route.request().postDataJSON(), report=reportsByKey.get(request.key);
+        const request=route.request().postDataJSON(), report=request.type==='region'?regionReport:reportsByKey.get(request.key);
         if(!report || request.report_id!==report.report_id) return route.fulfill({status:409,json:{}});
         savedReports.set(request.report_id,{report:structuredClone(report),saved_at:1780000000});
         return route.fulfill({status:201,json:{report_id:request.report_id,saved_at:1780000000}});
       }
       if(url.pathname==='/api/v2/report-snapshots') data={items:[...savedReports.values()]
-        .filter(saved=>!url.searchParams.get('key')||saved.report.subject.key===url.searchParams.get('key'))
-        .map(saved=>({report_id:saved.report.report_id,subject_key:saved.report.subject.key,
-          kind:saved.report.subject.kind,name:saved.report.subject.name,asof:saved.report.asof,
+        .filter(saved=>!url.searchParams.get('key')||(saved.report.subject.key||saved.report.subject.region_id)===url.searchParams.get('key'))
+        .map(saved=>({report_id:saved.report.report_id,subject_key:saved.report.subject.key||saved.report.subject.region_id,
+          kind:saved.report.subject.kind||'지역',name:saved.report.subject.name||saved.report.subject.region,asof:saved.report.asof,
           saved_at:saved.saved_at}))};
       if(url.pathname.startsWith('/api/v2/report-snapshots/')) {
         const id=decodeURIComponent(url.pathname.split('/').at(-1));
@@ -501,6 +503,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
     await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
+    await page.locator('#haesolPanel details').last().locator('summary').click();
+    await page.locator('#v2RegionSave').click();
+    await page.locator('#v2RegionSaveStatus').getByText(/저장했습니다/).waitFor();
+    await page.locator('#v2RegionSaved').click();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'당시 리포트 보기'}).click();
+    await page.locator('#v2ReportBody').getByText(/저장 당시 · 테스트구/).waitFor();
+    assert.match(await page.locator('#v2ReportBody').textContent(),/현재 시그널·자료 신선도/);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     assert(calls.some(x=>decodeURIComponent(x)==='/api/v2/regions/kb:1114000000/report'));
     assert.equal(await page.locator('#signalPanelReasons').isVisible(),true);
     assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
