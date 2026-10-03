@@ -42,6 +42,7 @@ def loan_scenarios(request: Request, capital: float | None = None, income: float
 def buying_power_get(request: Request, capital: float | None = None, income: float | None = None,
                      existing_debt_annual: float | None = None, homes: int | None = None,
                      first_time: bool | None = None, region: str | None = None,
+                     region_code: str | None = None,
                      regulated: bool | None = None, dispose: bool | None = None,
                      temp_two_home: bool | None = None, big_area: bool | None = None,
                      apply_bangongje: bool | None = None,
@@ -52,7 +53,8 @@ def buying_power_get(request: Request, capital: float | None = None, income: flo
     from realty_signal import api as app_api
     return app_api.buying_power_statement(
         request, capital=capital, income=income, existing_debt_annual=existing_debt_annual,
-        homes=homes, first_time=first_time, region=region, regulated=regulated,
+        homes=homes, first_time=first_time, region=region, region_code=region_code,
+        regulated=regulated,
         dispose=dispose, temp_two_home=temp_two_home, big_area=big_area,
         apply_bangongje=apply_bangongje,
         ltv=ltv, rate=rate, rate_type=rate_type, years=years,
@@ -61,14 +63,16 @@ def buying_power_get(request: Request, capital: float | None = None, income: flo
 
 @router.get("/api/buying-power/scenario")
 def price_scenario(request: Request, price: float = Query(ge=0, le=5_000_000),
-                   region: str | None = None, ltv: float | None = Query(None, ge=0, le=1),
+                   region: str | None = None, region_code: str | None = None,
+                   ltv: float | None = Query(None, ge=0, le=1),
                    rate: float = Query(0.04, ge=0, le=1), years: int = Query(30, ge=1, le=50)):
     from realty_signal import api as app_api, buying_power, db
     profile = db.profile_get(app_api._uid(request)) or {}
-    p = app_api._buyer_params(profile, region=region, ltv=ltv, rate=rate, years=years,
-                             sido=app_api._sido_of(region))
+    name, sido, code, status = (app_api._finance_region_choice(region, region_code)
+                                if region or region_code else app_api._default_finance_region(request, profile))
+    p = app_api._buyer_params(profile, region=name, ltv=ltv, rate=rate, years=years, sido=sido)
     return {**buying_power.for_price(price, p), "ready": p.capital > 0,
-            "안내": buying_power.notes(p, price)}
+            "안내": buying_power.notes(p, price), "지역식별": status, "지역코드": code}
 
 
 @router.post("/api/buying-power/confirm")

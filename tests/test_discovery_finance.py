@@ -1,14 +1,25 @@
 """Finance discovery must not turn unverified regulation into buyer eligibility."""
 
+from types import SimpleNamespace
+
+import pytest
+
 from realty_signal import buying_power, regulation
-from realty_signal.services import discovery_v2, discovery_finance
+from realty_signal.services import discovery_v2, discovery_finance, market_data as md
 from realty_signal.services.buyer_decision import finance_fingerprint
 
 from test_discovery_v2 import _row
 
 
+@pytest.fixture(autouse=True)
+def verified_buyer_region(monkeypatch):
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
+
+
 def _profile(*, capital=100_000, income=10_000):
-    profile = {"가용자본": capital, "연소득": income, "매수지역": "노원구"}
+    profile = {"가용자본": capital, "연소득": income, "매수지역": "노원구",
+               "매수지역코드": "kb:1135000000"}
     profile["매수력"] = {"가정버전": finance_fingerprint(
         buying_power.params_from_profile(profile, sido="서울"))}
     return profile
@@ -41,6 +52,7 @@ def test_missing_or_changed_profile_cannot_produce_monthly_pass():
 def test_confirmed_cash_buyer_with_missing_income_can_see_reference_payment():
     params = buying_power.Params(capital=100_000, income=None, region="노원구", sido="서울")
     profile = {"가용자본": 100_000, "연소득": 0, "매수지역": "노원구",
+               "매수지역코드": "kb:1135000000",
                "매수력": {"가정버전": finance_fingerprint(params)}}
     scenario = discovery_finance.FinanceScenario(profile, sido_of=lambda _region: "서울")
     assert scenario.status == "ready"

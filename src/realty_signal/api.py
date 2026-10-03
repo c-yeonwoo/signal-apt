@@ -1201,17 +1201,51 @@ def _verified_listing_region_code(region: str | None, source_sido: str | None) -
     return None
 
 
-def _default_region(request: Request, profile: dict) -> str | None:
-    """매수 예정 지역 기본값 — 지난 확정 시 지역 > ★관심지역 첫 번째."""
-    saved = ((profile.get("매수력") or {}).get("가정") or {}).get("지역")
+def _finance_region_choice(region: str | None, region_code: str | None) -> tuple:
+    """An explicit buyer region may be code-proven or name-only, never inferred from a collision."""
+    if region_code:
+        try:
+            identity = md.current_region_identity(region_code)
+        except Exception as exc:  # noqa: BLE001 — 임시 원천 장애는 지역 미확인이며 금융 계산으로 승격하지 않는다.
+            raise HTTPException(503, "지역 코드 자료를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.") from exc
+        if not identity or (region and region != identity["name"]):
+            raise HTTPException(422, "현재 지역 코드와 이름을 함께 확인할 수 없습니다. 지역을 다시 선택해 주세요.")
+        return identity["name"], identity["sido"], identity["region_id"], "verified"
+    if region in buying_power.AMBIGUOUS_PROFILE_REGIONS:
+        raise HTTPException(422, "이름이 같은 시군구가 있습니다. 시·도가 확인된 지역을 다시 선택해 주세요.")
+    if not region:
+        return None, None, None, "assumed"
+    try:
+        code = md.code_of(region)
+        identity = md.current_region_identity(f"kb:{code}") if code else None
+        if identity and identity["name"] == region:
+            return region, identity["sido"], identity["region_id"], "verified"
+    except Exception:  # noqa: BLE001 — 원천 장애 시 이름을 코드로 승격하지 않는다.
+        pass
+    return None, None, None, "unverified_name"
+
+
+def _default_finance_region(request: Request, profile: dict) -> tuple:
+    """Prior verified code > safe legacy name > actionable favorite > conservative assumption."""
+    conf = ((profile.get("매수력") or {}).get("가정") or {})
+    saved_code = profile.get("매수지역코드") or conf.get("지역코드")
+    if saved_code:
+        try:
+            identity = md.current_region_identity(saved_code)
+        except Exception:  # noqa: BLE001 — 저장 코드가 확인되지 않으면 과거 이름을 대입하지 않는다.
+            identity = None
+        return ((identity["name"], identity["sido"], identity["region_id"], "verified")
+                if identity else (None, None, None, "reselection_required"))
+    saved = conf.get("지역") or profile.get("매수지역")
+    if saved in buying_power.AMBIGUOUS_PROFILE_REGIONS:
+        return None, None, None, "reselection_required"
     if saved:
-        return saved
+        return _finance_region_choice(saved, None)
     uid = _uid(request)
-    if uid:
-        favs = db.actionable_region_favs(uid)
-        if favs:
-            return favs[0]
-    return None
+    for name in db.actionable_region_favs(uid) if uid else []:
+        if name not in buying_power.AMBIGUOUS_PROFILE_REGIONS:
+            return _finance_region_choice(name, None)
+    return None, None, None, "assumed"
 
 
 def _buyer_params(profile, **override):
@@ -1225,9 +1259,11 @@ def _buyer_params(profile, **override):
 def buying_power_statement(request: Request, **override):
     """매수력 확정서 — 프로필 기본값 + 화면 입력 override."""
     profile = db.profile_get(_uid(request)) or {}
-    if not override.get("region"):
-        override["region"] = _default_region(request, profile)
-    override.setdefault("sido", _sido_of(override.get("region")))
+    region_code = override.pop("region_code", None)
+    region, sido, selected_code, identity_status = (
+        _finance_region_choice(override.get("region"), region_code)
+        if override.get("region") or region_code else _default_finance_region(request, profile))
+    override["region"], override["sido"] = region, sido
     clear_monthly = override.pop("clear_monthly_budget", False)
     p = _buyer_params(profile, **override)
     if clear_monthly:
@@ -1236,6 +1272,8 @@ def buying_power_statement(request: Request, **override):
         return {"ready": False, "reason": "no_capital",
                 "message": "가용자본을 입력하면 매수력을 확정할 수 있어요."}
     out = buying_power.statement(p)
+    out["가정"]["지역코드"] = selected_code
+    out["지역식별"] = identity_status
     out["ready"] = True
     out["확정"] = (profile.get("매수력") or {}).get("최대매수가")
     out["재확인필요"] = bool(out["확정"] and (profile.get("매수력") or {}).get("가정버전") != out["가정버전"])
@@ -1258,14 +1296,22 @@ def buying_power_confirm(request: Request, data: dict):
         profile["월상환한도"] = None
         if profile.get("매수력"):
             profile["매수력"].get("가정", {}).pop("월상환한도", None)
-    if not kw.get("region"):
-        kw["region"] = _default_region(request, profile)
-    kw["sido"] = _sido_of(kw.get("region"))
+    region_code = data.get("region_code")
+    explicit_region = bool(kw.get("region") or region_code)
+    region, sido, selected_code, identity_status = (
+        _finance_region_choice(kw.get("region"), region_code) if explicit_region
+        else _default_finance_region(request, profile))
+    if explicit_region and identity_status == "unverified_name":
+        return JSONResponse({"ok": False, "error": "지역 코드를 확인할 수 없습니다. 목록에서 지역을 선택하거나 지역을 비워 보수 계산해 주세요."},
+                            status_code=422)
+    kw["region"], kw["sido"] = region, sido
     p = _buyer_params(profile, **kw)
     if p.capital <= 0:
         return JSONResponse({"ok": False, "error": "가용자본을 입력해 주세요."}, status_code=400)
     from datetime import date
     st = buying_power.statement(p)
+    st["가정"]["지역코드"] = selected_code
+    st["지역식별"] = identity_status
     st["확정일"] = date.today().isoformat()
     profile["매수력"] = st
     if p.capital:
@@ -1278,6 +1324,11 @@ def buying_power_confirm(request: Request, data: dict):
     profile["생애최초"] = 1 if p.first_time else 0
     if p.region:
         profile["매수지역"] = p.region
+    if explicit_region:
+        if selected_code:
+            profile["매수지역코드"] = selected_code
+        else:
+            profile.pop("매수지역코드", None)
     db.profile_set(uid, profile)
     return {"ok": True, "매수력": st}
 
@@ -1479,12 +1530,6 @@ def conclusion(request: Request | None = None, capital: float | None = None,
         override["rate"] = rate
     if years is not None:
         override["years"] = years
-    if not override.get("region"):
-        override["region"] = (
-            ((profile.get("매수력") or {}).get("가정") or {}).get("지역")
-            or profile.get("매수지역")
-        )
-    override.setdefault("sido", _sido_of(override.get("region")))
     p = _buyer_params(profile, **override)
     py = float(pyeong) if pyeong is not None else buying_power.pyeong_of(profile.get("관심평수"))
 

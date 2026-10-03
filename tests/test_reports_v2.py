@@ -234,6 +234,8 @@ def test_discovery_does_not_call_missing_rows_verified_empty(monkeypatch):
 
 def test_discovery_finance_context_keeps_policy_unknown_and_profile_private(monkeypatch):
     from realty_signal import api, db
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
     monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: True)
     monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: 7)
     profile = finance_profile()
@@ -269,6 +271,8 @@ def test_discovery_finance_profile_failure_does_not_hide_listings(monkeypatch):
 
 def test_discovery_cursor_restarts_when_finance_profile_changes(monkeypatch):
     from realty_signal import api, db
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
     monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: True)
     monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: 7)
     profile = finance_profile()
