@@ -16,6 +16,13 @@ def test_macro_latest_optional():
     assert isinstance(m, dict)
 
 
+def test_kb_affordability_trend_increases_with_index():
+    from realty_signal.signals.engine import macro_trend
+
+    result = macro_trend({"구매력": [95, 96, 97, 98, 99, 100, 101]})
+    assert result["power_dir"] == "상승"
+
+
 def test_locality_bits_empty():
     assert pl.locality_bits({}) == {}
     assert pl.locality_bits({"school": 10, "transit_min": 40})["학원밀도"] == 10
@@ -45,6 +52,7 @@ def test_digest_includes_extras():
         },
     )
     assert "거시" in d["body"] and "거래량비" in d["body"] and "전세가율" in d["body"]
+    assert "전국 아파트 구매력지수 120.0" in d["body"]
 
 
 def test_nbhd_metrics_includes_volume():

@@ -479,7 +479,7 @@ def price_index_from(sale: "pd.Series") -> "pd.Series":
 
 
 def macro_trend(macro: dict) -> dict:
-    """대출금리·구매력 최근 추세(상승/하락/보합) 요약."""
+    """KB 전국 아파트 대출금리·구매력의 최근 추세(상승/하락/보합) 요약."""
     def dir_of(arr):
         v = [x for x in (arr or []) if x is not None]
         if len(v) < 7:
@@ -518,9 +518,9 @@ def evaluate(
         else:
             macro_clause = f"대출금리 보합(현 {mt['rate']}%) 환경"
         if mt["power_dir"] == "상승":
-            macro_clause += ", 주택구매력도 개선 중"
+            macro_clause += ", 전국 아파트 주택구매력지수도 개선 중"
         elif mt["power_dir"] == "하락":
-            macro_clause += ", 주택구매력은 약화 중"
+            macro_clause += ", 전국 아파트 주택구매력지수는 약화 중"
 
     have = set(latest.index)
 

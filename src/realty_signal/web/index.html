@@ -2972,7 +2972,7 @@ const _GLOSSARY=[
 ["지표·시장 (이 앱)",[
   ["매수우위지수","매수·매도 심리(100 기준). 높으면 매수자가 많음.","앱"],
   ["전세수급지수","전세 수요/공급(100 기준). 높으면 전세난→매매 전이 압력.","앱"],
-  ["주택구입부담지수","중위소득 가구의 중간가 주택 구입 부담. 높을수록 비쌈.","앱"],
+  ["주택구매력지수","KB 전국 아파트 기준. 중위소득 가구의 중간가 주택 구입 능력이며 높을수록 구매력이 큽니다. 지역별 투자 수익률이나 개인의 대출 가능액은 아닙니다.","앱"],
   ["입지 모형 가격 차이","내부 호환 이름은 저평가도이지만 제한적 입지 회귀모형의 가격 잔차입니다. 통근 추정·교육업종 점포·환경 대리변수만 사용하며 학교 배정·단지/주택 조건은 반영하지 않습니다. 할인율·적정가 판정이 아닙니다.","앱"],
   ["급지","지역/단지 등급(입지·시세 순위). 시군구는 수도권 평단가 A~E, 단지는 지역 내 1~5.","앱"],
   ["경기 국면","KB 주간 매매증감률 26주 흐름을 회복·상승·후퇴·침체·관망으로 분류한 후행 지표.","앱"],
@@ -5011,7 +5011,7 @@ function drawChart(region, m, sig){
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#16a34a'}}]}});
   mk("price_index", 0, { lineStyle:{width:2.4, color:'#2563eb'}, z:3 });  // 누적 매매가격지수 — 브랜드 컬러
   const mc = window._macro;
-  if(mc) series.push({ name:'주택구매력', type:'line', yAxisIndex:0, showSymbol:false, z:0,
+  if(mc) series.push({ name:'전국 아파트 주택구매력지수', type:'line', yAxisIndex:0, showSymbol:false, z:0,
     lineStyle:{width:1.2, type:'dashed', color:'#94a3b8'}, itemStyle:{color:'#94a3b8'},
     data: mc.dates.map((dt,i)=>[dt, mc.구매력?.[i]]) });
 
@@ -5466,8 +5466,8 @@ function renderNbhd(d){
      ${d['전세수급']!=null?_nbStat('전세수급', d['전세수급']):''}${d['매수우위지수']!=null?_nbStat('매수우위', d['매수우위지수']):''}${d['매매모멘텀']?_nbStat('매매모멘텀', d['매매모멘텀']):''}</div>`);
   if(mac['대출금리']!=null||mac['구매력']!=null){
     more+=_nbSec('거시 (금리·구매력)', `<div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${mac['대출금리']!=null?_nbStat('주담대금리', mac['대출금리']+'%'):''}${mac['구매력']!=null?_nbStat('구매력', mac['구매력']):''}</div>
-      <div style="font-size:10px;color:var(--dim);margin-top:4px">KB 매크로${mac['기준']?' · '+mac['기준']:''}</div>`);
+      ${mac['대출금리']!=null?_nbStat('주담대금리', mac['대출금리']+'%'):''}${mac['구매력']!=null?_nbStat('전국 구매력지수', Number(mac['구매력']).toFixed(1)):''}</div>
+      <div style="font-size:10px;color:var(--dim);margin-top:4px">KB 월간 지표${mac['기준']?' · '+mac['기준']:''} · 구매력지수는 높을수록 구매 여력 증가. 이 지역이나 개인의 구매력은 아닙니다.</div>`);
   }
   more+=_nbSec('입지 보조', `<div style="display:flex;gap:8px;flex-wrap:wrap">
      ${d['입지점수']!=null?_nbStat('입지점수', d['입지점수']):''}${loc['학원밀도']!=null?_nbStat('학원밀도', loc['학원밀도']):''}
@@ -6146,8 +6146,8 @@ function openSources(){
     ['전세수급·매수우위·매수세·매매/전세 증감률','KB부동산 데이터허브','주간 (매주 금 발표)'],
     ['매매가격지수 (누적 추세선)','KB 주간 증감률 누적 — 자체 파생','주간'],
     ['거래량·실거래가','국토교통부 실거래가(RTMS)','수시 (계약 후 30일 내 신고)'],
-    ['주택구입부담지수 (구매력)','한국주택금융공사 K-HAI','분기'],
-    ['기준금리 / 대출금리','한국은행','기준금리 수시 · 대출금리 월'],
+    ['전국 아파트 주택구매력지수','KB부동산 데이터허브 (높을수록 구매력 증가)','월간'],
+    ['주택담보대출금리','KB부동산 데이터허브 (주택구매력 통계의 금리)','월간'],
     ['입주물량 (공급압력)','KB 데이터허브 공급 통계','월·연'],
     ['입지 모형 가격 차이·대리점수·가격 급지','자체 산출 (제한된 회귀모형 + 국토부 실거래; 적정가 아님)','실거래 갱신 시'],
     ['정비구역·재건축 단계','서울 열린데이터광장 (정비사업 현황·추진경과)','부정기 (지자체 고시)'],
