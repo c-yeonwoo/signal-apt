@@ -441,9 +441,9 @@ def myfeed(request: Request):
     items = []
     qs = [m for m in qs if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드"))]
     for r in regions:
-        rq = [m for m in qs if r in (m.get("지역") or "")]
+        rq = [m for m in qs if m.get("지역") == r]
         gap = min([m.get("급매갭") for m in rq if m.get("급매갭") is not None], default=None)
-        rp = [d for d in ps if r in (d.get("지역") or "")]
+        rp = [d for d in ps if d.get("_signal_region") == r]
         items.append({"type": "region", "region": r, "signal": sig.get(r, ""),
                       "급매": len(rq) if _personal_listings_allowed(request=request) else None,
                       "급매갭": gap, "personal_only": not _personal_listings_allowed(request=request),
@@ -684,9 +684,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
     if name == "get_region_signal":
         region = (args.get("region") or "").strip()
         rows = signals()
-        hit = next((r for r in rows if r.get("region") == region), None) \
-            or next((r for r in rows if region and region in (r.get("region") or "")), None)
-        return _adv_region_row(hit) if hit else {"error": f"'{region}' 지역 데이터를 찾지 못했습니다."}
+        hit = next((r for r in rows if r.get("region") == region), None)
+        return _adv_region_row(hit) if hit else {"error": f"'{region}' 지역 데이터를 찾지 못했습니다. 정확한 시군구명을 선택해 주세요."}
     if name == "get_complex":
         region, nm = (args.get("region") or "").strip(), (args.get("name") or "").strip()
         if not region or not nm:
@@ -723,7 +722,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             kind = args.get("kind") or "급매"
             items = _build_listings({kind}, include_private=_personal_listings_allowed(uid=uid))
             if region:
-                items = [x for x in items if region in (x.get("지역") or "")]
+                items = [x for x in items if x.get("지역") == region]
             items = sorted(items, key=lambda x: x.get("타이밍점수") or 0, reverse=True)[:8]
             return {"layer": "listing", "asof": _timing_asof(),
                     "listings": [{"단지명": x.get("단지명"), "지역": x.get("지역"), "유형": x.get("유형"),
@@ -770,7 +769,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         except Exception:  # noqa: BLE001
             return {"error": "청약 조회 실패"}
         if region:
-            items = [d for d in items if region in (d.get("지역") or "") or region in (d.get("주소") or "")]
+            items = [d for d in items if d.get("지역") == region
+                     and _listing_region_matches_kb(region, d.get("시도"))]
         items = sorted(items, key=lambda d: (d.get("Dday") if d.get("Dday") is not None else 999))[:12]
         if not items:
             return {"result": "조건에 맞는 청약 단지가 없습니다."}
@@ -798,7 +798,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         if kind in ("일반매물", "전체") and private_allowed:
             hb = _hanbang_verified_rows()
             if region:
-                hb = [m for m in hb if region in (m.get("지역") or "")]
+                hb = [m for m in hb if m.get("지역") == region]
             out["일반매물"] = [{"매물키": _listing_key("일반매물", m, {"hanbang_id": m.get("hanbang_id")},
                                             m.get("단지명"), m.get("지역")),
                                "단지명": m.get("단지명"), "지역": m.get("지역"),
@@ -811,7 +811,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             except Exception:  # noqa: BLE001
                 qs = []
             if region:
-                qs = [m for m in qs if region in (m.get("지역") or "")]
+                qs = [m for m in qs if m.get("지역") == region]
             qs = sorted(qs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
             out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
                           "호가": m.get("호가"), "급매갭": m.get("급매갭"),
@@ -823,7 +823,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             except Exception:  # noqa: BLE001
                 cs = []
             if region:
-                cs = [m for m in cs if region in (m.get("지역") or "")]
+                cs = [m for m in cs if m.get("지역") == region]
             cs = sorted(cs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
             out["찐매물"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
                             "호가": m.get("호가"), "시세갭": m.get("급매갭"),
@@ -837,7 +837,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             except Exception:  # noqa: BLE001
                 au = []
             if region:
-                au = [m for m in au if region in (m.get("region") or "")]
+                au = [m for m in au if m.get("region") == region
+                      and region not in db.AMBIGUOUS_LEGACY_REGION_KEYS]
             out["경매"] = [{"단지명": m.get("단지명"), "region": m.get("region"), "최저매각가": m.get("최저매각가"),
                           "감정가": m.get("감정가"), "유찰횟수": m.get("유찰횟수"), "입찰기일": m.get("입찰기일")} for m in au[:10]]
         if not any(out.get(k) for k in ("일반매물", "급매", "찐매물", "경매")):
@@ -2710,13 +2711,13 @@ def neighborhood(request: Request, region: str):
         try:
             qs = (_radar_verified_rows(QUICKSALE_FILE, _QUICKSALE_SCAN_VER)
                   if _personal_listings_allowed(request=request) else [])
-            return sum(1 for m in qs if region in (m.get("지역") or "")
+            return sum(1 for m in qs if m.get("지역") == region
                        and _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드")))
         except Exception:  # noqa: BLE001
             return 0
     ps_cnt = 0
     try:
-        ps_cnt = sum(1 for d in _presale() if region in (d.get("지역") or ""))
+        ps_cnt = sum(1 for d in _presale() if d.get("_signal_region") == region)
     except Exception:  # noqa: BLE001
         pass
     # 미래가치
