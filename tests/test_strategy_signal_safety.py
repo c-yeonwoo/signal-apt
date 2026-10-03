@@ -52,6 +52,7 @@ def test_myfeed_recalculates_old_cached_complex_grade_under_current_hold(monkeyp
         {"kind": "region", "key": "노원구"},
         {"kind": "complex", "key": "노원구|테스트단지"},
     ])
+    monkeypatch.setattr(api.db, "actionable_region_favs", lambda uid: ["노원구"])
     monkeypatch.setattr(api, "_display_signal_map", lambda: {"노원구": "HELD"})
     monkeypatch.setattr(api, "_personal_listings_allowed", lambda **kwargs: False)
     monkeypatch.setattr(api, "_presale", lambda: [])

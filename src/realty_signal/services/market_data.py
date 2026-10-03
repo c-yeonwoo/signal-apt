@@ -11,6 +11,11 @@ from functools import lru_cache
 from realty_signal import store
 from realty_signal.signals.engine import SignalConfig, evaluate
 
+SIDO_LABELS = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주",
+               "30": "대전", "31": "울산", "36": "세종", "41": "경기", "42": "강원",
+               "43": "충북", "44": "충남", "45": "전북", "46": "전남", "47": "경북",
+               "48": "경남", "50": "제주"}
+
 
 def signal_config() -> SignalConfig:
     from realty_signal.brain.config_store import active_config

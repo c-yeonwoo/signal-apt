@@ -67,6 +67,41 @@ test('ambiguous old region stays in records but not active favorite badges', asy
   assert.equal(ctx._favRegionIdentity.get('중구').status,'needs_reselection');
 });
 
+test('code-key region favorite supplies current display name while old record stays separate', async () => {
+  const ctx=vm.createContext({
+    _favs:new Set(), _favRegionIdentity:new Map(), _favRegionKeyByName:new Map(),
+    fetch:async()=>({json:async()=>({favorites:[
+      {kind:'region',key:'중구',region_identity:{status:'needs_reselection',message:'다시 선택'}},
+      {kind:'region',key:'kb:1114000000',region_identity:{status:'ready',name:'중구',label:'서울 · 중구'}},
+    ]})}),
+  });
+  vm.runInContext(extract('async function loadFavs()', 'async function toggleFav('),ctx);
+  await ctx.loadFavs();
+  assert.equal(ctx._favs.has('region:중구'),true);
+  assert.equal(ctx._favRegionKeyByName.get('중구'),'kb:1114000000');
+  assert.equal(ctx._favRegionIdentity.get('중구').status,'needs_reselection');
+  assert.equal(ctx._favRegionIdentity.get('kb:1114000000').label,'서울 · 중구');
+});
+
+test('old ambiguous Jung-gu can be explicitly reselected with the verified Seoul code', () => {
+  const calls=[];
+  const row={style:{},querySelector:()=>({set onclick(fn){this.handler=fn;row.favoriteClick=fn}})};
+  const ctx=vm.createContext({
+    document:{createElement:()=>row}, selected:null, _SIGC:{HELD:'#aaa'},
+    _REGION_GRADE:{}, _favs:new Set(),
+    _favRegionIdentity:new Map([['중구',{status:'needs_reselection'}]]),
+    _favRegionKeyByName:new Map(), displaySignal:()=> 'HELD',
+    badge:()=>'',gwonLabel:()=>'',esc:x=>x,
+    toggleFav:(...args)=>calls.push(args),openFavList:()=>calls.push(['records']),toast:()=>{},
+  });
+  vm.runInContext(extract('function rowEl(', '// 전세수급·매수우위가 KB 권역'),ctx);
+  ctx.rowEl({region:'중구',region_id:'kb:1114000000',group:'서울'},0);
+  assert.match(row.innerHTML,/재선택/);
+  assert.match(row.innerHTML,/<button type="button" class="fav" aria-label="서울 중구를 관심지역으로 재선택"/);
+  row.favoriteClick({stopPropagation(){}});
+  assert.deepEqual(calls,[['region','kb:1114000000','중구']]);
+});
+
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
   const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
   vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);

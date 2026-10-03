@@ -42,7 +42,11 @@ _FAKE_WEEK = {"as_of": "2026-07-20", "prev": "2026-07-13", "ready": True,
 
 
 def test_weekly_change_splits_my_regions(client, monkeypatch):
+    from types import SimpleNamespace
+
     monkeypatch.setattr(weekly, "latest", lambda kb=None, supply=None: dict(_FAKE_WEEK))
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"강남구": "1168000000"}, regions=["강남구"], identity_verified=True))
     client.post("/api/favorites", json={"kind": "region", "key": "강남구"})
     d = client.get("/api/weekly-change").json()
     assert d["ready"] is True and d["prev"] == "2026-07-13"
@@ -136,11 +140,14 @@ def test_pre_reform_region_favorite_is_preserved_but_needs_reselection(client, m
     db.fav_add(uid, "region", "서구", "서구")  # 기존 저장본은 자동 삭제·이전하지 않는다.
     response = client.post("/api/favorites", json={"kind": "region", "key": "서구"})
     assert response.status_code == 422 and response.json()["error"] == "retired_region"
-    assert client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()["ok"]
+    retired_code = client.post("/api/favorites", json={"kind": "region", "key": "kb:2826000000"})
+    assert retired_code.status_code == 422 and retired_code.json()["error"] == "retired_region"
+    created = client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()
+    assert created == {"ok": True, "key": "kb:1168000000"}
     db.fav_add(uid, "region", "제물포구", "제물포구")
     favorites = {f["key"]: f for f in client.get("/api/favorites").json()["favorites"]}
     assert favorites["서구"]["region_identity"]["status"] == "needs_reselection"
-    assert favorites["강남구"]["region_identity"]["status"] == "ready"
+    assert favorites["kb:1168000000"]["region_identity"]["status"] == "ready"
     assert favorites["제물포구"]["region_identity"]["status"] == "no_current_series"
 
 
@@ -172,6 +179,73 @@ def test_legacy_jung_gu_favorite_is_archived_not_personalized_as_seoul(client, m
     assert client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()["ok"]
     assert db.actionable_region_favs(uid) == ["강남구"]
     assert db.users_with_region_favs()[0]["regions"] == ["강남구"]
+
+
+def test_verified_code_favorite_reselects_jung_gu_without_rewriting_legacy(client, monkeypatch):
+    from types import SimpleNamespace
+
+    source = SimpleNamespace(
+        codes={"중구": "1114000000", "강남구": "1168000000"},
+        regions=["중구", "강남구"], identity_verified=True)
+    monkeypatch.setattr(md, "kb", lambda: source)
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "region", "중구", "중구")
+
+    response = client.post("/api/favorites", json={
+        "kind": "region", "key": "kb:1114000000", "label": "공격자가 고른 이름"})
+    assert response.status_code == 200
+    favorites = {f["key"]: f for f in client.get("/api/favorites").json()["favorites"]}
+    assert favorites["중구"]["region_identity"]["status"] == "needs_reselection"
+    assert favorites["kb:1114000000"]["region_identity"] == {
+        "status": "ready", "name": "중구", "region_id": "kb:1114000000",
+        "label": "서울 · 중구", "message": ""}
+    assert favorites["kb:1114000000"]["label"] == "서울 · 중구"
+    assert db.actionable_region_favs(uid) == ["중구"]
+    assert db.all_fav_regions() == ["중구"]
+    assert db.users_with_region_favs()[0]["regions"] == ["중구"]
+
+    source.identity_verified = False
+    assert db.actionable_region_favs(uid) == []
+    assert db.users_with_region_favs() == []
+    assert {f["key"]: f for f in client.get("/api/favorites").json()["favorites"]}[
+        "kb:1114000000"]["region_identity"]["status"] == "unverified"
+    source.identity_verified = True
+
+    assert client.delete("/api/favorites", params={"kind": "region", "key": "kb:1114000000"}).json()["ok"]
+    assert db.actionable_region_favs(uid) == []
+    assert [f["key"] for f in client.get("/api/favorites").json()["favorites"]] == ["중구"]
+
+
+def test_unverified_code_favorite_is_rejected_not_saved(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"중구": "1114000000"}, regions=["중구"], identity_verified=False))
+    response = client.post("/api/favorites", json={"kind": "region", "key": "kb:1114000000"})
+    assert response.status_code == 422
+    assert response.json()["error"] == "unverified_region"
+    assert client.get("/api/favorites").json()["favorites"] == []
+
+
+def test_region_favorite_rejects_code_shared_by_two_current_names(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"강남구": "1168000000", "다른 구": "1168000000"},
+        regions=["강남구", "다른 구"], identity_verified=True))
+    for key in ("강남구", "kb:1168000000"):
+        response = client.post("/api/favorites", json={"kind": "region", "key": key})
+        assert response.status_code == 422
+        assert response.json()["error"] == "unverified_region"
+    assert client.get("/api/favorites").json()["favorites"] == []
+
+
+def test_favorite_endpoints_require_a_user_account(client):
+    client.cookies.clear()
+    assert client.get("/api/favorites").status_code == 401
+    assert client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).status_code == 401
+    assert client.delete("/api/favorites", params={"kind": "region", "key": "강남구"}).status_code == 401
+    assert db.fav_list(None) == []
 
 
 def test_action_plan_requires_login(client):

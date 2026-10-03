@@ -143,7 +143,7 @@
   .row.sel { background:var(--accent-weak); }
   .row .nm { font-weight:700; font-size:16px; }
   .row .mn { width:100%; color:var(--dim); font-size:14px; line-height:1.45; }
-  .row .fav { font-size:20px; line-height:1; padding:4px 2px; }
+  .row .fav { border:0; background:transparent; font-size:20px; line-height:1; min-width:44px; min-height:44px; padding:4px 2px; }
   .badge { font-size:13px; padding:4px 8px; border-radius:6px; font-weight:700; white-space:nowrap;
            border:1px solid transparent; letter-spacing:-0.01em; }
   /* 배지 색은 :root 토큰에서만 가져온다 — 하드코딩하면 JS 팔레트와 또 갈라진다.
@@ -4696,12 +4696,17 @@ function rowEl(r, lv){
   const shared = `전세 ${r['전세수급']??'–'}·매수우위 ${r['매수우위지수']??'–'}`;
   // 경기 일반구는 '구명'만 짧게 표기
   const disp = lv===2 ? r.region.split(' ').slice(1).join(' ')||r.region : r.region;
-  const unresolvedFav = _favRegionIdentity.has(r.region) && _favRegionIdentity.get(r.region)?.status!=='ready';
+  const unresolvedFav = !_favRegionKeyByName.has(r.region) && _favRegionIdentity.has(r.region)
+    && _favRegionIdentity.get(r.region)?.status!=='ready';
   const faved = _favs.has('region:'+r.region);
+  const favRef = _favRegionKeyByName.get(r.region) || (r.region_id?.startsWith('kb:')?r.region_id:null);
   row.innerHTML = `<span class="nm">${disp}</span>${badge(displaySignal(r))}
-    <span class="fav" title="${unresolvedFav?'기존 관심지역의 구분이 필요합니다':'즐겨찾기'}" style="cursor:pointer;color:${unresolvedFav?'var(--danger)':faved?'#b45309':'var(--dim)'};margin-left:auto">${unresolvedFav?'확인 필요':faved?'★':'☆'}</span>
+    <button type="button" class="fav" aria-label="${unresolvedFav&&favRef?`${esc(r.group)} ${esc(r.region)}를 관심지역으로 재선택`:unresolvedFav?'기존 관심지역의 구분 확인':favRef?`${esc(r.group)} ${esc(r.region)} 관심지역 ${faved?'해제':'저장'}`:'지역 코드 확인 후 저장 가능'}" aria-pressed="${faved?'true':'false'}" title="${unresolvedFav&&favRef?`${esc(r.group)} ${esc(r.region)}로 새 관심지역 저장`:unresolvedFav?'기존 관심지역의 구분이 필요합니다':favRef?'즐겨찾기':'지역 코드 확인 후 저장할 수 있습니다'}" style="cursor:pointer;color:${unresolvedFav?'var(--danger)':faved?'#b45309':'var(--dim)'};margin-left:auto;${unresolvedFav?'font-size:11px':''}">${unresolvedFav&&favRef?'재선택':unresolvedFav||!favRef?'확인 필요':faved?'★':'☆'}</button>
     <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
-  row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); if(unresolvedFav) openFavList(); else toggleFav('region', r.region, r.region); };
+  row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation();
+    if(favRef) toggleFav('region', favRef, r.region);
+    else if(unresolvedFav) openFavList();
+    else toast('지역 코드를 확인할 수 없어 관심지역 저장을 보류합니다.'); };
   row.onclick = () => selectRegion(r.region);
   return row;
 }
@@ -5658,9 +5663,9 @@ async function renderFavList(){
   const rSec=`<div style="font-size:13px;font-weight:700;margin:2px 0 6px">📍 관심지역 <span style="color:var(--dim);font-weight:400">${regions.length}</span></div>`
     + (regions.length? regions.map(r=>{
         const identity=_favRegionIdentity.get(r)||{status:'unverified',message:'지역 자료를 확인하지 못했습니다.'};
-        const ready=identity.status==='ready';
+        const ready=identity.status==='ready', name=identity.name||r;
         return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)">
-          <div><button type="button" data-fav-region-open="${esc(r)}" style="border:0;background:none;text-align:left;cursor:pointer;padding:0;color:inherit"><b>${esc(r)}</b> ${badge(ready?safeMarketSignal(r):'HELD')}</button>
+          <div><button type="button" data-fav-region-open="${esc(r)}" style="border:0;background:none;text-align:left;cursor:pointer;padding:0;color:inherit"><b>${esc(identity.label||identity.saved_label||name)}</b> ${badge(ready?safeMarketSignal(name):'HELD')}</button>
           ${ready?'':`<div style="font-size:11px;color:var(--danger);margin-top:3px">${esc(identity.message)} 원래 관심 기록은 유지됩니다.</div>`}</div>
           <button type="button" data-fav-region-remove="${esc(r)}" style="border:0;background:none;cursor:pointer;color:#dc2626;font-size:12px;white-space:nowrap">✕ 제거</button></div>`;}).join('')
       : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 시그널 목록에서 ☆로 추가하세요.</div>');
@@ -5684,7 +5689,7 @@ async function renderFavList(){
   body.querySelectorAll('[data-fav-region-open]').forEach(button=>button.addEventListener('click',()=>{
     const r=button.dataset.favRegionOpen;
     document.getElementById('favListDlg').close(); switchTab('signal');
-    if(_favRegionIdentity.get(r)?.status==='ready') selectRegion(r);
+    if(_favRegionIdentity.get(r)?.status==='ready') selectRegion(_favRegionIdentity.get(r).name||r);
   }));
   body.querySelectorAll('[data-fav-region-remove]').forEach(button=>button.addEventListener('click',()=>{
     const r=button.dataset.favRegionRemove; favRemove('region',r,r);
@@ -7107,6 +7112,7 @@ function calcGajeom(){
 }
 let _favs = new Set();
 let _favRegionIdentity = new Map();
+let _favRegionKeyByName = new Map();
 let _watchKeys = new Set();
 async function loadWatchKeys(){
   try{ const r=await fetch('/api/listing-watch'); if(!r.ok) return;
@@ -7169,11 +7175,21 @@ async function loadListingWatch(){
 }
 async function loadFavs(){
   try{ const d=await (await fetch('/api/favorites')).json();
-    _favs = new Set((d.favorites||[]).filter(f=>f.kind!=='region'||f.region_identity?.status==='ready').map(f=>f.kind+':'+f.key));
-    _favRegionIdentity = new Map((d.favorites||[]).filter(f=>f.kind==='region').map(f=>[f.key,f.region_identity])); }catch(e){}
+    const favorites=d.favorites||[];
+    _favRegionIdentity = new Map(favorites.filter(f=>f.kind==='region').map(f=>
+      [f.key,{...(f.region_identity||{}),saved_label:f.label}]));
+    _favRegionKeyByName = new Map();
+    for(const f of favorites){
+      if(f.kind!=='region'||f.region_identity?.status!=='ready') continue;
+      const name=f.region_identity.name||f.key;
+      if(!_favRegionKeyByName.has(name)||f.key.startsWith('kb:')) _favRegionKeyByName.set(name,f.key);
+    }
+    _favs = new Set(favorites.filter(f=>f.kind!=='region').map(f=>f.kind+':'+f.key));
+    for(const name of _favRegionKeyByName.keys()) _favs.add('region:'+name);
+  }catch(e){}
 }
 async function toggleFav(kind, key, label){
-  const id=kind+':'+key;
+  const id=kind+':'+(kind==='region'?label:key);
   if(_favs.has(id)||(kind==='region'&&_favRegionIdentity.has(key))){ _favs.delete(id);
     await fetch('/api/favorites?kind='+kind+'&key='+encodeURIComponent(key),{method:'DELETE'}); }
   else { _favs.add(id);
