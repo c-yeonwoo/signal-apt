@@ -2620,7 +2620,7 @@ async function _loadAsks(){
   wrap.innerHTML=_dashCard(_dashH('예산 범위 매물 후보')
     +`<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">저장한 가격 상한 ${_eok(d.budget)} 아래에서 호가가 확인된 후보입니다. 동네 평균으로 짐작한 가격은 제외했습니다. 대출 승인·규제·권리·판매 여부는 별도 확인이 필요합니다.</div>`
     +cards);
-  wrap.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{ const c=d.asks[Number(b.dataset.ask)]; if(c&&c.key) openListingReport(c.key); });
+  wrap.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{ const c=d.asks[Number(b.dataset.ask)]; if(c&&c.key) SignalV2.openListing(c.key); });
 }
 function _renderLevers(d){
   const cols=(d.columns||[]).map(col=>`<div style="padding:10px 0;border-top:1px solid var(--line)">
@@ -7526,7 +7526,7 @@ async function startApp(needOnboard){
 <script>
 let _advMsgs=[], _advBusy=false, _advUsage=null, _advListingKey=null, _advComparisonKeys=null, _advAbort=null, _advEpoch=0;
 let _analysisGen=0, _analysisCurrent=null;
-const _analysisCache=new Map(), _analysisAsked=new Set();
+const _analysisCache=new Map();
 let _analysisRouteLayer=null;
 let _analysisPick=null;
 async function _analysisLoadKapt(){
@@ -7697,7 +7697,7 @@ function _analysisDiscovery(d){
       <div>${l.asking_manwon?_eok(l.asking_manwon):'호가 미확인'} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'}</div>
       <div class="analysis-muted">${esc(x.reason)} · 수집 ${esc(l.collected_at||'미확인')}${l.stale?' · 지난 결과':''}</div>
       ${commuteText?`<div class="analysis-muted">${commuteText}</div>`:''}
-      <button type="button" class="btn" data-key="${esc(l.key)}" onclick="openListingReport(this.dataset.key)">이 매물 분석</button></div>`;
+      <button type="button" class="btn" data-key="${esc(l.key)}" onclick="SignalV2.openListing(this.dataset.key)">이 매물 분석</button></div>`;
   }).join('');
   const headlines=(box.headlines||[]).map(x=>`<div style="padding:6px 0"><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>
     <div class="analysis-muted">${esc(x.published_at||'시점 미확인')} · ${esc(x.match||'관련성 미확인')}</div></div>`).join('');
@@ -7954,10 +7954,6 @@ async function openListingReport(key){
       if(gen!==_analysisGen||!loc) return;
       _analysisMergeLocation(full,loc);
     });
-    if(!_analysisAsked.has(key)){
-      _analysisAsked.add(key);
-      advSend('선택한 매물의 가격 근거와 장단점을 내 조건에 맞춰 요약해줘. 입지 도구에서 확인된 경로·통학구역 후보만 구분해서 설명하고, 출입구·배정 학교·호재는 추정하지 말아줘. 중개사 질문도 알려줘.');
-    }
     if(full.listing.name&&full.listing.region){
       fetch(`/api/complex/${encodeURIComponent(full.listing.region)}/${encodeURIComponent(full.listing.name)}/building`)
         .then(r=>r.ok?r.json():null).then(b=>{
