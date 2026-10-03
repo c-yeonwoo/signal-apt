@@ -17,6 +17,7 @@ DEFAULT_PREFS = {
     "high_timing": True,
     "nbhd_change": True,
     "listing_price": True,
+    "listing_target": True,
     "new_alternative": True,
     "region_evidence": True,
     "presale_deadline": True,

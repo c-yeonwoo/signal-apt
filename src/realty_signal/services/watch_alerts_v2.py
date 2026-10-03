@@ -69,6 +69,11 @@ def materialize(uid: int, saved: list[dict], current: list[dict], *,
             old_alt_keys = set(json.loads(old_alt_json))
             changed_price = (observed_price is not None and old_price is not None
                              and observed_price != old_price)
+            target_row = c.execute("SELECT target_price FROM listing_watch_price_targets_v2 "
+                                   "WHERE uid=? AND key=?", (uid, key)).fetchone()
+            target_price = _price(target_row[0]) if target_row else None
+            target_crossed = (changed_price and target_price is not None
+                              and old_price > target_price >= observed_price)
             new_keys = set(alt_keys) - old_alt_keys
             if changed_price or new_keys:
                 revision += 1
@@ -78,6 +83,12 @@ def materialize(uid: int, saved: list[dict], current: list[dict], *,
                            "new_price": observed_price,
                            "observed_at": row.get("fetched_at") or row.get("등록일")}
                 count += _insert(c, uid, key, "listing_price", revision, payload, now)
+            if target_crossed and prefs.get("listing_target", True):
+                payload = {"name": watch["name"], "region": watch.get("region"),
+                           "kind": watch["kind"], "target_price": target_price,
+                           "old_price": old_price, "new_price": observed_price,
+                           "observed_at": row.get("fetched_at") or row.get("등록일")}
+                count += _insert(c, uid, key, "listing_target", revision, payload, now)
             if new_keys and prefs.get("new_alternative", True):
                 payload = {"name": watch["name"], "region": watch.get("region"),
                            "kind": watch["kind"],
