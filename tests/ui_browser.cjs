@@ -54,7 +54,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/freshness') {
         const now=Date.parse('2026-10-03T12:00:00Z')/1000;
-        data={now,'기준일':'2026-09-21',sources:[
+        data={now,'기준일':'2026-09-21',kb_fetch:{observation_check:{asof:'2026-09-21',previous_asof:'2026-09-21',changed:false,checked_at:now-3600}},sources:[
           {key:'signal',label:'시장 시그널 (KB)',asof:'2026-09-21',ts:now-3600,cycle:'주 1회',note:'KB 자료'},
           {key:'trade',label:'국토부 실거래',ts:now-3600,cycle:'조회 시',note:'거래 자료'}]};
       }
@@ -223,6 +223,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#freshBox').getByText(/관측 12일 전/).waitFor();
     assert.match(await page.locator('#freshBox').textContent(),/관측 2026-09-21 · 최종 수집 1시간 전/);
     assert.match(await page.locator('#freshBox').textContent(),/최신 공표를 확인하기 전까지/);
+    assert.match(await page.locator('#freshBox').textContent(),/최근 수집 확인에서도 새 관측일이 없었습니다/);
     await page.keyboard.press('Escape');
     await page.locator('#dashMarketExtra > summary').click();
     await page.waitForFunction(()=>document.getElementById('dashRegimeWrap').textContent.length>0);

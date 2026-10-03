@@ -38,3 +38,24 @@ def test_scheduler_launches_sources_independently(monkeypatch):
             await asyncio.wait_for(api._auto_refresh_loop(), timeout=.2)
     asyncio.run(exercise())
     assert set(calls) == {"kb", "quicksale", "certified", "hanbang", "localities", "school_zones", "digest", "backup"}
+
+
+def test_kb_refresh_checks_stale_observation_daily():
+    day = 86400
+    now = 100 * day
+    assert not api._kb_refresh_due(now - day + 1, 12, now)
+    assert api._kb_refresh_due(now - day, 12, now)
+    assert not api._kb_refresh_due(now - day, 7.9, now)
+    assert api._kb_refresh_due(now - 7 * day, 7.9, now)
+    assert api._kb_refresh_due(now - day, None, now)
+
+
+def test_kb_refresh_records_unchanged_observation(monkeypatch, synthetic_market):
+    from realty_signal import store
+    monkeypatch.setattr(store, "fetch", lambda: synthetic_market)
+    monkeypatch.setattr(api, "_snapshot_signals", lambda asof: [])
+    first = api._do_refresh()
+    assert first["last_date"] == str(synthetic_market.last_date.date())
+    assert api.kb_fetch_health()["observation_check"]["changed"] is None
+    api._do_refresh()
+    assert api.kb_fetch_health()["observation_check"]["changed"] is False
