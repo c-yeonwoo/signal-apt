@@ -4,6 +4,8 @@ import json
 from datetime import date
 
 import pandas as pd
+import pytest
+from fastapi import HTTPException
 
 from realty_signal.routes import reports_v2
 from realty_signal.services import market_data as md
@@ -25,6 +27,15 @@ def test_region_report_exposes_failed_conditions_and_cautions(monkeypatch):
     assert report["assessment"]["display_grade"] == "판단 보류"
     assert "price_direction_conflict" in report["unknowns"]
     assert any(reason["reason_id"] == "sale_momentum" for reason in report["cautions"])
+    by_code = json.loads(reports_v2.region_report("kb:1114000000").body)
+    assert by_code["subject"] == {"region": "중구", "region_id": "kb:1114000000"}
+
+
+def test_region_code_route_rejects_unverified_legacy_cache(monkeypatch):
+    monkeypatch.setattr(md, "kb", lambda: _kb(identity_verified=False))
+    with pytest.raises(HTTPException) as error:
+        reports_v2.region_report("kb:1114000000")
+    assert error.value.status_code == 404
 
 
 def test_private_discovery_does_not_open_source_without_personal_access(monkeypatch):

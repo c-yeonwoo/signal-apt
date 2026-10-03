@@ -34,13 +34,14 @@
     return `<div class="v2-row"><b>${esc(reason.label)}</b><br>${value}${threshold}${verdict}${source}${prior}</div>`;
   }
 
-  async function paintRegion(region) {
+  async function paintRegion(region, regionId) {
     const generation = ++regionGeneration;
     const target = document.getElementById('haesolPanel');
     if (!target) return;
     target.dataset.reportRegion = region;
     try {
-      const report = await json(`/api/v2/regions/${encodeURIComponent(region)}/report`);
+      const ref=regionId && regionId.startsWith('kb:') ? regionId : region;
+      const report = await json(`/api/v2/regions/${encodeURIComponent(ref)}/report`);
       if (generation !== regionGeneration || target.dataset.reportRegion !== region) return;
       const a = report.assessment;
       const changed = a.change?.type;

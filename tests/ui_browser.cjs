@@ -30,7 +30,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         return route.fulfill({json:{ok:true}});
       }
       const decoded=decodeURIComponent(url.pathname);
-      if(decoded==='/api/v2/regions/테스트구/report') data={type:'region',asof:'2026-09-28',
+      if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) data={type:'region',asof:'2026-09-28',
         assessment:{display_grade:'매수',assessment_status:'ready',scope_note:'테스트 권역 자료',
           summary:'지역 신호만 보여 줍니다. 개별 매물의 가격 판단은 별도입니다.',raw_grade:'BUY',
           reasons:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
@@ -333,10 +333,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       document.getElementById('advPanel').style.display='none';
       document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
       meta={last_date:'2026-09-28',zones:{jeonse_supply:[],buyer_idx_strong:70,buyer_demand_buy:20}};
-      allSignals=[{region:'테스트구',group:'서울',signal:'BUY',display_signal:'BUY',assessment_status:'ready',급지:'B',전세수급:180,매수우위지수:68}];
+      allSignals=[{region:'테스트구',region_id:'kb:1114000000',group:'서울',signal:'BUY',display_signal:'BUY',assessment_status:'ready',급지:'B',전세수급:180,매수우위지수:68}];
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
     await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
+    assert(calls.some(x=>decodeURIComponent(x)==='/api/v2/regions/kb:1114000000/report'));
     assert.equal(await page.locator('#signalPanelReasons').isVisible(),true);
     assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);

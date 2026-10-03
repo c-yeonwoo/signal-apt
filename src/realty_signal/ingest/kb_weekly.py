@@ -88,6 +88,7 @@ class KBWeekly:
 
     long: pd.DataFrame
     codes: dict = field(default_factory=dict)  # 지역명 → 법정동코드(있으면)
+    identity_verified: bool = False  # 새 DataHub 수집·캐시 무결성 확인 전에는 동명이인 코드를 신뢰하지 않는다.
 
     @property
     def regions(self) -> list[str]:

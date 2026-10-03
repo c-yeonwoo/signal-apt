@@ -25,15 +25,18 @@ def _id(payload: dict) -> str:
 def region_report(region: str):
     from realty_signal.services import signal_assessment
 
+    resolved = md.region_for_ref(region)
+    if resolved is None:
+        raise HTTPException(404, "지역을 찾지 못했습니다.")
     df = md.signals_df()
-    hit = df[df["region"] == region]
+    hit = df[df["region"] == resolved]
     if hit.empty:
         raise HTTPException(404, "지역을 찾지 못했습니다.")
     row = json.loads(hit.iloc[0].to_json(force_ascii=False))
     assessment = signal_assessment.with_previous(
         signal_assessment.build(md.kb(), row, md.signal_config()))
     report = {"schema_version": "report-v2-1", "type": "region",
-              "subject": {"region": region, "region_id": assessment["region_id"]},
+              "subject": {"region": resolved, "region_id": assessment["region_id"]},
               "asof": assessment["asof"], "status": assessment["assessment_status"],
               "assessment": assessment,
               "positive": [x for x in assessment["reasons"] if x["role"] == "driver" and x.get("passing")],

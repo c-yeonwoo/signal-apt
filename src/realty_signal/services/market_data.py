@@ -34,6 +34,20 @@ def code_of(region: str) -> str:
     return codes.get(region) or codes_nospace().get(region.replace(" ", ""), "")
 
 
+def region_for_ref(ref: str) -> str | None:
+    """Resolve a verified KB ID; legacy display names remain read-only compatible."""
+    source = kb()
+    if ref.startswith("kb:"):
+        code = ref[3:]
+        if not source.identity_verified or not code.isdigit():
+            return None
+        present = set(source.regions)
+        matches = [name for name, value in source.codes.items()
+                   if str(value) == code and name in present]
+        return matches[0] if len(matches) == 1 else None
+    return ref if ref in source.regions else None
+
+
 @lru_cache(maxsize=1)
 def regime():
     from realty_signal.signals.regime import compute_regime
@@ -83,6 +97,7 @@ def assessed_signal_labels(today: str) -> dict[str, dict]:
             "display_signal": row["signal"] if assessment["assessment_status"] == "ready" else "HELD",
             "assessment_status": assessment["assessment_status"],
             "assessment_id": assessment["assessment_id"],
+            "region_id": assessment["region_id"],
         }
     return labels
 
