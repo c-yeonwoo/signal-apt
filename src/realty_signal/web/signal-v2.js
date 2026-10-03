@@ -149,7 +149,11 @@
         <p id="v2SaveReportStatus" class="v2-muted" role="status"></p>
         <button type="button" class="btn" id="v2ListingLink">내 계정에서 열기 링크 복사</button>
         <p class="v2-muted">이 링크는 현재 수집분을 다시 조회합니다. 지금 보이는 리포트의 고정 사본은 아닙니다.</p>
-        <p id="v2ListingLinkStatus" class="v2-muted" role="status"></p>`;
+        <p id="v2ListingLinkStatus" class="v2-muted" role="status"></p>
+        <div class="v2-row"><b>이 리포트로 다음 확인 행동을 정할 수 있었나요?</b><p class="v2-muted">선택만 기록합니다. 매물명·가격·내 조건은 보내지 않습니다.</p>
+          <button type="button" class="btn" data-v2-report-feedback="yes">네, 충분했어요</button>
+          <button type="button" class="btn" data-v2-report-feedback="no">아니요, 더 필요해요</button>
+          <p id="v2ReportFeedbackStatus" class="v2-muted" role="status"></p></div>`;
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
       body.querySelector('#v2ListingCompare').onclick = event => {
         event.currentTarget.textContent = addCompare(key);
@@ -160,6 +164,12 @@
       };
       body.querySelector('#v2ListingLink').onclick = () => copyListingLink(item.key);
       body.querySelector('#v2ListingLocation').onclick = () => loadLocation(key, generation);
+      body.querySelectorAll('[data-v2-report-feedback]').forEach(button => button.onclick = () => {
+        if (generation !== listingGeneration) return;
+        track(EVENTS.REPORT_TASK_FEEDBACK, {type:'listing', answer:button.dataset.v2ReportFeedback});
+        body.querySelectorAll('[data-v2-report-feedback]').forEach(choice => choice.disabled = true);
+        body.querySelector('#v2ReportFeedbackStatus').textContent = '의견 고맙습니다. 리포트를 다듬는 데 참고하겠습니다.';
+      });
       const refreshTrades = body.querySelector('#v2RefreshTrades');
       if (refreshTrades) refreshTrades.onclick = async () => {
         refreshTrades.disabled = true;

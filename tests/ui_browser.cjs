@@ -368,6 +368,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(nickPayloads.length,0);
     await page.locator('#v2ReportBody').getByRole('button',{name:'이 리포트 저장'}).click();
     await page.locator('#v2SaveReportStatus').getByText(/저장했습니다/).waitFor();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'네, 충분했어요'}).click();
+    assert.deepEqual(eventPayloads.filter(x=>x.name==='report_task_feedback').at(-1),
+      {name:'report_task_feedback',props:{type:'listing',answer:'yes'}});
+    assert.equal(await page.locator('#v2ReportBody').getByRole('button',{name:'아니요, 더 필요해요'}).isDisabled(),true);
     const reportFetches=calls.filter(path=>path==='/api/v2/listings/report').length;
     await page.locator('#v2ReportBody').getByRole('button',{name:'저장본 보기'}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'당시 리포트 보기'}).click();

@@ -24,6 +24,11 @@ def test_new_funnel_events_are_allowed(tmp_path, monkeypatch):
     db._migrated[0] = False
     for name in ("weekly_open", "buying_power_confirm", "evidence_open"):
         assert db.event_log(1, name, {}) is True, f"{name} 이 화이트리스트에 없다"
+    assert db.event_log(1, "report_task_feedback", {"type": "listing", "answer": "yes"}) is True
+    assert db.event_log(1, "report_task_feedback", {"type": "listing", "answer": "no"}) is True
+    assert db.event_log(2, "report_task_feedback", {"type": "listing", "answer": "yes"}) is True
+    assert db.report_feedback_counts() == {"yes": {"count": 2, "users": 2},
+                                           "no": {"count": 1, "users": 1}}
     counts = {r["name"]: r["count"] for r in db.event_counts(30)}
     assert counts.get("weekly_open") == 1
     assert counts.get("buying_power_confirm") == 1

@@ -231,4 +231,5 @@ def track_event(request: Request, data: dict = Body(...)):
 def admin_events(request: Request, days: int = 30):
     if not deps.is_admin(request):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
-    return {"ok": True, "days": days, "counts": db.event_counts(days)}
+    return {"ok": True, "days": days, "counts": db.event_counts(days),
+            "report_feedback": db.report_feedback_counts(days)}

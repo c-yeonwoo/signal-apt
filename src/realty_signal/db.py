@@ -452,6 +452,7 @@ _ALLOWED_EVENTS = frozenset({
     "evidence_open",          # "근거가 증명되는"이 카피인가 기능인가 — 성적표를 실제로 여나
     "listing_analysis_start", "listing_analysis_ready", "listing_evidence_open",
     "listing_compare_open", "listing_commute_compare", "listing_watch_add", "imjang_visit_save",
+    "report_task_feedback",
 })
 
 
@@ -479,6 +480,29 @@ def event_counts(days: int = 30) -> list[dict]:
     ).fetchall()
     c.close()
     return [{"name": n, "count": cnt, "users": users} for n, cnt, users in rows]
+
+
+def report_feedback_counts(days: int = 30) -> dict:
+    """Admin-only aggregate; never return report IDs, listing keys or individual answers."""
+    since = int(time.time()) - max(1, days) * 86400
+    c = conn()
+    try:
+        rows = c.execute("SELECT uid,props FROM events WHERE ts>=? AND name='report_task_feedback'",
+                         (since,)).fetchall()
+    finally:
+        c.close()
+    grouped = {answer: {"count": 0, "users": set()} for answer in ("yes", "no")}
+    for uid, props in rows:
+        try:
+            payload = json.loads(props)
+        except (TypeError, ValueError):
+            continue
+        answer = payload.get("answer") if isinstance(payload, dict) else None
+        if isinstance(answer, str) and answer in grouped and payload.get("type") == "listing":
+            grouped[answer]["count"] += 1
+            grouped[answer]["users"].add(uid)
+    return {answer: {"count": values["count"], "users": len(values["users"])}
+            for answer, values in grouped.items()}
 
 
 def _iso_week() -> str:
