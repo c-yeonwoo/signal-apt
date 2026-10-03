@@ -60,6 +60,7 @@ def test_explicit_queue_is_idempotent_private_and_does_not_call_model_on_get(mon
 def test_bad_model_output_falls_back_and_never_exposes_unsupported_claim(monkeypatch):
     report = _listing()
     bad = [{"text": "내년 가격은 20% 오릅니다.", "evidence_ids": ["trades"]},
+           {"text": "거래는 두 배 더 많아졌습니다.", "evidence_ids": ["trades"]},
            {"text": "중개사가 학교 배정을 보장합니다.", "evidence_ids": ["listing"]},
            {"text": "가격 판단을 보류하는 편이 안전합니다.", "evidence_ids": ["invented"]}]
     for claim in bad:

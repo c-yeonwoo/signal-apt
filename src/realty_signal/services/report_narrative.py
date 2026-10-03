@@ -1,8 +1,8 @@
 """Explicit, evidence-bound report explanations with a durable paid-call queue.
 
-The report remains usable without this optional layer. A claim is shown only if
-it cites an ID in the exact report revision requested by the user; numbers and
-the decision itself always come from the deterministic report, never the model.
+The report remains usable without this optional layer. A model claim is shown
+only if it cites an ID in the exact report revision requested by the user.
+Core decisions and displayed figures remain in the deterministic report.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ RESULT_RETENTION_SECONDS = 7 * 86400
 _last_cleanup = 0
 _UNSUPPORTED = re.compile(
     r"[0-9０-９]|https?://|[%％₩$]|(?:몇|수십|여러)\s*(?:억|만|원|년|월|일|분|㎡)"
+    r"|(?:한|하나|두|둘|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*(?:배|건|개|명|세대|억|만원|개월|년|주|분)"
     r"|확정|보장|무조건|반드시|당첨|승인|배정|수익률|예측|전망|오를 것|내릴 것"
     r"|상승할|하락할|때문에 상승|때문에 하락|매수해야|매도해야|사야 합니다|팔아야 합니다"
     r"|학군|통학|학교|역세권|교통|호재|개발"
