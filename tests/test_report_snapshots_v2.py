@@ -29,6 +29,13 @@ def _region_report(report_id="b" * 64):
             "asof": "2026-09-21", "assessment": {"display_grade": "판단 보류"}}
 
 
+def _comparison_report(report_id="d" * 64):
+    return {"schema_version": "report-v2-1", "type": "comparison", "report_id": report_id,
+            "items": [{"listing": {"key": "일반매물:one", "kind": "일반매물", "name": "첫 단지"}},
+                      {"listing": {"key": "급매:two", "kind": "급매", "name": "둘째 단지"}}],
+            "basis": "같은 조건 가격 비교"}
+
+
 def test_save_is_immutable_idempotent_and_owner_scoped(isolated_db):
     original = _report()
     first = snapshots.save(7, original)
@@ -64,6 +71,32 @@ def test_region_snapshot_is_immutable_and_visible_without_private_listing_access
     items = json.loads(reports_v2.report_snapshots_list(None, key="kb:11350").body)["items"]
     assert [(item["kind"], item["name"]) for item in items] == [("지역", "노원구")]
     assert json.loads(reports_v2.report_snapshot_get(None, report["report_id"]).body)["report"] == report
+
+
+def test_comparison_snapshot_rechecks_current_keys_and_private_scope(isolated_db, monkeypatch):
+    report = _comparison_report()
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    allowed = {"value": True}
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: allowed["value"])
+    monkeypatch.setattr(reports_v2, "comparison_report", lambda request, data: JSONResponse(report))
+    keys = [item["listing"]["key"] for item in report["items"]]
+    saved = json.loads(reports_v2.report_snapshot_save(None, {
+        "type": "comparison", "keys": keys, "report_id": report["report_id"]}).body)
+    assert saved["report_id"] == report["report_id"]
+    with pytest.raises(HTTPException) as changed:
+        reports_v2.report_snapshot_save(None, {"type": "comparison", "keys": keys,
+                                               "report_id": "e" * 64})
+    assert changed.value.status_code == 409
+    monkeypatch.setattr(reports_v2, "comparison_report", lambda request, data: (_ for _ in ()).throw(
+        AssertionError("historical comparison must not recalculate")))
+    items = json.loads(reports_v2.report_snapshots_list(None).body)["items"]
+    assert [(item["kind"], item["name"]) for item in items] == [("비교:개인", "2개 매물 비교")]
+    assert json.loads(reports_v2.report_snapshot_get(None, report["report_id"]).body)["report"] == report
+    allowed["value"] = False
+    assert json.loads(reports_v2.report_snapshots_list(None).body)["items"] == []
+    with pytest.raises(HTTPException) as hidden:
+        reports_v2.report_snapshot_get(None, report["report_id"])
+    assert hidden.value.status_code == 404
 
 
 def test_save_route_rechecks_current_report_and_permission(isolated_db, monkeypatch):

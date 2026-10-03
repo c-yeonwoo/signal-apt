@@ -14,7 +14,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const reportsByKey=new Map(), savedReports=new Map();
-    let entranceChosen=false, tradeEnriched=false, regionReport=null;
+    let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -106,20 +106,30 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:trade-missing' && !tradeEnriched)
         data.partial_failures=['trade_cache_unavailable'];
       if(url.pathname==='/api/v2/listings/report') reportsByKey.set(url.searchParams.get('key'),data);
+      if(url.pathname==='/api/v2/comparisons') {
+        const keys=route.request().postDataJSON().keys;
+        data={type:'comparison',report_id:'c'.repeat(64),basis:'같은 조건 가격 비교',items:keys.map((key,i)=>({
+          listing:{key,kind:'일반매물',name:i?'두번째테스트단지':'한방테스트단지',region:'테스트구',
+            asking_manwon:i?47000:50000,exclusive_m2:84.5,collected_at:'2026-09-29'},
+          price:{상태:'관측비교',표본수:3,호가차이율:i?-4:2}})),cautions:[],unknowns:['수리 상태']};
+        comparisonReport=data;
+      }
       if(url.pathname==='/api/v2/listings/report-enrich') {
         tradeEnriched=true;
         data={ok:true};
       }
       if(url.pathname==='/api/v2/report-snapshots' && route.request().method()==='POST') {
-        const request=route.request().postDataJSON(), report=request.type==='region'?regionReport:reportsByKey.get(request.key);
+        const request=route.request().postDataJSON(), report=request.type==='region'?regionReport:
+          request.type==='comparison'?comparisonReport:reportsByKey.get(request.key);
         if(!report || request.report_id!==report.report_id) return route.fulfill({status:409,json:{}});
         savedReports.set(request.report_id,{report:structuredClone(report),saved_at:1780000000});
         return route.fulfill({status:201,json:{report_id:request.report_id,saved_at:1780000000}});
       }
       if(url.pathname==='/api/v2/report-snapshots') data={items:[...savedReports.values()]
-        .filter(saved=>!url.searchParams.get('key')||(saved.report.subject.key||saved.report.subject.region_id)===url.searchParams.get('key'))
-        .map(saved=>({report_id:saved.report.report_id,subject_key:saved.report.subject.key||saved.report.subject.region_id,
-          kind:saved.report.subject.kind||'지역',name:saved.report.subject.name||saved.report.subject.region,asof:saved.report.asof,
+        .filter(saved=>!url.searchParams.get('key')||(saved.report.subject?.key||saved.report.subject?.region_id)===url.searchParams.get('key'))
+        .map(saved=>({report_id:saved.report.report_id,subject_key:saved.report.subject?.key||saved.report.subject?.region_id,
+          kind:saved.report.type==='comparison'?'비교:개인':saved.report.subject?.kind||'지역',
+          name:saved.report.type==='comparison'?'2개 매물 비교':saved.report.subject?.name||saved.report.subject?.region,asof:saved.report.asof,
           saved_at:saved.saved_at}))};
       if(url.pathname.startsWith('/api/v2/report-snapshots/')) {
         const id=decodeURIComponent(url.pathname.split('/').at(-1));
@@ -464,6 +474,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#listingCompareBody thead th').count(),3);
     await page.locator('#listingCompareDlg').getByRole('button',{name:'교통·학교 차이 확인'}).click();
     await page.locator('#listingCompareLocation').getByText('통학구역 후보 테스트초',{exact:false}).first().waitFor();
+    await page.locator('#listingCompareDlg').getByRole('button',{name:'이 비교 리포트 저장'}).click();
+    await page.locator('#listingCompareSaveStatus').getByText(/저장했습니다/).waitFor();
+    assert.equal(calls.filter(x=>x==='/api/v2/comparisons').length,1);
+    await page.locator('#listingCompareDlg').getByRole('button',{name:'저장본 보기'}).click();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'당시 리포트 보기'}).click();
+    await page.locator('#v2ReportBody').getByText(/저장 당시 · 2개 매물 비교/).waitFor();
+    assert.match(await page.locator('#v2ReportBody').textContent(),/현재 호가·판매 여부/);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>listingCompareOpen());
+    await page.locator('#listingCompareDlg').getByRole('button',{name:'닉에게 차이 묻기'}).waitFor();
     const compareRequest=page.waitForRequest(req=>req.url().includes('/api/advisor/stream')&&req.postDataJSON()?.comparison_keys?.length===2);
     await page.locator('#listingCompareDlg').getByRole('button',{name:'닉에게 차이 묻기'}).click();
     assert.deepEqual((await compareRequest).postDataJSON().comparison_keys,['일반매물:synthetic-hb-1','일반매물:synthetic-hb-2']);

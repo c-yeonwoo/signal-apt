@@ -8,16 +8,23 @@ from __future__ import annotations
 
 import json
 import time
+from hashlib import sha256
 
 from realty_signal import db
 
-PRIVATE_KINDS = frozenset({"일반매물", "급매", "찐매물"})
+PRIVATE_LISTING_KINDS = frozenset({"일반매물", "급매", "찐매물"})
+PRIVATE_KINDS = PRIVATE_LISTING_KINDS | {"비교:개인"}
 
 
 def save(uid: int, report: dict) -> dict:
-    subject = report["subject"]
+    subject = report.get("subject") or {}
     if report.get("type") == "region":
         key, kind = subject["region_id"], "지역"
+    elif report.get("type") == "comparison":
+        listings = [item.get("listing") or {} for item in report.get("items") or []]
+        keys = [listing["key"] for listing in listings]
+        key = "comparison:" + sha256(json.dumps(keys, ensure_ascii=False).encode()).hexdigest()
+        kind = "비교:개인" if any(listing.get("kind") in PRIVATE_LISTING_KINDS for listing in listings) else "비교"
     else:
         key, kind = subject["key"], subject["kind"]
     report_id = report["report_id"]
@@ -47,7 +54,7 @@ def list_for(uid: int, *, key: str | None = None, private_allowed: bool) -> list
             sql += " AND subject_key=?"
             args.append(key)
         if not private_allowed:
-            sql += " AND kind NOT IN (?,?,?)"
+            sql += " AND kind NOT IN (" + ",".join("?" for _ in PRIVATE_KINDS) + ")"
             args.extend(sorted(PRIVATE_KINDS))
         sql += " ORDER BY saved_at DESC,report_id DESC LIMIT 50"
         rows = c.execute(sql, args).fetchall()
@@ -56,7 +63,8 @@ def list_for(uid: int, *, key: str | None = None, private_allowed: bool) -> list
             report = json.loads(data)
             result.append({"report_id": report_id, "subject_key": subject_key, "kind": kind,
                            "name": ((report.get("subject") or {}).get("name") or
-                                    (report.get("subject") or {}).get("region")),
+                                    (report.get("subject") or {}).get("region") or
+                                    f"{len(report.get('items') or [])}개 매물 비교"),
                            "asof": report.get("asof"), "saved_at": saved_at})
         return result
     finally:
