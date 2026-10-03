@@ -13,6 +13,7 @@ from realty_signal.signals.engine import SignalConfig
 
 from test_signal_assessment_v2 import _kb, _row
 from test_discovery_v2 import _row as listing_row
+from test_discovery_finance import _profile as finance_profile
 
 
 def test_region_report_exposes_failed_conditions_and_cautions(monkeypatch):
@@ -45,7 +46,10 @@ def test_private_discovery_does_not_open_source_without_personal_access(monkeypa
     monkeypatch.setattr(api, "_build_listings", lambda *_a, **_k: (_ for _ in ()).throw(
         AssertionError("private source accessed")))
     monkeypatch.setattr(api, "hanbang", lambda: (_ for _ in ()).throw(AssertionError("private cache accessed")))
-    result = json.loads(reports_v2.discovery(None, {"max_price_manwon": 60000}).body)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: (_ for _ in ()).throw(
+        AssertionError("private profile accessed")))
+    result = json.loads(reports_v2.discovery(None, {"max_price_manwon": 60000,
+                                                    "max_monthly_manwon": 200}).body)
     assert result["private_access"] is False
     assert result["source_state"] == "forbidden"
     assert result["counts"]["matched"] == 0
@@ -110,6 +114,62 @@ def test_discovery_does_not_call_missing_rows_verified_empty(monkeypatch):
     result = json.loads(reports_v2.discovery(None, {"max_price_manwon": 60000}).body)
     assert result["sources"][0]["state"] == "failed"
     assert result["source_state"] == "partial_empty"
+
+
+def test_discovery_finance_context_keeps_policy_unknown_and_profile_private(monkeypatch):
+    from realty_signal import api, db
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: True)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: 7)
+    profile = finance_profile()
+    monkeypatch.setattr(db, "profile_get", lambda _uid: profile)
+    monkeypatch.setattr(api, "_sido_of", lambda _region: "서울")
+    monkeypatch.setattr(api, "hanbang", lambda: {"state": "ready", "regions": ["노원구"]})
+    monkeypatch.setattr(api, "quicksale", lambda: {"state": "empty"})
+    monkeypatch.setattr(api, "certified", lambda: {"state": "empty"})
+    monkeypatch.setattr(api, "_build_listings", lambda kinds, **_: [
+        listing_row("one", price=50_000, area=70)] if "일반매물" in kinds else [])
+    response = reports_v2.discovery(None, {"max_monthly_manwon": 200})
+    result = json.loads(response.body)
+    assert response.headers["cache-control"] == "private, no-store"
+    assert result["finance_context"]["policy_status"] == "unverified"
+    assert result["groups"]["verify"][0]["finance"]["status"] == "policy_unverified"
+    assert "가용자본" not in response.body.decode()
+
+
+def test_discovery_finance_profile_failure_does_not_hide_listings(monkeypatch):
+    from realty_signal import api, db
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: True)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: 7)
+    monkeypatch.setattr(db, "profile_get", lambda _uid: (_ for _ in ()).throw(OSError("db down")))
+    monkeypatch.setattr(api, "hanbang", lambda: {"state": "ready"})
+    monkeypatch.setattr(api, "quicksale", lambda: {"state": "empty"})
+    monkeypatch.setattr(api, "certified", lambda: {"state": "empty"})
+    monkeypatch.setattr(api, "_build_listings", lambda kinds, **_: [
+        listing_row("one", price=50_000, area=70)] if "일반매물" in kinds else [])
+    result = json.loads(reports_v2.discovery(None, {"max_monthly_manwon": 200}).body)
+    assert result["finance_context"]["status"] == "profile_unavailable"
+    assert result["groups"]["verify"][0]["finance"]["status"] == "profile_unavailable"
+
+
+def test_discovery_cursor_restarts_when_finance_profile_changes(monkeypatch):
+    from realty_signal import api, db
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: True)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: 7)
+    profile = finance_profile()
+    monkeypatch.setattr(db, "profile_get", lambda _uid: profile)
+    monkeypatch.setattr(api, "_sido_of", lambda _region: "서울")
+    monkeypatch.setattr(api, "hanbang", lambda: {"state": "ready"})
+    monkeypatch.setattr(api, "quicksale", lambda: {"state": "empty"})
+    monkeypatch.setattr(api, "certified", lambda: {"state": "empty"})
+    monkeypatch.setattr(api, "_build_listings", lambda kinds, **_: [
+        listing_row("one", price=50_000, area=70), listing_row("two", price=51_000, area=70)]
+        if "일반매물" in kinds else [])
+    first = json.loads(reports_v2.discovery(None, {"max_monthly_manwon": 200, "limit": 1}).body)
+    profile["가용자본"] = 90_000
+    with pytest.raises(HTTPException) as error:
+        reports_v2.discovery(None, {"max_monthly_manwon": 200, "limit": 1,
+                                    "cursor": first["next_cursor"]})
+    assert error.value.status_code == 409
 
 
 def test_discovery_returns_conflict_when_page_source_changes(monkeypatch):

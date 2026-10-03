@@ -11,7 +11,7 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-2"
+VERSION = "discovery-v2-3"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region"}
 
@@ -81,12 +81,14 @@ def _decode_cursor(value: str) -> dict:
         raise ValueError("invalid_cursor") from exc
 
 
-def _monthly(row: dict) -> float | None:
-    finance = row.get("자금") or {}
-    return _number(finance.get("총월상환") or finance.get("월상환"))
+def _monthly(finance: dict | None) -> float | None:
+    value = (finance or {}).get("monthly_exact_manwon")
+    if type(value) not in (int, float) or not isfinite(value) or value < 0:
+        return None
+    return float(value)
 
 
-def classify(row: dict, spec: dict) -> dict:
+def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
     listing = snapshot(row)
     price = listing["asking_manwon"]
     area = listing["exclusive_m2"]
@@ -100,9 +102,11 @@ def classify(row: dict, spec: dict) -> dict:
                        else "pass" if area >= spec["min_area_m2"] else "fail",
                        "value": area, "limit": spec["min_area_m2"]})
     if "max_monthly_manwon" in spec:
-        monthly = _monthly(row)
-        checks.append({"field": "max_monthly_manwon", "status": "unknown" if monthly is None
-                       else "pass" if monthly <= spec["max_monthly_manwon"] else "fail",
+        monthly = _monthly(finance)
+        assessed = (finance or {}).get("status") == "assessed" and monthly is not None
+        checks.append({"field": "max_monthly_manwon", "status": "unknown" if not assessed
+                       else "pass" if monthly <= spec["max_monthly_manwon"] and finance.get("possible") is True
+                       else "fail",
                        "value": monthly, "limit": spec["max_monthly_manwon"]})
     if "region" in spec and spec["region"]:
         checks.append({"field": "region", "status": "pass" if listing["region"] == spec["region"] else "fail",
@@ -121,26 +125,29 @@ def classify(row: dict, spec: dict) -> dict:
     if passed:
         reason = {"max_price_manwon": "설정한 호가 상한 안입니다.",
                   "min_area_m2": "원하는 전용면적 이상입니다.",
-                  "max_monthly_manwon": "계산한 월 부담이 설정 상한 안입니다.",
+                  "max_monthly_manwon": "입력 가정의 월 부담 상한 안입니다.",
                   "region": "선택한 지역입니다."}[passed[0]["field"]]
     else:
         reason = "조건을 입력하면 적합성을 비교합니다." if not checks else "조건 충족을 확인하지 못했습니다."
     if preference_match:
         reason = "선호 지역과 " + reason if passed else "선호 지역입니다."
     tradeoff = ("현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다." if not failed else
+                "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다." if failed[0]["field"] == "max_monthly_manwon" else
                 f"{failed[0]['field']} 조건을 넘습니다.")
     verify = ("매물 판매 여부와 실제 호가를 확인하세요." if listing["stale"] else
+              finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else
               "실제 자금·매물 상태를 확인하세요.")
     return {"listing": listing, "eligibility": tier, "constraints": checks,
             "recommendation_reason": reason, "tradeoff": tradeoff,
             "verify_next": verify, "signal_context": row.get("시그널"),
+            "finance": finance if "max_monthly_manwon" in spec else None,
             "preference": {"region": preferred, "matched": preference_match,
                            "score": preference_score, "coverage": preference_coverage},
             "rank_version": VERSION}
 
 
-def discover(rows: list[dict], spec: dict, *, source_fingerprint=None) -> dict:
+def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_of=None) -> dict:
     spec = validate(spec)
     cursor = spec.pop("cursor", None)
     query_hash = _hash(spec)
@@ -150,7 +157,8 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None) -> dict:
         if row.get("유형") not in KINDS or not row.get("key") or row["key"] in seen:
             continue
         seen.add(row["key"])
-        item = classify(row, spec)
+        finance = finance_of(row) if finance_of and "max_monthly_manwon" in spec else None
+        item = classify(row, spec, finance=finance)
         groups[item["eligibility"]].append(item)
     def order(item):
         snap = item["listing"]

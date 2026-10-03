@@ -237,9 +237,15 @@
   }
 
   function discoveryCard(x) {
+    const finance = x.finance;
+    const monthly = finance && Number.isFinite(Number(finance.monthly_manwon))
+      ? `${esc(finance.monthly_manwon)}만원` : '미계산';
+    const cash = finance && Number.isFinite(Number(finance.cash_manwon))
+      ? `${esc(finance.cash_manwon)}만원` : '미계산';
     return `<div class="v2-row" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
       <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}</p>
-      <p>추천 이유: ${esc(x.recommendation_reason)}</p>
+      ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
+      <p>${x.eligibility === 'verify' ? '확인된 점' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
       ${x.preference?.region ? `<p>지역 선호: ${x.preference.matched ? '부합' : x.preference.coverage ? '다른 지역' : '자료 미확인'}</p>` : ''}
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
@@ -251,7 +257,7 @@
     const form = document.getElementById('v2DiscoverForm');
     const result = document.getElementById('v2DiscoverResults');
     const spec = {};
-    for (const field of ['max_price_manwon', 'min_area_m2', 'region']) {
+    for (const field of ['max_price_manwon', 'min_area_m2', 'max_monthly_manwon', 'region']) {
       const value = form.elements[field].value.trim();
       if (value) spec[field === 'region' && form.elements.region_mode.value === 'prefer' ?
         'prefer_region' : field] = field === 'region' ? value : Number(value);
@@ -284,11 +290,21 @@
         const requested = spec.region || spec.prefer_region;
         const outside = requested && regions.length && !regions.includes(requested) ?
           `<p class="v2-muted">${esc(requested)}은(는) 현재 확인된 수집 지역에 없습니다.</p>` : '';
+        const financeNotice = spec.max_monthly_manwon ?
+          data.finance_context?.status === 'profile_unavailable' ? '저장된 매수력을 지금 읽지 못했습니다. 월 부담은 판정하지 않습니다.' :
+          data.finance_context?.status !== 'ready' ? '매수력을 설정·확정해야 월 부담을 계산할 수 있습니다.' :
+          data.finance_context?.policy_status !== 'verified' ? `대출 규제·세율 최신성이 검증되지 않았습니다(${esc(data.finance_context?.policy_declared_asof || '기준일 미확인')} 기준 가정). 월 부담은 참고용이며 후보는 확인 필요로 분류됩니다.` :
+          '월 부담은 입력 가정의 추정치이며 대출 승인이 아닙니다.' : '';
         result.innerHTML = `<p class="v2-muted">현재 수집된 ${regions.length}개 지역 · ${sources || '원천 상태 미확인'} · 전체 시장 아님</p>
-          ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}${outside}
+          ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}
+          ${financeNotice ? `<p class="v2-row v2-caution">${financeNotice}</p>` : ''}
+          ${spec.max_monthly_manwon && data.finance_context?.status !== 'ready' && data.finance_context?.status !== 'profile_unavailable' ?
+            '<button type="button" class="btn" data-v2-finance-setup>매수력 설정으로 이동</button>' : ''}${outside}
           <div id="v2DiscoveryGroups"></div><div id="v2DiscoveryPaging"></div>`;
       }
       const groupHost = result.querySelector('#v2DiscoveryGroups');
+      const setup = result.querySelector('[data-v2-finance-setup]');
+      if (setup) setup.onclick = () => { document.getElementById('v2DiscoverDlg').close(); switchTab('mypage'); };
       const sections = [['matched','조건 부합'],['verify','확인 필요'],['explore','탐색 후보']];
       for (const [name,label] of sections) {
         const rows = data.groups[name] || [];
