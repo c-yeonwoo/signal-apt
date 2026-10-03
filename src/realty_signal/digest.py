@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import smtplib
+from datetime import date
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -27,13 +28,18 @@ def build_user_digest(
 ) -> dict[str, Any]:
     """한 유저용 다이제스트 본문 데이터."""
     region_set = set(regions)
-    my_changes = [c for c in changes if c.get("region") in region_set]
+    # 원시 이력은 감사용이다. 현재 안전 판정과 일치할 때만 새 행동 알림이다.
+    my_changes = [c for c in changes if c.get("region") in region_set
+                  and c.get("new") in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}
+                  and signal_map.get(c.get("region")) == c.get("new")]
     lines = []
     for r in regions:
-        sig = signal_map.get(r, "–")
+        sig = signal_map.get(r, "HELD")
         ch = next((c for c in my_changes if c["region"] == r), None)
         if ch:
             lines.append(f"· {r}: {ch['old']} → {ch['new']} ({ch.get('direction', '')})")
+        elif sig == "HELD":
+            lines.append(f"· {r}: 현재 판정 확인 필요 (변화 알림 보류)")
         else:
             lines.append(f"· {r}: {sig} (변화 없음)")
     extra_lines = []
@@ -94,18 +100,23 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
 
     from realty_signal import personal_layer as pl
     from realty_signal import store
-    from realty_signal.signals.engine import SignalConfig, evaluate
+    from realty_signal.services import market_data as md
 
     if signal_df is None:
-        signal_df = evaluate(store.load(), SignalConfig(), store.load_supply())
+        signal_df = md.signals_df()
     if as_of is None:
         as_of = str(store.load().last_date.date())
     if changes is None:
         changes = snapshots.diff(snapshots.load(), signal_df)
-    if isinstance(signal_df, pd.DataFrame):
-        signal_map = dict(zip(signal_df["region"], signal_df["signal"]))
-    else:
-        signal_map = {}
+    regions = list(signal_df["region"]) if isinstance(signal_df, pd.DataFrame) else []
+    try:
+        labels = md.assessed_signal_labels(date.today().isoformat())
+    except Exception:  # noqa: BLE001 — 판정 장애 시 원시 BUY를 메일에 재노출하지 않는다
+        labels = {}
+    allowed = {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}
+    signal_map = {region: (label.get("display_signal") if label.get("assessment_status") == "ready"
+                           and label.get("display_signal") in allowed else "HELD")
+                  for region in regions for label in [labels.get(region) or {}]}
     macro = pl.macro_latest()
     # 급매 지역별 건수
     qs_by: dict[str, int] = {}
