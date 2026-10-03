@@ -28,7 +28,7 @@ LOCALITY = {
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
     monkeypatch.setattr(app_api, "_sido_of", lambda r: "서울")
-    monkeypatch.setattr(app_api, "_signal_map", lambda: dict(SIGNALS))
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: dict(SIGNALS))
     monkeypatch.setattr(app_api, "_region_grades", lambda r: list(GRADES.get(r, [])))
     monkeypatch.setattr(sl, "_locality_map", lambda: dict(LOCALITY))
     monkeypatch.setattr(sl, "_region_commute", lambda region, work: None)
@@ -108,7 +108,7 @@ def test_price_coverage_before_market_strength():
 
 
 def test_no_price_evidence_does_not_pick_alphabetical_regions(monkeypatch):
-    monkeypatch.setattr(app_api, "_signal_map", lambda: {**SIGNALS, "마포구": "BUY", "은평구": "WATCH"})
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {**SIGNALS, "마포구": "BUY", "은평구": "WATCH"})
     monkeypatch.setattr(sl, "_locality_map", lambda: {})
     monkeypatch.setattr(sl, "_fetch_grades", lambda regions: (_ for _ in ()).throw(AssertionError("network")))
     out = sl.build(_profile(), budget=100_000)
@@ -121,6 +121,15 @@ def test_profile_region_still_provides_a_focused_candidate(monkeypatch):
     out = sl.build(_profile(매수지역="노원구"), budget=100_000)
     assert out["지역"][0] == "노원구"
     assert out["ready"] is True
+
+
+def test_held_region_remains_discoverable_without_buy_claim(monkeypatch):
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {**SIGNALS, "노원구": "HELD"})
+    out = sl.build(_profile(매수지역="노원구"), budget=100_000)
+    candidate = next(c for c in out["candidates"] if c["region"] == "노원구")
+    assert candidate["시그널"] == "HELD"
+    assert "시그널" not in candidate["분해"]
+    assert "지역 판정 보류" in candidate["근거"]
 
 
 def test_candidate_carries_cash_and_reason():
