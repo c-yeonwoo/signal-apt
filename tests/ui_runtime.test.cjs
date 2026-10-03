@@ -34,6 +34,24 @@ test('same named complex pins group only when display coordinates nearly match',
   assert.deepEqual(groups,[[0,1],[2],[3]]);
 });
 
+test('retired favorite region shows reselect guidance without unsafe inline region code', async () => {
+  const body={innerHTML:'',querySelectorAll:()=>[]};
+  const ctx=vm.createContext({
+    _favs:new Set(["region:서구';alert(1)//"]),
+    _favRegionIdentity:new Map([["서구';alert(1)//",{status:'needs_reselection',message:'새 구역을 직접 선택해 주세요.'}]]),
+    document:{getElementById:id=>id==='favListBody'?body:null},
+    fetch:async()=>({json:async()=>({items:[]})}),
+    esc:s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
+    badge:s=>`[${s}]`,safeMarketSignal:()=>"BUY",
+  });
+  vm.runInContext(extract('async function renderFavList()', 'async function favRemove('),ctx);
+  await ctx.renderFavList();
+  assert.match(body.innerHTML,/새 구역을 직접 선택해 주세요/);
+  assert.match(body.innerHTML,/\[HELD\]/);
+  assert.doesNotMatch(body.innerHTML,/onclick="[^"]*alert\(1\)/);
+  assert.match(body.innerHTML,/data-fav-region-open="서구&#39;;alert\(1\)\/\/"/);
+});
+
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
   const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
   vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);

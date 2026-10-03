@@ -161,7 +161,30 @@ def usage_get(request: Request):
 
 @router.get("/api/favorites")
 def favorites_get(request: Request):
-    return {"favorites": db.fav_list(deps.uid(request))}
+    favorites = db.fav_list(deps.uid(request))
+    for favorite in favorites:
+        if favorite["kind"] == "region":
+            favorite["region_identity"] = _favorite_region_identity(favorite["key"])
+    return {"favorites": favorites}
+
+
+def _favorite_region_identity(region: str) -> dict:
+    """과거 관심지역은 보존하되, 현행 시그널/알림으로 오해하지 않게 한다."""
+    from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
+
+    try:
+        kb = md.kb()
+        code = str((kb.codes or {}).get(region) or "")
+        if code[:5] in INCHEON_RETIRED_CODES:
+            return {"status": "needs_reselection",
+                    "message": "2026-07 인천 구역 개편 전 지역입니다. 새 관심지역을 직접 선택해 주세요."}
+        if not kb.identity_verified or not code:
+            return {"status": "unverified", "message": "지역 코드 확인 전이라 관심 알림 판정을 보류합니다."}
+        if region not in kb.regions:
+            return {"status": "no_current_series", "message": "현재 KB 시그널 자료에 없는 지역입니다. 새 지역을 확인해 주세요."}
+        return {"status": "ready", "message": ""}
+    except Exception:  # noqa: BLE001 — KB 장애도 과거 키를 정상으로 단정하지 않는다
+        return {"status": "unverified", "message": "지역 자료를 확인하지 못해 관심 알림 판정을 보류합니다."}
 
 
 def _warm_complex_after_favorite(region: str, name: str) -> None:
@@ -192,6 +215,10 @@ def _complex_favorite_error(key: object) -> str | None:
 @router.post("/api/favorites")
 def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dict = Body(...)):
     kind, key = data.get("kind", "region"), data.get("key", "")
+    if kind == "region" and _favorite_region_identity(key)["status"] == "needs_reselection":
+        return JSONResponse({"ok": False, "error": "retired_region",
+                             "message": "이 지역은 2026-07 인천 구역 개편 전 이름입니다. 현행 지역을 선택해 주세요."},
+                            status_code=422)
     if kind == "complex":
         error = _complex_favorite_error(key)
         if error:

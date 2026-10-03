@@ -63,6 +63,22 @@ def test_old_cache_with_seoul_code_does_not_prove_jung_gu_price_origin():
     assert "region_identity_ambiguous" in old["risk_flags"]
 
 
+def test_pre_reform_incheon_codes_cannot_display_current_buy_grade():
+    dates = pd.date_range("2026-09-07", periods=4, freq="W-MON")
+    for code in sorted(sa.INCHEON_RETIRED_CODES):
+        rows = [(day, "서구", metric, value) for day in dates
+                for metric, value in (("sale_change", 0.1), ("jeonse_supply", 180),
+                                      ("buyer_superiority", 80))]
+        kb = KBWeekly(pd.DataFrame(rows, columns=["date", "region", "metric", "value"]),
+                      {"서구": code + "00000"}, identity_verified=True)
+        result = sa.build(kb, {"region": "서구", "signal": "BUY", "전세수급": 180,
+                               "매수우위지수": 80, "수급출처": "서구"}, SignalConfig(),
+                          asof=date(2026, 9, 28), today=date(2026, 9, 28))
+        assert result["raw_grade"] == "BUY" and result["assessment_status"] == "held"
+        assert "region_boundary_obsolete" in result["risk_flags"]
+        assert "2026-07 인천 행정구역 개편" in result["summary"]
+
+
 def test_datahub_disambiguates_incheon_jung_gu(monkeypatch):
     def source(_path, params):
         return {"날짜리스트": ["20260928"], "데이터리스트": [
