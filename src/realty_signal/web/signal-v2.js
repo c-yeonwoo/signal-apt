@@ -671,7 +671,7 @@
     } finally { button.disabled = false; }
   }
 
-  async function runDiscovery(cursor = null) {
+  async function runDiscovery(cursor = null, feedback = '') {
     const generation = ++discoveryGeneration;
     const form = document.getElementById('v2DiscoverForm');
     const result = document.getElementById('v2DiscoverResults');
@@ -727,6 +727,7 @@
           spec.priority === 'area' ? !!spec.prefer_min_area_m2 : false;
         result.innerHTML = `<p class="v2-muted">현재 수집된 ${regions.length}개 지역 · ${sources || '원천 상태 미확인'} · 전체 시장 아님</p>
           <p class="v2-muted">정렬: ${hasPreference ? '입력한 선호 충족·자료 확인도 → 수집일' : '최근 수집일'}${priorityApplied ? ' · 중요 선호 2배' : spec.priority ? ' · 선택한 중요 선호는 아직 입력되지 않아 균등 적용' : ''} · 호가가 저렴하다는 이유만으로 우선하지 않습니다.</p>
+          ${feedback ? `<p class="v2-row" role="status">${esc(feedback)}</p>` : ''}
           ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}
           ${financeNotice ? `<p class="v2-row v2-caution">${financeNotice}</p>` : ''}
           ${spec.move_in_by ? '<p class="v2-row v2-caution">입주일은 상세 확인이 가능한 한방 후보를 먼저 보여 줍니다. 카드의 ‘입주일 확인’을 눌러 원천을 확인한 뒤에만 조건 부합으로 분류하며, 실제 입주는 중개사에게 다시 확인하세요.</p>' : ''}
@@ -786,13 +787,23 @@
         openListing(button.dataset.v2Listing);
       });
       result.querySelectorAll('[data-v2-occupancy]').forEach(button => button.onclick = async () => {
+        const name = button.closest('[data-v2-card]')?.querySelector('b')?.textContent || '선택한 매물';
+        const requestedDay = spec.move_in_by;
+        const requestGeneration = discoveryGeneration;
         button.disabled = true;
         button.textContent = '입주일 확인 중…';
         try {
           const response = await fetch('/api/v2/discovery/occupancy', {method:'POST',
             headers:{'Content-Type':'application/json'},body:JSON.stringify({key:button.dataset.v2Occupancy})});
           if (!response.ok) throw new Error('상세 원천을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
-          await runDiscovery();
+          const occupancy = await response.json();
+          if (requestGeneration !== discoveryGeneration || !document.getElementById('v2DiscoverDlg').open) return;
+          const exact = ['dated', 'immediate'].includes(occupancy.status) && /^\d{4}-\d{2}-\d{2}$/.test(occupancy.date || '');
+          const feedback = exact && occupancy.date > requestedDay ?
+            `${name}: 원천 입주 가능일 ${occupancy.date}은 요청한 ${requestedDay}보다 늦어 기본 후보에서 제외했습니다. 조건 초과 후보를 켜면 비교용으로 볼 수 있습니다.` :
+            exact ? `${name}: 원천 입주 가능일 ${occupancy.date}을 확인했습니다. 실제 입주는 중개사에게 다시 확인하세요.` :
+            `${name}: 원천 상세에도 정확한 입주일이 없어 확인 필요로 남겼습니다. 실제 입주일은 중개사에게 확인하세요.`;
+          await runDiscovery(null, form.elements.move_in_by.value === requestedDay ? feedback : '');
         } catch (error) {
           button.textContent = error.message;
           button.disabled = false;

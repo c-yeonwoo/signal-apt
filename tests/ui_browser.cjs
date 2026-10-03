@@ -98,11 +98,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           groups:{matched:finance||noMatch?[]:[candidate],verify:finance?[candidate]:[],explore:[],
             exceeded:spec.include_exceeded?[exceededCandidate]:[]}};
         if(spec.move_in_by){
-          candidate.constraints=[{field:'move_in_by',status:occupancyChecked?'pass':'unknown'}];
+          const occupancyPass=occupancyChecked && spec.move_in_by>='2026-12-08';
+          const occupancyFail=occupancyChecked && !occupancyPass;
+          candidate.constraints=[{field:'move_in_by',status:occupancyPass?'pass':occupancyFail?'fail':'unknown'}];
           candidate.listing.move_in=occupancyChecked?{status:'dated',date:'2026-12-08'}:null;
-          candidate.eligibility=occupancyChecked?'matched':'verify';
-          data.counts={matched:occupancyChecked?1:0,verify:occupancyChecked?0:1,explore:0,exceeded:0};
-          data.groups={matched:occupancyChecked?[candidate]:[],verify:occupancyChecked?[]:[candidate],explore:[],exceeded:[]};
+          candidate.eligibility=occupancyPass?'matched':occupancyFail?'exceeded':'verify';
+          data.counts={matched:occupancyPass?1:0,verify:occupancyChecked?0:1,explore:0,exceeded:occupancyFail?1:0};
+          data.groups={matched:occupancyPass?[candidate]:[],verify:occupancyChecked?[]:[candidate],explore:[],exceeded:spec.include_exceeded&&occupancyFail?[candidate]:[]};
           data.next_cursor=null;
         }
       }
@@ -768,6 +770,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverResults [data-v2-group="verify"] [data-v2-occupancy]').click();
     await page.getByText(/원천 표시: 2026-12-08 입주 가능/).waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-group="matched"] [data-v2-card]').count(),1);
+    occupancyChecked=false;
+    await page.locator('#v2DiscoverForm [name=move_in_by]').fill('2026-11-30');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.locator('#v2DiscoverResults [data-v2-occupancy]').click();
+    await page.getByRole('status').getByText(/요청한 2026-11-30보다 늦어 기본 후보에서 제외/).waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),0);
     await page.locator('#v2DiscoverForm [name=move_in_by]').fill('');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
