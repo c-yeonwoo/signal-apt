@@ -500,7 +500,7 @@
 </head>
 <body class="tab-signal">
 <header>
-  <h1 onclick="location.assign('/')" title="홈(시그널)으로" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+  <h1 onclick="location.assign('/')" title="홈으로" style="display:flex;align-items:center;gap:9px;cursor:pointer">
     <svg width="30" height="30" viewBox="0 0 72 72" aria-label="로고">
       <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#1e3a8a"/><stop offset=".55" stop-color="#2563eb"/><stop offset="1" stop-color="#2563eb"/>
@@ -515,8 +515,9 @@
     <span>Signal APT</span>
   </h1>
   <div class="tabs">
-    <button class="tab on" data-group="home" onclick="switchTab('dashboard')" title="다음 할 일과 확인할 후보">홈</button>
-    <button class="tab" data-group="browse" onclick="switchTab('signal')" title="이번 주 시그널 지도와 매물">시그널</button>
+    <button class="tab on" data-group="home" aria-current="page" onclick="switchTab('dashboard')" title="다음 할 일과 확인할 후보">홈</button>
+    <button class="tab" data-group="market" onclick="switchTab('signal')" title="이번 주 동네 판정과 근거">시그널</button>
+    <button class="tab" data-group="browse" onclick="switchTab('all')" title="일반·급매·경매·청약 후보를 지도에서 찾기">매물 찾기</button>
     <button class="tab" data-group="criteria" onclick="switchTab('mypage')" title="예산·출퇴근·주거 조건">내 조건</button>
     <button class="tab" data-group="find" onclick="switchTab('watch')" title="찜한 매물·청약과 관심단지">내 후보</button>
   </div>
@@ -540,7 +541,6 @@
 <div id="groupSubnav" class="subnav" style="display:none">
   <span id="groupSubLabel" style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
   <div class="mtabs" id="groupSubTabs"></div>
-  <span id="listingFocus" style="margin-left:auto;font-size:12px;color:var(--dim);display:none"></span>
 </div>
 
 <!-- 대시보드 홈 -->
@@ -634,6 +634,7 @@
 <div id="view-all" style="display:none">
   <div style="padding:20px 20px 0">
     <h2 class="page-head">매물</h2>
+    <div id="listingFocus" role="status" aria-live="polite" style="font-size:12px;color:var(--dim);display:none;margin-bottom:10px"></div>
     <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
@@ -1700,17 +1701,17 @@ function renderMtFilter(hostId, rerender){
     if(_mtGradeSet.has(g)) _mtGradeSet.delete(g); else _mtGradeSet.add(g);
     renderMtFilter(hostId, rerender); rerender(); });
 }
-// ===== 상단은 할 일·조건·찜·매물. 같은 일의 화면은 메뉴에 두지 않는다. =====
+// ===== 동네 판정과 매물 탐색은 독립된 상단 과업이다. =====
 const _GROUPS={
   home:     ['dashboard'],
   criteria: ['mypage'],
-  browse:   ['signal','all'],
+  market:   ['signal'],
+  browse:   ['all'],
   find:     ['watch'],
 };
 const _BROWSE_TOOLS=['auction','redev','general','quicksale','presale','tradeup','report','undervalued'];
-const _GROUP_LABEL={browse:'후보 탐색', find:'내 후보', criteria:'내 조건'};
+const _GROUP_LABEL={browse:'매물 찾기', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
-  signal:{l:'시그널',d:'이번 주 변화'},
   all:{l:'매물',d:'내 예산 순'},
   watch:{l:'찜한 매물',d:'가격·일정'},
 };
@@ -1737,7 +1738,7 @@ function clearListingFocus(){ _focusRegion=null; renderListingFocus(); (_LISTLOA
 function renderListingFocus(){
   const el=document.getElementById('listingFocus'); if(!el) return;
   el.innerHTML = _focusRegion
-    ? `📍 <b>${_focusRegion}</b> 매물만 <span onclick="clearListingFocus()" style="cursor:pointer;color:var(--accent);margin-left:6px">전체 보기 ✕</span>`
+    ? `📍 <b>${esc(_focusRegion)}</b> 매물만 <button type="button" class="chip" onclick="clearListingFocus()" style="margin-left:6px">전체 보기 ✕</button>`
     : '';
   el.style.display = _focusRegion ? '' : 'none';
 }
@@ -1752,8 +1753,6 @@ function renderGroupSubnav(grp, active){
   const tabs=document.getElementById('groupSubTabs');
   const views=_GROUPS[grp]||[];
   tabs.innerHTML=views.map(v=>_subBtn(v, active)).join('');
-  const lf=document.getElementById('listingFocus'); if(lf) lf.style.display=(grp==='browse'&&_focusRegion)?'':'none';
-  if(grp==='browse') renderListingFocus();
 }
 const _LOAD={
   dashboard:()=>loadDashboard(),
@@ -1776,12 +1775,17 @@ function switchTab(t, fromHistory=false){
   if(_LISTING.includes(t)) _listingSub=t;   // 매물 하위탭 기억(포커스 헬퍼 호환)
   document.body.className='tab-'+t+(window._featureFlags?.nick_global_entry_enabled===false?' nick-global-disabled':'');
   // 상단 메인탭 — 그룹 기준 활성
-  document.querySelectorAll('.tabs .tab').forEach(b=>b.classList.toggle('on', b.dataset.group===grp));
+  document.querySelectorAll('.tabs .tab').forEach(b=>{
+    const active=b.dataset.group===grp;
+    b.classList.toggle('on', active);
+    if(active) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
-  // 서브내비 — 그룹에 하위뷰 2개 이상일 때만
-  const showSub=grp && _GROUPS[grp].length>1;
+  // 오래된 세부 화면에서만 매물 목록으로 돌아가는 작은 경로를 둔다.
+  const showSub=grp==='browse' && t!=='all';
   const sn=document.getElementById('groupSubnav'); if(sn) sn.style.display=showSub?'flex':'none';
   if(showSub) renderGroupSubnav(grp, t);
+  if(t==='all') renderListingFocus();
   // 뷰 토글
   _ALLVIEWS.forEach(v=>{const el=document.getElementById('view-'+v); if(el) el.style.display=(v===t)?'':'none';});
   // 뷰 로더

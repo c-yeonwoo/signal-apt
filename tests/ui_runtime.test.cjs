@@ -40,16 +40,19 @@ test('KB freshness legend changes to held at the same nine-calendar-day boundary
   assert.match(box.innerHTML,/background:#16a34a/);
 });
 
-test('inline app scripts parse and browse navigation keeps one list and the signal map', () => {
+test('inline app scripts parse and signal/listing navigation are separate tasks', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));
+  assert.match(html, /data-group="market" onclick="switchTab\('signal'\)"[^>]*>시그널<\/button>/);
+  assert.match(html, /data-group="browse" onclick="switchTab\('all'\)"[^>]*>매물 찾기<\/button>/);
   const targets = {groupSubLabel: {}, groupSubTabs: {}, listingFocus: {style: {}}};
   const ctx = vm.createContext({document: {getElementById: id => targets[id]}, location: {hash: '#all'}});
   vm.runInContext(extract('const _GROUPS={', 'const _LOAD={'), ctx);
+  assert.equal(ctx._groupOf('signal'),'market');
+  assert.equal(ctx._groupOf('all'),'browse');
   ctx.renderGroupSubnav('browse', 'all');
   assert.match(targets.groupSubTabs.innerHTML, /data-sub="all"/);
-  assert.match(targets.groupSubTabs.innerHTML, /data-sub="signal"/);
-  assert.ok(targets.groupSubTabs.innerHTML.indexOf('data-sub="signal"') < targets.groupSubTabs.innerHTML.indexOf('data-sub="all"'));
+  assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="signal"/);
   assert.doesNotMatch(targets.groupSubTabs.innerHTML, /분석·전략|경매·재건축|data-sub="auction"|data-sub="report"/);
   ctx.renderGroupSubnav('browse', 'auction');
   assert.match(targets.groupSubTabs.innerHTML, /data-sub="all"/);
