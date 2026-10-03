@@ -3272,10 +3272,14 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
         if row.get("유형") in {"일반매물", "급매", "찐매물"}:
             row["budget_fit"] = property_analysis.buyer_fit(
                 property_analysis.snapshot(row), profile, confirmed_power=confirmed)
+    # 원시 등급은 내부 감사용이다. 현재 보류 판정과 함께 브라우저로 내보내면
+    # 다른 화면이 원시 BUY를 현재 추천으로 재사용할 수 있다.
+    public_rows = [{key: value for key, value in row.items() if key != "원시시그널"}
+                   for row in out]
     asof = _timing_asof()
     kinds = ("경매", "급매", "찐매물", "일반매물", "청약", "재건축")
     return {
-        "listings": out,
+        "listings": public_rows,
         "asof": asof,
         "meta": {
             "source": "kb_weekly",
