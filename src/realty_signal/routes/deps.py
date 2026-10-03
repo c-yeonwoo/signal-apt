@@ -38,7 +38,7 @@ def require_admin(request: Request) -> JSONResponse | None:
 def fav_context(uid_: int) -> dict:
     fav = db.fav_list(uid_)
     return {
-        "관심지역": [f["key"] for f in fav if f["kind"] == "region"],
+        "관심지역": db.actionable_region_favs(uid_),
         "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav if f["kind"] == "complex"],
     }
 

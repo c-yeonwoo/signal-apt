@@ -52,6 +52,21 @@ test('retired favorite region shows reselect guidance without unsafe inline regi
   assert.match(body.innerHTML,/data-fav-region-open="서구&#39;;alert\(1\)\/\/"/);
 });
 
+test('ambiguous old region stays in records but not active favorite badges', async () => {
+  const ctx=vm.createContext({
+    _favs:new Set(), _favRegionIdentity:new Map(),
+    fetch:async()=>({json:async()=>({favorites:[
+      {kind:'region',key:'중구',region_identity:{status:'needs_reselection',message:'다시 선택'}},
+      {kind:'region',key:'강남구',region_identity:{status:'ready',message:''}},
+    ]})}),
+  });
+  vm.runInContext(extract('async function loadFavs()', 'async function toggleFav('),ctx);
+  await ctx.loadFavs();
+  assert.equal(ctx._favs.has('region:중구'),false);
+  assert.equal(ctx._favs.has('region:강남구'),true);
+  assert.equal(ctx._favRegionIdentity.get('중구').status,'needs_reselection');
+});
+
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
   const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
   vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);
