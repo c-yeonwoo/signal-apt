@@ -11,7 +11,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[];
+    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     let entranceChosen=false;
     page.on('pageerror', e=>errors.push(e.message));
@@ -53,13 +53,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/v2/discovery') {
         const spec=route.request().postDataJSON()||{};
+        discoveryPayloads.push(spec);
         const next=!!spec.cursor, finance=!!spec.max_monthly_manwon;
         const noProfile=finance&&spec.prefer_region==='프로필없음';
         const preferred=!!spec.prefer_max_price_manwon||!!spec.prefer_min_area_m2;
         const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
           name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
           recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
-          preference:preferred?{region:'테스트구',matched:true,score:67,coverage:67,
+          preference:preferred?{region:'테스트구',matched:true,score:spec.priority==='price'?75:67,coverage:spec.priority==='price'?75:67,
+            priority:spec.priority||'balanced',
             satisfied:2,known:2,total:3,details:[
               {field:'region',label:'선호 지역',status:'matched'},
               {field:'price',label:'선호 호가',status:'matched'},
@@ -480,6 +482,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm [name=prefer_min_area_m2]').fill('84');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/선호 2\/3개 충족 · 2\/3개 자료 확인/).waitFor();
+    await page.locator('#v2DiscoverForm [name=priority]').selectOption('price');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText(/호가 우선\(2배\): 적합도 75\/100 · 확인도 75\/100/).waitFor();
+    assert.equal(discoveryPayloads.at(-1).priority,'price');
     await page.locator('#v2DiscoverForm [name=region]').fill('프로필없음');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
