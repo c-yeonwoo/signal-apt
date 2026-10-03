@@ -5,6 +5,7 @@ __pycache__/
 venv/
 *.egg-info/
 .pytest_cache/
+node_modules/
 
 # Data — KB 주간 시계열 원본 엑셀/캐시는 커밋하지 않음 (저작권/용량)
 data/raw/*.xlsx

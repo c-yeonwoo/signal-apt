@@ -110,6 +110,14 @@ def _snapshot_signals(asof: str) -> list[dict]:
     except Exception as e:  # noqa: BLE001
         log.warning("outcome snapshot skip: %s", e)
     try:
+        recs = json.loads(_signals_df().to_json(orient="records", force_ascii=False))
+        from realty_signal.services import signal_assessment
+        assessments = [signal_assessment.build(md.kb(), row, md.signal_config(),
+                                               asof=md.kb().last_date.date()) for row in recs]
+        signal_assessment.issue_many(assessments)
+    except Exception as e:  # noqa: BLE001
+        log.warning("signal assessment issuance skip: %s", e)
+    try:
         from realty_signal.ingest import pipeline
         pipeline.build_market_strength(cur)
     except Exception as e:  # noqa: BLE001
@@ -322,6 +330,7 @@ from realty_signal.routes.strategy import router as strategy_router  # noqa: E40
 from realty_signal.routes.geo import router as geo_router  # noqa: E402
 from realty_signal.routes.brain import router as brain_router  # noqa: E402
 from realty_signal.routes.home import router as home_router  # noqa: E402
+from realty_signal.routes.reports_v2 import router as reports_v2_router  # noqa: E402
 
 app.include_router(auth_router, default_response_class=SafeJSONResponse)
 app.include_router(alerts_router, default_response_class=SafeJSONResponse)
@@ -335,6 +344,7 @@ app.include_router(strategy_router, default_response_class=SafeJSONResponse)
 app.include_router(geo_router, default_response_class=SafeJSONResponse)
 app.include_router(brain_router, default_response_class=SafeJSONResponse)
 app.include_router(home_router, default_response_class=SafeJSONResponse)
+app.include_router(reports_v2_router, default_response_class=SafeJSONResponse)
 
 
 def _signal_config() -> SignalConfig:
@@ -470,6 +480,16 @@ def index(request: Request):
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     return HTMLResponse(body, headers=headers)
+
+
+@app.get("/assets/signal-v2.js")
+def signal_v2_script():
+    """Small isolated interface module; deployed with the HTML revision."""
+    from fastapi.responses import Response
+
+    return Response((WEB_DIR / "signal-v2.js").read_text(encoding="utf-8"),
+                    media_type="text/javascript; charset=utf-8",
+                    headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 @app.get("/legal/terms", response_class=HTMLResponse)

@@ -156,6 +156,8 @@
          border-color:color-mix(in srgb,var(--sig-watch) 18%,transparent);}
   .NEUTRAL{background:color-mix(in srgb,var(--sig-neutral) 8%,transparent);color:var(--sig-neutral);
            border-color:color-mix(in srgb,var(--sig-neutral) 16%,transparent);}
+  .HELD{background:color-mix(in srgb,var(--sig-neutral) 8%,transparent);color:var(--sig-neutral);
+        border-color:color-mix(in srgb,var(--sig-neutral) 16%,transparent);}
   .SELL_RISK{background:color-mix(in srgb,var(--sig-sell) 8%,transparent);color:var(--sig-sell);
              border-color:color-mix(in srgb,var(--sig-sell) 18%,transparent);}
   /* 성적표: 좁은 화면에선 부차 열을 숨긴다. '초과'가 이 표의 결론이라 잘리면 안 된다. */
@@ -392,6 +394,22 @@
   button:focus-visible, [role="button"]:focus-visible, summary:focus-visible, .chip:focus-visible, .row:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
   .subnav { padding:12px 20px; border-bottom:1px solid var(--line); gap:12px; align-items:center; flex-wrap:wrap; background:var(--panel); }
   #groupSubLabel { display:none; }
+  .v2-panel { padding:18px; line-height:1.55; color:var(--txt); }
+  .v2-panel h2 { font-size:22px; margin:0 0 8px; }
+  .v2-panel h3 { font-size:16px; margin:18px 0 8px; }
+  .v2-panel p { margin:5px 0; }
+  .v2-panel .v2-muted { color:var(--dim); font-size:13px; }
+  .v2-panel .v2-row { padding:10px 12px; margin:7px 0; border:1px solid var(--line); border-radius:10px; }
+  .v2-panel .v2-caution { border-color:var(--warn); }
+  .v2-panel button { min-height:44px; }
+  #v2ReportDlg,#v2DiscoverDlg { width:min(720px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); border:1px solid var(--line); border-radius:16px; padding:0; background:var(--panel); color:var(--txt); }
+  #v2ReportDlg::backdrop,#v2DiscoverDlg::backdrop { background:rgba(15,23,42,.5); }
+  .v2-top { position:sticky; top:0; display:flex; justify-content:flex-end; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); z-index:1; }
+  .v2-form { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .v2-form label { display:grid; gap:4px; font-size:13px; }
+  .v2-form input { min-height:44px; width:145px; border:1px solid var(--line); border-radius:8px; padding:0 10px; background:var(--bg); color:var(--txt); }
+  .v2-form select { min-height:44px; border:1px solid var(--line); border-radius:8px; padding:0 10px; background:var(--bg); color:var(--txt); }
+  @media(max-width:600px) { #v2ReportDlg,#v2DiscoverDlg { width:100vw; height:100dvh; max-width:none; max-height:none; border-radius:0; } }
 </style>
 </head>
 <body class="tab-signal">
@@ -515,6 +533,7 @@
     <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
+      <button type="button" class="chip" onclick="SignalV2.openDiscovery()">내 조건으로 찾기</button>
       <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
     </div>
     <div id="laMoreFilters" class="la-more">
@@ -1211,6 +1230,7 @@
 <div id="view-watch" style="display:none">
  <div style="max-width:960px;margin:0 auto;padding:22px 18px 40px">
   <h2 class="page-head">찜한 매물·청약</h2>
+  <button type="button" class="btn" onclick="SignalV2.openNotes()">내 판단 기록 보기</button>
   <p class="page-sub">청약 일정과 호가 변화를 확인하고, 같은 단지·비슷한 조건의 다른 후보를 찾으세요. 알림 발송은 아직 제공하지 않습니다.</p>
   <div id="watchStatus" style="font-size:12px;color:var(--dim);margin:10px 0"></div>
   <div id="watchList"></div>
@@ -1406,7 +1426,7 @@
 </dialog>
 
 <script>
-const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK"];
+const SIGNALS = ["STRONG_BUY","BUY","WATCH","NEUTRAL","SELL_RISK","HELD"];
 /** 시그널 색 — **`:root` 토큰에서 읽는다.** 하드코딩하지 않는다.
  *  예전엔 CSS 배지와 JS 가 각각 다른 팔레트를 들고 있어서, 같은 시그널이 배지에서는 짙은 초록,
  *  차트·지도·리스트 좌측선에서는 밝은 초록으로 나왔다. 한 곳에서만 정의한다. */
@@ -1418,10 +1438,11 @@ const SIGCOLOR = (() => {
     BUY:        t('--sig-buy',    '#15803d'),
     WATCH:      t('--sig-watch',  '#b45309'),
     NEUTRAL:    t('--sig-neutral','#5f6875'),
+    HELD:       t('--sig-neutral','#5f6875'),
     SELL_RISK:  t('--sig-sell',   '#b91c1c'),
   };
 })();
-let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK"]);
+let active = new Set(["STRONG_BUY","BUY","WATCH","SELL_RISK","HELD"]);
 let activeGrade = new Set(["A","B","C","D","E"]);   // 지역 급지 필터(A~E). 급지 없는 지방은 항상 통과
 let allSignals = [], selected = null, meta = null;
 const chart = echarts.init(document.getElementById('chart'));
@@ -1481,8 +1502,9 @@ window.addEventListener('resize', () => {
   if(typeof sigMap!=='undefined' && sigMap){ try{ sigMap.invalidateSize(); }catch(e){} }
   Object.values(_ms||{}).forEach(st=>{ try{ st.map.invalidateSize(); }catch(e){} });
 });
-const SIG_KO={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도'};
+const SIG_KO={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도',HELD:'판단 보류'};
 const badge = s => `<span class="badge ${s}">${SIG_KO[s]||s}</span>`;
+const displaySignal = r => r?.display_signal || r?.signal || 'HELD';
 const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
 // 호환 키 '저평가도'는 제한된 입지 회귀모형의 잔차. 실제 할인/적정가가 아니다.
 // "저평가 -47%" 는 이중부정이라 아무도 못 읽는다 — 방향은 단어로, 크기는 절대값으로 쓴다.
@@ -1760,11 +1782,11 @@ async function loadDashboard(){
   if(favRows.length){
     const top=favRows.slice(0,5), rest=favRows.slice(5);
     favH+=top.map(r=>`<div onclick="openNbhd('${r.region}')" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer">
-      <b style="font-weight:600;min-width:72px">${r.region}</b>${badge(r.signal)}</div>`).join('');
+      <b style="font-weight:600;min-width:72px">${r.region}</b>${badge(displaySignal(r))}</div>`).join('');
     if(rest.length){
       favH+=`<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지 ${rest.length}곳</summary>
         <div>${rest.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openNbhd('${r.region}')">
-          <b style="min-width:72px;font-weight:600">${r.region}</b>${badge(r.signal)}</div>`).join('')}</div></details>`;
+          <b style="min-width:72px;font-weight:600">${r.region}</b>${badge(displaySignal(r))}</div>`).join('')}</div></details>`;
     }
   } else {
     favH+=`<div style="color:var(--dim);font-size:13px;padding:4px 0">아직 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시그널 지도에서 추가</span></div>`;
@@ -3567,7 +3589,7 @@ function _signalLut(){ const m={}; (allSignals||[]).forEach(s=>{ if(s&&s.region)
 async function _ensureGeo(){ if(!_uvGeo){ try{ _uvGeo=await (await fetch('/sudo_gu.geojson')).json(); }catch(e){} } return _uvGeo; }
 function _choStyle(mode, name, gl, sido, sl){
   if(mode==='signal'){
-    const row=sl&&sl[_onorm(name)], col=row&&_SIG_COLOR[row.signal];
+    const row=sl&&sl[_onorm(name)], col=row&&_SIG_COLOR[displaySignal(row)];
     const on=selected&&_onorm(selected)===_onorm(name);
     return {color:on?'#0f172a':'#fff',weight:on?3:1,fillColor:col||'#e2e8f0',fillOpacity:col?0.72:0.16};
   }
@@ -3580,7 +3602,7 @@ function _choStyle(mode, name, gl, sido, sl){
 function _choTip(mode, name, gl, sido, sl){
   if(mode==='signal'){
     const row=sl&&sl[_onorm(name)];
-    const ko=row?(SIG_KO[row.signal]||row.signal):'자료 없음';
+    const ko=row?(SIG_KO[displaySignal(row)]||displaySignal(row)):'자료 없음';
     const src=row&&row['수급출처']?` · ${row['수급출처']} 공통`:'';
     return `${name} · ${ko}${src}`;
   }
@@ -4447,7 +4469,7 @@ const _SIGC = SIGCOLOR;   // 별칭. 두 벌로 나뉘어 있던 걸 하나로 �
 function rowEl(r, lv){
   const row = document.createElement('div');
   row.className = `row${lv?' lv'+lv:''}` + (selected===r.region?' sel':'');
-  row.style.borderLeft = `3px solid ${_SIGC[r.signal]||'#cbd5e1'}`;   // 시그널 색 강조
+  row.style.borderLeft = `3px solid ${_SIGC[displaySignal(r)]||'#cbd5e1'}`;   // 시그널 색 강조
   // 구별 차별 지표(매매모멘텀·입주)를 앞세우고, 권역 공통 수급은 뒤에 흐리게 + 칩 표기
   const sp = r['공급압력']==null?'':`입주 ${r['공급압력']}x`;
   const mom = r['매매모멘텀'] && r['매매모멘텀']!=='보합' ? `매매 ${r['매매모멘텀']}` : '';
@@ -4458,7 +4480,7 @@ function rowEl(r, lv){
   // 경기 일반구는 '구명'만 짧게 표기
   const disp = lv===2 ? r.region.split(' ').slice(1).join(' ')||r.region : r.region;
   const faved = _favs.has('region:'+r.region);
-  row.innerHTML = `<span class="nm">${disp}</span>${badge(r.signal)}
+  row.innerHTML = `<span class="nm">${disp}</span>${badge(displaySignal(r))}
     <span class="fav" title="즐겨찾기" style="cursor:pointer;color:${faved?'#b45309':'var(--dim)'};margin-left:auto">${faved?'★':'☆'}</span>
     <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
   row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); toggleFav('region', r.region, r.region); };
@@ -4480,17 +4502,17 @@ function header(cls, key, label, count, lv){
 }
 function gyeonggiParent(name){ const i=name.indexOf(' '); return i<0?name:name.slice(0,i); }
 
-const _SIGRANK = {STRONG_BUY:0, BUY:1, WATCH:2, NEUTRAL:3, SELL_RISK:4};
+const _SIGRANK = {STRONG_BUY:0, BUY:1, WATCH:2, NEUTRAL:3, SELL_RISK:4, HELD:5};
 function miniHead(t){ const h=document.createElement('div'); h.className='ghead'; h.style.cursor='default'; h.innerHTML=t; return h; }
 function renderList(){
   const q = document.getElementById('search').value.trim();
   const grp = document.getElementById('groupFilter').value;
   const list = document.getElementById('list'); list.innerHTML = '';
-  let rows = allSignals.filter(r => active.has(r.signal))
+  let rows = allSignals.filter(r => active.has(displaySignal(r)))
     .filter(r => !r['급지'] || activeGrade.has(r['급지']))   // 급지 없는 지방은 항상 통과
     .filter(r => !grp || r.group===grp).filter(r => !q || r.region.includes(q));
   // 시그널 강한 순 → 전세수급 높은 순 → 가나다
-  rows.sort((a,b)=> (_SIGRANK[a.signal]??9)-(_SIGRANK[b.signal]??9)
+  rows.sort((a,b)=> (_SIGRANK[displaySignal(a)]??9)-(_SIGRANK[displaySignal(b)]??9)
     || (b['전세수급']||0)-(a['전세수급']||0) || a.region.localeCompare(b.region));
   const favs = rows.filter(r => _favs.has('region:'+r.region));
   const rest = rows.filter(r => !_favs.has('region:'+r.region));
@@ -4555,15 +4577,11 @@ async function selectRegion(region){
   drawSigMap();
   const r = allSignals.find(x => x.region===region);
   if(!r) return;
-  document.getElementById('sigbadge').innerHTML = `${region} ${badge(r.signal)}`;
+  document.getElementById('sigbadge').innerHTML = `${region} ${badge(displaySignal(r))}`;
   const ss=document.getElementById('sigsub');
   if(ss) ss.innerHTML = `전세수급 ${r['전세수급']??'–'} · 매수우위 ${r['매수우위지수']??'–'}` + (r['공급압력']!=null?` · 입주 ${r['공급압력']}x`:'') + gwonLabel(r['수급출처']);
-  // 시그널 이유 — 헤더에 상시 노출 (현재 기준)
-  const reasons = (r['근거']||'').split(' · ').filter(Boolean).map(x=>`<span class="rchip">${x}</span>`).join(' ');
-  document.getElementById('haesolPanel').innerHTML =
-    `<div style="margin-bottom:7px"><b style="color:var(--accent)">시그널 이유</b> <span style="color:var(--dim);font-size:14px">· ${meta.last_date} 현재</span><br>${(r['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`
-    + `<div style="display:flex;gap:6px;flex-wrap:wrap">${reasons}</div>`
-    + _sigScopeNote(r);
+  document.getElementById('haesolPanel').textContent = '판정 근거를 확인하고 있습니다…';
+  window.SignalV2?.paintRegion(region);
   const d = await (await fetch(`/api/series/${encodeURIComponent(region)}`)).json();
   _lastM = d.metrics; _lastSig = r; _lastVol = d.volume || null;
   if(_showHist && !_histCache[region]){
@@ -4576,7 +4594,7 @@ let sigMap=null;
 function _sigScopeNote(r){
   const bits=[];
   const up=meta&&meta.zones&&meta.zones.momentum_up;
-  const priceBar=up!=null?`최근 4주 매매가 ${up}%를 넘는지`:'최근 4주 매매';
+  const priceBar=up!=null?`최근 4개 주간 매매변동률 평균이 ${up}%/주 이상인지`:'최근 4개 주간 매매변동률 평균';
   if(r['수급출처']) bits.push(`전세수급·매수우위는 ${r['수급출처']}가 같은 숫자입니다. 이 구만의 차이는 ${priceBar}입니다.`);
   const bs=r['매수우위지수'], bar=meta&&meta.zones&&meta.zones.buyer_idx_strong;
   if(bs!=null && bar!=null){
@@ -4599,10 +4617,10 @@ async function drawSigMap(){
   });
   const lg=document.getElementById('sigMapLegend');
   if(lg){
-    const order=['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK'];
+    const order=['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK','HELD'];
     const seoul=(allSignals||[]).filter(s=>s.group==='서울' && /구$/.test(s.region) && !s.region.endsWith('개구'));
     const cnt={};
-    seoul.forEach(s=>{ cnt[s.signal]=(cnt[s.signal]||0)+1; });
+    seoul.forEach(s=>{ const code=displaySignal(s); cnt[code]=(cnt[code]||0)+1; });
     const chips=order.map(s=>`<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${_SIG_COLOR[s]};display:inline-block"></span>${SIG_KO[s]}${cnt[s]?` ${cnt[s]}`:''}</span>`).join('');
     const head=seoul.length?`서울 자치구 ${seoul.length}곳 · 이번 주`:'이번 주 색깔';
     const momBar=(meta&&meta.zones&&meta.zones.momentum_up!=null)?Number(meta.zones.momentum_up).toFixed(2):'0.20';
@@ -4623,13 +4641,14 @@ function wrapKo(s, n){
 }
 function reasonGraphic(region, sig){
   // 차트 위: 시그널 + 종합 해설(문장)
-  const head = `${region}  ▸  ${sig.signal}`;
-  const lines = wrapKo(sig['해설']||'', 28);
+  const shown = displaySignal(sig);
+  const head = `${region}  ▸  ${SIG_KO[shown]||shown}`;
+  const lines = wrapKo(shown==='HELD'?'자료·가격 방향 확인이 필요합니다. 원래 규칙의 신호를 현재 판정으로 사용하지 마세요.':(sig['해설']||''), 28);
   const W = 366;
   const H = 32 + lines.length * 18 + 12;
   return [{ type:'group', left:56, top:30, z:100, silent:true, children:[
     {type:'rect', shape:{width:W, height:H, r:8}, style:{fill:'rgba(15,17,21,0.88)', stroke:'#e2e8f0', lineWidth:1}},
-    {type:'text', left:12, top:9, style:{text:head, fill:SIGCOLOR[sig.signal]||'#fff', font:'bold 14px sans-serif'}},
+    {type:'text', left:12, top:9, style:{text:head, fill:SIGCOLOR[shown]||'#fff', font:'bold 14px sans-serif'}},
     {type:'text', left:12, top:34, style:{text:lines.join('\n'), fill:'#334155', fontSize:12, lineHeight:18}},
   ]}];
 }
@@ -4823,7 +4842,7 @@ function _applyMarketData(data){
   }
   renderZoneLegend(); renderList();
   const keep = selected && allSignals.find(r=>r.region===selected);
-  if(allSignals.length) selectRegion(keep ? selected : (allSignals.find(r=>active.has(r.signal))||allSignals[0]).region);
+  if(allSignals.length) selectRegion(keep ? selected : (allSignals.find(r=>active.has(displaySignal(r)))||allSignals[0]).region);
 }
 async function loadData(force=false){
   const generation=++_marketGeneration;
@@ -5009,7 +5028,7 @@ function nickCxBtn(name, region){
 }
 function reportBtn(key){
   if(!key || !/^(일반매물|급매|찐매물|경매):/.test(key)) return '';
-  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();openListingReport(this.dataset.reportKey)">매물분석</button>`;
+  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();SignalV2.openListing(this.dataset.reportKey)">매물분석</button>`;
 }
 // ===== 동네 리포트 (v2: 주간 스냅샷·diff·관심지역 비교) =====
 let _nbhdCur=null;
@@ -6362,7 +6381,7 @@ function _haversineKm(a,b){ const R=6371,d=x=>x*Math.PI/180;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s)); }
 let _myLine=null, _mySearchList=[], _cxFindT2=null;
 const _MMICON={home:'🏠',region:'📍',complex:'🏢',search:'🔎',work:'💼'};
-const _SIG_COLOR={STRONG_BUY:'#15803d',BUY:'#16a34a',WATCH:'#ca8a04',NEUTRAL:'#64748b',SELL_RISK:'#dc2626'};
+const _SIG_COLOR={STRONG_BUY:'#15803d',BUY:'#16a34a',WATCH:'#ca8a04',NEUTRAL:'#64748b',SELL_RISK:'#dc2626',HELD:'#5f6875'};
 function _pinIcon(color, sel){
   return L.divIcon({className:'', html:`<div class="mappin${sel?' sel':''}" style="background:${color}"></div>`,
     iconSize:sel?[24,24]:[18,18], iconAnchor:sel?[6,24]:[4,18]}); }
@@ -6974,6 +6993,41 @@ async function startApp(needOnboard){
     </div>
   </div>
 </div>
+<dialog id="v2ReportDlg" aria-label="매물 분석 리포트">
+  <div class="v2-top"><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
+  <div id="v2ReportBody" class="v2-panel" aria-live="polite"></div>
+</dialog>
+<dialog id="v2DiscoverDlg" aria-label="내 조건으로 매물 찾기">
+  <div class="v2-top"><button type="button" class="btn" onclick="document.getElementById('v2DiscoverDlg').close()" aria-label="매물 찾기 닫기">닫기 ✕</button></div>
+  <div class="v2-panel">
+    <h2>내 조건으로 빠르게 찾기</h2>
+    <p class="v2-muted">확인된 조건에 맞는 매물과 정보가 부족한 매물을 나눠 보여줍니다.</p>
+    <form id="v2DiscoverForm" class="v2-form">
+      <label>호가 상한 · 만원<input name="max_price_manwon" type="number" min="1" step="1000" placeholder="예: 60000"></label>
+      <label>최소 전용면적 · ㎡<input name="min_area_m2" type="number" min="1" step="1" placeholder="예: 59"></label>
+      <label>지역<input name="region" type="text" maxlength="80" placeholder="예: 노원구"></label>
+      <label>지역 조건<select name="region_mode"><option value="prefer">선호 · 다른 지역도 보기</option><option value="must">필수 · 이 지역만</option></select></label>
+      <button class="btn primary" type="submit">후보 찾기</button>
+    </form>
+    <div id="v2DiscoverResults" aria-live="polite"></div>
+  </div>
+</dialog>
+<dialog id="v2NoteDlg" aria-label="관심 이유 기록">
+  <div class="v2-top"><button type="button" class="btn" onclick="document.getElementById('v2NoteDlg').close()" aria-label="기록 닫기">닫기 ✕</button></div>
+  <div class="v2-panel">
+    <h2>내 판단 기록</h2>
+    <p class="v2-muted">왜 관심을 가졌는지와 어떤 변화가 있으면 다시 생각할지 남겨두세요.</p>
+    <form id="v2NoteForm">
+      <label style="display:block;margin:12px 0">관심 이유<textarea name="thesis" required maxlength="500" rows="3" style="display:block;width:100%;box-sizing:border-box;font:inherit"></textarea></label>
+      <label style="display:block;margin:12px 0">다시 생각할 조건<textarea name="counter_condition" required maxlength="500" rows="3" style="display:block;width:100%;box-sizing:border-box;font:inherit"></textarea></label>
+      <label>복기 시점 <select name="horizon_weeks" class="ctrl"><option value="4">4주 뒤</option><option value="12" selected>12주 뒤</option><option value="26">26주 뒤</option></select></label>
+      <button type="submit" class="btn primary" style="margin-top:14px">기록 저장</button>
+    </form>
+    <p id="v2NoteStatus" role="status"></p>
+    <div id="v2NoteList"></div>
+  </div>
+</dialog>
+<script defer src="/assets/signal-v2.js"></script>
 <script>
 let _advMsgs=[], _advBusy=false, _advUsage=null, _advListingKey=null, _advComparisonKeys=null, _advAbort=null, _advEpoch=0;
 let _analysisGen=0, _analysisCurrent=null;

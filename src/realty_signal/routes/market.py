@@ -161,14 +161,17 @@ def freshness(request: Request):
 @router.get("/api/signals")
 def signals(only: str | None = None):
     import json
+    from datetime import date
     df = md.signals_df()
     if only:
         keep = {s.strip().upper() for s in only.split(",")}
         df = df[df["signal"].isin(keep)]
     recs = json.loads(df.to_json(orient="records", force_ascii=False))
     codes = md.kb().codes
+    labels = md.assessed_signal_labels(date.today().isoformat())
     for r in recs:
         r["group"] = _region_group(r["region"], codes.get(r["region"]))
+        r.update(labels.get(r["region"], {"display_signal": "HELD", "assessment_status": "held"}))
     return recs
 
 

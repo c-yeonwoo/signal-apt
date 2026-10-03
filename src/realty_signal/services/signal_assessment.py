@@ -1,0 +1,184 @@
+"""Evidence-linked market labels. Legacy grades remain available for audit."""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from copy import deepcopy
+from datetime import date, datetime, timezone
+from hashlib import sha256
+import json
+import math
+import time
+
+import pandas as pd
+
+from realty_signal import db
+from realty_signal.ingest.kb_weekly import KBWeekly
+from realty_signal.signals.engine import SignalConfig
+
+VERSION = "signal-assessment-v1"
+GUARD_VERSION = "source-and-price-v1"
+LABELS = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
+          "NEUTRAL": "중립", "SELL_RISK": "매도주의"}
+
+
+def _finite(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _hash(value: object) -> str:
+    return sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+
+
+def _last_four(kb: KBWeekly, region: str, asof: date) -> tuple[list[dict], bool]:
+    series = kb.series(region, "sale_change")
+    if series.empty:
+        return [], False
+    series = series[series.index <= pd.Timestamp(asof)].tail(4)
+    items = [{"date": str(stamp.date()), "value": _finite(value)} for stamp, value in series.items()]
+    if len(items) != 4 or any(item["value"] is None for item in items):
+        return items, False
+    days = [pd.Timestamp(item["date"]) for item in items]
+    return items, days[-1].date() == asof and all((b - a).days == 7 for a, b in zip(days, days[1:]))
+
+
+def _metric(reason_id: str, label: str, value: float | None, unit: str,
+            threshold: float, passing: bool, source: str, role: str = "driver") -> dict:
+    return {"reason_id": reason_id, "label": label, "value": value, "unit": unit,
+            "threshold": threshold, "passing": passing, "role": role,
+            "source_region": source, "inherited": False}
+
+
+def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
+          asof: date | None = None, today: date | None = None) -> dict:
+    """Create a deterministic assessment without reading or writing issuance history."""
+    asof = asof or kb.last_date.date()
+    today = today or datetime.now(timezone.utc).date()
+    region = str(row["region"])
+    code = str((kb.codes or {}).get(region) or "")
+    # Legacy caches lost one of the two Jung-gu identities. Never serve it as a
+    # verified district until fresh source rows have the correct parent code.
+    ambiguous = region == "중구" and not code.startswith("11")
+    region_id = f"kb:{code}" if code and not ambiguous else f"ambiguous:{region}"
+    weeks, complete = _last_four(kb, region, asof)
+    momentum = round(sum(x["value"] for x in weeks) / 4, 4) if complete else None
+    js, bs = _finite(row.get("전세수급")), _finite(row.get("매수우위지수"))
+    source = str(row.get("수급출처") or region)
+    input_dates_current = all(
+        not kb.series(source, metric).empty
+        and kb.series(source, metric).index[-1].date() == asof
+        for metric in ("jeonse_supply", "buyer_superiority")
+    )
+    reasons = [
+        _metric("jeonse_pressure", "전세수급 압력", js, "지수", config.jeonse_crunch,
+                js is not None and js >= config.jeonse_crunch, source),
+        _metric("buyer_interest", "매수심리의 자체 관찰선", bs, "지수", config.buyeridx_strong,
+                bs is not None and bs >= config.buyeridx_strong, source),
+        _metric("sale_momentum", "최근 4주 주간 매매변동률 평균", momentum, "%/주", config.momentum_up,
+                momentum is not None and momentum >= config.momentum_up, region),
+    ]
+    for reason in reasons[:2]:
+        reason["inherited"] = source != region
+    if bs is not None and bs < 100:
+        reasons.append({"reason_id": "buyer_balance", "role": "limitation",
+                        "label": "KB 응답 균형선 100 미만", "value": bs, "unit": "지수",
+                        "threshold": 100, "passing": False, "source_region": source,
+                        "inherited": source != region})
+    risk_flags = []
+    if not complete:
+        risk_flags.append("sale_weeks_incomplete")
+    if js is None or bs is None:
+        risk_flags.append("market_inputs_missing")
+    elif not input_dates_current:
+        risk_flags.append("market_inputs_stale")
+    if ambiguous:
+        risk_flags.append("region_identity_ambiguous")
+    if (today - asof).days > 14:
+        risk_flags.append("source_stale")
+    raw = str(row.get("signal") or "NEUTRAL")
+    if raw in {"BUY", "STRONG_BUY"} and momentum is not None and momentum < 0:
+        risk_flags.append("price_direction_conflict")
+    if momentum is not None and momentum < 0:
+        reasons.append({"reason_id": "price_direction_conflict", "role": "counterevidence",
+                        "label": "최근 4주 주간 매매변동률 평균은 음수입니다",
+                        "value": momentum, "unit": "%/주", "source_region": region})
+    supply = _finite(row.get("공급압력"))
+    if supply is not None and supply >= config.supply_glut:
+        reasons.append(_metric("supply_pressure", "입주물량 부담", supply, "배",
+                               config.supply_glut, True, region, "counterevidence"))
+    status = "held" if risk_flags else "ready"
+    config_hash = _hash(asdict(config))
+    basis = {"version": VERSION, "guard_version": GUARD_VERSION, "region_id": region_id,
+             "asof": asof.isoformat(), "config_hash": config_hash, "raw_grade": raw,
+             "reasons": reasons, "price_weeks": weeks, "risk_flags": risk_flags}
+    return {**basis, "assessment_id": _hash(basis), "region": region,
+            "display_grade": LABELS.get(raw, "판단 보류") if status == "ready" else "판단 보류",
+            "assessment_status": status,
+            "summary": ("자료 또는 가격 방향을 확인한 뒤 판단합니다." if status == "held" else
+                        f"지역 시장 신호는 {LABELS.get(raw, '판단 보류')}입니다. 개별 매물의 적정 가격이나 미래 수익을 뜻하지 않습니다."),
+            "scope_note": (f"전세수급과 매수심리는 {source} 권역 자료를 함께 사용합니다."
+                           if source != region else "이 지역 자료를 사용합니다."),
+            "change": {"type": "first_observation", "previous_grade": None, "changed_reasons": []}}
+
+
+def _previous(c, region_id: str, asof: str, current_id: str) -> dict | None:
+    hit = c.execute("SELECT data FROM signal_assessments WHERE region_id=? AND asof<=? AND id<>? "
+                    "ORDER BY asof DESC, issued_at DESC, id DESC LIMIT 1", (region_id, asof, current_id)).fetchone()
+    return json.loads(hit[0]) if hit else None
+
+
+def with_previous(assessment: dict) -> dict:
+    c = db.conn()
+    try:
+        previous = _previous(c, assessment["region_id"], assessment["asof"], assessment["assessment_id"])
+    finally:
+        c.close()
+    if previous is None:
+        return assessment
+    current = deepcopy(assessment)
+    old_reasons = {r["reason_id"]: r for r in previous.get("reasons", [])}
+    for reason in current["reasons"]:
+        prior = old_reasons.get(reason["reason_id"])
+        if prior:
+            reason["previous_value"] = prior.get("value")
+            reason["previous_passing"] = prior.get("passing")
+    changed = [r["reason_id"] for r in current["reasons"]
+               if r.get("value") != (old_reasons.get(r["reason_id"]) or {}).get("value")
+               or r.get("passing") != (old_reasons.get(r["reason_id"]) or {}).get("passing")]
+    grade_changed = current["raw_grade"] != previous.get("raw_grade")
+    if grade_changed:
+        changed.append("grade")
+    safety_changed = (current["assessment_status"] != previous.get("assessment_status")
+                      or current["risk_flags"] != previous.get("risk_flags"))
+    if safety_changed:
+        changed.append("safety_status")
+    method_changed = any(current[k] != previous.get(k) for k in ("version", "config_hash", "guard_version"))
+    same_asof = current["asof"] == previous.get("asof")
+    freshness_only = (same_asof and set(changed) == {"safety_status"}
+                      and (set(current["risk_flags"]) ^ set(previous.get("risk_flags") or [])) == {"source_stale"})
+    current["change"] = {
+        "type": "mixed_change" if method_changed and changed else "method_change" if method_changed
+                else "freshness_change" if freshness_only else "source_revision" if same_asof and changed
+                else "market_change" if changed else "unchanged",
+        "previous_grade": previous.get("display_grade"), "changed_reasons": changed,
+        "previous_assessment_id": previous.get("assessment_id"),
+    }
+    return current
+
+
+def issue_many(assessments: list[dict]) -> int:
+    """Append only the assessments actually issued by the refresh pipeline."""
+    c = db.conn()
+    try:
+        issued_at = time.time_ns()
+        rows = [(item["assessment_id"], item["region_id"], item["region"], item["asof"],
+                 issued_at, json.dumps(item, ensure_ascii=False, allow_nan=False)) for item in assessments]
+        c.executemany("INSERT OR IGNORE INTO signal_assessments VALUES(?,?,?,?,?,?)", rows)
+        c.commit()
+        return c.total_changes
+    finally:
+        c.close()

@@ -22,6 +22,8 @@ def test_region_centroids_route_returns_known_metro():
 
 def test_complex_building_not_hijacked_by_centroids_body():
     """regression: region_centroids body was accidentally left under complex_building."""
-    out = api.complex_building("노원구", "__no_such_complex__")
+    # The route shape is under test; a developer's .env must not trigger a live lookup.
+    with patch("realty_signal.personal_layer.building_for_complex", return_value=None):
+        out = api.complex_building("노원구", "__no_such_complex__")
     assert out.get("ok") is False
     assert "centroids" not in out

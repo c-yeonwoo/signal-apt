@@ -68,6 +68,25 @@ def signal_map() -> dict:
     return dict(zip(df["region"], df["signal"]))
 
 
+@lru_cache(maxsize=2)
+def assessed_signal_labels(today: str) -> dict[str, dict]:
+    """Daily display status for every region; raw signal stays unchanged."""
+    from datetime import date
+    from realty_signal.services import signal_assessment
+
+    kb_data = kb()
+    config = signal_config()
+    labels = {}
+    for row in json.loads(signals_df().to_json(orient="records", force_ascii=False)):
+        assessment = signal_assessment.build(kb_data, row, config, today=date.fromisoformat(today))
+        labels[row["region"]] = {
+            "display_signal": row["signal"] if assessment["assessment_status"] == "ready" else "HELD",
+            "assessment_status": assessment["assessment_status"],
+            "assessment_id": assessment["assessment_id"],
+        }
+    return labels
+
+
 def data_age_days() -> float | None:
     try:
         last = kb().last_date
@@ -86,5 +105,6 @@ def clear_caches() -> None:
     backtest.cache_clear()
     codes_nospace.cache_clear()
     alert_track_record.cache_clear()
+    assessed_signal_labels.cache_clear()
     # 가격지수·시장 기준선은 engine 모듈 전역에 남는다 — KB 가 바뀌면 같이 버려야 한다
     clear_backtest_caches()

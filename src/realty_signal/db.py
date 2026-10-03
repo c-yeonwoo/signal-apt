@@ -62,6 +62,19 @@ CREATE TABLE IF NOT EXISTS decision_snap(uid INTEGER NOT NULL, entity_id TEXT NO
     week TEXT NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL,
     PRIMARY KEY(uid, entity_id, week));
 CREATE INDEX IF NOT EXISTS ix_decision_snap_uid_week ON decision_snap(uid, week);
+CREATE TABLE IF NOT EXISTS signal_assessments(
+    id TEXT PRIMARY KEY, region_id TEXT NOT NULL, region TEXT NOT NULL,
+    asof TEXT NOT NULL, issued_at INTEGER NOT NULL, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_signal_assessments_region ON signal_assessments(region_id, asof DESC, issued_at DESC);
+CREATE TABLE IF NOT EXISTS decision_notes_v2(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER NOT NULL, subject_type TEXT NOT NULL,
+    subject_key TEXT NOT NULL, thesis TEXT NOT NULL, counter_condition TEXT NOT NULL,
+    horizon_weeks INTEGER NOT NULL, report_id TEXT, revision INTEGER NOT NULL,
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_decision_notes_v2_uid ON decision_notes_v2(uid, updated_at DESC);
+CREATE TABLE IF NOT EXISTS decision_note_revisions_v2(
+    note_id INTEGER NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
+    PRIMARY KEY(note_id, revision));
 """
 
 _migrated = [False]
