@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from realty_signal import db
+from realty_signal import digest
 from realty_signal.digest import build_user_digest
 
 
@@ -109,3 +110,41 @@ def test_build_user_digest_with_changes():
     assert "강남구: WATCH → BUY" in d["body"]
     assert "마포구: WATCH (변화 없음)" in d["body"]
     assert len(d["changes"]) == 1
+
+
+def test_digest_does_not_announce_raw_upgrade_when_current_assessment_is_held():
+    change = {"region": "서구", "old": "WATCH", "new": "BUY", "direction": "▲매수기회"}
+    d = build_user_digest("a@b.com", ["서구"], [change], {"서구": "HELD"}, "2026-10-04")
+    assert d["changes"] == []
+    assert "변동 1건" not in d["subject"]
+    assert "WATCH → BUY" not in d["body"]
+    assert "현재 판정 확인 필요" in d["body"]
+
+
+def test_collect_digests_uses_assessed_grades_not_raw_dataframe(monkeypatch):
+    import pandas as pd
+    from realty_signal import personal_layer as pl
+    from realty_signal.services import market_data as md
+
+    monkeypatch.setattr(md, "assessed_signal_labels", lambda today: {
+        "강남구": {"display_signal": "BUY", "assessment_status": "ready"},
+        "서구": {"display_signal": "HELD", "assessment_status": "held"},
+    })
+    monkeypatch.setattr(db, "users_with_region_favs", lambda: [
+        {"id": 1, "email": "a@b.com", "regions": ["강남구", "서구"]}])
+    monkeypatch.setattr(db, "fav_list", lambda uid: [])
+    monkeypatch.setattr(pl, "macro_latest", lambda: {})
+    monkeypatch.setattr(pl, "volume_summary", lambda region: {})
+    frame = pd.DataFrame([{"region": "강남구", "signal": "BUY"},
+                          {"region": "서구", "signal": "BUY"}])
+    changes = [{"region": "서구", "old": "WATCH", "new": "BUY", "direction": "▲매수기회"}]
+    d = digest.collect_digests(signal_df=frame, changes=changes, as_of="2026-10-04")[0]
+    assert "서구: 현재 판정 확인 필요" in d["body"]
+    assert "변동 1건" not in d["subject"]
+    assert "강남구: BUY" in d["body"]
+
+    monkeypatch.setattr(md, "assessed_signal_labels", lambda today: (_ for _ in ()).throw(RuntimeError("offline")))
+    unavailable = digest.collect_digests(signal_df=frame, changes=changes, as_of="2026-10-04")[0]
+    assert "강남구: 현재 판정 확인 필요" in unavailable["body"]
+    assert "서구: 현재 판정 확인 필요" in unavailable["body"]
+    assert unavailable["changes"] == []
