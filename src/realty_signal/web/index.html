@@ -2003,9 +2003,9 @@ function _buyerNoteOf(frm, to){
     ? {dir:'cool', label:'서두를 이유 감소', why:'매수 신호가 약해졌습니다. 급하게 붙지 않아도 되는 구간으로 이동 중입니다.'}
     : {dir:'heat', label:'조건 강화',       why:'매수 신호가 강해졌습니다. 관심 단지가 있으면 선택지가 줄기 전에 확인해 보세요.'};
 }
-/** KB 수집 지연 배너. **"시장이 조용하다" 와 "우리가 못 받아왔다" 를 절대 섞지 않는다.** */
+/** KB 관측 지연 배너. 관측일과 마지막 원천 확인일을 섞지 않는다. */
 function _staleBanner(d){
-  if(!(d.stale_days > 10)) return '';
+  if(!(d.stale_days > 8)) return '';
   const f = d.kb_fetch || {};
   const err = f.error;
   const days = d.stale_days;
@@ -2020,8 +2020,8 @@ function _staleBanner(d){
   }
   return `<div style="margin-bottom:10px;padding:9px 12px;background:var(--warn-weak,rgba(180,83,9,.10));
       border:1px solid var(--sig-watch);border-radius:9px;font-size:12px;color:var(--sig-watch);line-height:1.6">
-    <b>데이터를 ${days}일째 받아오지 못했습니다.</b> 아래 내용은 그만큼 오래된 기준일 기준입니다.<br>
-    <span style="opacity:.9">${why} 시장이 조용한 것과는 다른 상태입니다.</span>
+    <b>KB 관측 기준일이 ${days}일 전입니다.</b> 최신 발표분이 현재 화면에 반영됐는지 확인이 필요합니다.<br>
+    <span style="opacity:.9">${why} 관측 지연은 시장 변화가 없다는 뜻이 아닙니다.</span>
   </div>`;
 }
 function _moverRow(m){
@@ -2200,11 +2200,8 @@ async function _loadWeekly(){
     wrap.innerHTML=_weeklyQuiet('지난주와 비교할 데이터가 아직 없어요.');
     return;
   }
-  _renderComeback(d);
   const mine=d.mine||[], rest=d.rest||[], movers=d.movers||[], t=d.totals||{};
-  // 예전 문구는 "KB 데이터가 N일째 그대로입니다" 였다. 읽으면 "시장이 안 변했다"로 들리는데
-  // 실제 뜻은 "우리가 못 받아오고 있다" 이다. KB 는 그 사이 정상 발표를 계속했다.
-  // 원인을 화면이 직접 말한다 — 로그를 볼 수 없는 사용자도 이 배너만 본다.
+  // 관측 기준이 오래됐으면 이전 등급 비교를 이번 주의 새 변화처럼 제시하지 않는다.
   const stale=_staleBanner(d);
   const nChange=(t.up||0)+(t.down||0);
   let conclusion='';
@@ -2228,6 +2225,13 @@ async function _loadWeekly(){
     detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">등급 그대로 · 지표 급변</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${movers.slice(0,10).map(_moverRow).join('')}</div>`;
   }
+  if(d.stale_days > 8){
+    wrap.innerHTML=_dashCard(_dashH('주간 변화 확인 보류')+stale+
+      `<p style="font-size:13px;color:var(--dim)">새 등급 변화를 확인할 수 없습니다. 아래 비교는 ${esc(d.as_of||'기준일 미확인')} 관측 당시의 기록입니다.</p>`+
+      _holdBlock(d.holds)+_dashMore('과거 비교 보기',detail));
+    return;
+  }
+  _renderComeback(d);
   wrap.innerHTML=_dashCard(_dashH(head)+stale+conclusion+_holdBlock(d.holds)+_dashMore('상세 보기', detail));
   if(d.as_of) _ackWhenVisible(wrap,'/api/weekly-change/seen',{as_of:d.as_of});
 }
