@@ -92,7 +92,14 @@ def materialize(uid: int, favorite_key: str, current: dict, *, prefs: dict | Non
             return 0
         payload = _important_change(old, current) if old else None
         inserted = 0
-        if payload and (prefs or {}).get("region_evidence", True):
+        # One user may have both a unique old name and a newly selected code
+        # for the same region. Advance both baselines, but issue the current
+        # assessment only once across those saved keys.
+        already_issued = bool(payload and c.execute(
+            "SELECT 1 FROM alert_outbox_v2 WHERE uid=? AND subject_type='region' "
+            "AND kind='region_evidence' AND evidence_revision=? LIMIT 1",
+            (uid, current_id)).fetchone())
+        if payload and not already_issued and (prefs or {}).get("region_evidence", True):
             event_id = sha256(json.dumps([uid, favorite_key, "region_evidence", current_id],
                                          ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
             inserted = c.execute(
