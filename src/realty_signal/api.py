@@ -188,9 +188,18 @@ async def _briefing_loop():
         await asyncio.sleep(_BRIEFING_TICK)
 
 
+def _scheduled_backup():
+    from realty_signal import backup
+
+    if not backup.enabled():
+        raise backup.BackupNotConfigured()
+    if backup.run_backup() is None:
+        raise backup.BackupUploadFailed()
+
+
 async def _auto_refresh_loop():
     """Independent due times: a failing source never delays other source jobs."""
-    from realty_signal import jobs, backup, digest as dig
+    from realty_signal import jobs, digest as dig
     import asyncio
     import time
 
@@ -227,10 +236,6 @@ async def _auto_refresh_loop():
         from realty_signal.ingest import school_zone
         return school_zone.refresh()
 
-    def backup_job():
-        if backup.enabled() and backup.run_backup() is None:
-            raise RuntimeError("backup_failed")
-
     def watch_alert_job():
         from realty_signal.services import watch_alerts_v2
         return watch_alerts_v2.scan_cached_sources()
@@ -252,7 +257,7 @@ async def _auto_refresh_loop():
         ("localities", locality_job, 86400),
         ("school_zones", school_zone_job, 7*86400),
         ("digest", digest_job, 6*3600),
-        ("backup", backup_job, 86400),
+        ("backup", _scheduled_backup, 86400),
         ("watch_alerts", watch_alert_job, 900),
         ("region_alerts", region_alert_job, 900),
         ("presale_alerts", presale_alert_job, 6*3600),

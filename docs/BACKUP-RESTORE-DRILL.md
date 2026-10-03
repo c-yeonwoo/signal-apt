@@ -2,6 +2,8 @@
 
 현재 서비스는 SQLite `app.db`를 온라인 스냅샷으로 만들고 `signalapt/app-YYYYMMDD-HHMMSS.db.gz` 형식으로 S3 호환 저장소에 업로드한다. 업로드 성공이나 `/ready` 200만으로 복원 가능성이 입증되지는 않는다.
 
+관리자 `/api/operations`의 `backup.configured`와 `backup.upload_job`을 먼저 확인한다. 설정이 없거나 업로드가 실패하면 스케줄러는 성공 시각을 새로 기록하지 않고 각각 `BackupNotConfigured`, `BackupUploadFailed` 오류 유형을 남긴다. 이전 `last_success`는 과거 업로드 이력일 수 있으므로 현재 설정과 마지막 시도 결과를 함께 읽어야 한다. `/ready`의 `kb_source_fresh_for_signal`은 KB 관측일의 8일 제한만 나타내며, 지역별 판정 준비 여부나 백업 복구 가능성을 뜻하지 않는다.
+
 ## 읽기 전용 복원 점검
 
 1. Railway 작업 로그 또는 저장소에서 최근 성공한 백업의 정확한 오브젝트 키를 확인한다. 키에 계정 비밀값을 넣지 않는다.

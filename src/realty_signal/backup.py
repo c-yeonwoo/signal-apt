@@ -27,6 +27,14 @@ _REQUIRED_TABLES = ("users", "profile", "favorites", "kv")
 _MAX_VERIFY_BYTES = 4 * 1024**3
 
 
+class BackupNotConfigured(RuntimeError):
+    """The scheduled upload cannot run without its storage credentials."""
+
+
+class BackupUploadFailed(RuntimeError):
+    """No remote object was confirmed for this scheduled attempt."""
+
+
 def _cfg() -> dict:
     e = os.environ
     return {
