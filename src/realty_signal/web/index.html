@@ -610,6 +610,7 @@
         <div style="font-size:10px;color:var(--dim);padding:5px 10px 0">경기 사이클 파형 — 침체 저점 → 회복 → 상승 고점 → 후퇴 (곡선 위치 = 국면, 색 = 국면 구간)</div>
         <div id="cycleMiniChart" style="height:70px"></div>
       </div>
+      <p style="font-size:11px;color:var(--dim);margin:8px 12px 0">지역 가격·수급 추세입니다. 전국 구매력지수는 이 지역의 지표가 아니므로 차트에 겹치지 않으며, 동네 리포트의 거시 항목에서 따로 볼 수 있습니다.</p>
       <div id="chart"></div>
       <div id="macroMini" style="display:none;border-top:1px solid var(--line)">
         <div onclick="toggleMacroMini()" style="font-size:10px;color:var(--dim);padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:6px">
@@ -5011,9 +5012,6 @@ function drawChart(region, m, sig){
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#16a34a'}}]}});
   mk("price_index", 0, { lineStyle:{width:2.4, color:'#2563eb'}, z:3 });  // 누적 매매가격지수 — 브랜드 컬러
   const mc = window._macro;
-  if(mc) series.push({ name:'전국 아파트 주택구매력지수', type:'line', yAxisIndex:0, showSymbol:false, z:0,
-    lineStyle:{width:1.2, type:'dashed', color:'#94a3b8'}, itemStyle:{color:'#94a3b8'},
-    data: mc.dates.map((dt,i)=>[dt, mc.구매력?.[i]]) });
 
   // 보조축(우측 1개) — 셀렉트로 전환: 증감% / 금리% / 거래량
   const sec = (document.getElementById('secAxis')||{}).value || 'change';
