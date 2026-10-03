@@ -9,8 +9,10 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from math import isfinite
+import re
 from urllib.parse import urlparse
 
+from realty_signal import db
 from realty_signal.services import listing_watch
 from realty_signal.services.property_analysis import snapshot
 
@@ -144,6 +146,21 @@ def _https(url: str | None) -> str | None:
     return url if parsed.scheme == "https" and parsed.hostname else None
 
 
+def _news_region_match(row: dict, text: str) -> bool:
+    """A shared district name needs an adjacent province name in the article."""
+    region = (row.get("지역") or "").strip()
+    if len(region) < 2 or region not in text:
+        return False
+    if region not in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        return True
+    sido = (row.get("시도") or "").strip()
+    if not sido:
+        return False
+    district = region.removeprefix(f"{sido} ")
+    return bool(re.search(rf"(?<![가-힣]){re.escape(sido)}(?:특별시|광역시|시)?\s+"
+                          rf"{re.escape(district)}(?![가-힣])", text))
+
+
 def news(row: dict, articles: list[dict], *, now: datetime | None = None) -> list[dict]:
     """직접 관련이라고 주장하지 않는 문자열 매칭. 오래된 기사와 비HTTPS는 제외."""
     now = now or datetime.now(timezone.utc)
@@ -158,7 +175,7 @@ def news(row: dict, articles: list[dict], *, now: datetime | None = None) -> lis
         title, descr = str(article.get("title") or "")[:180], str(article.get("descr") or "")[:260]
         combined = title + " " + descr
         name_match = len(name) >= 4 and name in combined
-        region_match = len(region) >= 2 and region in combined
+        region_match = _news_region_match(row, combined)
         if not name_match and not region_match:
             continue
         level = "단지명·지역명 문자열 일치" if name_match and region_match else (
