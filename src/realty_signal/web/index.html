@@ -7152,6 +7152,8 @@ async function startApp(needOnboard){
   }
   if(!routeFromHash()) switchTab('dashboard');   // 해시 있으면 해당 탭, 없으면 대시보드 홈
   window.addEventListener('hashchange', routeFromHash);   // 뒤로/앞으로
+  window._signalAppReady=true;
+  if(window.SignalV2 && !document.getElementById('onbDlg').open) SignalV2.openInitialLink();
   setupAuctionBookmarklet();
 }
 (async function init(){

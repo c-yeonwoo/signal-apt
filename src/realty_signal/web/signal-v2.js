@@ -114,7 +114,10 @@
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
         <button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
         <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>
-        ${watchAction(item)}`;
+        ${watchAction(item)}
+        <button type="button" class="btn" id="v2ListingLink">내 계정에서 열기 링크 복사</button>
+        <p class="v2-muted">이 링크는 현재 수집분을 다시 조회합니다. 지금 보이는 리포트의 고정 사본은 아닙니다.</p>
+        <p id="v2ListingLinkStatus" class="v2-muted" role="status"></p>`;
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
       body.querySelector('#v2ListingCompare').onclick = event => {
         event.currentTarget.textContent = addCompare(key);
@@ -123,10 +126,40 @@
         dialog.close();
         listingCompareOpen();
       };
+      body.querySelector('#v2ListingLink').onclick = () => copyListingLink(item.key);
     } catch (error) {
       if (generation === listingGeneration) body.textContent = error.message;
     }
   }
+
+  async function copyListingLink(key) {
+    const url = new URL(location.pathname, location.origin);
+    url.searchParams.set('listing', key);
+    url.hash = 'all';
+    const status = document.getElementById('v2ListingLinkStatus');
+    try {
+      await navigator.clipboard.writeText(url.href);
+      status.textContent = '링크를 복사했습니다. 같은 계정의 접근 권한이 있어야 열립니다.';
+    } catch (_) {
+      status.innerHTML = `<label>링크를 직접 복사하세요<input type="text" readonly value="${esc(url.href)}"></label>`;
+      status.querySelector('input').select();
+    }
+  }
+
+  function openInitialLink() {
+    const key = new URLSearchParams(location.search).get('listing');
+    if (!key) return;
+    if (!/^(급매|찐매물|일반매물|청약|경매):.{1,180}$/.test(key)) return;
+    openListing(key);
+  }
+
+  document.getElementById('v2ReportDlg')?.addEventListener('close', () => {
+    const url = new URL(location.href);
+    if (!url.searchParams.has('listing')) return;
+    url.searchParams.delete('listing');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  });
+  document.getElementById('onbDlg')?.addEventListener('close', openInitialLink);
 
   function openDiscovery(region = '') {
     discoveryGeneration++;
@@ -371,6 +404,7 @@
 
   document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
   document.getElementById('v2NoteForm')?.addEventListener('submit', saveNote);
-  window.SignalV2 = {paintRegion, openListing, openDiscovery, openNote, openNotes};
+  window.SignalV2 = {paintRegion, openListing, openDiscovery, openNote, openNotes, openInitialLink};
+  if (window._signalAppReady && !document.getElementById('onbDlg')?.open) openInitialLink();
   if (typeof selected === 'string' && selected) paintRegion(selected);
 })();

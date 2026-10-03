@@ -75,6 +75,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           finance_context:finance?{status:noProfile?'no_confirmed_profile':'ready',policy_status:'unverified'}:null,
           groups:{matched:finance?[]:[candidate],verify:finance?[candidate]:[],explore:[]}};
       }
+      if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
+        return route.fulfill({status:403,json:{detail:'forbidden'}});
       if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
         subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
           kind:'일반매물',asking_manwon:50000,collected_at:'2026-09-29'},
@@ -291,7 +293,31 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#analysisFixture button').click();
     await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
     assert.equal(nickPayloads.length,0);
+    await page.evaluate(()=>{
+      Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__copiedReportLink=value;}}});
+    });
+    await page.locator('#v2ReportBody').getByRole('button',{name:'내 계정에서 열기 링크 복사'}).click();
+    await page.getByText('링크를 복사했습니다.',{exact:false}).waitFor();
+    const link=await page.evaluate(()=>window.__copiedReportLink);
+    assert.equal(new URL(link).searchParams.get('listing'),'일반매물:synthetic-hb-1');
+    assert.equal(new URL(link).hash,'#all');
+    assert.equal(new URL(link).searchParams.has('invite'),false);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(value=>{
+      history.replaceState(null,'',value);
+      SignalV2.openInitialLink();
+    },link);
+    await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
+    assert.equal(await page.locator('#v2ReportDlg').evaluate(el=>el.open),true);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.waitForFunction(()=>!new URLSearchParams(location.search).has('listing'));
+    await page.evaluate(()=>{
+      history.replaceState(null,'','/?listing='+encodeURIComponent('일반매물:forbidden')+'#all');
+      SignalV2.openInitialLink();
+    });
+    await page.locator('#v2ReportBody').getByText('이 매물에 접근할 수 없습니다.').waitFor();
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.waitForFunction(()=>!new URLSearchParams(location.search).has('listing'));
     await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-1'));
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
