@@ -92,7 +92,7 @@ test('general listings reuse the same-day map and explicit refresh bypasses cach
   assert.deepEqual(calls, ['/api/general-listings','render','resize','/api/general-listings','render']);
 });
 
-test('market snapshot loads in parallel, reuses browser cache, and refresh bypasses it', async () => {
+test('market snapshot revalidates date and guard revision without refetching stable data', async () => {
   const calls = [], saved = new Map(), elements = new Map();
   const payload = {
     '/api/meta': {last_date:'2026-09-29'},
@@ -114,9 +114,16 @@ test('market snapshot loads in parallel, reuses browser cache, and refresh bypas
   await ctx.loadData();
   assert.deepEqual(calls.slice(0,4), ['/api/meta','/api/signals','/api/regime','/api/macro']);
   await ctx.loadData();
-  assert.equal(calls.filter(x=>x.startsWith('/api/')).length,4);
+  assert.deepEqual(calls.filter(x=>x.startsWith('/api/')).slice(4), ['/api/meta']);
+  payload['/api/meta']={...payload['/api/meta'],last_date:'2026-09-30'};
+  await ctx.loadData();
+  assert.deepEqual(calls.filter(x=>x.startsWith('/api/')).slice(5), ['/api/meta','/api/meta','/api/signals','/api/regime','/api/macro']);
+  assert.equal(elements.get('dateTxt').textContent,'KB 기준 2026-09-30');
+  payload['/api/meta']={...payload['/api/meta'],signal_guard_version:'v3'};
+  await ctx.loadData();
+  assert.equal(calls.filter(x=>x.startsWith('/api/')).length,15);
   await ctx.loadData(true);
-  assert.equal(calls.filter(x=>x.startsWith('/api/')).length,8);
+  assert.equal(calls.filter(x=>x.startsWith('/api/')).length,19);
 });
 
 test('stale weekly observations do not appear as this week signal changes', async () => {
