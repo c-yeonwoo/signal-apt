@@ -34,6 +34,21 @@ test('same named complex pins group only when display coordinates nearly match',
   assert.deepEqual(groups,[[0,1],[2],[3]]);
 });
 
+test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
+  const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
+  vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);
+  const fallback=ctx._mapTile();
+  assert.match(fallback.url,/^https:\/\/tile\.openstreetmap\.org\//);
+  assert.match(fallback.options.attribution,/OpenStreetMap contributors/);
+  vm.runInContext('_mapCfg={vworld:"synthetic-key"}',ctx);
+  const configured=ctx._mapTile();
+  assert.match(configured.url,/api\.vworld\.kr/);
+  assert.match(configured.options.attribution,/VWorld/);
+  assert.doesNotMatch(html,/basemaps\.cartocdn\.com/);
+  for(const id of ['uvMap','sigMap','myMap'])
+    assert.match(html,new RegExp(`${id}=L\\.map\\(el,\\{attributionControl:true`));
+});
+
 test('grouped map pins keep per-listing selection and one marker per group', () => {
   const layers=new Set(), made=[];
   const map={removeLayer:m=>layers.delete(m),hasLayer:m=>layers.has(m),invalidateSize(){}};

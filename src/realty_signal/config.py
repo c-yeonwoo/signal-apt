@@ -120,7 +120,7 @@ def odsay_cache_approved() -> bool:
 
 
 def vworld_key() -> str | None:
-    """VWorld(국토부) 지도 타일 키 — 있으면 한글 지도, 없으면 CartoDB 폴백."""
+    """VWorld(국토부) 지도 타일 키 — 있으면 한글 지도, 없으면 OSM 표준 타일."""
     return os.environ.get("VWORLD_KEY")
 
 
