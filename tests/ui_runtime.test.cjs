@@ -119,6 +119,32 @@ test('market snapshot loads in parallel, reuses browser cache, and refresh bypas
   assert.equal(calls.filter(x=>x.startsWith('/api/')).length,8);
 });
 
+test('stale weekly observations do not appear as this week signal changes', async () => {
+  const wrap = {innerHTML:''}, events = [];
+  let payload = {ready:true, as_of:'2026-09-21', stale_days:12,
+    mine:[], rest:[], movers:[], totals:{regions:20,up:1,down:4}, holds:[]};
+  const ctx = vm.createContext({
+    document:{getElementById:()=>wrap},
+    fetch:async()=>({ok:true,json:async()=>payload}),
+    _dashCard:x=>x, _dashH:x=>x, _dashMore:(label,x)=>label+x,
+    _weeklyQuiet:x=>x, _myWeeklyBlock:()=>'', _holdBlock:()=>'',
+    _renderComeback:()=>events.push('comeback'),
+    _ackWhenVisible:()=>events.push('seen'),
+    esc:x=>String(x),
+  });
+  vm.runInContext(extract('function _staleBanner(d){', 'function _moverRow(m){'),ctx);
+  vm.runInContext(extract('async function _loadWeekly(){', '// ===== 다음 할 일'),ctx);
+  await ctx._loadWeekly();
+  assert.match(wrap.innerHTML,/주간 변화 확인 보류/);
+  assert.match(wrap.innerHTML,/KB 관측 기준일이 12일 전/);
+  assert.doesNotMatch(wrap.innerHTML,/등급 변화 <b>5곳/);
+  assert.deepEqual(events,[]);
+  payload={...payload,as_of:'2026-09-28',stale_days:5};
+  await ctx._loadWeekly();
+  assert.match(wrap.innerHTML,/등급 변화 없음/);
+  assert.deepEqual(events,['comeback','seen']);
+});
+
 test('opening quicksale reaches both APIs and renders', async () => {
   const calls = [], status = {}, region = {options: [0, 1]};
   const ctx = vm.createContext({

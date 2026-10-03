@@ -200,26 +200,20 @@ def test_complex_favorite_tells_the_buyer_that_warming_started():
 
 
 def test_stale_data_warning_is_wired():
-    """0 이 '평온'인지 '수집 중단'인지 화면이 구분해야 한다."""
+    """관측 지연을 최신 시장 변화 없음으로 해석하지 않아야 한다."""
     html = INDEX.read_text(encoding="utf-8")
-    assert "d.stale_days > 10" in html or "d.stale_days>10" in html
-    assert "일째" in html
+    assert "d.stale_days > 8" in html or "d.stale_days>8" in html
+    assert "KB 관측 기준일이" in html
 
 
-def test_stale_banner_blames_collection_not_the_market():
-    """배너는 '시장이 조용하다' 가 아니라 '우리가 못 받아왔다' 라고 말해야 한다.
-
-    옛 문구 "KB 데이터가 N일째 그대로입니다" 는 읽으면 '시장이 안 변했다' 로 들렸고,
-    실제로 그 오해가 "분석이 너무 부동하다" 는 인상을 만들었다(2026-09-06 조사).
-    같은 기간 KB 는 정상 발표를 계속했고 멈춘 건 우리 수집이었다.
-    """
+def test_stale_banner_separates_observation_from_collection():
+    """오래된 KB 관측과 마지막 수집 시각을 분리하고 원천·수집 실패를 단정하지 않는다."""
     html = INDEX.read_text(encoding="utf-8")
-    assert "받아오지 못했습니다" in html, "수집 주체를 밝히는 문구가 없다"
-    assert "시장이 조용한 것과는 다른 상태" in html, "시장 정적과 수집 중단을 구분하지 않는다"
-    # 주석이 아니라 **화면에 나가는 문자열**만 본다 (주석에는 옛 문구가 기록으로 남아 있다)
+    assert "KB 관측 기준일이" in html
+    assert "마지막 성공 수집이" in html
+    assert "관측 지연은 시장 변화가 없다는 뜻이 아닙니다" in html
     visible = "\n".join(l for l in html.splitlines() if not l.lstrip().startswith("//"))
-    assert "그대로입니다" not in visible, "옛 오해 유발 문구가 화면 문자열로 되살아났다"
-    # 원인(연속 실패·마지막 성공)을 배너가 직접 말할 수 있어야 한다
+    assert "데이터를 ${days}일째 받아오지 못했습니다" not in visible
     assert "kb_fetch" in html and "consecutive" in html
 
 
