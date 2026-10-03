@@ -123,9 +123,12 @@ def test_default_redevelopment_warm_uses_only_ready_buy_regions(monkeypatch):
 def test_listing_cards_and_timing_use_guarded_region_signal(monkeypatch):
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
     monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-03")
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
     monkeypatch.setattr(api, "_presale", lambda: [
-        {"단지명": "보류 단지", "지역": "보류구", "시그널": "BUY", "상태": "접수예정", "관리번호": "1"},
-        {"단지명": "확인 단지", "지역": "확인구", "시그널": "BUY", "상태": "접수예정", "관리번호": "2"},
+        {"단지명": "보류 단지", "지역": "보류구", "시도": "서울", "_signal_region": "보류구",
+         "시그널": "BUY", "상태": "접수예정", "관리번호": "1"},
+        {"단지명": "확인 단지", "지역": "확인구", "시도": "서울", "_signal_region": "확인구",
+         "시그널": "BUY", "상태": "접수예정", "관리번호": "2"},
     ])
     monkeypatch.setattr(md, "assessed_signal_labels", lambda today: {
         "보류구": {"display_signal": "HELD", "assessment_status": "held"},
@@ -153,6 +156,21 @@ def test_listing_signal_assessment_failure_fails_closed(monkeypatch):
     assert row["원시시그널"] == "STRONG_BUY"
     assert row["시그널"] == "HELD"
     assert row["판정상태"] == "held"
+
+
+def test_integrated_presale_does_not_reborrow_other_province_signal(monkeypatch):
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-04")
+    monkeypatch.setattr(api, "_presale", lambda: [
+        {"단지명": "부산 강서 단지", "지역": "강서구", "시도": "부산",
+         "_signal_region": None, "시그널": "", "상태": "접수예정", "관리번호": "4"}])
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(md, "assessed_signal_labels", lambda today: {
+        "강서구": {"display_signal": "BUY", "assessment_status": "ready"}})
+    row = api._build_listings({"청약"})[0]
+    assert row["시그널"] == "HELD"
+    assert row["지역식별상태"] == "held"
+    assert row["기회도"] is None or row["기회도"] <= 50
 
 
 def test_public_listing_response_drops_audit_only_raw_grade(monkeypatch):

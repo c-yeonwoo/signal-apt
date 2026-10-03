@@ -964,6 +964,12 @@ def _display_signal_map() -> dict:
     return visible
 
 
+def _auction_signal_map() -> dict:
+    """소재 시·도/코드가 없는 경매의 동명이 지역은 지역 시그널을 붙이지 않는다."""
+    return {region: grade for region, grade in _display_signal_map().items()
+            if region not in db.AMBIGUOUS_LEGACY_REGION_KEYS}
+
+
 def signals(only: str | None = None):
     """시그널 레코드 리스트 — Nick·동네 리포트·advisor tool 공용 (라우트는 market router)."""
     from realty_signal.routes.market import signals as _market_signals
@@ -3145,7 +3151,8 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
     safe_auction_signals = {region: label.get("display_signal")
                             for region, label in assessed.items()
                             if label.get("assessment_status") == "ready"
-                            and label.get("display_signal") in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}}
+                            and label.get("display_signal") in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}
+                            and region not in db.AMBIGUOUS_LEGACY_REGION_KEYS}
     out = []
 
     def add(kind, name, region, signal, mlabel, mval, munit, raw, lat, lng, ref, total=None):
@@ -3157,17 +3164,24 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
         # 검증된 현재 KB 식별과 시·도가 일치할 때만 읽기 모델에서 코드를 보강한다.
         if kind == "일반매물" and not source_code:
             source_code = _verified_listing_region_code(region, raw.get("시도"))
-        identity_ok = (kind not in {"일반매물", "급매", "찐매물"}
-                       or _listing_region_matches_kb(region, raw.get("시도"), source_code))
+        if kind in {"일반매물", "급매", "찐매물"}:
+            identity_ok = _listing_region_matches_kb(region, raw.get("시도"), source_code)
+        elif kind == "청약":
+            identity_ok = (bool(region and raw.get("_signal_region") == region)
+                           and _listing_region_matches_kb(region, raw.get("시도")))
+        elif kind == "경매":
+            identity_ok = bool(region and region not in db.AMBIGUOUS_LEGACY_REGION_KEYS)
+        else:
+            identity_ok = True
         safe_signal = assessment.get("display_signal") if assessment.get("assessment_status") == "ready" else "HELD"
         if not identity_ok:
             safe_signal = "HELD"
         if safe_signal not in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK", "HELD"}:
             safe_signal = "HELD"
         safe_grade = grade.get(region) if identity_ok else None
-        identity_status = ("not_applicable" if kind not in {"일반매물", "급매", "찐매물"}
-                           else "matched" if raw.get("시도") and identity_ok
-                           else "name_only" if identity_ok else "held")
+        identity_status = ("held" if not identity_ok else
+                           "not_applicable" if kind not in {"일반매물", "급매", "찐매물"} else
+                           "matched" if raw.get("시도") else "name_only")
         tr = listing_timing(kind, raw, safe_signal, safe_grade, asof=_timing_asof())
         row = {"유형": kind, "단지명": name, "지역": region, "시도": raw.get("시도"),
                "지역코드": source_code, "시그널": safe_signal,
