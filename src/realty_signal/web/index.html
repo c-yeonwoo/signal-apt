@@ -3379,7 +3379,7 @@ function _laApplyResponse(types,d,preservePrice=false){
   const budgetOption=document.querySelector('#laSort option[value="budget"]');
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
-  document.getElementById('laStatus').textContent=`${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전 수집`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`;
+  document.getElementById('laStatus').textContent=`${_laData.length}건 · KB 관측 ${d.asof||'–'}${info.data_age_days!=null?` · 관측 ${info.data_age_days}일 경과`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`;
   initLaPriceFilter();
   if(price && _laPrice){
     _laPrice.active=!!price.active;
@@ -5216,6 +5216,18 @@ async function loadData(force=false){
   if(generation!==_marketGeneration) return;
   _marketRemember(fresh);
   _applyMarketData(fresh);
+}
+let _lastVisibleMarketCheck=0, _visibleMarketChecking=false;
+async function refreshVisibleMarket(){
+  if(!window._signalAppReady || document.visibilityState!=='visible' || _visibleMarketChecking ||
+     Date.now()-_lastVisibleMarketCheck<900000) return;
+  _lastVisibleMarketCheck=Date.now();
+  _visibleMarketChecking=true;
+  try{
+    await loadData();
+    if(location.hash.slice(1)==='all') await loadAllListings();
+  }catch(e){ /* 백그라운드 점검 실패는 다음 주기에 재시도 */ }
+  finally{ _visibleMarketChecking=false; }
 }
 let _showHist=false, _histCache={}, _lastM=null, _lastSig=null, _lastVol=null;
 // 오버레이 상태 — 전세수급 배경 구간(기본 off) + 경기 국면 밴드
@@ -7399,6 +7411,10 @@ async function startApp(needOnboard){
   if(!routeFromHash()) switchTab('dashboard');   // 해시 있으면 해당 탭, 없으면 대시보드 홈
   window.addEventListener('hashchange', routeFromHash);   // 뒤로/앞으로
   window._signalAppReady=true;
+  _lastVisibleMarketCheck=Date.now();
+  document.addEventListener('visibilitychange', refreshVisibleMarket);
+  window.addEventListener('focus', refreshVisibleMarket);
+  setInterval(refreshVisibleMarket, 900000);
   if(window.SignalV2 && !document.getElementById('onbDlg').open) SignalV2.openInitialLink();
   setupAuctionBookmarklet();
 }

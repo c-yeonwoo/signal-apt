@@ -22,6 +22,30 @@ test('inline app scripts parse and browse navigation keeps one list and the sign
   assert.doesNotMatch(targets.groupSubTabs.innerHTML, /data-sub="auction"|data-sub="report"/);
 });
 
+test('returning to a long-lived tab checks market and visible listings at most once per 15 minutes', async () => {
+  let now=1_000_000, marketChecks=0, listingChecks=0;
+  const ctx=vm.createContext({
+    Date:{now:()=>now}, window:{_signalAppReady:true},
+    document:{visibilityState:'visible'}, location:{hash:'#all'},
+    loadData:async()=>{marketChecks++;}, loadAllListings:async()=>{listingChecks++;},
+  });
+  vm.runInContext(extract('let _lastVisibleMarketCheck=', 'let _showHist='),ctx);
+  await ctx.refreshVisibleMarket();
+  await ctx.refreshVisibleMarket();
+  assert.equal(marketChecks,1);
+  assert.equal(listingChecks,1);
+  now+=900001;
+  ctx.document.visibilityState='hidden';
+  await ctx.refreshVisibleMarket();
+  assert.equal(marketChecks,1);
+  ctx.document.visibilityState='visible';
+  await ctx.refreshVisibleMarket();
+  assert.equal(marketChecks,2);
+  assert.equal(listingChecks,2);
+  assert.match(html,/KB 관측 \$\{d\.asof\|\|'–'\}.*관측 \$\{info\.data_age_days\}일 경과/);
+  assert.doesNotMatch(html,/info\.data_age_days\}일 전 수집/);
+});
+
 test('same named complex pins group only when display coordinates nearly match', () => {
   const ctx=vm.createContext({});
   vm.runInContext(extract('function _pinGroups(', 'function plotPins('),ctx);
