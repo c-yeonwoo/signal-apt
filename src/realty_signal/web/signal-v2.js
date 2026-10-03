@@ -35,6 +35,32 @@
     return `<div class="v2-row"><b>${esc(reason.label)}</b><br>${value}${threshold}${verdict}${source}${prior}</div>`;
   }
 
+  function listingQuickAnswer(report, question) {
+    const lines = report.lines || {};
+    if (question === 'price') return {
+      title:'가격이 싼가?',
+      answer: report.price?.['이유'] || lines.price ||
+        (report.price?.['상태'] === '관측비교' && Number(report.price?.['표본수']) > 0
+          ? `동일 조건 실거래 ${report.price['표본수']}건과 비교했습니다. 이 숫자만으로 싸다고 확정할 수 없습니다.`
+          : '비교 가능한 동일 조건 실거래가 부족해 싸다고 판단할 수 없습니다.'),
+      limit:'실거래 비교는 실제 계약 가격이나 현재 판매 가능 여부를 보증하지 않습니다.',
+    };
+    if (question === 'budget') return {
+      title:'내 예산에 맞나?',
+      answer:(report.partial_failures || []).includes('buyer_profile_unavailable')
+        ? '내 자금 프로필을 읽지 못해 예산 적합성을 보류했습니다.'
+        : lines.cash || report.buyer_fit?.reason || '저장된 자금 조건이 없어 비교할 수 없습니다.',
+      limit:'호가와 저장한 가정의 비교이며 대출 승인·세금·수리비 확인 전입니다.',
+    };
+    if (question === 'risk') return {
+      title:'뭘 조심해야 하나?',
+      answer:report.cautions?.[0]?.text || report.unknowns?.[0] ||
+        '이 자료에서 별도 주의 항목을 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.',
+      limit:'아래 주의할 점과 다음 확인 항목을 함께 살펴보세요.',
+    };
+    return null;
+  }
+
   async function paintRegion(region, regionId) {
     const generation = ++regionGeneration;
     const target = document.getElementById('haesolPanel');
@@ -123,6 +149,12 @@
         `${esc(x.label)} · ${esc(x.asof || '기준일 미확인')} · ${esc(x.status)}`).join('<br>');
       body.innerHTML = `<h2>${esc(item.name || '매물')} · ${money(item.asking_manwon)}</h2>
         <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)} · 수집 ${esc(item.collected_at || '시각 미확인')}${item.stale ? ' · 지난 수집 결과' : ''}</p>
+        <div class="v2-row" aria-label="이 리포트에 물어보기"><b>먼저 궁금한 것부터 보세요</b>
+          <p class="v2-muted">현재 리포트 근거를 쉽게 다시 보여 줍니다. 새 분석이나 Nick 호출은 하지 않습니다.</p>
+          <button type="button" class="btn" data-v2-quick-question="price">가격이 싼가?</button>
+          <button type="button" class="btn" data-v2-quick-question="budget">내 예산에 맞나?</button>
+          <button type="button" class="btn" data-v2-quick-question="risk">뭘 조심해야 하나?</button>
+          <div id="v2QuickAnswer" role="status" aria-live="polite"></div></div>
         <p>${esc((report.lines || {}).cash || '자금 계산은 확인이 필요합니다.')}</p>
         ${(report.partial_failures || []).includes('buyer_profile_unavailable') ? '<p class="v2-row v2-caution">내 자금 프로필을 불러오지 못해 예산 적합성은 보류했습니다. 가격 근거는 별도로 확인할 수 있습니다.</p>' : ''}
         <p>${esc((report.lines || {}).price || '현재 판매 여부와 실제 호가를 확인하세요.')}</p>
@@ -155,6 +187,15 @@
           <button type="button" class="btn" data-v2-report-feedback="no">아니요, 더 필요해요</button>
           <p id="v2ReportFeedbackStatus" class="v2-muted" role="status"></p></div>`;
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
+      body.querySelectorAll('[data-v2-quick-question]').forEach(button => button.onclick = () => {
+        if (generation !== listingGeneration || !dialog.open) return;
+        const answer = listingQuickAnswer(report, button.dataset.v2QuickQuestion);
+        if (!answer) return;
+        body.querySelectorAll('[data-v2-quick-question]').forEach(choice =>
+          choice.setAttribute('aria-pressed', String(choice === button)));
+        body.querySelector('#v2QuickAnswer').innerHTML = `<p><b>${esc(answer.title)}</b> ${esc(answer.answer)}</p>
+          <p class="v2-muted">${esc(answer.limit)}</p>`;
+      });
       body.querySelector('#v2ListingCompare').onclick = event => {
         event.currentTarget.textContent = addCompare(key);
       };
