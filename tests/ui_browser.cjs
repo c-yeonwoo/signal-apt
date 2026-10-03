@@ -51,14 +51,22 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/v2/discovery') {
-        const next=!!route.request().postDataJSON()?.cursor;
+        const spec=route.request().postDataJSON()||{};
+        const next=!!spec.cursor, finance=!!spec.max_monthly_manwon;
+        const noProfile=finance&&spec.prefer_region==='프로필없음';
+        const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
+          name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
+          recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
+          preference:{region:'테스트구',matched:true,coverage:100},
+          finance:finance?noProfile?{status:'no_confirmed_profile',reason:'매수력 확정 필요'}:
+            {status:'policy_unverified',monthly_manwon:120,cash_manwon:20000,
+              reason:'대출 규제·세율 최신성 미검증'}:null};
         data={private_access:true,source_state:'partial',coverage:{regions:['테스트구']},
           sources:[{kind:'일반매물',state:'partial'},{kind:'급매',state:'failed'}],
-          counts:{matched:2,verify:0,explore:0},next_cursor:next?null:'synthetic-next',
-          groups:{matched:[{listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
-            name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
-            recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
-            preference:{region:'테스트구',matched:true,coverage:100}}],verify:[],explore:[]}};
+          counts:finance?{matched:0,verify:1,explore:0}:{matched:2,verify:0,explore:0},
+          next_cursor:finance||next?null:'synthetic-next',
+          finance_context:finance?{status:noProfile?'no_confirmed_profile':'ready',policy_status:'unverified'}:null,
+          groups:{matched:finance?[]:[candidate],verify:finance?[candidate]:[],explore:[]}};
       }
       if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
         subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
@@ -398,6 +406,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('두번째 후보').waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),2);
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-next]').count(),0);
+    await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText(/총 월 상환 약 120만원/).waitFor();
+    assert.match(await page.locator('#v2DiscoverResults').textContent(),/후보는 확인 필요로 분류/);
+    assert.match(await page.locator('#v2DiscoverResults h3').textContent(),/확인 필요/);
+    await page.locator('#v2DiscoverForm [name=region]').fill('프로필없음');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.locator('[data-v2-finance-setup]').click();
+    assert.equal(await page.locator('#v2DiscoverDlg').evaluate(el=>el.open),false);
+    assert.equal(await page.locator('#view-mypage').isVisible(),true);
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }

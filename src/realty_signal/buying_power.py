@@ -337,6 +337,7 @@ def for_price(price: float, p: Params) -> dict:
         "비상자금": round(p.reserve_cash),
         "잔여현금": round(p.capital - cash["합계"]),
         "총월상환": round(total_monthly),
+        "총월상환정밀": total_monthly,  # 조건 경계 비교용. UI에는 반올림 값을 표시한다.
         "계산버전": MODEL_VERSION,
         "판단범위": "입력 가정 기반 추정이며 금융기관 승인 및 매물 권리 확인이 필요합니다",
         "정책검증": reg.policy_manifest(),

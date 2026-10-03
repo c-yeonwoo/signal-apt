@@ -92,6 +92,7 @@ def comparison_report(request: Request, data: dict = Body(...)):
 def discovery(request: Request, data: dict = Body(...)):
     from realty_signal import api as app_api
     from realty_signal.services import discovery_v2
+    from realty_signal.services import discovery_finance
 
     try:
         spec = discovery_v2.validate(data)
@@ -138,8 +139,24 @@ def discovery(request: Request, data: dict = Body(...)):
             del source["expected_count"]
             if not source["regions"]:
                 source["regions"] = sorted({row.get("지역") for row in source_rows if row.get("지역")})
+    scenario = None
+    if allowed and "max_monthly_manwon" in spec:
+        from realty_signal import db
+        uid = deps.uid(request)
+        profile_failed = False
+        try:
+            profile = db.profile_get(uid) if uid else None
+        except Exception:  # noqa: BLE001 — 자금 프로필 장애가 매물 검색 전체를 막지 않게 한다.
+            profile = None
+            profile_failed = True
+        scenario = discovery_finance.FinanceScenario(profile, sido_of=app_api._sido_of)
+        if profile_failed:
+            scenario.status = "profile_unavailable"
+    fingerprint = {"sources": sources, "finance": scenario.fingerprint,
+                   "finance_status": scenario.status} if scenario else sources
     try:
-        result = discovery_v2.discover(rows, spec, source_fingerprint=sources)
+        result = discovery_v2.discover(rows, spec, source_fingerprint=fingerprint,
+                                       finance_of=scenario.for_row if scenario else None)
     except ValueError as exc:
         if str(exc) == "stale_cursor":
             raise HTTPException(409, "수집 결과가 바뀌었습니다. 처음부터 다시 검색하세요.") from exc
@@ -152,6 +169,10 @@ def discovery(request: Request, data: dict = Body(...)):
                               "partial" if rows and degraded else "ready" if rows else
                               "partial_empty" if degraded else "empty")
     result["sources"] = sources
+    if scenario:
+        result["finance_context"] = {"status": scenario.status,
+                                     "policy_status": scenario.policy["status"],
+                                     "policy_declared_asof": scenario.policy["declared_asof"]}
     result["coverage"] = {"scope": "collected_sample", "regions": sorted({region for source in sources
                                                                             for region in source["regions"]}),
                           "source_count": len(sources)}
