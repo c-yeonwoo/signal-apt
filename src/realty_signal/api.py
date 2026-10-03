@@ -3231,20 +3231,40 @@ def _scan_regions() -> list[str]:
     known = set(_bundled_centroids())
     try:
         df = _signals_df()
-        buy = list(df[df["signal"].isin(["STRONG_BUY", "BUY"])]["region"])
         valid = set(df["region"]) | known
     except Exception as exc:  # noqa: BLE001 - KB 실패가 외부 매물 수집까지 막지 않게 한다
         log.warning("급매 대상 지역 시그널 미확인: %s", type(exc).__name__)
-        buy, valid = [], known
+        df, valid = None, known
+    try:
+        labels = md.assessed_signal_labels(date.today().isoformat()) if df is not None else {}
+    except Exception as exc:  # noqa: BLE001 - 오래된 원시 BUY로 스캔 대상을 고르지 않는다
+        log.warning("급매 대상 지역 안전 판정 미확인: %s", type(exc).__name__)
+        labels = {}
+    buy = ([r for r in df["region"] if (labels.get(r) or {}).get("assessment_status") == "ready"
+            and (labels.get(r) or {}).get("display_signal") in {"STRONG_BUY", "BUY"}]
+           if df is not None else [])
     owner_email = config.personal_listing_email()
     owner = db.user_by_email(owner_email) if owner_email else None
     favs = ([f["key"] for f in db.fav_list(owner["id"])
              if f["kind"] == "region" and f["key"] in valid] if owner else [])
     seen, out = set(), []
     for r in buy + favs:
-        if r not in seen:
+        if r not in seen and _scan_region_current(r):
             seen.add(r); out.append(r)
     return out
+
+
+def _scan_region_current(region: str) -> bool:
+    """동명/개편 전 지역의 중심점을 다른 구 스캔에 재사용하지 않는다."""
+    if region not in {"중구", "서구", "동구", "남구", "강서구", "북구", "인천 중구"}:
+        return True
+    try:
+        code = _code_of(region)
+    except Exception:  # noqa: BLE001 - 이름만으로 동명이 구를 짐작하지 않는다
+        return False
+    point = _bundled_centroids().get(region)
+    identity = _sigungu_identity_at(*point) if point else None
+    return bool(code and identity and identity[0] == region and identity[2] == code[:5])
 
 
 def _hanbang_regions() -> list[str]:
@@ -3253,7 +3273,7 @@ def _hanbang_regions() -> list[str]:
     owner = db.user_by_email(owner_email) if owner_email else None
     known = set(_bundled_centroids())
     favorites = ([f["key"] for f in db.fav_list(owner["id"])
-                  if f["kind"] == "region" and f["key"] in known] if owner else [])
+                  if f["kind"] == "region" and f["key"] in known and _scan_region_current(f["key"])] if owner else [])
     if len(favorites) >= 3:
         return list(dict.fromkeys(favorites))[:3]
     return list(dict.fromkeys(favorites + _scan_regions()))[:3]
