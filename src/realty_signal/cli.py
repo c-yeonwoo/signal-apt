@@ -58,6 +58,21 @@ def fetch():
                   f"(지역 {len(kb.regions)} · 지표 {len(kb.metrics)} · 최신 {kb.last_date.date()})")
 
 
+@app.command("region-audit")
+def region_audit_cmd():
+    """운영 DB의 지역 키 상태를 개인정보 없는 집계로만 읽는다. 자료는 변경하지 않는다."""
+    import json
+    from realty_signal import region_identity_audit
+
+    try:
+        kb = store.load()
+        report = region_identity_audit.audit(db.DB, kb)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        console.print(f"[red]지역 감사 불가:[/red] {type(exc).__name__}")
+        raise typer.Exit(1) from exc
+    typer.echo(json.dumps(report, ensure_ascii=False, sort_keys=True))
+
+
 def _macos_notify(title: str, message: str):
     """macOS 알림 센터로 푸시 (실패해도 무시)."""
     import shutil
