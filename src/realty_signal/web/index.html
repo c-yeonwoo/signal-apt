@@ -5169,6 +5169,20 @@ async function _fetchMarketData(){
 function _marketRevision(meta){
   return [meta?.last_date,meta?.signal_config_version,meta?.signal_guard_version].join('|');
 }
+function _defaultSignalRegion(){
+  const query=document.getElementById('search').value.trim();
+  const group=document.getElementById('groupFilter').value;
+  const visible = row => active.has(displaySignal(row))
+    && (!row['급지'] || activeGrade.has(row['급지']))
+    && (!group || row.group===group) && (!query || row.region.includes(query));
+  // 관심지역은 현재 코드가 확인된 항목만 들어 있다. 첫 방문에는 전체
+  // 시그널 상위 지역보다 사용자가 실제 추적하는 지역의 근거를 먼저 보여 준다.
+  for(const name of _favRegionKeyByName.keys()){
+    const favorite=allSignals.find(row=>row.region===name);
+    if(favorite && visible(favorite)) return name;
+  }
+  return (allSignals.find(visible)||allSignals[0])?.region;
+}
 function _applyMarketData(data){
   meta=data.meta; allSignals=data.signals;
   _signalTrendRegion=null;
@@ -5192,7 +5206,7 @@ function _applyMarketData(data){
   }
   renderZoneLegend(); renderList();
   const keep = selected && allSignals.find(r=>r.region===selected);
-  if(allSignals.length) selectRegion(keep ? selected : (allSignals.find(r=>active.has(displaySignal(r)))||allSignals[0]).region);
+  if(allSignals.length) selectRegion(keep ? selected : _defaultSignalRegion());
 }
 async function loadData(force=false){
   const cached=force?null:_marketCached();
