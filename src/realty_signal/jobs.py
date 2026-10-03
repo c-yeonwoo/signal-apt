@@ -12,7 +12,7 @@ def _schema(c):
         last_attempt REAL, failures INTEGER DEFAULT 0, error TEXT)""")
 
 
-def _claim(name, owner, lease_seconds):
+def _claim(name, owner, lease_seconds, *, expedite=False):
     c = db.conn()
     try:
         _schema(c)
@@ -20,6 +20,11 @@ def _claim(name, owner, lease_seconds):
         c.commit()
         c.execute("BEGIN IMMEDIATE")
         now = time.time()
+        # A newly due source must not wait for a persisted no-op interval from
+        # an older scheduler release. Keep failed jobs on their retry clock.
+        if expedite:
+            c.execute("UPDATE jobs SET due_at=? WHERE name=? AND due_at>? AND lease_until<=? AND failures=0",
+                      (now, name, now, now))
         changed = c.execute("UPDATE jobs SET owner=?,lease_until=?,last_attempt=? WHERE name=? AND due_at<=? AND lease_until<=?",
                             (owner, now+lease_seconds, now, name, now, now)).rowcount
         c.commit()
@@ -28,9 +33,9 @@ def _claim(name, owner, lease_seconds):
         c.close()
 
 
-def run(name, fn, *, interval, retry=3600, lease_seconds=300):
+def run(name, fn, *, interval, retry=3600, lease_seconds=300, expedite=False):
     owner = uuid4().hex
-    if not _claim(name, owner, lease_seconds):
+    if not _claim(name, owner, lease_seconds, expedite=expedite):
         return {"status": "not_due_or_running"}
     stop = threading.Event()
     def renew():
