@@ -3231,7 +3231,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             add("일반매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "등록일", m.get("등록일"), "", m, m.get("lat"), m.get("lng"),
                 {"hanbang_id": m.get("hanbang_id"), "hanbang_complex_id": m.get("hanbang_complex_id"),
-                 "전용면적": m.get("전용면적"), "층": m.get("층"), "호가": m.get("호가"),
+                 "전용면적": m.get("전용면적"), "층": m.get("층"), "방수": m.get("방수"), "호가": m.get("호가"),
                  "등록일": m.get("등록일"), "검증표시": m.get("검증표시")},
                 total=m.get("호가"))
     if "청약" in want:

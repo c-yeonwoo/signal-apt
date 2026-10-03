@@ -43,6 +43,14 @@ def _positive(value) -> float | None:
     return number if 0 < number < 1_000_000_000 else None
 
 
+def _rooms(value) -> int | None:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    return count if not isinstance(value, bool) and str(value).strip() == str(count) and 1 <= count <= 15 else None
+
+
 def normalize(row: dict) -> dict | None:
     """매매 아파트만 보존한다. 원문·연락처·이미지·상세주소는 절대 저장하지 않는다."""
     if row.get("atlfslKndCd") != "01" or row.get("dlngSeCd") != "A1":
@@ -70,7 +78,8 @@ def normalize(row: dict) -> dict | None:
         "hanbang_id": str(source_id), "hanbang_complex_id": str(row.get("hsmpInfoPk") or "") or None,
         "단지명": name, "지역": str(row.get("sggNm") or "").strip(),
         "호가": round(price), "전용면적": area, "평형": round(area / 3.3058, 1) if area else None,
-        "층": floor, "lat": lat, "lng": lng, "등록일": row.get("atlfslTrsmDt"),
+        "층": floor, "방수": _rooms(row.get("roomCnt")), "lat": lat, "lng": lng,
+        "등록일": row.get("atlfslTrsmDt"),
         "급매표시": row.get("atlfslSttsCd") == "02", "검증표시": row.get("atlfslVrfcYn") == "Y",
         "source": "hanbang",
     }

@@ -74,7 +74,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         const noProfile=finance&&spec.prefer_region_code==='11160';
         const preferred=!!spec.prefer_max_price_manwon||!!spec.prefer_min_area_m2;
         const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
-          name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
+          name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000,rooms:3},
           recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
           preference:preferred?{region:'테스트구',matched:true,score:spec.priority==='price'?75:67,coverage:spec.priority==='price'?75:67,
             priority:spec.priority||'balanced',
@@ -745,6 +745,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText('첫번째 후보').waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]').getAttribute('aria-pressed'),'false');
+    await page.locator('#v2DiscoverForm [name=min_rooms]').fill('3');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    assert.equal(discoveryPayloads.at(-1).min_rooms,3);
+    assert.match(await page.locator('#v2DiscoverResults [data-v2-card]').first().textContent(),/방 3개/);
+    await page.locator('#v2DiscoverForm [name=min_rooms]').fill('');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/총 월 상환 약 120만원/).waitFor();

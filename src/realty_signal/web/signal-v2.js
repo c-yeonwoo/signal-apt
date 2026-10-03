@@ -627,7 +627,7 @@
     const cash = finance && Number.isFinite(Number(finance.cash_manwon))
       ? `${esc(finance.cash_manwon)}만원` : '미계산';
     return `<div class="v2-row${x.eligibility === 'exceeded' ? ' v2-caution' : ''}" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
-      <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}</p>
+      <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}${x.listing.rooms != null ? ` · 방 ${esc(x.listing.rooms)}개` : ''}</p>
       ${x.eligibility === 'exceeded' ? '<p>설정한 필수 조건을 넘는 비교용 후보입니다. 구매 가능 추천이 아닙니다.</p>' : ''}
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
       <p>${x.eligibility === 'verify' || x.eligibility === 'exceeded' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
@@ -668,7 +668,7 @@
     const form = document.getElementById('v2DiscoverForm');
     const result = document.getElementById('v2DiscoverResults');
     const spec = {};
-    for (const field of ['max_price_manwon', 'min_area_m2', 'max_monthly_manwon',
+    for (const field of ['max_price_manwon', 'min_area_m2', 'min_rooms', 'max_monthly_manwon',
                          'prefer_max_price_manwon', 'prefer_min_area_m2']) {
       const value = form.elements[field].value.trim();
       if (value) spec[field] = Number(value);
@@ -744,7 +744,7 @@
       if (!groupHost.querySelector('[data-v2-card]') && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty')
         groupHost.innerHTML = `<p>현재 조건의 기본 후보가 없습니다.${data.counts.exceeded && !spec.include_exceeded ? ` 조건 초과 ${esc(data.counts.exceeded)}건을 비교용으로 보려면 위 선택란을 켜세요.` : ' 가격·면적·지역을 하나씩 조정해 보세요.'}</p>`;
       if (!cursor && !data.counts.matched && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty') {
-        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',
+        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',min_rooms:'최소 방 개수',
           max_monthly_manwon:'월 상환 상한',region_code:'필수 지역'};
         const options = Object.entries(data.single_condition_relaxations || {}).filter(([field,count]) => labels[field] && count > 0);
         if (options.length) {
