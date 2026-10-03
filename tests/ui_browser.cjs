@@ -308,6 +308,23 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(budgetUi.within,/호가·확정상한 이내/);
     assert.match(budgetUi.above,/호가·확정상한 초과/);
     assert.match(budgetUi.cash,/상한보다 높습니다/);
+    const priceUi=await page.evaluate(()=>{
+      const base={유형:'일반매물',단지명:'가격테스트',지역:'테스트구',시도:'서울',기회도:10};
+      _laApplyResponse('일반매물',{listings:[
+        {...base,key:'high',총액:160000}, {...base,key:'unknown',총액:null},
+        {...base,key:'low',총액:40000}],asof:'2026-09-28',
+        meta:{confirmed_budget:false,private_access:true}});
+      const all=window.__budgetItems.map(x=>x.key);
+      document.getElementById('laPriceMax').value='150000'; onLaPrice();
+      const filtered=window.__budgetItems.map(x=>x.key);
+      const note=document.getElementById('laPriceNote').textContent;
+      resetLaPrice();
+      return {all,filtered,restored:window.__budgetItems.map(x=>x.key),note};
+    });
+    assert.deepEqual(priceUi.all,['low','high','unknown']);
+    assert.deepEqual(priceUi.filtered,['low']);
+    assert.deepEqual(priceUi.restored,priceUi.all);
+    assert.match(priceUi.note,/가격 미상 1건 제외/);
     await page.evaluate(()=>{window.__generalRows=[]; mapSplit=(listId,mapId,items,opt)=>{
       window.__generalRows=items; document.getElementById(listId).innerHTML=opt.summary(items[0]).nm+opt.detail(items[0]);
     }; switchTab('general');});
