@@ -5,6 +5,7 @@
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const money = value => Number.isFinite(Number(value)) && Number(value) > 0
     ? `${(Number(value) / 10000).toFixed(2)}억` : '가격 미확인';
+  const enabled = name => window._featureFlags?.[name] !== false;
   const risks = {
     sale_weeks_incomplete:'최근 주간 가격 4주가 이어지지 않습니다',
     market_inputs_missing:'전세수급 또는 매수심리 자료가 없습니다',
@@ -79,6 +80,10 @@
 
   async function askExplanation(report, payload, target, isCurrent) {
     if (!target || !isCurrent()) return;
+    if (!enabled('contextual_explanations_enabled')) {
+      target.textContent = '추가 AI 설명은 잠시 중지됐습니다. 기본 근거 리포트는 계속 볼 수 있습니다.';
+      return;
+    }
     target.textContent = '선택한 리포트의 근거를 확인해 설명을 준비하고 있습니다…';
     const options = {method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({...payload, mode:payload.mode || 'easy'})};
@@ -112,6 +117,10 @@
     const target = document.getElementById('haesolPanel');
     if (!target) return;
     target.dataset.reportRegion = region;
+    if (!enabled('report_v2_enabled')) {
+      target.innerHTML = '<p class="v2-row v2-caution">독립 근거 리포트가 일시 중지됐습니다. 위 지역 배지와 출처 기준일만 참고하고, 재개 후 근거·반대 근거를 확인해 주세요.</p>';
+      return;
+    }
     try {
       const ref=regionId && regionId.startsWith('kb:') ? regionId : region;
       const report = await json(`/api/v2/regions/${encodeURIComponent(ref)}/report`);
@@ -139,10 +148,10 @@
         <p class="v2-muted">${change}</p>
         ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(a.raw_grade)} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
         <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
-        <div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
+        ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
           <button type="button" class="btn" id="v2RegionExplain">쉽게 설명</button>
           <button type="button" class="btn" id="v2RegionCounter">반대 근거 보기</button>
-          <div id="v2RegionExplanation" role="status" aria-live="polite"></div></div>
+          <div id="v2RegionExplanation" role="status" aria-live="polite"></div></div>` : ''}
         <button type="button" class="btn" id="v2RegionDiscover">이 지역 매물 비교</button>
         <button type="button" class="btn" id="v2RegionNote">관심 이유 기록</button>
         <details><summary>이 판정 보관하기</summary><p class="v2-muted">저장 당시 근거로 남습니다. 현재 판정은 위에서 다시 확인하세요.</p>
@@ -152,7 +161,8 @@
       </section>`;
       target.querySelector('#v2RegionDiscover').onclick = () => openDiscovery(region);
       for (const [id, mode] of [['v2RegionExplain','easy'],['v2RegionCounter','counterevidence']]) {
-        target.querySelector(`#${id}`).onclick = () => askExplanation(report,
+        const button = target.querySelector(`#${id}`);
+        if (button) button.onclick = () => askExplanation(report,
           {type:'region',key:ref,mode}, target.querySelector('#v2RegionExplanation'),
           () => generation === regionGeneration && target.dataset.reportRegion === region);
       }
@@ -187,6 +197,10 @@
 
   async function openListing(key) {
     if (!key) return;
+    if (!enabled('report_v2_enabled')) {
+      if (typeof window.openListingReport === 'function') window.openListingReport(key);
+      return;
+    }
     const generation = ++listingGeneration;
     const dialog = document.getElementById('v2ReportDlg');
     const body = document.getElementById('v2ReportBody');
@@ -210,12 +224,12 @@
           <button type="button" class="btn" data-v2-quick-question="budget">내 예산에 맞나?</button>
           <button type="button" class="btn" data-v2-quick-question="risk">뭘 조심해야 하나?</button>
           <div id="v2QuickAnswer" role="status" aria-live="polite"></div></div>
-        <div class="v2-row"><b>이 리포트 더 쉽게 보기</b><p class="v2-muted">선택하면 AI가 현재 근거만 다시 풀어 설명합니다. 기본 리포트와 숫자는 바꾸지 않습니다.</p>
+        ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>이 리포트 더 쉽게 보기</b><p class="v2-muted">선택하면 AI가 현재 근거만 다시 풀어 설명합니다. 기본 리포트와 숫자는 바꾸지 않습니다.</p>
           <button type="button" class="btn" data-v2-explain="easy">쉽게 설명</button>
           <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
           <label class="v2-muted">추가 질문 <input id="v2ExplainQuestion" maxlength="300" placeholder="이 근거에서 무엇을 확인할까요?"></label>
           <button type="button" class="btn" id="v2ExplainQuestionSend">이 근거에 질문</button>
-          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>
+          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}
         <p>${esc((report.lines || {}).cash || '자금 계산은 확인이 필요합니다.')}</p>
         ${(report.partial_failures || []).includes('buyer_profile_unavailable') ? '<p class="v2-row v2-caution">내 자금 프로필을 불러오지 못해 예산 적합성은 보류했습니다. 가격 근거는 별도로 확인할 수 있습니다.</p>' : ''}
         <p>${esc((report.lines || {}).price || '현재 판매 여부와 실제 호가를 확인하세요.')}</p>
@@ -253,7 +267,8 @@
       body.querySelectorAll('[data-v2-explain]').forEach(button => button.onclick = () =>
         askExplanation(report, {type:'listing',key,mode:button.dataset.v2Explain},
           explanationTarget, currentExplanation));
-      body.querySelector('#v2ExplainQuestionSend').onclick = () => {
+      const questionButton = body.querySelector('#v2ExplainQuestionSend');
+      if (questionButton) questionButton.onclick = () => {
         const question = body.querySelector('#v2ExplainQuestion').value.trim();
         if (!question) { explanationTarget.textContent = '질문을 입력해 주세요.'; return; }
         askExplanation(report, {type:'listing',key,mode:'question',question},
@@ -553,6 +568,12 @@
   }
 
   function openDiscovery(region = '') {
+    if (!enabled('discovery_v2_enabled')) {
+      if (typeof window.focusListings === 'function') window.focusListings(region);
+      else if (typeof window.switchTab === 'function') window.switchTab('all');
+      if (typeof window.toast === 'function') window.toast('조건별 발견은 일시 중지됐습니다. 기본 매물 목록에서 확인해 주세요.');
+      return;
+    }
     discoveryGeneration++;
     const dialog = document.getElementById('v2DiscoverDlg');
     const form = document.getElementById('v2DiscoverForm');

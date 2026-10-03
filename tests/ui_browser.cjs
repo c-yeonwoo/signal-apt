@@ -996,6 +996,33 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       assert(layout.results<=layout.available,`discovery results overflow at ${width}px: ${JSON.stringify(layout)}`);
       await page.evaluate(()=>document.getElementById('v2DiscoverDlg').close());
     }
+    const rollout = await page.evaluate(async()=>{
+      const original=window.openListingReport;
+      window._featureFlags={report_v2_enabled:true,discovery_v2_enabled:true,
+        contextual_explanations_enabled:false,nick_global_entry_enabled:false};
+      document.body.classList.add('nick-global-disabled');
+      await SignalV2.paintRegion('테스트구','kb:1114000000');
+      const aiHidden=!document.getElementById('v2RegionExplain');
+      window._featureFlags.report_v2_enabled=false;
+      window._featureFlags.discovery_v2_enabled=false;
+      window.__fallbackKey=null;
+      window.openListingReport=key=>{window.__fallbackKey=key;};
+      SignalV2.openListing('일반매물:synthetic-hb-1');
+      SignalV2.openDiscovery('테스트구');
+      await SignalV2.paintRegion('테스트구','kb:1114000000');
+      switchTab('signal');
+      const result={aiHidden,fallbackKey:window.__fallbackKey,
+        discoverClosed:!document.getElementById('v2DiscoverDlg').open,
+        reportPaused:document.getElementById('haesolPanel').textContent.includes('일시 중지'),
+        nickHidden:getComputedStyle(document.getElementById('advFab')).display==='none',
+        retainedClass:document.body.classList.contains('nick-global-disabled')};
+      window.openListingReport=original;
+      window._featureFlags={};
+      delete window.__fallbackKey;
+      return result;
+    });
+    assert.deepEqual(rollout,{aiHidden:true,fallbackKey:'일반매물:synthetic-hb-1',
+      discoverClosed:true,reportPaused:true,nickHidden:true,retainedClass:true});
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360/390/1280px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }

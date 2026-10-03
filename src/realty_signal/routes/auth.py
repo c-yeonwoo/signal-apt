@@ -91,7 +91,8 @@ def auth_me(request: Request):
         return JSONResponse({"auth": False}, status_code=401)
     return {"auth": True, "email": u["email"], "profile": db.profile_get(u["id"]),
             "onboarded": bool(db.profile_get(u["id"])),
-            "admin": (u["email"] or "").lower() in config.admin_whitelist()}
+            "admin": (u["email"] or "").lower() in config.admin_whitelist(),
+            "features": config.rollout_flags()}
 
 
 @router.get("/api/profile")

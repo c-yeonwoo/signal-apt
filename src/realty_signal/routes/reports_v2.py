@@ -8,6 +8,7 @@ import json
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from realty_signal import config
 from realty_signal.routes import deps
 from realty_signal.services import market_data as md
 from realty_signal.services import decision_notes_v2 as notes
@@ -22,8 +23,14 @@ def _id(payload: dict) -> str:
                              default=str).encode()).hexdigest()
 
 
+def _require_feature(name: str) -> None:
+    if not config.rollout_flags()[name]:
+        raise HTTPException(503, "이 기능은 잠시 중지됐습니다. 기존 탐색 화면을 이용해 주세요.")
+
+
 @router.get("/api/v2/regions/{region}/report")
 def region_report(region: str):
+    _require_feature("report_v2_enabled")
     from realty_signal.services import signal_assessment
 
     resolved = md.region_for_ref(region)
@@ -52,6 +59,7 @@ def region_report(region: str):
 
 
 def _listing_report(request: Request, key: str, *, cache_only: bool) -> JSONResponse:
+    _require_feature("report_v2_enabled")
     from realty_signal.routes.market import listing_analysis
 
     legacy = listing_analysis(request, key, stage="full", cache_only=cache_only)
@@ -164,6 +172,7 @@ def report_snapshot_delete(request: Request, report_id: str):
 
 @router.post("/api/v2/comparisons")
 def comparison_report(request: Request, data: dict = Body(...)):
+    _require_feature("report_v2_enabled")
     from realty_signal.routes.market import listing_compare
 
     keys = data.get("keys") if isinstance(data, dict) else None
@@ -181,6 +190,7 @@ def comparison_report(request: Request, data: dict = Body(...)):
 @router.post("/api/v2/reports/{report_id}/explanations")
 def explanation_request(request: Request, report_id: str, data: dict = Body(...)):
     """Explicit paid explanation request against the current authorized report."""
+    _require_feature("contextual_explanations_enabled")
     from realty_signal.services import report_narrative as narrative
 
     uid = deps.uid(request)
@@ -263,6 +273,7 @@ def _discovery_regions() -> list[dict]:
 
 @router.get("/api/v2/discovery/regions")
 def discovery_regions():
+    _require_feature("discovery_v2_enabled")
     options = _discovery_regions()
     return JSONResponse({"status": "ready" if options else "unverified", "regions": options}, headers=PRIVATE)
 
@@ -289,6 +300,7 @@ def _canonical_discovery_region(spec: dict) -> dict:
 
 @router.post("/api/v2/discovery")
 def discovery(request: Request, data: dict = Body(...)):
+    _require_feature("discovery_v2_enabled")
     from realty_signal import api as app_api
     from realty_signal.services import discovery_v2
     from realty_signal.services import discovery_finance
@@ -406,6 +418,7 @@ def discovery(request: Request, data: dict = Body(...)):
 @router.post("/api/v2/discovery/occupancy")
 def discovery_occupancy_lookup(request: Request, data: dict = Body(...)):
     """사용자가 고른 한방 매물 하나의 입주 가능일만 상세 조회한다."""
+    _require_feature("discovery_v2_enabled")
     from realty_signal.services import discovery_occupancy, property_analysis
 
     uid = deps.uid(request)
@@ -432,6 +445,7 @@ def discovery_occupancy_lookup(request: Request, data: dict = Body(...)):
 @router.post("/api/v2/discovery/commute")
 def discovery_commute_lookup(request: Request, data: dict = Body(...)):
     """현재 매물 한 건과 저장 직장의 참고 경로만 명시 요청으로 조회한다."""
+    _require_feature("discovery_v2_enabled")
     from realty_signal import db
     from realty_signal.services import discovery_commute, discovery_v2, property_analysis
 
