@@ -600,6 +600,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.waitForTimeout(220);
     assert.equal(await page.locator('#v2LocationResult').textContent(),'');
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    const nickCallsBeforeLegacyReport=nickPayloads.length;
     await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-1'));
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
@@ -631,13 +632,18 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByRole('button',{name:'내 지정 지우기'}).click();
     await page.getByRole('button',{name:'지도에서 출입구 후보 지정',exact:true}).waitFor();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.classList.contains('adv-report-mode')),true);
+    assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport);
     await page.getByRole('button',{name:'닉과 대화'}).click();
+    assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport);
+    await page.locator('#advInput').fill('이 매물의 가격 근거를 설명해줘');
+    await page.locator('#advSendBtn').click();
     await page.getByText('선택 매물의 가격을 확인하세요.',{exact:false}).waitFor();
     assert.equal(nickPayloads.at(-1).listing_key,'일반매물:synthetic-hb-1');
     await page.getByRole('button',{name:'매물 리포트'}).click();
     await page.getByRole('button',{name:'＋ 비교함 담기'}).click();
     await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-2'));
     await page.getByText('두번째테스트단지',{exact:true}).last().waitFor();
+    assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport+1);
     await page.getByRole('button',{name:'＋ 비교함 담기'}).click();
     await page.getByRole('button',{name:'선택 매물 비교 2/3'}).click();
     await page.getByText('같은 면적 국토부 실거래',{exact:false}).waitFor();
