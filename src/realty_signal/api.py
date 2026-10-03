@@ -759,6 +759,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         out: dict = {}
         if private_allowed and kind in ("급매", "찐매물", "전체"):
             out["가격근거주의"] = "급매갭·시세갭은 공급사 중위시세 기준의 표시값이며, 국토부 실거래로 검증한 할인율이 아닙니다."
+        safe_signals = _display_signal_map() if private_allowed and kind in ("급매", "찐매물", "전체") else {}
         if kind in ("일반매물", "전체") and private_allowed:
             try:
                 hb = json.loads(HANBANG_FILE.read_text(encoding="utf-8")).get("listings", []) if HANBANG_FILE.exists() else []
@@ -781,7 +782,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
                 qs = [m for m in qs if region in (m.get("지역") or "")]
             qs = sorted(qs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
             out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
-                          "호가": m.get("호가"), "급매갭": m.get("급매갭"), "시그널": m.get("시그널")} for m in qs]
+                          "호가": m.get("호가"), "급매갭": m.get("급매갭"),
+                          "시그널": safe_signals.get(m.get("지역"), "HELD")} for m in qs]
         if kind in ("찐매물", "전체") and private_allowed:
             try:
                 cs = json.loads(CERTIFIED_FILE.read_text(encoding="utf-8")).get("listings", []) if CERTIFIED_FILE.exists() else []
@@ -791,7 +793,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
                 cs = [m for m in cs if region in (m.get("지역") or "")]
             cs = sorted(cs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
             out["찐매물"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
-                            "호가": m.get("호가"), "시세갭": m.get("급매갭"), "시그널": m.get("시그널")} for m in cs]
+                            "호가": m.get("호가"), "시세갭": m.get("급매갭"),
+                            "시그널": safe_signals.get(m.get("지역"), "HELD")} for m in cs]
         if kind in ("경매", "전체"):
             from realty_signal.auction import AUCTION_FILE
             try:
@@ -908,7 +911,11 @@ def _signal_map() -> dict:
 
 def _display_signal_map() -> dict:
     """User-facing grades fail closed while preserving candidate-region coverage."""
-    raw = _signal_map()
+    try:
+        raw = _signal_map()
+    except Exception as exc:  # noqa: BLE001 — 원천 장애는 원시 BUY 재노출 사유가 아니다.
+        log.warning("raw signal map unavailable: %s", exc)
+        return {}
     try:
         labels = md.assessed_signal_labels(date.today().isoformat())
     except Exception as exc:  # noqa: BLE001 — 판정 실패는 원시 BUY 노출 사유가 아니다.

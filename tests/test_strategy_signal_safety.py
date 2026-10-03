@@ -1,5 +1,6 @@
 """User-facing strategy cards must never revive an unsafe raw BUY grade."""
 
+import json
 import pandas as pd
 from types import SimpleNamespace
 
@@ -22,6 +23,11 @@ def test_display_map_fails_closed_when_assessment_unavailable(monkeypatch):
         raise RuntimeError("assessment unavailable")
     monkeypatch.setattr(api.md, "assessed_signal_labels", unavailable)
     assert api._display_signal_map() == {"노원구": "HELD"}
+
+
+def test_display_map_returns_no_unsafe_grade_when_raw_source_unavailable(monkeypatch):
+    monkeypatch.setattr(api, "_signal_map", lambda: (_ for _ in ()).throw(RuntimeError("KB unavailable")))
+    assert api._display_signal_map() == {}
 
 
 def test_strategy_cards_do_not_promote_held_raw_buy(monkeypatch):
@@ -100,3 +106,21 @@ def test_redevelopment_cards_use_safe_grade(monkeypatch):
     monkeypatch.setattr(api, "db_has_redev_cache", lambda region: True)
     assert api.redev_candidates("노원구")["시그널"] == "HELD"
     assert api._advisor_tool("get_redev", {"region": "노원구"})["시그널"] == "HELD"
+
+
+def test_nick_listing_cache_signal_is_rechecked_at_answer_time(monkeypatch, tmp_path):
+    quicksale = tmp_path / "quicksale.json"
+    certified = tmp_path / "certified.json"
+    for path in (quicksale, certified):
+        path.write_text(json.dumps({"listings": [{"단지명": "테스트단지", "지역": "노원구",
+                                                "호가": 50000, "급매갭": -5,
+                                                "시그널": "STRONG_BUY"}]}), encoding="utf-8")
+    monkeypatch.setattr(api, "QUICKSALE_FILE", quicksale)
+    monkeypatch.setattr(api, "CERTIFIED_FILE", certified)
+    monkeypatch.setattr(api, "HANBANG_FILE", tmp_path / "hanbang.json")
+    monkeypatch.setattr(api.auction, "AUCTION_FILE", tmp_path / "auction.json")
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **kwargs: True)
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {"노원구": "HELD"})
+    answer = api._advisor_tool("get_listings", {"kind": "전체"}, uid=1)
+    assert answer["급매"][0]["시그널"] == "HELD"
+    assert answer["찐매물"][0]["시그널"] == "HELD"
