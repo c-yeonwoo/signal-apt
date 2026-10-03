@@ -48,3 +48,19 @@ def test_integrated_auction_keeps_raw_for_audit_but_ranks_with_hold(monkeypatch)
 def test_auction_enrichment_without_assessment_is_held():
     row = auction.enrich([_listing()], {})[0]
     assert row["지역시그널"] == "HELD"
+
+
+def test_name_only_auction_in_same_named_district_cannot_borrow_buy(monkeypatch):
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {"중구": "BUY", "노원구": "BUY"})
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(api.md, "assessed_signal_labels", lambda today: {
+        "중구": {"display_signal": "BUY", "assessment_status": "ready"}})
+    monkeypatch.setattr(api, "_signal_map", lambda: {"중구": "BUY"})
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-04")
+    monkeypatch.setattr(auction, "load", lambda: [_listing("중구")])
+    assert auction_routes.buy_regions() == [{"region": "노원구", "signal": "BUY"}]
+    assert auction_routes.auction_listings()["listings"][0]["지역시그널"] == "HELD"
+    row = api._build_listings({"경매"})[0]
+    assert row["시그널"] == "HELD"
+    assert row["지역식별상태"] == "held"
+    assert row["원시시그널"] == "BUY"

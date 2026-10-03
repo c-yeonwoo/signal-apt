@@ -24,7 +24,7 @@ def _asdict(lst):
 def buy_regions():
     from realty_signal import api as app_api
 
-    safe = app_api._display_signal_map()
+    safe = app_api._auction_signal_map()
     return [{"region": region, "signal": grade} for region, grade in safe.items()
             if grade in {"STRONG_BUY", "BUY"}]
 
@@ -38,7 +38,7 @@ def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익
     ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
     return {
         "params": {"target_margin": target_margin},
-        "listings": auction.enrich(auction.load(), app_api._display_signal_map(), ov),
+        "listings": auction.enrich(auction.load(), app_api._auction_signal_map(), ov),
     }
 
 
