@@ -107,6 +107,10 @@ CREATE INDEX IF NOT EXISTS ix_alert_outbox_v2_user
     ON alert_outbox_v2(uid,created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_alert_outbox_v2_unread
     ON alert_outbox_v2(uid,seen_at,created_at DESC);
+CREATE TABLE IF NOT EXISTS region_watch_state_v2(
+    uid INTEGER NOT NULL, favorite_key TEXT NOT NULL,
+    assessment_id TEXT NOT NULL, updated_at INTEGER NOT NULL,
+    PRIMARY KEY(uid,favorite_key));
 """
 
 _migrated = [False]
@@ -381,6 +385,10 @@ def fav_add(uid: int, kind: str, key: str, label: str) -> None:
 def fav_remove(uid: int, kind: str, key: str) -> None:
     c = conn()
     c.execute("DELETE FROM favorites WHERE uid=? AND kind=? AND key=?", (uid, kind, key))
+    if kind == "region":
+        c.execute("DELETE FROM region_watch_state_v2 WHERE uid=? AND favorite_key=?", (uid, key))
+        c.execute("DELETE FROM alert_outbox_v2 WHERE uid=? AND subject_type='region' AND subject_key=?",
+                  (uid, key))
     c.commit()
     c.close()
 

@@ -687,14 +687,32 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(!JSON.stringify(eventPayloads).includes('synthetic-hb-1'));
     await page.evaluate(()=>{
       document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
-      renderAlerts({watch_events:[{subject_type:'listing',subject_key:'일반매물:synthetic-hb-1',
+      renderAlerts({region_events:[{subject_type:'region',subject_key:'kb:1114000000',
+        kind:'region_evidence',created_at:1780000000,seen:false,
+        payload:{region:'테스트구<img src=x onerror=alert(1)>',region_id:'kb:1114000000',asof:'2026-09-28',
+          old_grade:'매수',new_grade:'관망',changed_reasons:[{label:'전세수급 압력'}]}},
+        {subject_type:'region',subject_key:'kb:1114000000',kind:'region_evidence',
+          created_at:1780000001,seen:true,
+          payload:{region:'테스트구',region_id:'kb:1114000000',asof:'2026-09-28',old_grade:'매수',
+            new_grade:'관망',changed_reasons:[{label:'전세수급 압력'}]}}],
+        watch_events:[{subject_type:'listing',subject_key:'일반매물:synthetic-hb-1',
         kind:'listing_price',created_at:1780000000,seen:false,
         payload:{name:'<img src=x onerror=alert(1)>',region:'테스트구',old_price:50000,new_price:47000}}],
         timing:[],nbhd:[],changes:[],digest:[],unread:1,prefs:{listing_price:true,new_alternative:true}});
       document.getElementById('alertsDlg').showModal();
     });
     assert.match(await page.locator('#alertsBody').textContent(),/확인된 호가 5.0억 → 4.7억/);
+    assert.match(await page.locator('#alertsBody').textContent(),/과거 발행 기록은 현재 매수 신호가 아닙니다/);
     assert.equal(await page.locator('#alertsBody img').count(),0);
+    await page.evaluate(()=>{
+      window._signalAppReady=false;
+      allSignals=[{region:'테스트구',region_id:'kb:1114000000',group:'서울',
+        signal:'BUY',display_signal:'BUY',assessment_status:'ready',급지:'B',
+        전세수급:180,매수우위지수:68}];
+    });
+    await page.locator('#alertsBody [data-alert-region="테스트구"]').click();
+    await page.locator('#haesolPanel').getByText(/지역 신호만 보여 줍니다/).waitFor();
+    await page.evaluate(()=>document.getElementById('alertsDlg').showModal());
     await page.locator('#alertsBody [data-alert-listing]').click();
     await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();

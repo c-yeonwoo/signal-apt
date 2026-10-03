@@ -18,6 +18,7 @@ DEFAULT_PREFS = {
     "nbhd_change": True,
     "listing_price": True,
     "new_alternative": True,
+    "region_evidence": True,
     "timing_min": 70,
 }
 

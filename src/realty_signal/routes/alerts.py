@@ -35,7 +35,7 @@ def alerts(request: Request):
     """Alert Engine v1 — 시그널 변동·고타이밍 매물·동네 diff."""
     from realty_signal.brain import alerts as alert_engine
     from realty_signal import api as app_api
-    from realty_signal.services import watch_alerts_v2
+    from realty_signal.services import region_alerts_v2, watch_alerts_v2
 
     uid = deps.uid(request)
     favs = set(db.actionable_region_favs(uid)) if uid else set()
@@ -59,14 +59,18 @@ def alerts(request: Request):
             uid, private_allowed=deps.personal_listings_allowed(request))
         result["watch_events"] = events["items"]
         result["unread"] += events["unread"]
+        region_events = region_alerts_v2.list_events(uid)
+        result["region_events"] = region_events["items"]
+        result["unread"] += region_events["unread"]
     else:
         result["watch_events"] = []
+        result["region_events"] = []
     return result
 
 
 @router.post("/api/alerts/seen")
 def alerts_seen(request: Request):
-    from realty_signal.services import watch_alerts_v2
+    from realty_signal.services import region_alerts_v2, watch_alerts_v2
 
     uid = deps.uid(request)
     if not uid:
@@ -77,6 +81,7 @@ def alerts_seen(request: Request):
         last = ""
     db.kv_set(f"alerts_seen:{uid}", last)
     watch_alerts_v2.mark_seen(uid, private_allowed=deps.personal_listings_allowed(request))
+    region_alerts_v2.mark_seen(uid)
     return {"ok": True}
 
 
