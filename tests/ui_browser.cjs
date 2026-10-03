@@ -92,6 +92,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         positive:[{text:'동일 조건 실거래가 있습니다.'}],
         cautions:[{text:'현재 판매 여부는 확인되지 않았습니다.'}],
         next_actions:['실제 호가 확인'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
+      if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:profile-fail')
+        data.partial_failures=['buyer_profile_unavailable'];
       if(url.pathname==='/api/v2/listings/report') reportsByKey.set(url.searchParams.get('key'),data);
       if(url.pathname==='/api/v2/report-snapshots' && route.request().method()==='POST') {
         const request=route.request().postDataJSON(), report=reportsByKey.get(request.key);
@@ -380,6 +382,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>SignalV2.openListing('일반매물:location-fail'));
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
     await page.locator('#v2LocationResult').getByText(/자료를 불러오지 못했습니다/).waitFor();
+    assert.match(await page.locator('#v2ReportBody').textContent(),/가격 근거/);
+    await page.evaluate(()=>SignalV2.openListing('일반매물:profile-fail'));
+    await page.locator('#v2ReportBody').getByText(/내 자금 프로필을 불러오지 못해/).waitFor();
     assert.match(await page.locator('#v2ReportBody').textContent(),/가격 근거/);
     await page.evaluate(()=>SignalV2.openListing('일반매물:location-slow'));
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
