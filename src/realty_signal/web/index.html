@@ -5032,7 +5032,7 @@ async function _fetchMarketData(){
 function _applyMarketData(data){
   meta=data.meta; allSignals=data.signals;
   _signalTrendRegion=null;
-  document.getElementById('dateTxt').textContent = `최신 ${meta.last_date}`;
+  document.getElementById('dateTxt').textContent = `KB 기준 ${meta.last_date}`;
   {
     const rg = data.regime;
     const box = document.getElementById('regimeBox');
@@ -5931,7 +5931,7 @@ function openSources(){
     + `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <thead><tr style="color:var(--dim);font-size:11px;text-align:left"><th style="padding:7px 6px">지표</th><th style="padding:7px 6px">출처</th><th style="padding:7px 6px;white-space:nowrap">갱신주기</th></tr></thead>
       <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 6px">${r[0]}</td><td style="padding:8px 6px;color:var(--dim)">${r[1]}</td><td style="padding:8px 6px;color:var(--dim);white-space:nowrap">${r[2]}</td></tr>`).join('')}</tbody></table>`
-    + `<div style="font-size:11px;color:var(--dim);margin-top:12px">현재 KB 데이터 ${asof} · 앱은 주간 자동 갱신됩니다. 지표는 참고용이며 실제 투자 판단·실거래 확인은 이용자 책임입니다.</div>`;
+    + `<div style="font-size:11px;color:var(--dim);margin-top:12px">현재 ${asof} · 앱은 주간 자동 갱신됩니다. 지표는 참고용이며 실제 투자 판단·실거래 확인은 이용자 책임입니다.</div>`;
   document.getElementById('sourceDlg').showModal();
   loadFreshness();
 }
@@ -5951,19 +5951,26 @@ async function loadFreshness(){
   let d; try{ d=await (await fetch('/api/freshness')).json(); }
   catch(e){ box.innerHTML='<div style="color:var(--dim);font-size:12px">신선도 정보를 불러오지 못했습니다.</div>'; return; }
   const now=d.now||Math.floor(Date.now()/1000);
-  const dot=ts=>{ if(!ts) return '#94a3b8'; const days=(now-ts)/86400; return days<=8?'#16a34a':days<=31?'#ca8a04':'#dc2626'; };
-  const when=(s)=>{ const r=_relTime(s.ts, now); return r?`<b>${r}</b>`:`<span style="color:var(--dim)">${s.cycle||'–'}</span>`; };
+  const kbAsOf=d.sources.find(s=>s.key==='signal')?.asof;
+  const kbAsOfTs=/^\d{4}-\d{2}-\d{2}$/.test(kbAsOf||'') ? Date.parse(`${kbAsOf}T00:00:00Z`)/1000 : null;
+  const kbAge=Number.isFinite(kbAsOfTs) && kbAsOfTs ? (now-kbAsOfTs)/86400 : null;
+  const dot=s=>{ const ts=s.key==='signal' ? kbAsOfTs : s.ts;
+    if(!ts) return '#94a3b8'; const days=(now-ts)/86400;
+    return days<=8?'#16a34a':days<=(s.key==='signal'?14:31)?'#ca8a04':'#dc2626'; };
+  const when=s=>{ const r=_relTime(s.key==='signal'?kbAsOfTs:s.ts, now);
+    return r?`<b>${s.key==='signal'?'관측 ':''}${r}</b>`:`<span style="color:var(--dim)">${s.key==='signal'?'관측일 미확인':s.cycle||'–'}</span>`; };
   box.innerHTML=`<div style="font-size:13px;font-weight:700;margin-bottom:2px">데이터 신선도 <span style="font-weight:400;font-size:11px;color:var(--dim)">· 소스별 최종 갱신</span></div>
     <div style="font-size:11px;color:var(--dim);margin-bottom:8px">분석 기준일 <b style="color:var(--txt)">${d['기준일']||'–'}</b> (KB 시장 시그널)</div>`
+    + (kbAge>8 ? `<p class="v2-caution" style="font-size:11px;margin:0 0 8px">KB 관측 기준일이 ${Math.floor(kbAge)}일 전입니다. 최신 공표를 확인하기 전까지 이 시그널을 현재 시장 상황으로 단정하지 마세요.</p>` : '')
     + d.sources.map(s=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)">
-        <span style="width:8px;height:8px;border-radius:50%;background:${dot(s.ts)};margin-top:5px;flex:none"></span>
+        <span style="width:8px;height:8px;border-radius:50%;background:${dot(s)};margin-top:5px;flex:none"></span>
         <div style="flex:1;min-width:0">
           <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600">${s.label}</span><span style="white-space:nowrap;font-size:12px">${when(s)}</span></div>
-          <div style="font-size:11px;color:var(--dim);line-height:1.5">${s.note||''} <span style="opacity:.8">· 주기: ${s.cycle||'–'}</span></div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.5">${s.key==='signal'?`관측 ${s.asof||'기준일 미확인'} · 최종 수집 ${_relTime(s.ts,now)||'시각 미확인'} · `:''}${s.note||''} <span style="opacity:.8">· 주기: ${s.cycle||'–'}</span></div>
         </div></div>`).join('')
     // 색만으로 정보를 전달하지 않는다 — 점 색 + 글자 라벨을 같이 준다(색각 이상 대응)
     + `<div style="font-size:10px;color:var(--dim);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">`
-    + [['최신','8일 이내','var(--sig-strong)'],['보통','한 달 이내','var(--sig-watch)'],
+    + [['최신','8일 이내','var(--sig-strong)'],['보통','일반 원천 한 달 이내·KB 관측 14일 이내','var(--sig-watch)'],
        ['오래됨','','var(--sig-sell)'],['미수집','실시간 또는 없음','var(--sig-neutral)']]
         .map(([l,d2,c])=>`<span style="display:inline-flex;align-items:center;gap:4px">
           <span style="width:7px;height:7px;border-radius:50%;background:${c}"></span>${l}${d2?` (${d2})`:''}</span>`).join('')
