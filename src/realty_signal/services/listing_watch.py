@@ -8,18 +8,31 @@ from __future__ import annotations
 
 WATCHABLE = {"급매", "찐매물", "일반매물", "청약", "경매"}
 PRIVATE = {"급매", "찐매물", "일반매물"}
+COLLIDING_DISTRICTS = {"중구", "강서구", "서구", "동구", "남구", "북구"}
+
+
+def same_region(a: dict, b: dict) -> bool:
+    """같은 구 이름만으로 다른 시도의 매물을 대안으로 묶지 않는다."""
+    region = a.get("지역")
+    if not region or region != b.get("지역"):
+        return False
+    a_sido, b_sido = a.get("시도"), b.get("시도")
+    if a_sido and b_sido:
+        return a_sido == b_sido
+    return region not in COLLIDING_DISTRICTS
 
 
 def public_fields(row: dict) -> dict:
     ref = row.get("ref") or {}
     return {"key": row.get("key"), "kind": row.get("유형"), "name": row.get("단지명"),
-            "region": row.get("지역"), "price": row.get("총액"), "pyeong": row.get("평형"),
+            "region": row.get("지역"), "region_sido": row.get("시도"),
+            "price": row.get("총액"), "pyeong": row.get("평형"),
             "dday": ref.get("Dday"), "status": row.get("지표값") if row.get("유형") == "청약" else None,
             "stale": bool(row.get("stale")), "fetched_at": row.get("fetched_at")}
 
 
 def _same_complex(a: dict, b: dict) -> bool:
-    if not a.get("단지명") or not a.get("지역"):
+    if not a.get("단지명") or not same_region(a, b):
         return False
     ar, br = a.get("ref") or {}, b.get("ref") or {}
     if ar.get("complex_no") and br.get("complex_no"):
@@ -38,7 +51,7 @@ def _same_source_listing(a: dict, b: dict) -> bool:
 
 
 def _similar(a: dict, b: dict) -> bool:
-    if a.get("유형") != b.get("유형") or a.get("지역") != b.get("지역"):
+    if a.get("유형") != b.get("유형") or not same_region(a, b):
         return False
     ap, bp = a.get("총액"), b.get("총액")
     if bool(ap) != bool(bp):

@@ -1662,6 +1662,10 @@ function safeMarketSignal(region){
   const row=(allSignals||[]).find(x=>x.region===region);
   return displaySignal(row);
 }
+function safeRadarSignal(listing){
+  // 수집기가 시·도 출처와 KB 지역의 불일치를 발견하면 원시 신호를 비운다.
+  return listing?.['시그널'] ? safeMarketSignal(listing['지역']) : 'HELD';
+}
 function _mtPass(region){
   const g=_mtRegionGrade(region);
   if(g && !_mtGradeSet.has(g)) return false;
@@ -3175,6 +3179,7 @@ function qsStatusText(data){
   const state=data?.state||(!data?.ready?'never_scanned':'unverified');
   if(state==='personal_only') return '외부 매물은 개인 계정에서만 확인할 수 있습니다.';
   if(state==='never_scanned') return '아직 확인된 스캔 결과가 없습니다.';
+  if(state==='identity_unverified') return '이전 수집분의 시·도 출처를 확인할 수 없어 매물을 잠시 숨겼습니다. 새 수집을 확인해 주세요.';
   if(state==='failed') return `원천 조회 실패 · 현재 매물 0건으로 판단할 수 없습니다.${refresh.error?' '+refresh.error:''}`;
   const when=data?.last_success_at ? new Date(data.last_success_at*1000).toLocaleDateString('ko-KR') : '시점 미확인';
   let text=`${n}건 · ${when} 결과 · 조회 대상 ${data.regions?.length||0}곳`;
@@ -3266,6 +3271,7 @@ function renderQuicksale(){
   const gapLabel = '공급사 기준 갭';
   const rows = src.filter(m=>{
     if(!(inFocus(m['지역']||'') && _mtPass(m['지역']))) return false;
+    if(_mtBuyOnly && !['STRONG_BUY','BUY'].includes(safeRadarSignal(m))) return false;
     return minGap===0 || (m['급매갭']!=null && m['급매갭']<=minGap);
   });
   const kind=_qsMode==='찐매물'?'찐매물':'급매';
@@ -3280,10 +3286,10 @@ function renderQuicksale(){
   const accent = _qsMode==='찐매물' ? '#0f766e' : '#ea580c';
   const deep = _qsMode==='찐매물' ? '#0d9488' : '#ef4444';
   mapSplit('qsList','qsMap',rows,{
-    summary:m=>({nm:`${m['단지명']||'–'} ${_qsMode==='찐매물'?'<span class="pill" style="background:#ccfbf1;color:#0f766e">인증 표시</span> ':''}${m['stale']||source.stale?'<span class="pill">지난 결과</span> ':''}${badge(safeMarketSignal(m['지역']))}`,
+    summary:m=>({nm:`${m['단지명']||'–'} ${_qsMode==='찐매물'?'<span class="pill" style="background:#ccfbf1;color:#0f766e">인증 표시</span> ':''}${m['stale']||source.stale?'<span class="pill">지난 결과</span> ':''}${badge(safeRadarSignal(m))}`,
       right:_mtMetric(gapLabel,
         `<b style="color:${m['급매갭']!=null&&m['급매갭']<=-8?deep:accent}">${(m['급매갭']??'–')+(m['급매갭']!=null?'%':'')}</b>`),
-      sub:`${m['지역']||''}${_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''} · 공급사 호가 ${_eok(m['호가'])}`}),
+      sub:`${m['시도']?m['시도']+' ':''}${m['지역']||''}${safeRadarSignal(m)!=='HELD'&&_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${m['평형']||''} · 공급사 호가 ${_eok(m['호가'])}`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>중위시세 ${_eok(m['중위시세'])}</span>
       <span>${m['층']??'–'}층 ${m['방향']||''}</span><span>세대 ${m['세대수']?m['세대수'].toLocaleString():'–'}</span>
       <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">공급사 인증 표시</span>':''}</div>
@@ -3459,7 +3465,8 @@ function _laPricePass(x){
 }
 function renderAllListings(){
   _laRenderedKey=_laViewKey(_laCurrentTypes);
-  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역']) && _laPricePass(x));
+  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역']) &&
+    (!_mtBuyOnly || ['STRONG_BUY','BUY'].includes(x['시그널'])) && _laPricePass(x));
   const opp=x=>x['기회도']??-1, tot=x=>_laAsk(x);
   const sr=x=>_SIGRANK[x['시그널']]??9;
   rows=rows.slice().sort((a,b)=>{
@@ -3479,11 +3486,11 @@ function renderAllListings(){
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
     '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
-  const rowBadge=x=>`${typeBadge(x['유형'])} ${badge(safeMarketSignal(x['지역']))}`;
+  const rowBadge=x=>`${typeBadge(x['유형'])} ${badge(x['시그널']||'HELD')}`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${x['단지명']||'–'} ${rowBadge(x)}`,
       right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${_laBudgetLabel(x)?`<span style="color:var(--dim)">${_laBudgetLabel(x)}</span> · `:''}${x['유형']} · ${x['지역']||''}${_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''}`}),
+      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${_laBudgetLabel(x)?`<span style="color:var(--dim)">${_laBudgetLabel(x)}</span> · `:''}${x['유형']} · ${x['시도']?x['시도']+' ':''}${x['지역']||''}${x['지역식별상태']!=='held'&&_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''}`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="openTypedList('청약')">청약 목록 →</span>`
         : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);

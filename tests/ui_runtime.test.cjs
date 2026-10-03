@@ -191,6 +191,14 @@ test('quicksale status separates verified empty from upstream failure', () => {
   assert.match(ctx.qsStatusText({ready: false, state: 'failed', listings: [], refresh: {error: 'timeout'}}), /0건으로 판단할 수 없습니다/);
   assert.match(ctx.qsStatusText({...zero, state: 'partial_empty', refresh: {failed_requests: 1}}), /0건 확정 불가/);
   assert.match(ctx.qsStatusText({...zero, refresh: {signal_context: 'unavailable'}}), /지역 시그널 미확인/);
+  assert.match(ctx.qsStatusText({...zero, state: 'identity_unverified'}), /시·도 출처를 확인할 수 없어/);
+});
+
+test('radar card never borrows a region badge after source province mismatch', () => {
+  const ctx = vm.createContext({safeMarketSignal: () => 'STRONG_BUY'});
+  vm.runInContext(extract('function safeRadarSignal(listing){', 'function _mtPass(region){'), ctx);
+  assert.equal(ctx.safeRadarSignal({지역: '중구', 시도: '인천', 시그널: ''}), 'HELD');
+  assert.equal(ctx.safeRadarSignal({지역: '중구', 시도: '서울', 시그널: 'BUY'}), 'STRONG_BUY');
 });
 
 test('quicksale empty view names filter and source states separately', () => {
@@ -198,6 +206,7 @@ test('quicksale empty view names filter and source states separately', () => {
   const ctx = vm.createContext({
     document: {getElementById: id => id === 'qsGap' ? gap : empty},
     renderMtFilter() {}, inFocus: () => true, _mtPass: () => true, mapSplit() {},
+    _mtBuyOnly: false,
     _qsMode: '급매', _qsList: [], _qsCertList: [], _qsData: {급매: {state: 'failed'}},
     _qsViewKey: () => 'test',
   });

@@ -110,12 +110,13 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
     # 급매 지역별 건수
     qs_by: dict[str, int] = {}
     try:
+        from realty_signal import api
         qs_path = Path("data/cache/quicksale.json")
         if qs_path.exists():
-            qs = json.loads(qs_path.read_text(encoding="utf-8")).get("listings", [])
+            qs = api._radar_verified_rows(qs_path, api._QUICKSALE_SCAN_VER)
             for m in qs:
                 r = m.get("지역") or ""
-                if r:
+                if r and api._listing_region_matches_kb(r, m.get("시도")):
                     qs_by[r] = qs_by.get(r, 0) + 1
     except Exception:  # noqa: BLE001
         qs_by = {}

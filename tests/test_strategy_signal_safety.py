@@ -112,7 +112,9 @@ def test_nick_listing_cache_signal_is_rechecked_at_answer_time(monkeypatch, tmp_
     quicksale = tmp_path / "quicksale.json"
     certified = tmp_path / "certified.json"
     for path in (quicksale, certified):
-        path.write_text(json.dumps({"listings": [{"단지명": "테스트단지", "지역": "노원구",
+        version = api._QUICKSALE_SCAN_VER if path == quicksale else api._CERTIFIED_SCAN_VER
+        path.write_text(json.dumps({"_scan_ver": version,
+                                    "listings": [{"단지명": "테스트단지", "지역": "노원구", "시도": "서울",
                                                 "호가": 50000, "급매갭": -5,
                                                 "시그널": "STRONG_BUY"}]}), encoding="utf-8")
     monkeypatch.setattr(api, "QUICKSALE_FILE", quicksale)

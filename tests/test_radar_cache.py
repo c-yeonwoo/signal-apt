@@ -89,8 +89,9 @@ def test_radar_fetches_bundled_region_when_kb_signal_is_unavailable(monkeypatch)
     monkeypatch.setattr(api, "_signal_map", lambda: (_ for _ in ()).throw(FileNotFoundError("KB cache")))
     monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1]})
     monkeypatch.setattr(api, "_code_of", lambda region: (_ for _ in ()).throw(AssertionError("not needed")))
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
     monkeypatch.setattr(api, "_region_centroid", lambda region, code: (37.6, 127.1))
-    monkeypatch.setattr(api, "_sigungu_at", lambda lat, lng: "노원구")
+    monkeypatch.setattr(api, "_sigungu_identity_at", lambda lat, lng: ("노원구", "서울"))
     monkeypatch.setattr(baroezip, "fetch_market_with_status", lambda *args, **kwargs: ([
         {"단지명": "테스트", "complex_no": "1", "평형": "25", "층": 10,
          "호가": 50000, "급매": True, "급매갭": -5, "lat": 37.6, "lng": 127.1}], None))
@@ -98,6 +99,33 @@ def test_radar_fetches_bundled_region_when_kb_signal_is_unavailable(monkeypatch)
     rows, status = api._radar_scan_with_status(["노원구"])
     assert status["usable"] is True and status["signal_context"] == "unavailable"
     assert rows[0]["단지명"] == "테스트" and rows[0]["시그널"] == ""
+
+
+def test_same_named_district_keeps_province_and_does_not_borrow_seoul_signal(monkeypatch):
+    from realty_signal.ingest import baroezip
+
+    monkeypatch.setattr(api, "_signal_map", lambda: {"중구": "STRONG_BUY"})
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.56, 126.99]})
+    monkeypatch.setattr(api, "_region_centroid", lambda *_: (37.56, 126.99))
+    monkeypatch.setattr(api, "_sido_of", lambda *_: "서울")
+    monkeypatch.setattr(api, "_sigungu_identity_at", lambda *_: ("중구", "인천"))
+    monkeypatch.setattr(baroezip, "fetch_market_with_status", lambda *args, **kwargs: ([
+        {"단지명": "동명단지", "complex_no": "1", "평형": 25, "층": 10,
+         "호가": 50000, "급매": True, "급매갭": -5, "lat": 37.48, "lng": 126.62}], None))
+    rows, status = api._radar_scan_with_status(["중구"])
+    assert status["usable"] and rows[0]["지역"] == "중구"
+    assert rows[0]["시도"] == "인천" and rows[0]["시그널"] == ""
+
+
+def test_geojson_province_identity_separates_same_named_polygons(monkeypatch):
+    actual = {entry[1] for entry in api._sigungu_polys() if entry[0] == "중구"}
+    assert actual == {"서울", "인천"}
+    ring = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]
+    other = [[3, 0], [5, 0], [5, 2], [3, 2], [3, 0]]
+    monkeypatch.setattr(api, "_sigungu_polys", lambda: [("중구", "서울", [ring], (0, 0, 2, 2)),
+                                                          ("중구", "인천", [other], (3, 0, 5, 2))])
+    assert api._sigungu_identity_at(1, 1) == ("중구", "서울")
+    assert api._sigungu_identity_at(1, 4) == ("중구", "인천")
 
 
 def test_partial_refresh_keeps_unscanned_regions_with_stale_flag(tmp_path):
@@ -126,6 +154,19 @@ def test_radar_response_distinguishes_verified_zero_from_failure(tmp_path):
     path.unlink()
     failed = api._radar_cached_response(path, api._QUICKSALE_SCAN_VER)
     assert failed["state"] == "failed" and failed["listings"] == []
+
+
+def test_old_radar_cache_cannot_restore_unverified_region_identity(tmp_path, monkeypatch):
+    path = tmp_path / "quicksale.json"
+    monkeypatch.setattr(api, "QUICKSALE_FILE", path)
+    path.write_text(json.dumps({"ready": True, "_scan_ver": api._QUICKSALE_SCAN_VER - 1,
+                                "listings": [{"지역": "중구", "시그널": "STRONG_BUY"}],
+                                "regions": ["중구"]}), encoding="utf-8")
+    api._record_radar_refresh(path, {"ok": True})
+    response = api.quicksale()
+    assert response["state"] == "identity_unverified" and response["listings"] == []
+    assert api._radar_verified_rows(path, api._QUICKSALE_SCAN_VER) == []
+    assert api._preserve_unscanned(path, [], {"successful_regions": []}) == []
 
 
 def test_radar_response_marks_unverified_legacy_cache(tmp_path):
