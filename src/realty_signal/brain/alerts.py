@@ -16,6 +16,8 @@ DEFAULT_PREFS = {
     "signal_upgrade": True,
     "high_timing": True,
     "nbhd_change": True,
+    "listing_price": True,
+    "new_alternative": True,
     "timing_min": 70,
 }
 
