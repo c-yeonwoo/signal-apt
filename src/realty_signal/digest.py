@@ -145,7 +145,7 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
                 continue
             key = f.get("key") or ""
             reg, _, nm = key.partition("|")
-            if not nm:
+            if not nm or reg in db.AMBIGUOUS_LEGACY_REGION_KEYS:
                 continue
             code = codes.get(reg) or ""
             d = db.kv_get(f"complex:{code[:5]}:{nm}", max_age=30 * 86400) if code[:5].isdigit() else None

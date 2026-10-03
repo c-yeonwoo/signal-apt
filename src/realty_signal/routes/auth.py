@@ -168,6 +168,9 @@ def favorites_get(request: Request):
     for favorite in favorites:
         if favorite["kind"] == "region":
             favorite["region_identity"] = _favorite_region_identity(favorite["key"])
+        elif favorite["kind"] == "complex" and favorite["key"].partition("|")[0] in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+            favorite["complex_identity"] = {"status": "needs_reselection",
+                                            "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다."}
     return {"favorites": favorites}
 
 
@@ -227,6 +230,8 @@ def _complex_favorite_error(key: object) -> str | None:
     region, name = (part.strip() for part in key.split("|", 1))
     if not region or not name:
         return "단지와 시군구를 다시 선택해 주세요."
+    if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        return "이름만 적힌 중구는 서울·개편 전 인천을 구별할 수 없어 관심단지로 새로 등록할 수 없습니다."
     try:
         code = md.code_of(region)
     except Exception:  # noqa: BLE001

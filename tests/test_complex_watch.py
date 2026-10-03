@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from realty_signal import db
+from realty_signal import api, db
 from realty_signal.services import complex_watch as cw
 
 _HTML = Path(__file__).resolve().parents[1] / "src/realty_signal/web/index.html"
@@ -150,6 +150,19 @@ def test_loader_rejects_sido_level_region(tmp_path, monkeypatch):
     # 시군구는 통과해야 한다(캐시가 비어 있으면 '미수집' 이라고 말한다)
     data, _ = load("강남구", "은마아파트")
     assert "수집" in data["_unavailable"]
+
+
+def test_ambiguous_old_complex_favorite_never_borrows_seoul_trade_cache(monkeypatch):
+    monkeypatch.setattr(api, "_code_of", lambda region: pytest.fail("중구를 서울 코드로 추정하면 안 됩니다"))
+    data, ts = cw.cache_loader()("중구", "옛 관심단지")
+    assert ts is None and "구별할 수 없습니다" in data["_unavailable"]
+    rows, snaps, unavailable = cw.scan([("중구", "옛 관심단지")],
+        lambda *_: pytest.fail("모호한 지역의 캐시를 읽으면 안 됩니다"), {}, budget=100000)
+    assert rows == [] and snaps == {}
+    assert unavailable[0]["key"] == "중구|옛 관심단지"
+    assert "보류" in unavailable[0]["reason"]
+    assert api.warm_favorite_complex("중구", "옛 관심단지") == {
+        "status": "unavailable", "reason": "ambiguous_region"}
 
 
 def test_loader_never_calls_network(monkeypatch, tmp_path):

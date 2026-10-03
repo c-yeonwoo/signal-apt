@@ -145,6 +145,8 @@ def fav_gongsi_samples(uid: int | None, region: str, limit: int = 3) -> list[dic
             continue
         key = f.get("key") or ""
         reg, _, nm = key.partition("|")
+        if reg in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+            continue
         if reg != region or not nm:
             continue
         g = db.kv_get(f"gongsi:{region}:{nm}", max_age=90 * 86400) or {}
