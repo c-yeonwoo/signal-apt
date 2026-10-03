@@ -46,7 +46,8 @@ def _personal_listings_allowed(*, request: Request | None = None, uid: int | Non
     return config.personal_listing_allowed(db.user_email(uid))
 
 
-_REFRESH_EVERY_DAYS = 7   # KB는 주간 발표 → 7일 주기로 신선도 점검
+_REFRESH_EVERY_DAYS = 7   # 관측이 신선할 때의 KB 점검 간격
+_STALE_REFRESH_EVERY_DAYS = 1  # 관측이 지연되면 새 공표분을 매일 확인
 _REFRESH_RETRY_HOURS = 6  # 수집 실패 시 하루를 기다리지 않고 이만큼 뒤 재시도
 
 # 수집 상태 kv 키 — **실패를 화면에서 볼 수 있게 하는 것이 목적이다.**
@@ -62,6 +63,7 @@ def kb_fetch_health() -> dict:
     last_ok = db.kv_get("last_kb_fetch")
     attempt = db.kv_get(_KB_LAST_ATTEMPT)
     err = db.kv_get(_KB_LAST_ERROR) or None
+    observation = db.kv_get("kb_observation_check") or {}
     now = time.time()
     return {
         "last_success_ts": last_ok,
@@ -70,6 +72,7 @@ def kb_fetch_health() -> dict:
         "last_attempt_days": round((now - attempt) / 86400, 1) if attempt else None,
         "error": err,
         "failing": bool(err and err.get("consecutive", 0) >= 1),
+        "observation_check": observation,
     }
 
 
@@ -78,11 +81,27 @@ def _data_age_days() -> float | None:
     return md.data_age_days()
 
 
+def _kb_refresh_due(last_fetch: float, data_age_days: float | None, now: float) -> bool:
+    """관측이 8일 넘게 지연되면, 성공 수집 후에도 하루마다 새 공표분을 확인한다."""
+    interval = (_STALE_REFRESH_EVERY_DAYS if data_age_days is None or data_age_days > 8
+                else _REFRESH_EVERY_DAYS)
+    return now - last_fetch >= interval * 86400
+
+
 def _do_refresh() -> dict:
     """KB 재수집 + 파생 캐시 무효화. /api/refresh·스케줄러 공용."""
     import time
+    previous = db.kv_get("kb_observation_check") or {}
     kb = store.fetch()
-    db.kv_set("last_kb_fetch", time.time())   # 마지막 수집 시각(스케줄러 기준)
+    checked_at = time.time()
+    asof = str(kb.last_date.date())
+    previous_asof = previous.get("asof")
+    db.kv_set("kb_observation_check", {
+        "asof": asof, "previous_asof": previous_asof,
+        "changed": None if previous_asof is None else asof != previous_asof,
+        "checked_at": checked_at,
+    })
+    db.kv_set("last_kb_fetch", checked_at)   # 마지막 수집 시각(스케줄러 기준)
     md.clear_caches()
     from realty_signal.services.complex_signal import clear_uv_cache
     clear_uv_cache()
@@ -171,7 +190,7 @@ async def _auto_refresh_loop():
 
     def kb_job():
         last = db.kv_get("last_kb_fetch") or 0
-        if store.CACHE_FILE.exists() and time.time()-last < _REFRESH_EVERY_DAYS*86400:
+        if store.CACHE_FILE.exists() and not _kb_refresh_due(last, _data_age_days(), time.time()):
             return
         db.kv_set(_KB_LAST_ATTEMPT, time.time())
         try:
