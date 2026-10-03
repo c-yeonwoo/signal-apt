@@ -147,6 +147,20 @@ test('buyer preview renders a verified response and shows region validation erro
   assert.match(preview.textContent,/지역을 다시 선택해 주세요/);
 });
 
+test('stale budget watch shows a reconfirm action instead of disappearing', async () => {
+  const wrap={innerHTML:''};
+  const ctx=vm.createContext({
+    document:{getElementById:id=>id==='dashBudgetNewWrap'?wrap:null},
+    fetch:async()=>({ok:true,json:async()=>({ready:false,reason:'reconfirm_required',
+      message:'매수력을 다시 확정해 주세요.'})}),
+    _dashCard:x=>x,_dashH:x=>x,
+  });
+  vm.runInContext(extract('async function _loadBudgetWatch()', 'async function _loadBuyingPower()'),ctx);
+  await ctx._loadBudgetWatch();
+  assert.match(wrap.innerHTML,/매수력을 다시 확정해 주세요/);
+  assert.match(wrap.innerHTML,/openBuyingPower\(\)/);
+});
+
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
   const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
   vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);

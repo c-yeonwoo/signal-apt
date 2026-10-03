@@ -2391,9 +2391,10 @@ async function _loadBudgetWatch(){
   }catch(e){ wrap.innerHTML=''; return; }
 
   if(!d.ready){
-    if(d.reason==='no_budget'){
+    if(d.reason==='no_budget'||d.reason==='reconfirm_required'){
       wrap.innerHTML=_dashCard(_dashH('예산 아래 매물')
-        +`<div style="font-size:13.5px;color:var(--dim);line-height:1.55">${d.message||''}</div>`);
+        +`<div style="font-size:13.5px;color:var(--dim);line-height:1.55">${d.message||''}</div>
+          <button type="button" class="btn" style="margin-top:10px" onclick="openBuyingPower()">매수력 ${d.reason==='reconfirm_required'?'다시 확인':'설정'}하기</button>`);
     } else if(d.reason==='first_run'){
       wrap.innerHTML=_dashCard(_dashH('예산 아래 매물')
         +`<div style="font-size:14px;line-height:1.55">가격이 있는 매물이 <b>${(d.in_budget||0).toLocaleString()}건</b> 있습니다.

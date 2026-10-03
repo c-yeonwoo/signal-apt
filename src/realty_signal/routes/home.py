@@ -90,7 +90,7 @@ def budget_watch(request: Request):
     '새로 들어옴' 을 신규 등장 / 가격 인하 / 매수력 상향으로 **구분해서** 낸다.
     뭉개면 거짓이 된다.
     """
-    from realty_signal import api as app_api
+    from realty_signal import api as app_api, buying_power
     from realty_signal.services import budget_watch as bw
 
     uid = deps.uid(request)
@@ -98,10 +98,13 @@ def budget_watch(request: Request):
         return JSONResponse({"ready": False, "reason": "login_required"}, status_code=401)
     try:
         profile = db.profile_get(uid) or {}
-        budget = (profile.get("매수력") or {}).get("최대매수가")
-        if not budget:
-            return {"ready": False, "reason": "no_budget",
-                    "message": "매수력을 확정하면 예산 안에 들어온 매물을 알려드립니다."}
+        confirmed = buying_power.validated_confirmed_power(profile)
+        if confirmed is None:
+            stale = bool((profile.get("매수력") or {}).get("최대매수가"))
+            return {"ready": False, "reason": "reconfirm_required" if stale else "no_budget",
+                    "message": ("매수력을 다시 확정하면 예산 안에 들어온 매물을 알려드립니다."
+                                if stale else "매수력을 확정하면 예산 안에 들어온 매물을 알려드립니다.")}
+        budget = confirmed[0]
         rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"},
                                        include_private=deps.personal_listings_allowed(request))
         return bw.compute(uid, rows, float(budget))
@@ -113,16 +116,17 @@ def budget_watch(request: Request):
 @router.post("/api/budget-watch/seen")
 def budget_watch_seen(request: Request):
     """예산 매물 카드가 보인 뒤에만 다음 비교 기준점을 저장한다."""
-    from realty_signal import api as app_api
+    from realty_signal import api as app_api, buying_power
     from realty_signal.services import budget_watch as bw
 
     uid = deps.uid(request)
     if not uid:
         return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
     profile = db.profile_get(uid) or {}
-    budget = (profile.get("매수력") or {}).get("최대매수가")
-    if not budget:
-        return {"ok": False, "reason": "no_budget"}
+    confirmed = buying_power.validated_confirmed_power(profile)
+    if confirmed is None:
+        return {"ok": False, "reason": "reconfirm_required"}
+    budget = confirmed[0]
     rows = app_api._build_listings({"경매", "급매", "찐매물", "청약", "재건축"},
                                    include_private=deps.personal_listings_allowed(request))
     bw.mark_seen(uid, rows, float(budget))
@@ -137,6 +141,7 @@ def complex_watch(request: Request):
     솔직히 답하고, 채우는 건 주간 워밍(`warm_favorite_complexes`)과 단지 상세 조회가 한다 —
     홈 카드가 국토부 API 를 관심단지 수만큼 때리게 두면 홈이 느려진다.
     """
+    from realty_signal import buying_power
     from realty_signal.services import complex_watch as cw
 
     uid = deps.uid(request)
@@ -148,7 +153,8 @@ def complex_watch(request: Request):
         return {"ready": False, "reason": "no_favorites",
                 "message": "관심단지를 ★ 로 등록하면 그 단지의 실거래 변화를 알려드립니다."}
     try:
-        budget = ((db.profile_get(uid) or {}).get("매수력") or {}).get("최대매수가")
+        confirmed = buying_power.validated_confirmed_power(db.profile_get(uid) or {})
+        budget = confirmed[0] if confirmed else None
         out = cw.compute(uid, favs, cw.cache_loader(),
                          budget=float(budget) if budget else None)
         out.pop("_snaps", None)       # 기준점은 열람 확인 API 에서만 전진한다
@@ -161,6 +167,7 @@ def complex_watch(request: Request):
 @router.post("/api/complex-watch/seen")
 def complex_watch_seen(request: Request):
     """관심단지 카드가 보인 뒤에만 실거래 비교 기준점을 저장한다."""
+    from realty_signal import buying_power
     from realty_signal.services import complex_watch as cw
 
     uid = deps.uid(request)
@@ -169,7 +176,8 @@ def complex_watch_seen(request: Request):
     favs = cw.favorites_of(uid)
     if not favs:
         return {"ok": False, "reason": "no_favorites"}
-    budget = ((db.profile_get(uid) or {}).get("매수력") or {}).get("최대매수가")
+    confirmed = buying_power.validated_confirmed_power(db.profile_get(uid) or {})
+    budget = confirmed[0] if confirmed else None
     out = cw.compute(uid, favs, cw.cache_loader(),
                      budget=float(budget) if budget else None)
     cw.mark_seen(uid, out.get("_snaps", {}))

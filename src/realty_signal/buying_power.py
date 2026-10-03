@@ -619,6 +619,37 @@ def params_from_profile(profile: dict | None, **override) -> Params:
     return Params(**{k: v for k, v in base.items() if k in valid})
 
 
+def validated_confirmed_power(profile: dict | None) -> tuple[float, Params] | None:
+    """Return a saved price ceiling only while its assumptions and region remain current."""
+    if not isinstance(profile, dict):
+        return None
+    saved = profile.get("매수력") or {}
+    if not isinstance(saved, dict) or not saved.get("가정버전"):
+        return None
+    try:
+        ceiling = float(saved.get("최대매수가"))
+        if not isfinite(ceiling) or ceiling <= 0:
+            return None
+        if saved.get("지역식별") in {"reselection_required", "unverified_name"}:
+            return None
+        params = params_from_profile(profile)
+        profile_code = profile.get("매수지역코드")
+        assumption_code = (saved.get("가정") or {}).get("지역코드")
+        if profile_code and assumption_code and profile_code != assumption_code:
+            return None
+        saved_code = profile_code or assumption_code
+        if params.capital <= 0 or (params.region and not saved_code) or (saved_code and not params.region):
+            return None
+        from realty_signal.services.buyer_decision import finance_fingerprint
+        if finance_fingerprint(params) != saved["가정버전"]:
+            return None
+        if abs(max_purchase(params)[0] - ceiling) > 1:
+            return None
+        return ceiling, params
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return None
+
+
 def params_for_region(p: Params, region: str | None, sido: str | None = None) -> Params:
     """같은 재무조건을 다른 지역 규제로 다시 본다 — 숏리스트 후보별 자금 계산용."""
     if not region:

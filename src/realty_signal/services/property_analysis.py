@@ -74,31 +74,21 @@ def snapshot(row: dict) -> dict:
 def buyer_fit(listing: dict, profile: dict | None = None) -> dict:
     """확정 매수력과 호가만 비교한다. 구매 가능성/대출 승인이 아니다."""
     from realty_signal import buying_power
-    from realty_signal.services.buyer_decision import finance_fingerprint
 
     profile = profile or {}
     saved = profile.get("매수력") or {}
-    budget = _number(saved.get("최대매수가"))
     asking = _number(listing.get("asking_manwon"))
-    if budget is None or not saved.get("가정버전"):
+    if _number(saved.get("최대매수가")) is None or not saved.get("가정버전"):
         return {"status": "unknown", "reason": "검증 가능한 확정 매수력이 없어 예산 적합성을 판단하지 않았습니다."}
     if asking is None:
         return {"status": "unknown", "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
     if listing.get("stale"):
         return {"status": "unknown", "reason": "지난 수집 호가라 현재 예산 적합성을 판단하지 않았습니다."}
-    try:
-        params = buying_power.params_from_profile(profile)
-        current_budget = buying_power.max_purchase(params)[0]
-        if (params.capital <= 0 or finance_fingerprint(params) != saved["가정버전"]
-                or abs(current_budget - budget) > 1):
-            return {"status": "unknown", "reason": "저장한 자금 가정이 현재 조건과 달라 매수력을 다시 확정해야 합니다."}
-    except (TypeError, ValueError, OverflowError):
-        return {"status": "unknown", "reason": "자금 가정을 확인할 수 없어 매수력을 다시 확정해야 합니다."}
-    if saved.get("지역식별") in {"reselection_required", "unverified_name"}:
-        return {"status": "unknown", "reason": "매수 예정 지역을 다시 선택한 뒤 예산을 비교해 주세요."}
+    confirmed = buying_power.validated_confirmed_power(profile)
+    if confirmed is None:
+        return {"status": "unknown", "reason": "저장한 자금·지역 가정이 현재 조건과 달라 매수력을 다시 확정해야 합니다."}
+    budget, params = confirmed
     saved_code = profile.get("매수지역코드") or (saved.get("가정") or {}).get("지역코드")
-    if params.region and not saved_code:
-        return {"status": "unknown", "reason": "예전 지역 이름만 저장돼 있어 매수 예정 지역을 다시 선택해야 합니다."}
     if saved_code and (
         not isinstance(saved_code, str) or not saved_code.startswith("kb:")
         or not params.region or str(listing.get("region_code") or "") != saved_code[3:8]

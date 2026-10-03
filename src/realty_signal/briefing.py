@@ -244,7 +244,7 @@ def plan(uid: int) -> dict:
 
     profile = dict(db.profile_get(uid) or {})
     profile["_favs"] = db.actionable_region_favs(uid)
-    confirmed = bool((profile.get("매수력") or {}).get("최대매수가"))
+    confirmed = buying_power.validated_confirmed_power(profile) is not None
     p = buying_power.params_from_profile(profile)
     budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
 
