@@ -114,6 +114,17 @@ def test_exceeded_candidates_are_hidden_by_default_and_explicitly_labeled():
     assert not shown["groups"]["matched"]
 
 
+def test_single_condition_relaxation_counts_only_verified_fresh_candidates():
+    rows = [_row("price-only", price=70_000, area=70),
+            _row("area-only", price=50_000, area=50),
+            _row("both", price=70_000, area=50),
+            _row("unknown-area", price=70_000, area=None),
+            _row("stale-price", price=70_000, area=70, stale=True)]
+    result = discovery.discover(rows, {"max_price_manwon": 60_000, "min_area_m2": 60})
+    assert result["single_condition_relaxations"] == {"max_price_manwon": 1, "min_area_m2": 1}
+    assert result["groups"]["exceeded"] == []
+
+
 def test_unrequested_low_price_is_not_a_ranking_bonus():
     rows = [_row("z-cheap", price=10_000), _row("a-costly", price=50_000)]
     out = discovery.discover(rows, {"max_price_manwon": 60_000})

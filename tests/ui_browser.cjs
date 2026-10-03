@@ -84,6 +84,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         data={private_access:true,source_state:'partial',coverage:{regions:['테스트구']},
           sources:[{kind:'일반매물',state:'partial'},{kind:'급매',state:'failed'}],
           counts:finance?{matched:0,verify:1,explore:0,exceeded:1}:{matched:noMatch?0:2,verify:0,explore:0,exceeded:1},
+          single_condition_relaxations:noMatch?{region:1}:{},
           next_cursor:finance||next?null:'synthetic-next',
           finance_context:finance?{status:noProfile?'no_confirmed_profile':'ready',policy_status:'unverified'}:null,
           groups:{matched:finance||noMatch?[]:[candidate],verify:finance?[candidate]:[],explore:[],
@@ -595,6 +596,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/조건 초과 1건을 비교용으로 보려면/).waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),0);
+    await page.locator('#v2DiscoverResults [data-v2-relax=region]').click();
+    assert.equal(await page.locator('#v2DiscoverForm [name=region]').evaluate(el=>el===document.activeElement),true);
+    assert.equal(await page.locator('#v2DiscoverForm [name=region]').inputValue(),'조건없음');
     await page.locator('#v2DiscoverForm [name=region_mode]').selectOption('prefer');
     await page.locator('#v2DiscoverForm [name=region]').fill('테스트구');
     await page.locator('#v2DiscoverForm [name=region]').fill('프로필없음');

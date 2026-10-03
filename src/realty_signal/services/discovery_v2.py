@@ -11,7 +11,7 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-5"
+VERSION = "discovery-v2-6"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region",
           "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
@@ -239,6 +239,16 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
                     overflow.append(item)
             items[:] = selected + overflow
     counts = {k: len(v) for k, v in groups.items()}
+    # Count only candidates that become a basic candidate by relaxing exactly
+    # one failed condition. Unknown or stale facts must not be promoted.
+    relaxations = {}
+    for item in groups["exceeded"]:
+        checks = item["constraints"]
+        failures = [check for check in checks if check["status"] == "fail"]
+        if (len(failures) == 1 and all(check["status"] != "unknown" for check in checks)
+                and not item["listing"]["stale"] and item["listing"]["collected_at"]):
+            field = failures[0]["field"]
+            relaxations[field] = relaxations.get(field, 0) + 1
     snapshot_hash = _hash({"groups": groups, "sources": source_fingerprint})
     if not spec["include_exceeded"]:
         groups["exceeded"] = []
@@ -260,6 +270,7 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
                                   "snapshot": snapshot_hash, "offset": next_offset}) if more else None
     return {"version": VERSION, "groups": {k: v[offset:next_offset] for k, v in groups.items()},
             "counts": counts,
+            "single_condition_relaxations": relaxations,
             "page": offset // limit + 1, "next_cursor": next_cursor,
             "basis": "수집된 일반·급매·찐매물의 호가와 확인 가능한 조건만 비교합니다. 구매 가능 확정이 아닙니다.",
             "generated_at": datetime.now(timezone.utc).isoformat()}
