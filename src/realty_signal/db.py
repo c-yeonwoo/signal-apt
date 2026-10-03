@@ -442,16 +442,20 @@ def users_with_region_favs() -> list[dict]:
     return out
 
 
-# A pre-reform, name-only "중구" favorite may have meant either Seoul or the
-# former Incheon district. The original selection was not stored, so it must
-# never silently become a current Seoul preference or notification target.
-AMBIGUOUS_LEGACY_REGION_KEYS = frozenset({"중구"})
+# A name-only favorite for a district shared by multiple provinces cannot
+# prove which province the user selected. Keep the original row for removal,
+# but do not silently attach it to whichever district the current KB cache names.
+AMBIGUOUS_LEGACY_REGION_KEYS = frozenset({
+    "중구", "서구", "동구", "남구", "강서구", "북구", "인천 중구",
+})
 
 
 def complex_favorite_region(ref: str) -> dict:
     """Resolve a complex favorite's saved region without upgrading an old name key."""
     if ref in AMBIGUOUS_LEGACY_REGION_KEYS:
-        return {"status": "needs_reselection", "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다."}
+        message = ("이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다."
+                   if ref == "중구" else f"이름만 저장된 {ref}의 시·도와 현행 구역을 확인할 수 없습니다.")
+        return {"status": "needs_reselection", "message": message}
     if ref.startswith("kb:"):
         try:
             from realty_signal.services import market_data as md
