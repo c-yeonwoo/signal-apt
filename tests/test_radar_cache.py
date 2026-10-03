@@ -83,6 +83,35 @@ def test_scan_regions_keeps_only_owner_favorites_without_kb(tmp_path, monkeypatc
     assert api._scan_regions() == ["노원구"]  # 과거 캐시는 다른 계정의 관심지역일 수 있다.
 
 
+def test_scan_targets_use_current_assessment_and_skip_retired_favorite(monkeypatch):
+    import pandas as pd
+
+    monkeypatch.setattr(api, "_signals_df", lambda: pd.DataFrame([
+        {"region": "서구", "signal": "BUY"}, {"region": "강남구", "signal": "BUY"}]))
+    monkeypatch.setattr(api.md, "assessed_signal_labels", lambda today: {
+        "서구": {"assessment_status": "held", "display_signal": "HELD"},
+        "강남구": {"assessment_status": "ready", "display_signal": "BUY"}})
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {
+        "서구": [37.545, 126.676], "강남구": [37.518, 127.047]})
+    monkeypatch.setattr(api, "_code_of", lambda region: {"서구": "2826000000", "강남구": "1168000000"}[region])
+    monkeypatch.setattr(api, "_sigungu_identity_at", lambda lat, lng: ("서해구", "인천", "28275"))
+    monkeypatch.setattr(api.config, "personal_listing_email", lambda: "owner@example.com")
+    monkeypatch.setattr(api.db, "user_by_email", lambda email: {"id": 1})
+    monkeypatch.setattr(api.db, "fav_list", lambda uid: [{"kind": "region", "key": "서구"}])
+
+    assert api._scan_regions() == ["강남구"]
+    assert api._hanbang_regions() == ["강남구"]
+
+
+def test_ambiguous_scan_center_requires_same_current_boundary_code(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.5638, 126.9976]})
+    monkeypatch.setattr(api, "_sigungu_identity_at", lambda lat, lng: ("중구", "서울", "11140"))
+    monkeypatch.setattr(api, "_code_of", lambda region: "2811000000")
+    assert not api._scan_region_current("중구")
+    monkeypatch.setattr(api, "_code_of", lambda region: "1114000000")
+    assert api._scan_region_current("중구")
+
+
 def test_radar_fetches_bundled_region_when_kb_signal_is_unavailable(monkeypatch):
     from realty_signal.ingest import baroezip
 
