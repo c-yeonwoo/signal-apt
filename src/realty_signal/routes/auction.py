@@ -6,7 +6,6 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from realty_signal import auction, config, store
 from realty_signal.routes import deps
-from realty_signal.services import market_data as md
 
 router = APIRouter(tags=["auction"])
 
@@ -23,19 +22,23 @@ def _asdict(lst):
 
 @router.get("/api/auction/buy-regions")
 def buy_regions():
-    df = md.signals_df()
-    hot = df[df["signal"].isin(["STRONG_BUY", "BUY"])]
-    return [{"region": r["region"], "signal": r["signal"]} for _, r in hot.iterrows()]
+    from realty_signal import api as app_api
+
+    safe = app_api._display_signal_map()
+    return [{"region": region, "signal": grade} for region, grade in safe.items()
+            if grade in {"STRONG_BUY", "BUY"}]
 
 
 @router.get("/api/auction/listings")
 def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익률"],
                      loan_ratio: float | None = None, loan_rate: float | None = None,
                      hold_months: int | None = None):
+    from realty_signal import api as app_api
+
     ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
     return {
         "params": {"target_margin": target_margin},
-        "listings": auction.enrich(auction.load(), md.signal_map(), ov),
+        "listings": auction.enrich(auction.load(), app_api._display_signal_map(), ov),
     }
 
 

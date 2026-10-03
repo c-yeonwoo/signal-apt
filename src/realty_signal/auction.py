@@ -536,7 +536,7 @@ def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | N
     out = []
     for lst in listings:
         rec = recommend(lst, p)
-        sig = signals.get(lst.region, "")
+        sig = signals.get(lst.region, "HELD")
         margin = rec.get("총비용우위율")
         score = (_SIG_WEIGHT.get(sig, 0) * 10 + margin) if margin is not None else -100
         if rec["상태"] != "conditional_bid":
