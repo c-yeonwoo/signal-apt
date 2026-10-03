@@ -101,6 +101,7 @@ test('market snapshot loads in parallel, reuses browser cache, and refresh bypas
   };
   const ctx = vm.createContext({
     meta:null, allSignals:[], selected:null, active:new Set(['BUY']), window:{},
+    displaySignal:r=>r?.display_signal||r?.signal||'HELD',
     localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},
     document:{getElementById:id=>{
       if(!elements.has(id)) elements.set(id,{style:{},textContent:'',innerHTML:''});

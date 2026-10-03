@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/index.html'), 'utf8');
+const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/signal-v2.js'), 'utf8');
 
 (async()=>{
   const browser = await chromium.launch({headless:true});
@@ -20,6 +21,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
         return route.fulfill({body:'',contentType:url.pathname.endsWith('.js')?'application/javascript':'text/css'});
       }
       if(url.pathname==='/') return route.fulfill({body:html,contentType:'text/html'});
+      if(url.pathname==='/assets/signal-v2.js') return route.fulfill({body:signalV2,contentType:'application/javascript'});
       calls.push(url.pathname);
       let data={ready:false,items:[],listings:[],regions:[],actions:[],message:'합성 테스트 데이터'};
       if(url.pathname==='/api/auth/me') return route.fulfill({status:401,json:{}});
@@ -39,6 +41,14 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
+      if(url.pathname==='/api/v2/discovery') data={private_access:false,groups:{},counts:{}};
+      if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
+        subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
+          kind:'일반매물',asking_manwon:50000,collected_at:'2026-09-29'},
+        price:{'상태':'관측비교','표본수':3},buyer_fit:{status:'unknown'},
+        positive:[{text:'동일 조건 실거래가 있습니다.'}],
+        cautions:[{text:'현재 판매 여부는 확인되지 않았습니다.'}],
+        next_actions:['실제 호가 확인'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
       if(url.pathname==='/api/general-listings') data={ready:true,state:'partial',regions:['테스트구'],last_success_at:1780000000,
         refresh:{limited_regions:['테스트구'],failed_requests:0},listings:[{hanbang_id:'synthetic-hb-1',단지명:'한방테스트단지',지역:'테스트구',호가:50000,전용면적:84.5,층:12,등록일:'2026-09-29'}]};
       if(url.pathname==='/api/listing-analysis'){
@@ -236,6 +246,10 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     await page.evaluate(()=>document.body.insertAdjacentHTML('beforeend',
       '<div id="analysisFixture">'+reportBtn('일반매물:synthetic-hb-1')+'</div>'));
     await page.locator('#analysisFixture button').click();
+    await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
+    assert.equal(nickPayloads.length,0);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-1'));
     await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
     await page.getByText('살 수 있는 가격보다 비쌈',{exact:false}).waitFor();
@@ -287,6 +301,16 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
     assert(eventPayloads.some(x=>x.name==='listing_commute_compare'));
     assert(eventPayloads.some(x=>x.name==='listing_compare_open'));
     assert(!JSON.stringify(eventPayloads).includes('synthetic-hb-1'));
+    const held=await page.evaluate(()=>{
+      const row={region:'테스트구',signal:'BUY',display_signal:'HELD',group:'서울'};
+      const label=displaySignal(row);
+      return {label,badge:badge(label),style:_choStyle('signal','테스트구',{},null,{테스트구:row}),
+        tip:_choTip('signal','테스트구',{},null,{테스트구:row})};
+    });
+    assert.equal(held.label,'HELD');
+    assert.match(held.badge,/판단 보류/);
+    assert.equal(held.style.fillColor,'#5f6875');
+    assert.match(held.tip,/판단 보류/);
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     assert.deepEqual(errors,[]);

@@ -70,6 +70,11 @@ def _change_rows(
     rows = []
     for rec in data["데이터리스트"]:
         region = rec["지역명"]
+        # 서울/인천의 중구를 이름만으로 합치면 가격과 지역코드가 서로 다른
+        # 지역에서 온다. 기존 서울 표시명은 유지하고 인천을 구분한다.
+        region_code = str(rec.get("지역코드") or "")
+        if region == "중구" and region_code.startswith("28"):
+            region = "인천 중구"
         if code_sink is not None:
             code_sink[region] = rec.get("지역코드")
         for i, v in enumerate(rec["dataList"]):
