@@ -165,17 +165,27 @@ def freshness(request: Request):
 @router.get("/api/signals")
 def signals(only: str | None = None):
     import json
+    import logging
     from datetime import date
     df = md.signals_df()
-    if only:
-        keep = {s.strip().upper() for s in only.split(",")}
-        df = df[df["signal"].isin(keep)]
     recs = json.loads(df.to_json(orient="records", force_ascii=False))
     codes = md.kb().codes
-    labels = md.assessed_signal_labels(date.today().isoformat())
+    try:
+        labels = md.assessed_signal_labels(date.today().isoformat())
+    except Exception as exc:  # noqa: BLE001 — 화면 판정은 원시 등급으로 되돌리지 않는다.
+        logging.getLogger("realty_signal").warning("signal assessment unavailable: %s", exc)
+        labels = {}
     for r in recs:
         r["group"] = _region_group(r["region"], codes.get(r["region"]))
-        r.update(labels.get(r["region"], {"display_signal": "HELD", "assessment_status": "held"}))
+        label = labels.get(r["region"]) or {}
+        r.update(label)
+        if label.get("assessment_status") != "ready" or label.get("display_signal") not in {
+            "STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}:
+            r["display_signal"] = "HELD"
+            r["assessment_status"] = "held"
+    if only:
+        keep = {s.strip().upper() for s in only.split(",")}
+        return [r for r in recs if r["display_signal"] in keep]
     return recs
 
 
