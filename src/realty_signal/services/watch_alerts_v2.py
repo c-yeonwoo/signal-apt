@@ -139,13 +139,13 @@ def scan_cached_sources() -> int:
 
 def list_events(uid: int, *, private_allowed: bool, limit: int = PAGE_SIZE) -> dict:
     limit = max(1, min(PAGE_SIZE, int(limit)))
-    where = ("e.uid=? AND (e.subject_type!='listing' OR EXISTS ("
-             "SELECT 1 FROM listing_watch w WHERE w.uid=e.uid AND w.key=e.subject_key))")
+    where = ("e.uid=? AND e.subject_type='listing' AND EXISTS ("
+             "SELECT 1 FROM listing_watch w WHERE w.uid=e.uid AND w.key=e.subject_key)")
     args: list = [uid]
     if not private_allowed:
-        where += (" AND (e.subject_type!='listing' OR NOT EXISTS ("
+        where += (" AND NOT EXISTS ("
                   "SELECT 1 FROM listing_watch w WHERE w.uid=e.uid AND w.key=e.subject_key "
-                  "AND w.kind IN ('급매','찐매물','일반매물')))")
+                  "AND w.kind IN ('급매','찐매물','일반매물'))")
     c = db.conn()
     try:
         rows = c.execute("SELECT e.id,e.subject_type,e.subject_key,e.kind,e.payload,e.created_at,e.seen_at "
@@ -162,14 +162,14 @@ def list_events(uid: int, *, private_allowed: bool, limit: int = PAGE_SIZE) -> d
 
 
 def mark_seen(uid: int, *, private_allowed: bool) -> int:
-    where = ("uid=? AND seen_at IS NULL AND (subject_type!='listing' OR EXISTS ("
+    where = ("uid=? AND seen_at IS NULL AND subject_type='listing' AND EXISTS ("
              "SELECT 1 FROM listing_watch w WHERE w.uid=alert_outbox_v2.uid "
-             "AND w.key=alert_outbox_v2.subject_key))")
+             "AND w.key=alert_outbox_v2.subject_key)")
     if not private_allowed:
-        where += (" AND (subject_type!='listing' OR NOT EXISTS ("
+        where += (" AND NOT EXISTS ("
                   "SELECT 1 FROM listing_watch w WHERE w.uid=alert_outbox_v2.uid "
                   "AND w.key=alert_outbox_v2.subject_key "
-                  "AND w.kind IN ('급매','찐매물','일반매물')))")
+                  "AND w.kind IN ('급매','찐매물','일반매물'))")
     c = db.conn()
     try:
         cur = c.execute(f"UPDATE alert_outbox_v2 SET seen_at=? WHERE {where}",
