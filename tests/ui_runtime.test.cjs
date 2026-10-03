@@ -15,6 +15,12 @@ test('KB national affordability is not presented as the opposite HF burden index
   assert.match(html, /\['주택담보대출금리','KB부동산 데이터허브/);
 });
 
+test('regional trend chart does not overlay one national affordability line on every district', () => {
+  const chart = extract('function drawChart(', '// 거시 추세 미니차트');
+  assert.doesNotMatch(chart, /mc\.구매력|주택구매력지수/);
+  assert.match(html, /전국 구매력지수는 이 지역의 지표가 아니므로 차트에 겹치지 않으며/);
+});
+
 test('inline app scripts parse and browse navigation keeps one list and the signal map', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));
