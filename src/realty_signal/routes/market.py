@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -24,19 +26,25 @@ def ready():
         c.execute("SELECT 1")
         c.close()
         fresh = md.data_age_days()
+        kb_source_fresh = 0 <= (date.today() - md.kb().last_date.date()).days <= 8
         ok = store.CACHE_FILE.exists() and fresh is not None and fresh <= 14
-        return JSONResponse({"ready": ok}, status_code=200 if ok else 503)
+        return JSONResponse({"ready": ok, "kb_source_fresh_for_signal": kb_source_fresh},
+                            status_code=200 if ok else 503)
     except Exception:
-        return JSONResponse({"ready": False}, status_code=503)
+        return JSONResponse({"ready": False, "kb_source_fresh_for_signal": False}, status_code=503)
 
 
 @router.get("/api/operations")
 def operations(request: Request):
     if err := deps.require_admin(request):
         return err
-    from realty_signal import jobs, llm
+    from realty_signal import backup, jobs, llm
     from realty_signal.ingest.pipeline import cache_health
-    return {"jobs": jobs.status(), "llm": llm.usage_summary(),
+    job_status = jobs.status()
+    return {"jobs": job_status,
+            "backup": {"configured": backup.enabled(),
+                       "upload_job": next((job for job in job_status if job["name"] == "backup"), None)},
+            "llm": llm.usage_summary(),
             "sources": cache_health(include_private=deps.personal_listings_allowed(request))}
 
 _METRIC_LABEL = {
