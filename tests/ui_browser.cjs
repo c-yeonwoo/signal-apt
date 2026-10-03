@@ -54,10 +54,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         const spec=route.request().postDataJSON()||{};
         const next=!!spec.cursor, finance=!!spec.max_monthly_manwon;
         const noProfile=finance&&spec.prefer_region==='프로필없음';
+        const preferred=!!spec.prefer_max_price_manwon||!!spec.prefer_min_area_m2;
         const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
           name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
           recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
-          preference:{region:'테스트구',matched:true,coverage:100},
+          preference:preferred?{region:'테스트구',matched:true,score:67,coverage:67,
+            satisfied:2,known:2,total:3,details:[
+              {field:'region',label:'선호 지역',status:'matched'},
+              {field:'price',label:'선호 호가',status:'matched'},
+              {field:'area',label:'선호 면적',status:'unknown'}]}:
+            {region:'테스트구',matched:true,coverage:100},
           finance:finance?noProfile?{status:'no_confirmed_profile',reason:'매수력 확정 필요'}:
             {status:'policy_unverified',monthly_manwon:120,cash_manwon:20000,
               reason:'대출 규제·세율 최신성 미검증'}:null};
@@ -411,7 +417,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText(/총 월 상환 약 120만원/).waitFor();
     assert.match(await page.locator('#v2DiscoverResults').textContent(),/후보는 확인 필요로 분류/);
     assert.match(await page.locator('#v2DiscoverResults h3').textContent(),/확인 필요/);
+    await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('');
+    await page.locator('#v2DiscoverForm .v2-preferences summary').click();
+    await page.locator('#v2DiscoverForm [name=prefer_max_price_manwon]').fill('50000');
+    await page.locator('#v2DiscoverForm [name=prefer_min_area_m2]').fill('84');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText(/선호 2\/3개 충족 · 2\/3개 자료 확인/).waitFor();
     await page.locator('#v2DiscoverForm [name=region]').fill('프로필없음');
+    await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.locator('[data-v2-finance-setup]').click();
     assert.equal(await page.locator('#v2DiscoverDlg').evaluate(el=>el.open),false);

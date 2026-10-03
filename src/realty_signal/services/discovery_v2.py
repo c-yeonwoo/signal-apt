@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import base64
 import binascii
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-3"
+VERSION = "discovery-v2-4"
 KINDS = {"일반매물", "급매", "찐매물"}
-FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region"}
+FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region",
+          "prefer_max_price_manwon", "prefer_min_area_m2"}
 
 
 def _number(value):
@@ -31,7 +32,8 @@ def validate(spec: dict) -> dict:
     if unknown:
         raise ValueError("unsupported_condition")
     cleaned = {}
-    for key in ("max_price_manwon", "min_area_m2", "max_monthly_manwon"):
+    for key in ("max_price_manwon", "min_area_m2", "max_monthly_manwon",
+                "prefer_max_price_manwon", "prefer_min_area_m2"):
         if spec.get(key) is not None:
             value = _number(spec[key])
             if value is None or value > 5_000_000:
@@ -88,6 +90,39 @@ def _monthly(finance: dict | None) -> float | None:
     return float(value)
 
 
+def _preference(listing: dict, spec: dict) -> dict:
+    """Unknown observations keep their place in the denominator, never earn fit."""
+    details = []
+    definitions = (("region", "선호 지역", spec.get("prefer_region"), listing["region"],
+                    bool(listing["region"]), lambda v, target: v == target),
+                   ("price", "선호 호가", spec.get("prefer_max_price_manwon"),
+                    listing["asking_manwon"], listing["asking_manwon"] is not None and not listing["stale"],
+                    lambda v, target: v <= target),
+                   ("area", "선호 면적", spec.get("prefer_min_area_m2"),
+                    listing["exclusive_m2"], listing["exclusive_m2"] is not None and not listing["stale"],
+                    lambda v, target: v >= target))
+    for field, label, target, value, known, meets in definitions:
+        if target is None or target == "":
+            continue
+        details.append({"field": field, "label": label, "status": "unknown" if not known else
+                        "matched" if meets(value, target) else "missed", "value": value, "target": target})
+    total = len(details)
+    known = sum(x["status"] != "unknown" for x in details)
+    satisfied = sum(x["status"] == "matched" for x in details)
+    return {"region": spec.get("prefer_region"),
+            "matched": any(x["field"] == "region" and x["status"] == "matched" for x in details),
+            "score": round(100 * satisfied / total) if total else None,
+            "coverage": round(100 * known / total) if total else None,
+            "satisfied": satisfied, "known": known, "total": total, "details": details}
+
+
+def _freshness(listing: dict) -> int:
+    try:
+        return date.fromisoformat((listing.get("collected_at") or "")[:10]).toordinal()
+    except ValueError:
+        return 0
+
+
 def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
     listing = snapshot(row)
     price = listing["asking_manwon"]
@@ -111,11 +146,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
     if "region" in spec and spec["region"]:
         checks.append({"field": "region", "status": "pass" if listing["region"] == spec["region"] else "fail",
                        "value": listing["region"], "limit": spec["region"]})
-    preferred = spec.get("prefer_region")
-    preferred_known = bool(listing["region"])
-    preference_match = bool(preferred and preferred_known and listing["region"] == preferred)
-    preference_score = (100 if preference_match else 0) if preferred else None
-    preference_coverage = (100 if preferred_known else 0) if preferred else None
+    preference = _preference(listing, spec)
     tier = "exceeded" if any(x["status"] == "fail" for x in checks) else (
         "verify" if any(x["status"] == "unknown" for x in checks) or listing["stale"] or
         listing["collected_at"] is None else "matched" if checks else "explore")
@@ -129,8 +160,10 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
                   "region": "선택한 지역입니다."}[passed[0]["field"]]
     else:
         reason = "조건을 입력하면 적합성을 비교합니다." if not checks else "조건 충족을 확인하지 못했습니다."
-    if preference_match:
+    if preference["matched"]:
         reason = "선호 지역과 " + reason if passed else "선호 지역입니다."
+    elif not passed and preference["satisfied"]:
+        reason = "입력한 선호 조건 일부에 부합합니다."
     tradeoff = ("현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다." if not failed else
                 "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다." if failed[0]["field"] == "max_monthly_manwon" else
                 f"{failed[0]['field']} 조건을 넘습니다.")
@@ -142,8 +175,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
             "recommendation_reason": reason, "tradeoff": tradeoff,
             "verify_next": verify, "signal_context": row.get("시그널"),
             "finance": finance if "max_monthly_manwon" in spec else None,
-            "preference": {"region": preferred, "matched": preference_match,
-                           "score": preference_score, "coverage": preference_coverage},
+            "preference": preference,
             "rank_version": VERSION}
 
 
@@ -163,8 +195,8 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
     def order(item):
         snap = item["listing"]
         return (-(item["preference"]["score"] or 0),
-                -sum(x["status"] == "pass" for x in item["constraints"]),
-                snap["asking_manwon"] if snap["asking_manwon"] is not None else float("inf"),
+                -(item["preference"]["coverage"] or 0),
+                -_freshness(snap),
                 snap["key"])
     for items in groups.values():
         items.sort(key=order)
@@ -179,6 +211,17 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
             else:
                 overflow.append(item)
         items[:] = selected + overflow
+        if not spec.get("region"):
+            # In broad discovery, one district cannot monopolize the first page.
+            selected, overflow, region_counts = [], [], {}
+            for item in items:
+                region = item["listing"]["region"]
+                if region_counts.get(region, 0) < 4:
+                    selected.append(item)
+                    region_counts[region] = region_counts.get(region, 0) + 1
+                else:
+                    overflow.append(item)
+            items[:] = selected + overflow
     counts = {k: len(v) for k, v in groups.items()}
     snapshot_hash = _hash({"groups": groups, "sources": source_fingerprint})
     if not spec["include_exceeded"]:

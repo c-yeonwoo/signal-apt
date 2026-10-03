@@ -238,6 +238,9 @@
 
   function discoveryCard(x) {
     const finance = x.finance;
+    const preference = x.preference || {};
+    const preferred = (preference.details || []).filter(p => p.status === 'matched').map(p => esc(p.label));
+    const unknownPreference = (preference.details || []).filter(p => p.status === 'unknown').map(p => esc(p.label));
     const monthly = finance && Number.isFinite(Number(finance.monthly_manwon))
       ? `${esc(finance.monthly_manwon)}만원` : '미계산';
     const cash = finance && Number.isFinite(Number(finance.cash_manwon))
@@ -245,8 +248,8 @@
     return `<div class="v2-row" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
       <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}</p>
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
-      <p>${x.eligibility === 'verify' ? '확인된 점' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
-      ${x.preference?.region ? `<p>지역 선호: ${x.preference.matched ? '부합' : x.preference.coverage ? '다른 지역' : '자료 미확인'}</p>` : ''}
+      <p>${x.eligibility === 'verify' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
+      ${preference.total ? `<p>선호 ${preference.satisfied}/${preference.total}개 충족 · ${preference.known}/${preference.total}개 자료 확인${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p>` : ''}
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
       <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button></div>`;
@@ -257,7 +260,8 @@
     const form = document.getElementById('v2DiscoverForm');
     const result = document.getElementById('v2DiscoverResults');
     const spec = {};
-    for (const field of ['max_price_manwon', 'min_area_m2', 'max_monthly_manwon', 'region']) {
+    for (const field of ['max_price_manwon', 'min_area_m2', 'max_monthly_manwon',
+                         'prefer_max_price_manwon', 'prefer_min_area_m2', 'region']) {
       const value = form.elements[field].value.trim();
       if (value) spec[field === 'region' && form.elements.region_mode.value === 'prefer' ?
         'prefer_region' : field] = field === 'region' ? value : Number(value);
@@ -295,7 +299,9 @@
           data.finance_context?.status !== 'ready' ? '매수력을 설정·확정해야 월 부담을 계산할 수 있습니다.' :
           data.finance_context?.policy_status !== 'verified' ? `대출 규제·세율 최신성이 검증되지 않았습니다(${esc(data.finance_context?.policy_declared_asof || '기준일 미확인')} 기준 가정). 월 부담은 참고용이며 후보는 확인 필요로 분류됩니다.` :
           '월 부담은 입력 가정의 추정치이며 대출 승인이 아닙니다.' : '';
+        const hasPreference = !!(spec.prefer_region || spec.prefer_max_price_manwon || spec.prefer_min_area_m2);
         result.innerHTML = `<p class="v2-muted">현재 수집된 ${regions.length}개 지역 · ${sources || '원천 상태 미확인'} · 전체 시장 아님</p>
+          <p class="v2-muted">정렬: ${hasPreference ? '입력한 선호 충족·자료 확인도 → 수집일' : '최근 수집일'} · 호가가 저렴하다는 이유만으로 우선하지 않습니다.</p>
           ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}
           ${financeNotice ? `<p class="v2-row v2-caution">${financeNotice}</p>` : ''}
           ${spec.max_monthly_manwon && data.finance_context?.status !== 'ready' && data.finance_context?.status !== 'profile_unavailable' ?
