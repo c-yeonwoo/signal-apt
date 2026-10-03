@@ -10,8 +10,11 @@ env 미설정 시 no-op(폴백). SQLite 온라인 백업(.backup)으로 실행 �
 from __future__ import annotations
 
 import gzip
+from hashlib import sha256
+from io import BytesIO
 import logging
 import os
+import re
 import sqlite3
 import tempfile
 import time
@@ -20,6 +23,8 @@ from pathlib import Path
 from realty_signal import db as _db
 
 log = logging.getLogger("realty_signal")
+_REQUIRED_TABLES = ("users", "profile", "favorites", "kv")
+_MAX_VERIFY_BYTES = 4 * 1024**3
 
 
 def _cfg() -> dict:
@@ -49,6 +54,56 @@ def dump_gz() -> bytes:
             return gzip.compress(Path(tmp.name).read_bytes())
     finally:
         src.close()
+
+
+def verify_gz(data: bytes) -> dict:
+    """Restore into an isolated temporary DB and check integrity without touching app.db."""
+    with tempfile.TemporaryDirectory(prefix="signalapt-restore-check-") as directory:
+        path = Path(directory) / "restored.db"
+        size = 0
+        with gzip.GzipFile(fileobj=BytesIO(data)) as source, path.open("wb") as restored:
+            while chunk := source.read(1024 * 1024):
+                size += len(chunk)
+                if size > _MAX_VERIFY_BYTES:
+                    raise ValueError("backup_too_large")
+                restored.write(chunk)
+        try:
+            connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            try:
+                checks = [row[0] for row in connection.execute("PRAGMA integrity_check")]
+                if checks != ["ok"]:
+                    raise ValueError("backup_integrity_failed")
+                tables = {row[0] for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}
+                if not set(_REQUIRED_TABLES).issubset(tables):
+                    raise ValueError("backup_schema_incomplete")
+                counts = {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                          for table in _REQUIRED_TABLES}
+            finally:
+                connection.close()
+        except sqlite3.DatabaseError as exc:
+            raise ValueError("backup_not_sqlite") from exc
+        return {"sha256": sha256(data).hexdigest(), "restored_bytes": size,
+                "integrity": "ok", "row_counts": counts}
+
+
+def verify_remote(key: str) -> dict:
+    """Read and restore-check one named S3 backup; never replaces the live DB."""
+    if not enabled():
+        raise ValueError("backup_not_configured")
+    if not re.fullmatch(r"signalapt/app-\d{8}-\d{6}\.db\.gz", key):
+        raise ValueError("invalid_backup_key")
+    import boto3
+    c = _cfg()
+    s3 = boto3.client("s3", endpoint_url=c["endpoint"] or None,
+                      aws_access_key_id=c["key"], aws_secret_access_key=c["secret"],
+                      region_name=c["region"])
+    response = s3.get_object(Bucket=c["bucket"], Key=key)
+    body = response["Body"]
+    try:
+        return verify_gz(body.read())
+    finally:
+        body.close()
 
 
 def run_backup(keep: int = 14) -> str | None:

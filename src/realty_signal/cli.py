@@ -312,6 +312,20 @@ def backup():
     console.print(f"[green]백업 완료:[/green] {key}" if key else "[red]백업 실패[/red]")
 
 
+@app.command("backup-verify")
+def backup_verify(key: str = typer.Argument(..., help="검증할 signalapt/app-*.db.gz 오브젝트 키")):
+    """S3 백업을 임시 DB에 복원·검증한다. 운영 DB는 변경하지 않는다."""
+    from realty_signal import backup as bk
+    try:
+        result = bk.verify_remote(key)
+    except Exception as exc:  # noqa: BLE001 — 운영 명령은 실패를 종료 코드로 드러낸다.
+        console.print(f"[red]백업 복원 검증 실패:[/red] {type(exc).__name__}")
+        raise typer.Exit(1) from exc
+    console.print(f"[green]임시 복원 검증 완료[/green] · sha256 {result['sha256']}")
+    console.print(f"용량 {result['restored_bytes']} bytes · 무결성 {result['integrity']}")
+    console.print("핵심 테이블 행 수: " + ", ".join(f"{name}={count}" for name, count in result["row_counts"].items()))
+
+
 @app.command()
 def report(
     path: Path = typer.Argument(..., exists=True, help="KB 주간 시계열 .xlsx 경로"),
