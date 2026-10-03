@@ -5962,7 +5962,7 @@ async function loadFreshness(){
     return r?`<b>${s.key==='signal'?'관측 ':''}${r}</b>`:`<span style="color:var(--dim)">${s.key==='signal'?'관측일 미확인':s.cycle||'–'}</span>`; };
   box.innerHTML=`<div style="font-size:13px;font-weight:700;margin-bottom:2px">데이터 신선도 <span style="font-weight:400;font-size:11px;color:var(--dim)">· 소스별 최종 갱신</span></div>
     <div style="font-size:11px;color:var(--dim);margin-bottom:8px">분석 기준일 <b style="color:var(--txt)">${d['기준일']||'–'}</b> (KB 시장 시그널)</div>`
-    + (kbAge>8 ? `<p class="v2-caution" style="font-size:11px;margin:0 0 8px">KB 관측 기준일이 ${Math.floor(kbAge)}일 전입니다. ${kbCheck?.changed===false?'최근 수집 확인에서도 새 관측일이 없었습니다. ':''}최신 공표를 확인하기 전까지 이 시그널을 현재 시장 상황으로 단정하지 마세요.</p>` : '')
+    + (kbAge!=null && Math.floor(kbAge)>8 ? `<p class="v2-caution" style="font-size:11px;margin:0 0 8px">KB 관측 기준일이 ${Math.floor(kbAge)}일 전입니다. ${kbCheck?.changed===false?'최근 수집 확인에서도 새 관측일이 없었습니다. ':''}최신 공표를 확인하기 전까지 이 시그널을 현재 시장 상황으로 단정하지 마세요.</p>` : '')
     + d.sources.map(s=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)">
         <span style="width:8px;height:8px;border-radius:50%;background:${dot(s)};margin-top:5px;flex:none"></span>
         <div style="flex:1;min-width:0">
