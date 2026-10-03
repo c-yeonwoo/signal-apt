@@ -83,6 +83,15 @@ test('code-key region favorite supplies current display name while old record st
   assert.equal(ctx._favRegionIdentity.get('kb:1114000000').label,'서울 · 중구');
 });
 
+test('complex star targets verified code favorite before an old name key', () => {
+  const ctx=vm.createContext({_favComplexIdentity:new Map([
+    ['강남구|같은단지',{status:'ready',name:'강남구'}],
+    ['kb:1168000000|같은단지',{status:'ready',name:'강남구'}],
+  ])});
+  vm.runInContext(extract('function cxFavKey(', 'const _ambiguousLegacyComplexRegions='),ctx);
+  assert.equal(ctx.cxFavKey('강남구','같은단지'),'kb:1168000000|같은단지');
+});
+
 test('old ambiguous Jung-gu can be explicitly reselected with the verified Seoul code', () => {
   const calls=[];
   const row={style:{},querySelector:()=>({set onclick(fn){this.handler=fn;row.favoriteClick=fn}})};
