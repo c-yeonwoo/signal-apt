@@ -215,7 +215,7 @@
       if (generation !== listingGeneration || !dialog.open) return;
       body.innerHTML = `<h2>내가 저장한 리포트</h2><p class="v2-muted">최근 50개까지 표시합니다. 저장 당시의 근거이며 현재 판정·매물 상태는 다시 확인하세요.</p>` +
         ((data.items || []).length ? data.items.map(item => `<div class="v2-row">
-          <b>${esc(item.name || '매물')} · ${esc(item.kind)}</b>
+          <b>${esc(item.name || '매물')} · ${esc(item.kind?.startsWith('비교') ? '비교' : item.kind)}</b>
           <p class="v2-muted">${item.kind === '지역' ? 'KB 기준' : '수집'} ${esc(item.asof || '시각 미확인')} · 저장 ${esc(new Date(item.saved_at * 1000).toLocaleString('ko-KR'))}</p>
           <button type="button" class="btn" data-saved-report="${esc(item.report_id)}">당시 리포트 보기</button>
           <button type="button" class="btn" data-delete-report="${esc(item.report_id)}">저장본 삭제</button>
@@ -259,6 +259,22 @@
           <p>${esc(assessment.summary || '당시 근거를 확인하세요.')}</p>
           <h3>당시 긍정 근거</h3>${(report.positive || []).map(reason).join('') || '<p>확인된 긍정 근거가 없습니다.</p>'}
           <h3>당시 반대 근거·한계</h3>${(report.cautions || []).map(reason).join('') || '<p>당시 별도 반대 근거가 기록되지 않았습니다.</p>'}
+          <button type="button" class="btn" id="v2BackSavedReports">저장본 목록으로</button>`;
+        body.querySelector('#v2BackSavedReports').onclick = () => openSavedReports(listKey);
+        return;
+      }
+      if (report.type === 'comparison') {
+        const entries = report.items || [];
+        body.innerHTML = `<h2>저장 당시 · ${esc(entries.length)}개 매물 비교</h2>
+          <p class="v2-caution">저장 후 바뀌지 않은 당시 비교입니다. 현재 호가·판매 여부·실거래·내 자금 상태를 뜻하지 않습니다.</p>
+          <p class="v2-muted">${esc(report.basis || '당시 수집분 기준')}</p>
+          ${entries.map(entry => { const listing = entry.listing || {}, price = entry.price || {};
+            return `<div class="v2-row"><b>${esc(listing.name || '단지 미확인')}</b> · ${money(listing.asking_manwon)}
+              <p>${esc(listing.region || '')} · ${listing.exclusive_m2 ? `${esc(listing.exclusive_m2)}㎡` : '면적 미확인'} · 수집 ${esc(listing.collected_at || '시점 미확인')}</p>
+              <p>당시 가격 근거: ${price['상태'] === '관측비교' ? `동일 조건 실거래 ${esc(price['표본수'])}건 대비 ${esc(price['호가차이율'])}%` : esc(price['이유'] || '비교 보류')}</p></div>`;
+          }).join('')}
+          ${(report.cautions || []).map(text => `<p class="v2-caution">${esc(text)}</p>`).join('')}
+          <p class="v2-muted">당시 미비교 항목: ${(report.unknowns || []).map(esc).join(' · ') || '기록 없음'}</p>
           <button type="button" class="btn" id="v2BackSavedReports">저장본 목록으로</button>`;
         body.querySelector('#v2BackSavedReports').onclick = () => openSavedReports(listKey);
         return;
@@ -489,6 +505,27 @@
     return listing?.key && listing.name && typeof watchBtn === 'function' ? watchBtn(listing.key) : '';
   }
 
+  async function saveComparison() {
+    const button = document.getElementById('listingCompareSave');
+    const status = document.getElementById('listingCompareSaveStatus');
+    const keys = typeof _listingCompareKeys === 'function' ? _listingCompareKeys() : [];
+    if (!button || !status || keys.length < 2 || keys.length > 3) return;
+    const sameSelection = () => document.getElementById('listingCompareDlg').open &&
+      _listingCompareKeys().join('\u0000') === keys.join('\u0000');
+    button.disabled = true;
+    status.textContent = '현재 비교 근거를 확인하고 저장하고 있습니다…';
+    try {
+      const options = {method:'POST',headers:{'Content-Type':'application/json'}};
+      const current = await json('/api/v2/comparisons', {...options,body:JSON.stringify({keys})});
+      await json('/api/v2/report-snapshots', {...options,
+        body:JSON.stringify({type:'comparison',keys,report_id:current.report_id})});
+      if (sameSelection())
+        status.textContent = '이 시점의 비교 근거를 저장했습니다.';
+    } catch (error) {
+      if (sameSelection()) status.textContent = error.message;
+    } finally { button.disabled = false; }
+  }
+
   async function runDiscovery(cursor = null) {
     const generation = ++discoveryGeneration;
     const form = document.getElementById('v2DiscoverForm');
@@ -622,7 +659,7 @@
 
   document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
   document.getElementById('v2NoteForm')?.addEventListener('submit', saveNote);
-  window.SignalV2 = {paintRegion, openListing, openSavedReports, openDiscovery, openNote, openNotes, openInitialLink};
+  window.SignalV2 = {paintRegion, openListing, openSavedReports, openDiscovery, openNote, openNotes, openInitialLink, saveComparison};
   if (window._signalAppReady && !document.getElementById('onbDlg')?.open) openInitialLink();
   if (typeof selected === 'string' && selected) paintRegion(selected);
 })();

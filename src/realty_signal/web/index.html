@@ -7543,6 +7543,9 @@ async function listingCompareOpen(){
       <div style="margin-top:12px"><button type="button" class="btn" onclick="listingCompareLocations()">교통·학교 차이 확인</button>
         <span class="analysis-muted">선택할 때만 경로 API를 조회합니다.</span></div>
       <div id="listingCompareLocation"></div>
+      <div style="margin-top:12px"><button type="button" class="btn" id="listingCompareSave" onclick="SignalV2.saveComparison()">이 비교 리포트 저장</button>
+        <button type="button" class="btn" onclick="document.getElementById('listingCompareDlg').close();SignalV2.openSavedReports()">저장본 보기</button>
+        <p id="listingCompareSaveStatus" class="analysis-muted" role="status"></p></div>
       <button type="button" class="btn" style="margin-top:12px;background:var(--accent);color:#fff" onclick="listingCompareAsk()">닉에게 차이 묻기</button>
       <details style="font-size:12px;margin-top:12px"><summary>왜 이렇게 비교하나요?</summary>
         <p>면적이나 층이 다르면 총 호가만으로 유불리를 가를 수 없습니다. 같은 면적의 최근 실거래라도 현재 매물의 동·향·상태와 다르며, 표본이 적으면 판단을 보류합니다.</p>
