@@ -48,6 +48,16 @@ def _date(value: object) -> str | None:
     return None
 
 
+def _rooms(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    return count if str(value).strip() == str(count) and 1 <= count <= 15 else None
+
+
 def snapshot(row: dict) -> dict:
     """LLM/브라우저에 전달할 검증된 최소 매물 정보."""
     ref = row.get("ref") or {}
@@ -63,7 +73,8 @@ def snapshot(row: dict) -> dict:
         "key": row.get("key"), "kind": kind, "name": row.get("단지명"),
         "region": row.get("지역"), "region_sido": row.get("시도"),
         "region_code": row.get("지역코드"), "asking_manwon": price,
-        "exclusive_m2": area, "floor": floor, "source": row.get("source") or kind,
+        "exclusive_m2": area, "rooms": _rooms(ref.get("방수")), "floor": floor,
+        "source": row.get("source") or kind,
         "published_at": row.get("published_at") or ref.get("등록일"),
         "collected_at": _date(row.get("fetched_at")), "stale": bool(row.get("stale")),
         "coordinate": coords,

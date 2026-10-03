@@ -22,6 +22,25 @@ def test_price_area_and_unknown_are_separate_tiers():
     assert result["groups"]["matched"][0]["signal_context"] == "SELL_RISK"
 
 
+def test_min_rooms_is_a_verified_hard_condition_and_missing_source_stays_unknown():
+    enough = _row("enough", price=55_000, area=70)
+    too_few = _row("too-few", price=45_000, area=70)
+    missing = _row("missing", price=50_000, area=70)
+    enough["ref"]["방수"] = 3
+    too_few["ref"]["방수"] = 2
+    out = discovery.discover([enough, too_few, missing],
+                             {"min_rooms": 3, "include_exceeded": True})
+    assert [x["listing"]["name"] for x in out["groups"]["matched"]] == ["enough"]
+    assert [x["listing"]["name"] for x in out["groups"]["verify"]] == ["missing"]
+    assert [x["listing"]["name"] for x in out["groups"]["exceeded"]] == ["too-few"]
+    assert out["groups"]["verify"][0]["verify_next"] == "매물의 방 개수를 확인하세요."
+    assert out["groups"]["exceeded"][0]["tradeoff"] == "방 개수가 원하는 최소보다 적습니다."
+    assert out["single_condition_relaxations"] == {"min_rooms": 1}
+    for value in (0, 16, True, 2.5, "3"):
+        with pytest.raises(ValueError, match="invalid_condition_value"):
+            discovery.validate({"min_rooms": value})
+
+
 def test_stale_price_never_passes_and_invalid_input_is_rejected():
     out = discovery.discover([_row("stale", price=45000, area=70, stale=True)],
                             {"max_price_manwon": 50000})

@@ -14,7 +14,7 @@ def _raw(source_id=1, **overrides):
             "useYn": "Y", "trdeAmt": 53_000, "prvuseArea": 84.5,
             "hsmpNm": "상계주공 102동\\n서울 노원구 상계동", "sggNm": "노원구",
             "hsmpInfoPk": 123, "flrCnt": 10, "atlfslLat": 37.6, "atlfslLot": 127.1,
-            "atlfslTrsmDt": "2026-09-29", "lreaTelno": "010-0000-0000",
+            "atlfslTrsmDt": "2026-09-29", "roomCnt": 3, "lreaTelno": "010-0000-0000",
             "picTelno": "010-1111-1111", "atlfslExplnCn": "원문 설명",
             **overrides}
 
@@ -31,12 +31,16 @@ def test_normalize_apartment_sale_only_and_whitelists_private_fields():
     row = hanbang.normalize(_raw())
     assert row["단지명"] == "상계주공" and row["호가"] == 53_000
     assert row["hanbang_id"] == "1" and row["평형"] == 25.6
+    assert row["방수"] == 3
     assert all(word not in json.dumps(row, ensure_ascii=False)
                for word in ("010-0000-0000", "010-1111-1111", "원문 설명"))
     assert hanbang.normalize(_raw(dlngSeCd="B1")) is None
     assert hanbang.normalize(_raw(atlfslKndCd="05")) is None
     assert hanbang.normalize(_raw(useYn="N")) is None
     assert hanbang.normalize(_raw(trdeAmt=0)) is None
+    assert hanbang.normalize(_raw(roomCnt=0))["방수"] is None
+    assert hanbang.normalize(_raw(roomCnt="three"))["방수"] is None
+    assert hanbang.normalize(_raw(roomCnt=2.5))["방수"] is None
 
 
 def test_pagination_marks_complete_only_after_short_page(monkeypatch):
@@ -117,6 +121,7 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     listing = private["listings"][0]
     assert listing["key"] == "일반매물:1" and listing["총액"] == 53_000
     assert listing["지역코드"] == "11350"
+    assert listing["ref"]["방수"] == 3
     assert not listing["stale"]
     api._record_radar_refresh(cache, {"ok": False, "attempted_at": time.time()})
     assert owner.get("/api/listings/all?types=일반매물").json()["listings"][0]["stale"]

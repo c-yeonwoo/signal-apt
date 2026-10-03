@@ -11,9 +11,9 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-8"
+VERSION = "discovery-v2-9"
 KINDS = {"일반매물", "급매", "찐매물"}
-FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region",
+FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
 PRIORITIES = {"balanced", "region", "price", "area"}
 
@@ -40,6 +40,11 @@ def validate(spec: dict) -> dict:
             if value is None or value > 5_000_000:
                 raise ValueError("invalid_condition_value")
             cleaned[key] = value
+    if spec.get("min_rooms") is not None:
+        value = spec["min_rooms"]
+        if type(value) is not int or not 1 <= value <= 15:
+            raise ValueError("invalid_condition_value")
+        cleaned["min_rooms"] = value
     if spec.get("region") is not None:
         if not isinstance(spec["region"], str) or len(spec["region"]) > 80:
             raise ValueError("invalid_region")
@@ -156,6 +161,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
     listing = snapshot(row)
     price = listing["asking_manwon"]
     area = listing["exclusive_m2"]
+    rooms = listing["rooms"]
     checks = []
     if "max_price_manwon" in spec:
         checks.append({"field": "max_price_manwon", "status": "unknown" if price is None or listing["stale"]
@@ -165,6 +171,10 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
         checks.append({"field": "min_area_m2", "status": "unknown" if area is None
                        else "pass" if area >= spec["min_area_m2"] else "fail",
                        "value": area, "limit": spec["min_area_m2"]})
+    if "min_rooms" in spec:
+        checks.append({"field": "min_rooms", "status": "unknown" if rooms is None
+                       else "pass" if rooms >= spec["min_rooms"] else "fail",
+                       "value": rooms, "limit": spec["min_rooms"]})
     if "max_monthly_manwon" in spec:
         monthly = _monthly(finance)
         assessed = (finance or {}).get("status") == "assessed" and monthly is not None
@@ -200,6 +210,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
     if passed:
         reason = {"max_price_manwon": "설정한 호가 상한 안입니다.",
                   "min_area_m2": "원하는 전용면적 이상입니다.",
+                  "min_rooms": "원하는 방 개수 이상입니다.",
                   "max_monthly_manwon": "입력 가정의 월 부담 상한 안입니다.",
                   "region": "선택한 지역입니다.", "region_code": "선택한 지역입니다."}[passed[0]["field"]]
     else:
@@ -210,6 +221,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
         reason = "입력한 선호 조건 일부에 부합합니다."
     failed_reason = {"max_price_manwon": "호가가 설정한 상한보다 높습니다.",
                      "min_area_m2": "전용면적이 원하는 최소 면적보다 작습니다.",
+                     "min_rooms": "방 개수가 원하는 최소보다 적습니다.",
                      "max_monthly_manwon": "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다.",
                      "region": "선택한 필수 지역 밖의 매물입니다.",
                      "region_code": "선택한 필수 지역 밖의 매물입니다."}
@@ -218,6 +230,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
     verify = ("매물 판매 여부와 실제 호가를 확인하세요." if listing["stale"] else
               finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
               "매물의 시군구 코드를 확인하세요." if missing and missing[0]["field"] == "region_code" else
+              "매물의 방 개수를 확인하세요." if missing and missing[0]["field"] == "min_rooms" else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else
               "실제 자금·매물 상태를 확인하세요.")
     return {"listing": listing, "eligibility": tier, "constraints": checks,
