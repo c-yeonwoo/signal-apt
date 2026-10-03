@@ -353,7 +353,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         : originalFetch(input,...args);
       toggleFav=async(kind,key,label)=>{ saved={kind,key,label}; return true; };
       try{
-        await selectComplexFavoriteRegion('중구','옛 관심단지');
+        await toggleComplexFav('중구','옛 관심단지');
         const dlg=document.getElementById('complexRegionPickDlg');
         const options=document.getElementById('complexRegionPickOptions').textContent;
         dlg.querySelector('#complexRegionPickOptions button').click();

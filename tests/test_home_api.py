@@ -182,6 +182,23 @@ def test_complex_favorite_rejects_name_only_jung_gu(client, monkeypatch):
     assert watched["moved_total"] == 0
 
 
+@pytest.mark.parametrize("region", ["서구", "동구", "남구", "강서구", "북구", "인천 중구"])
+def test_other_ambiguous_old_districts_need_explicit_code(client, monkeypatch, region):
+    monkeypatch.setattr(auth_routes.md, "code_of", lambda name: pytest.fail(
+        "동명이 구 이름을 현재 코드로 추정하면 안 됩니다"))
+    for kind, key in (("region", region), ("complex", f"{region}|옛 단지")):
+        response = client.post("/api/favorites", json={"kind": kind, "key": key})
+        assert response.status_code == 422
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "region", region, region)
+    db.fav_add(uid, "complex", f"{region}|옛 단지", "옛 단지")
+    records = {item["kind"]: item for item in client.get("/api/favorites").json()["favorites"]}
+    assert records["region"]["region_identity"]["status"] == "needs_reselection"
+    assert records["complex"]["complex_identity"]["status"] == "needs_reselection"
+    assert db.actionable_region_favs(uid) == []
+    assert db.complex_favorite_region(region)["status"] == "needs_reselection"
+
+
 def test_complex_favorite_verified_code_keeps_old_jung_gu_separate(client, monkeypatch):
     from types import SimpleNamespace
 
@@ -217,7 +234,7 @@ def test_pre_reform_region_favorite_is_preserved_but_needs_reselection(client, m
     uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
     db.fav_add(uid, "region", "서구", "서구")  # 기존 저장본은 자동 삭제·이전하지 않는다.
     response = client.post("/api/favorites", json={"kind": "region", "key": "서구"})
-    assert response.status_code == 422 and response.json()["error"] == "retired_region"
+    assert response.status_code == 422 and response.json()["error"] == "ambiguous_region"
     retired_code = client.post("/api/favorites", json={"kind": "region", "key": "kb:2826000000"})
     assert retired_code.status_code == 422 and retired_code.json()["error"] == "retired_region"
     created = client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()

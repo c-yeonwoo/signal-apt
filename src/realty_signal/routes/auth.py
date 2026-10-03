@@ -179,7 +179,7 @@ def _favorite_region_identity(region: str) -> dict:
 
     if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
         return {"status": "needs_reselection",
-                "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 시그널 목록에서 현행 지역을 다시 선택해 주세요."}
+                "message": f"이름만 저장된 {region}의 시·도와 현행 구역을 확인할 수 없습니다. 시그널 목록에서 현행 지역을 다시 선택해 주세요."}
 
     if region.startswith("kb:"):
         try:
@@ -230,7 +230,8 @@ def _complex_favorite_error(key: object) -> str | None:
     if not region or not name:
         return "단지와 시군구를 다시 선택해 주세요."
     if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
-        return "이름만 적힌 중구는 서울·개편 전 인천을 구별할 수 없어 관심단지로 새로 등록할 수 없습니다."
+        return ("이름만 적힌 중구는 서울·개편 전 인천을 구별할 수 없어 관심단지로 새로 등록할 수 없습니다."
+                if region == "중구" else f"이름만 적힌 {region}는 시·도를 확인할 수 없어 관심단지로 새로 등록할 수 없습니다.")
     if region.startswith("kb:"):
         return None if db.complex_favorite_region(region)["status"] == "ready" else "현재 지역 코드를 확인할 수 없습니다. 현행 지역을 다시 선택해 주세요."
     try:
@@ -255,7 +256,7 @@ def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dic
                             status_code=422)
     if kind == "region" and key in db.AMBIGUOUS_LEGACY_REGION_KEYS:
         return JSONResponse({"ok": False, "error": "ambiguous_region",
-                             "message": "중구는 이름만으로 등록할 수 없습니다. 시그널 목록에서 지역을 다시 선택해 주세요."},
+                             "message": f"{key}는 이름만으로 등록할 수 없습니다. 시그널 목록에서 지역을 다시 선택해 주세요."},
                             status_code=422)
     if kind == "region":
         identity = _favorite_region_identity(key)
