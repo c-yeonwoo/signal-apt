@@ -30,6 +30,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         return route.fulfill({json:{ok:true}});
       }
       const decoded=decodeURIComponent(url.pathname);
+      if(decoded==='/api/v2/regions/테스트구/report') data={type:'region',asof:'2026-09-28',
+        assessment:{display_grade:'매수',assessment_status:'ready',scope_note:'테스트 권역 자료',
+          summary:'지역 신호만 보여 줍니다. 개별 매물의 가격 판단은 별도입니다.',raw_grade:'BUY',
+          reasons:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
+          change:{type:'first_observation',changed_reasons:[]}},
+        positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
+        cautions:[{reason_id:'buyer_interest',label:'매수심리 관찰선 미충족',value:68,threshold:70,unit:'지수',role:'driver',passing:false}],
+        unknowns:[]};
+      if(decoded==='/api/series/테스트구') data={metrics:{},volume:null};
       if(decoded==='/api/complex/테스트구/테스트단지') data={단지명:'테스트단지',identity_status:'single_observed',
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
           비교거래:{상태:'관측',건수:4,중앙값:50000,최저:45000,최고:55000,거래월범위:'2026-08~2026-09'}}],
@@ -311,6 +320,54 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(held.badge,/판단 보류/);
     assert.equal(held.style.fillColor,'#5f6875');
     assert.match(held.tip,/판단 보류/);
+    await page.evaluate(()=>{
+      document.getElementById('advPanel').style.display='none';
+      document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
+      meta={last_date:'2026-09-28',zones:{jeonse_supply:[],buyer_idx_strong:70,buyer_demand_buy:20}};
+      allSignals=[{region:'테스트구',group:'서울',signal:'BUY',display_signal:'BUY',급지:'B',전세수급:180,매수우위지수:68}];
+      switchTab('signal'); renderList(); selectRegion('테스트구');
+    });
+    await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
+    assert.equal(await page.locator('#signalPanelReasons').isVisible(),true);
+    assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
+    assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
+    assert.equal(await page.locator('#haesolPanel').evaluate(el=>getComputedStyle(el).maxHeight),'none');
+    assert.equal(await page.locator('#signalPanelReasons').evaluate(el=>getComputedStyle(el).overflowY),'auto');
+    assert.equal(calls.some(x=>decodeURIComponent(x)==='/api/series/테스트구'),false);
+    assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
+    await page.locator('#sideToggle').click();
+    assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),false);
+    assert.equal(await page.locator('#sideToggle').getAttribute('aria-expanded'),'true');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
+    await page.locator('#sideToggle').click();
+    await page.locator('#signalSide #list .row').first().click();
+    assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
+    assert.equal(await page.locator('#sigbadge').evaluate(el=>el===document.activeElement),true);
+    await page.getByRole('tab',{name:'가격·수급 추세'}).click();
+    await page.waitForFunction(()=>document.getElementById('signalTrendStatus').textContent==='');
+    assert.equal(calls.filter(x=>decodeURIComponent(x)==='/api/series/테스트구').length,1);
+    assert.equal(await page.locator('#signalPanelReasons').isVisible(),false);
+    await page.getByRole('tab',{name:'지역 지도'}).click();
+    assert.equal(await page.locator('#signalPanelMap').isVisible(),true);
+    assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
+    await page.getByRole('tab',{name:'판정 근거'}).click();
+    assert.equal(await page.locator('#signalPanelReasons').isVisible(),true);
+    await page.getByRole('tab',{name:'판정 근거'}).focus();
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.getByRole('tab',{name:'지역 지도'}).getAttribute('aria-selected'),'true');
+    await page.getByRole('tab',{name:'판정 근거'}).click();
+    await page.setViewportSize({width:1280,height:800});
+    assert.equal(await page.locator('#signalSide').isVisible(),true);
+    assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
+    await page.setViewportSize({width:390,height:800});
+    await page.waitForFunction(()=>document.getElementById('signalSide').inert);
+    assert((await page.evaluate(()=>document.documentElement.scrollWidth))<=390);
+    assert((await page.locator('#signalPanelReasons').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
+    await page.setViewportSize({width:360,height:800});
+    await page.waitForFunction(()=>document.getElementById('signalSide').inert);
+    assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
+    assert((await page.locator('#signalPanelReasons').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     assert.deepEqual(errors,[]);

@@ -55,9 +55,8 @@
           ? `이전 ${esc(a.change.previous_grade || '판정')}에서 ${changedLabels.map(esc).join(' · ')} 근거가 달라졌습니다.${changed === 'source_revision' ? ' 같은 기준일의 원천 수정입니다.' : ''}` :
           '이전 발행 판정에서 확인된 근거 변화가 없습니다.';
       target.innerHTML = `<section class="v2-panel" aria-label="지역 시그널 근거">
-        <h2>${esc(region)} · ${esc(a.display_grade)}</h2>
-        <p class="v2-muted">지역 시장 신호 · KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
-        <p>${esc(a.summary)}</p>
+        <p class="v2-report-lead">${esc(a.summary)}</p>
+        <p class="v2-muted">KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
         <h3>이번 판정의 근거</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
           '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
         <h3>반대 근거와 한계</h3>${report.cautions.length ? report.cautions.map(reason).join('') :
