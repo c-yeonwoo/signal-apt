@@ -917,7 +917,22 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#v2NoteList [data-note-more]').count(),0);
     await page.evaluate(()=>{document.getElementById('v2NoteDlg').close();window.fetch=window.__notePagingFetch;
       delete window.__notePagingFetch;delete window.__noteRecord;delete window.__resolveNoteA;});
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({width,height:844});
+      await page.evaluate(()=>SignalV2.openDiscovery());
+      await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+      await page.locator('#v2DiscoverResults [data-v2-card]').first().waitFor();
+      const layout = await page.evaluate(() => ({viewport:innerWidth,
+        page:document.documentElement.scrollWidth,
+        dialog:document.getElementById('v2DiscoverDlg').getBoundingClientRect().width,
+        results:document.getElementById('v2DiscoverResults').scrollWidth,
+        available:document.getElementById('v2DiscoverResults').clientWidth}));
+      assert(layout.page<=layout.viewport,`discovery page overflows at ${width}px: ${JSON.stringify(layout)}`);
+      assert(layout.dialog<=layout.viewport,`discovery dialog overflows at ${width}px: ${JSON.stringify(layout)}`);
+      assert(layout.results<=layout.available,`discovery results overflow at ${width}px: ${JSON.stringify(layout)}`);
+      await page.evaluate(()=>document.getElementById('v2DiscoverDlg').close());
+    }
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
+    console.log('PASS: Chromium 360/390/1280px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
