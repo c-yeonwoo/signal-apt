@@ -6,7 +6,6 @@ SMTP env가 있으면 발송·없으면 dry-run 출력.
 
 from __future__ import annotations
 
-import json
 import os
 import smtplib
 from datetime import date
@@ -135,19 +134,15 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
     for u in db.users_with_region_favs():
         vols = {r: (pl.volume_summary(r) or {}).get("거래량비") for r in u["regions"]}
         complexes = []
-        codes = {}
-        try:
-            codes = json.loads(store.CODES_FILE.read_text(encoding="utf-8")) if store.CODES_FILE.exists() else {}
-        except Exception:  # noqa: BLE001
-            codes = {}
         for f in db.fav_list(u["id"]):
             if f.get("kind") != "complex":
                 continue
             key = f.get("key") or ""
-            reg, _, nm = key.partition("|")
-            if not nm or reg in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+            ref, _, nm = key.partition("|")
+            identity = db.complex_favorite_region(ref)
+            if not nm or identity["status"] != "ready":
                 continue
-            code = codes.get(reg) or ""
+            reg, code = identity["name"], identity["code"]
             d = db.kv_get(f"complex:{code[:5]}:{nm}", max_age=30 * 86400) if code[:5].isdigit() else None
             plist = (d or {}).get("평형별") or []
             main = max(plist, key=lambda p: p.get("매매건수", 0) or 0) if plist else {}

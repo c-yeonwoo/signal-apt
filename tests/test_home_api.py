@@ -182,6 +182,32 @@ def test_complex_favorite_rejects_name_only_jung_gu(client, monkeypatch):
     assert watched["moved_total"] == 0
 
 
+def test_complex_favorite_verified_code_keeps_old_jung_gu_separate(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"중구": "1114000000"}, regions=["중구"], identity_verified=True))
+    warmed = []
+    monkeypatch.setattr(auth_routes, "_warm_complex_after_favorite",
+                        lambda region, name: warmed.append((region, name)))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "complex", "중구|옛 관심단지", "옛 관심단지")
+
+    selected = client.post("/api/favorites", json={
+        "kind": "complex", "key": "kb:1114000000|옛 관심단지"})
+    assert selected.status_code == 200
+    assert selected.json()["key"] == "kb:1114000000|옛 관심단지"
+    assert warmed == [("kb:1114000000", "옛 관심단지")]
+    records = {item["key"]: item for item in client.get("/api/favorites").json()["favorites"]}
+    assert records["중구|옛 관심단지"]["complex_identity"]["status"] == "needs_reselection"
+    assert records["kb:1114000000|옛 관심단지"]["complex_identity"]["label"] == "서울 · 중구"
+    assert db.complex_favorite_region("kb:1114000000")["code"] == "1114000000"
+
+    bad = client.post("/api/favorites", json={
+        "kind": "complex", "key": "kb:2811000000|옛 관심단지"})
+    assert bad.status_code == 422
+
+
 def test_pre_reform_region_favorite_is_preserved_but_needs_reselection(client, monkeypatch):
     from types import SimpleNamespace
 

@@ -326,8 +326,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(priceUi.restored,priceUi.all);
     assert.match(priceUi.note,/가격 미상 1건 제외/);
     const ambiguousFavorite=await page.evaluate(async()=>{
-      const originalFetch=window.fetch, oldFavorites=_favs;
+      const originalFetch=window.fetch, oldFavorites=_favs, oldIdentity=_favComplexIdentity;
       _favs=new Set(['complex:중구|옛 관심단지']);
+      _favComplexIdentity=new Map([['중구|옛 관심단지',{status:'needs_reselection',
+        message:'이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다.'}]]);
       window.fetch=(input,...args)=>String(input)==='/api/myfeed'
         ? Promise.resolve({json:async()=>({ok:true,items:[{type:'complex',region:'중구',name:'옛 관심단지',
             지역확인필요:true,데이터없음:true}]})}) : originalFetch(input,...args);
@@ -336,12 +338,34 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         return {favorite:document.getElementById('favListBody').innerHTML,
           feed:document.getElementById('dashFeedWrap').innerHTML};
       }
-      finally { window.fetch=originalFetch; _favs=oldFavorites; }
+      finally { window.fetch=originalFetch; _favs=oldFavorites; _favComplexIdentity=oldIdentity; }
     });
-    assert.match(ambiguousFavorite.favorite,/시·도를 확인할 수 없어 변화 판정을 보류합니다/);
+    assert.match(ambiguousFavorite.favorite,/서울·개편 전 인천을 구별할 수 없습니다/);
+    assert.match(ambiguousFavorite.favorite,/지역 재선택/);
     assert.doesNotMatch(ambiguousFavorite.favorite,/＋비교|>상세</);
     assert.match(ambiguousFavorite.feed,/지역 확인 전 · 변화 판정 보류/);
     assert.doesNotMatch(ambiguousFavorite.feed,/openComplex/);
+    const reselected=await page.evaluate(async()=>{
+      const originalFetch=window.fetch, originalToggle=toggleFav;
+      let saved=null;
+      window.fetch=(input,...args)=>String(input)==='/api/v2/discovery/regions'
+        ? Promise.resolve({ok:true,json:async()=>({regions:[{code:'11140',name:'중구',label:'서울 · 중구'}]})})
+        : originalFetch(input,...args);
+      toggleFav=async(kind,key,label)=>{ saved={kind,key,label}; return true; };
+      try{
+        await selectComplexFavoriteRegion('중구','옛 관심단지');
+        const dlg=document.getElementById('complexRegionPickDlg');
+        const options=document.getElementById('complexRegionPickOptions').textContent;
+        dlg.querySelector('#complexRegionPickOptions button').click();
+        await new Promise(resolve=>setTimeout(resolve,0));
+        return {options,saved};
+      }finally{
+        document.getElementById('complexRegionPickDlg').close();
+        window.fetch=originalFetch; toggleFav=originalToggle;
+      }
+    });
+    assert.match(reselected.options,/서울 · 중구 · 이 단지가 맞습니다/);
+    assert.deepEqual(reselected.saved,{kind:'complex',key:'kb:1114000000|옛 관심단지',label:'옛 관심단지'});
     await page.evaluate(()=>{window.__generalRows=[]; mapSplit=(listId,mapId,items,opt)=>{
       window.__generalRows=items; document.getElementById(listId).innerHTML=opt.summary(items[0]).nm+opt.detail(items[0]);
     }; switchTab('general');});

@@ -165,6 +165,18 @@ def test_ambiguous_old_complex_favorite_never_borrows_seoul_trade_cache(monkeypa
         "status": "unavailable", "reason": "ambiguous_region"}
 
 
+def test_verified_code_complex_watch_reads_only_its_code_cache(monkeypatch):
+    monkeypatch.setattr(db, "complex_favorite_region", lambda region: {
+        "status": "ready", "name": "중구", "code": "1114000000", "sido": "서울"}
+        if region == "kb:1114000000" else {"status": "needs_reselection"})
+    keys = []
+    monkeypatch.setattr(db, "kv_get", lambda key, **_kw: keys.append(key) or {"매매추이": [], "평형별": []})
+    monkeypatch.setattr(db, "kv_ts", lambda key: 1_700_000_000)
+    data, _ts = cw.cache_loader()("kb:1114000000", "검증단지")
+    assert data is not None
+    assert keys == ["complex:11140:검증단지"]
+
+
 def test_loader_never_calls_network(monkeypatch, tmp_path):
     """홈 카드가 관심단지 수만큼 국토부 API 를 때리면 홈이 느려진다."""
     monkeypatch.setattr(db, "DB", tmp_path / "t.db")

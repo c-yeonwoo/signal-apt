@@ -1520,6 +1520,12 @@
   </div>
   <div id="favListBody" style="max-height:64vh;overflow:auto"></div>
 </dialog>
+<dialog id="complexRegionPickDlg" style="width:420px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+  <h3 style="margin:0 0 8px">관심단지 지역 다시 선택</h3>
+  <p style="font-size:12px;line-height:1.6;color:var(--dim)">옛 중구 찜은 서울인지 개편 전 인천인지 알 수 없습니다. 아래 현행 지역이 실제 관심단지의 위치와 일치할 때만 선택하세요. 옛 찜은 지워지지 않습니다.</p>
+  <div id="complexRegionPickOptions" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"></div>
+  <button type="button" class="btn" onclick="document.getElementById('complexRegionPickDlg').close()">취소</button>
+</dialog>
 
 <dialog id="sourceDlg" style="width:620px;max-width:95vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -5533,12 +5539,12 @@ async function loadCxSig(btn, name, region){
 function cxBtn(name, region){
   if(!name||!region) return '';
   const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
-  const on=(_favs||new Set()).has('complex:'+r+'|'+n);
+  const on=(_favs||new Set()).has('complex:'+cxFavKey(r,n));
   return ` <span class="btn favcx" data-n="${n}" data-r="${r}" style="padding:3px 10px${on?';background:var(--accent);color:#fff':''}" onclick="event.stopPropagation();favCxToggle(this)">${on?'★':'☆'} 관심단지</span>`
     + ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">단지</span>`;
 }
 function favCxToggle(el){ const n=el.dataset.n, r=el.dataset.r;
-  toggleFav('complex', r+'|'+n, n).then((changed)=>{ if(!changed) return; const on=_favs.has('complex:'+r+'|'+n);
+  toggleFav('complex', cxFavKey(r,n), n).then((changed)=>{ if(!changed) return; const on=_favs.has('complex:'+cxFavKey(r,n));
     el.textContent=(on?'★':'☆')+' 관심단지'; el.style.background=on?'var(--accent)':''; el.style.color=on?'#fff':'';
     toast(on?`관심단지 추가: ${n}`:'관심단지 해제'); }); }
 function _spark(vals){
@@ -5756,7 +5762,7 @@ async function renderFavList(){
   const complexes=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8));
   const cxMeta={};
   try{ const d=await (await fetch('/api/myfeed')).json();
-    (d.items||[]).filter(i=>i.type==='complex').forEach(i=>{ cxMeta[i.region+'|'+i.name]=i; });
+    (d.items||[]).filter(i=>i.type==='complex').forEach(i=>{ cxMeta[i.key||i.region+'|'+i.name]=i; });
   }catch(e){}
   const money=v=>v?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):'–';
   const rSec=`<div style="font-size:13px;font-weight:700;margin:2px 0 6px">📍 관심지역 <span style="color:var(--dim);font-weight:400">${regions.length}</span></div>`
@@ -5769,19 +5775,22 @@ async function renderFavList(){
           <button type="button" data-fav-region-remove="${esc(r)}" style="border:0;background:none;cursor:pointer;color:#dc2626;font-size:12px;white-space:nowrap">✕ 제거</button></div>`;}).join('')
       : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 시그널 목록에서 ☆로 추가하세요.</div>');
   const cSec=`<div style="font-size:13px;font-weight:700;margin:18px 0 6px">🏢 관심단지 <span style="color:var(--dim);font-weight:400">${complexes.length}</span></div>`
-    + (complexes.length? complexes.map(k=>{const i=k.indexOf('|'), reg=k.slice(0,i), nm=k.slice(i+1), nq=nm.replace(/['"\\]/g,''), kq=k.replace(/['"\\]/g,'');
-        const m=cxMeta[k]||{};
+    + (complexes.length? complexes.map(k=>{const i=k.indexOf('|'), ref=k.slice(0,i), nm=k.slice(i+1), nq=nm.replace(/['"\\]/g,''), kq=k.replace(/['"\\]/g,'');
+        const m=cxMeta[k]||{}, identity=_favComplexIdentity.get(k)||{};
+        const reg=identity.name||ref, regLabel=identity.label||reg;
         const bits=[];
         if(m['단지등급']) bits.push(badge(m['단지등급']));
         if(m['전세가율']!=null) bits.push(`전세 ${m['전세가율']}%`);
         if(m['갭']!=null) bits.push('갭 '+money(m['갭']));
         if(m['최근평단가']) bits.push(money(m['최근평단가'])+'/평');
         const meta=bits.length?`<span style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:4px;flex-wrap:wrap">${bits.join(' · ')}${(m.spark&&m.spark.length>=2)?_sparkMini(m.spark):''}</span>`:'';
-        const held=m['지역확인필요']?'<div style="font-size:11px;color:var(--danger);margin-top:3px">이름만 저장된 중구의 시·도를 확인할 수 없어 변화 판정을 보류합니다. 원래 찜은 유지됩니다.</div>':'';
+        const held=m['지역확인필요']||identity.status==='needs_reselection'||identity.status==='unverified'
+          ?`<div style="font-size:11px;color:var(--danger);margin-top:3px">${esc(identity.message||'지역 확인 전이라 변화 판정을 보류합니다.')} 원래 찜은 유지됩니다.</div>`:'';
         return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)">
-          <span style="min-width:0;overflow:hidden"><b>${nm}</b> <span style="font-size:11px;color:var(--dim)">${reg}</span><div style="margin-top:3px">${meta}${held}</div></span>
+          <span style="min-width:0;overflow:hidden"><b>${esc(nm)}</b> <span style="font-size:11px;color:var(--dim)">${esc(regLabel)}</span><div style="margin-top:3px">${meta}${held}</div></span>
           <span style="display:flex;gap:9px;white-space:nowrap;flex-shrink:0">
-            ${m['지역확인필요']?'':`<span onclick="addToCompare('${nq}','${reg}')" style="cursor:pointer;color:var(--accent);font-size:12px">＋비교</span>
+            ${identity.status==='needs_reselection'?`<button type="button" class="btn" data-complex-reselect="${esc(k)}">지역 재선택</button>`:''}
+            ${held?'':`<span onclick="addToCompare('${nq}','${reg}')" style="cursor:pointer;color:var(--accent);font-size:12px">＋비교</span>
             <span onclick="document.getElementById('favListDlg').close();openComplex('${nq}','${reg}')" style="cursor:pointer;font-size:12px">상세</span>`}
             <span onclick="favRemove('complex','${kq}','${nq}')" style="cursor:pointer;color:#dc2626;font-size:12px">✕</span></span></div>`;}).join('')
       : '<div style="color:var(--dim);font-size:12px;padding:4px 0">없음 — 매물에서 ☆로 추가</div>');
@@ -5794,10 +5803,44 @@ async function renderFavList(){
   body.querySelectorAll('[data-fav-region-remove]').forEach(button=>button.addEventListener('click',()=>{
     const r=button.dataset.favRegionRemove; favRemove('region',r,r);
   }));
+  body.querySelectorAll('[data-complex-reselect]').forEach(button=>button.addEventListener('click',()=>{
+    const key=button.dataset.complexReselect;
+    selectComplexFavoriteRegion(key.slice(0,key.indexOf('|')),key.slice(key.indexOf('|')+1));
+  }));
+}
+async function selectComplexFavoriteRegion(oldRegion,name){
+  const dlg=document.getElementById('complexRegionPickDlg');
+  const box=document.getElementById('complexRegionPickOptions');
+  box.textContent='현행 지역을 확인하는 중…'; if(!dlg.open) dlg.showModal();
+  try{
+    const response=await fetch('/api/v2/discovery/regions');
+    if(!response.ok) throw new Error();
+    const choices=((await response.json()).regions||[]).filter(x=>x.name===oldRegion);
+    if(!choices.length){ box.textContent='현재 지역 코드에서 일치하는 시군구를 찾지 못했습니다. 임의로 옮기지 않습니다.'; return; }
+    box.replaceChildren();
+    for(const choice of choices){
+      const button=document.createElement('button'); button.type='button'; button.className='btn';
+      const key=`kb:${choice.code}00000|${name}`;
+      button.textContent=_favs.has('complex:'+key)?`${choice.label} · 이미 새 찜에 추가됨`:`${choice.label} · 이 단지가 맞습니다`;
+      button.disabled=_favs.has('complex:'+key);
+      button.onclick=async()=>{
+        button.disabled=true;
+        const saved=await toggleFav('complex',key,name);
+        if(saved){ dlg.close(); await loadFavs(); renderFavList(); }
+        else button.disabled=false;
+      };
+      box.append(button);
+    }
+  }catch(e){ box.textContent='지역 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'; }
 }
 async function favRemove(kind,key,label){ await toggleFav(kind,key,label); renderFavList();
   const mv=document.getElementById('view-mymap'); if(mv && mv.style.display!=='none') drawMyMap(); }
-function cxFavKey(region,name){ return region+'|'+name; }
+function cxFavKey(region,name){
+  for(const [key,identity] of _favComplexIdentity){
+    if(identity.status==='ready'&&identity.name===region&&key.endsWith('|'+name)) return key;
+  }
+  return region+'|'+name;
+}
 function updateCxFavBtn(){
   const b=document.getElementById('cxFavBtn'); if(!b) return;
   const on=(_favs||new Set()).has('complex:'+cxFavKey(_cxCur.region,_cxCur.name));
@@ -6773,7 +6816,7 @@ async function drawMyMap(){
   const p=_profile||{};
   const regionFavs=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
   const complexFavs=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8))
-    .filter(k=>_favComplexIdentity.get(k)?.status!=='needs_reselection'); // 이름만 남은 중구는 지도에 추측 좌표로 놓지 않는다.
+    .filter(k=>!['needs_reselection','unverified'].includes(_favComplexIdentity.get(k)?.status)); // 식별 보류 단지는 추측 좌표로 놓지 않는다.
   const regionsNeeded=[...new Set([p['거주지'], ...regionFavs].filter(Boolean))];
   let cen={};
   if(regionsNeeded.length){ try{ cen=(await (await fetch('/api/region-centroids?regions='+encodeURIComponent(regionsNeeded.join(',')))).json()).centroids||{}; }catch(e){} }
@@ -6781,9 +6824,10 @@ async function drawMyMap(){
   if(p['거주지'] && cen[p['거주지']]){ const hs=sm[p['거주지']]||{}; pts.push({kind:'home',name:p['거주지'],region:p['거주지'],lat:cen[p['거주지']][0],lng:cen[p['거주지']][1],color:'#2563eb',sig:safeMarketSignal(p['거주지']),grade:hs['급지']}); }
   regionFavs.forEach(r=>{ if(cen[r] && r!==p['거주지']){ const s=sm[r]||{}; const safe=safeMarketSignal(r); pts.push({kind:'region',name:r,region:r,lat:cen[r][0],lng:cen[r][1],color:(_SIG_COLOR[safe]||'#5f6875'),sig:safe,grade:s['급지']}); } });
   if(complexFavs.length){
-    const q=complexFavs.map(k=>{const i=k.indexOf('|');return k.slice(0,i)+' '+k.slice(i+1);});
+    const q=complexFavs.map(k=>{const i=k.indexOf('|'), identity=_favComplexIdentity.get(k)||{};
+      return `${identity.sido||''} ${identity.name||k.slice(0,i)} ${k.slice(i+1)}`.trim();});
     let co={}; try{ co=(await (await fetch('/api/geocode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:q,max_miss:10})})).json()).coords||{}; }catch(e){}
-    complexFavs.forEach((k,idx)=>{ const i=k.indexOf('|'), reg=k.slice(0,i), nm=k.slice(i+1); const c=co[q[idx]]; if(c) pts.push({kind:'complex',name:nm,region:reg,lat:c[0],lng:c[1],color:'#ea580c'}); });
+    complexFavs.forEach((k,idx)=>{ const i=k.indexOf('|'), reg=_favComplexIdentity.get(k)?.name||k.slice(0,i), nm=k.slice(i+1); const c=co[q[idx]]; if(c) pts.push({kind:'complex',name:nm,region:reg,lat:c[0],lng:c[1],color:'#ea580c'}); });
   }
   if(p['직장lat'] && p['직장lng']) pts.push({kind:'work',name:p['직장']||'직장',region:'',lat:p['직장lat'],lng:p['직장lng'],color:'#0f172a'});
   _mySearchList.forEach(s=> pts.push({kind:'search',name:s.name,region:s.region,lat:s.lat,lng:s.lng,color:'#7c3aed'}));
@@ -6893,7 +6937,7 @@ function myPinClick(i){
     if(pt['갭']!=null) bits.push(`갭 ${won(pt['갭'])}`);
     if(bits.length || (pt.spark&&pt.spark.length>=2))
       info+=`<div style="margin-top:6px;font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${bits.join(' · ')}${(pt.spark&&pt.spark.length>=2)?_sparkMini(pt.spark):''}</div>`;
-    const favd=(_favs||new Set()).has('complex:'+pt.region+'|'+pt.name);
+    const favd=(_favs||new Set()).has('complex:'+cxFavKey(pt.region,pt.name));
     info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
       <span class="btn" style="padding:4px 10px;font-size:12px${favd?';background:var(--accent);color:#fff':''}" onclick="mmToggleFav('${nm}','${pt.region}')">${favd?'★ 관심단지':'☆ 관심단지'}</span>
       <span class="btn" style="padding:4px 10px;font-size:12px" onclick="addToCompare('${nm}','${pt.region}');updateCmpChip()">＋ 비교</span>
@@ -7306,7 +7350,7 @@ async function toggleFav(kind, key, label){
       return false; }
     if(kind==='complex' && out.warming==='queued') toast('관심단지로 등록했습니다 · 실거래 변화를 준비하는 중입니다.');
     track('fav_add',{kind,key}); }
-  if(kind==='region') await loadFavs();
+  if(kind==='region'||kind==='complex') await loadFavs();
   if(typeof renderList==='function') renderList();
   if(kind==='region') loadAlerts();   // 즐겨찾기 변경 → 알림 다이제스트 갱신
   return true;

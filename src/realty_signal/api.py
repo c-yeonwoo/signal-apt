@@ -450,19 +450,20 @@ def myfeed(request: Request):
                       "청약임박": len(rp),
                       "청약단지": (rp[0].get("단지명") if rp else None)})
     for key in complexes:
-        region, _, name = key.partition("|")
-        if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
-            items.append({"type": "complex", "region": region, "name": name,
+        ref, _, name = key.partition("|")
+        identity = db.complex_favorite_region(ref)
+        if identity["status"] != "ready":
+            items.append({"type": "complex", "key": key, "region": ref, "name": name,
                           "지역확인필요": True, "데이터없음": True})
             continue
-        code = _code_of(region)
+        region, code = identity["name"], identity["code"]
         d = db.kv_get(f"complex:{code[:5]}:{name}", max_age=30 * 86400) if code[:5].isdigit() else None
         metrics = _main_flat_metrics(d or {})
         # 캐시에 단지시그널이 없어도 지역시그널+실거래로 즉시 산출(공시비율은 myfeed에서 생략 — 느림)
         cs = {}
         if d and (d.get("총거래") or d.get("매매추이")):
             cs = _complex_signal(region, d, sig.get(region, ""), None)
-        items.append({"type": "complex", "region": region, "name": name,
+        items.append({"type": "complex", "key": key, "region": region, "name": name,
                       "최근평단가": (d or {}).get("최근평단가"), "추세pct": (d or {}).get("추세pct"),
                       "단지등급": cs.get("등급"), "단지점수": cs.get("점수"),
                       "전세가율": metrics.get("전세가율"), "갭": metrics.get("갭"),
@@ -2332,13 +2333,14 @@ def warm_favorite_complex(region: str, name: str) -> dict:
     """관심단지 하나의 실거래 캐시를 준비한다. 등록 직후와 주간 워밍이 함께 쓴다."""
     from realty_signal import db
     from realty_signal.ingest import complex as cx
-    if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
-        return {"status": "unavailable", "reason": "ambiguous_region"}
+    identity = db.complex_favorite_region(region)
+    if identity["status"] != "ready":
+        return {"status": "unavailable", "reason": "ambiguous_region" if identity["status"] == "needs_reselection" else "unverified_region"}
     config.load_env()
     pk = config.public_data_key()
     if not pk:
         return {"status": "unavailable", "reason": "no_key"}
-    code = _code_of(region)
+    code = identity["code"]
     if not (code and code.isdigit() and len(code) >= 5):
         return {"status": "unavailable", "reason": "invalid_region"}
     if code[2:5] == "000":
@@ -2349,7 +2351,7 @@ def warm_favorite_complex(region: str, name: str) -> dict:
         return {"status": "skipped"}
     try:
         data = cx.fetch_complex(code[:5], name, pk)
-        data["region"] = region
+        data["region"] = identity["name"]
         db.kv_set(ckey, data)
         return {"status": "warmed"}
     except Exception as e:  # noqa: BLE001
