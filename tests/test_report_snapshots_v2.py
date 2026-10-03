@@ -23,6 +23,12 @@ def _report(report_id="a" * 64):
             "asof": "2026-10-03", "price": {"이유": "원본 가격 근거"}}
 
 
+def _region_report(report_id="b" * 64):
+    return {"schema_version": "report-v2-1", "type": "region", "report_id": report_id,
+            "subject": {"region": "노원구", "region_id": "kb:11350"},
+            "asof": "2026-09-21", "assessment": {"display_grade": "판단 보류"}}
+
+
 def test_save_is_immutable_idempotent_and_owner_scoped(isolated_db):
     original = _report()
     first = snapshots.save(7, original)
@@ -35,6 +41,29 @@ def test_save_is_immutable_idempotent_and_owner_scoped(isolated_db):
     assert snapshots.get(7, original["report_id"], private_allowed=False) is None
     assert snapshots.list_for(7, private_allowed=False) == []
     assert snapshots.list_for(7, private_allowed=True)[0]["name"] == "테스트 단지"
+
+
+def test_region_snapshot_is_immutable_and_visible_without_private_listing_access(isolated_db, monkeypatch):
+    report = _region_report()
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: False)
+    monkeypatch.setattr(reports_v2, "region_report", lambda region: JSONResponse(report))
+    saved = json.loads(reports_v2.report_snapshot_save(None, {
+        "type": "region", "region": "kb:11350", "report_id": report["report_id"]}).body)
+    assert saved["report_id"] == report["report_id"]
+    with pytest.raises(HTTPException) as mismatch:
+        reports_v2.report_snapshot_save(None, {"type": "region", "region": "kb:11350",
+                                                "report_id": "c" * 64})
+    assert mismatch.value.status_code == 409
+    with pytest.raises(HTTPException) as invalid:
+        reports_v2.report_snapshot_save(None, {"type": [], "region": "kb:11350",
+                                                "report_id": report["report_id"]})
+    assert invalid.value.status_code == 422
+    monkeypatch.setattr(reports_v2, "region_report", lambda region: (_ for _ in ()).throw(
+        AssertionError("historical read must not recalculate")))
+    items = json.loads(reports_v2.report_snapshots_list(None, key="kb:11350").body)["items"]
+    assert [(item["kind"], item["name"]) for item in items] == [("지역", "노원구")]
+    assert json.loads(reports_v2.report_snapshot_get(None, report["report_id"]).body)["report"] == report
 
 
 def test_save_route_rechecks_current_report_and_permission(isolated_db, monkeypatch):

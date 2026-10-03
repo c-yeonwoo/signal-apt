@@ -1,4 +1,4 @@
-"""Explicitly saved, immutable personal listing reports.
+"""Explicitly saved, immutable personal listing and region reports.
 
 The payload is server-generated. Reading a historical copy never refreshes a
 listing, but private-source permission must still be valid at read time.
@@ -16,7 +16,11 @@ PRIVATE_KINDS = frozenset({"일반매물", "급매", "찐매물"})
 
 def save(uid: int, report: dict) -> dict:
     subject = report["subject"]
-    key, kind, report_id = subject["key"], subject["kind"], report["report_id"]
+    if report.get("type") == "region":
+        key, kind = subject["region_id"], "지역"
+    else:
+        key, kind = subject["key"], subject["kind"]
+    report_id = report["report_id"]
     payload = json.dumps(report, ensure_ascii=False, sort_keys=True)
     if len(payload.encode("utf-8")) > 250_000:
         raise ValueError("report_too_large")
@@ -51,7 +55,8 @@ def list_for(uid: int, *, key: str | None = None, private_allowed: bool) -> list
         for report_id, subject_key, kind, data, saved_at in rows:
             report = json.loads(data)
             result.append({"report_id": report_id, "subject_key": subject_key, "kind": kind,
-                           "name": (report.get("subject") or {}).get("name"),
+                           "name": ((report.get("subject") or {}).get("name") or
+                                    (report.get("subject") or {}).get("region")),
                            "asof": report.get("asof"), "saved_at": saved_at})
         return result
     finally:
