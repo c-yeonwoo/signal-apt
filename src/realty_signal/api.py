@@ -1276,7 +1276,10 @@ def buying_power_statement(request: Request, **override):
     out["지역식별"] = identity_status
     out["ready"] = True
     out["확정"] = (profile.get("매수력") or {}).get("최대매수가")
-    out["재확인필요"] = bool(out["확정"] and (profile.get("매수력") or {}).get("가정버전") != out["가정버전"])
+    out["재확인필요"] = bool(out["확정"] and (
+        buying_power.validated_confirmed_power(profile) is None
+        or (profile.get("매수력") or {}).get("가정버전") != out["가정버전"]
+        or identity_status in {"reselection_required", "unverified_name"}))
     return out
 
 

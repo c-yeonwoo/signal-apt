@@ -82,6 +82,18 @@ def test_changed_assumption_requires_reconfirmation_even_if_maximum_is_equal(cli
     assert result["재확인필요"] is True
 
 
+def test_saved_ceiling_drift_requires_reconfirmation_below_old_ui_tolerance(client):
+    confirmed = client.post("/api/buying-power/confirm", json={
+        "capital": 50000, "income": 8000}).json()["매수력"]
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    profile = db.profile_get(uid)
+    profile["매수력"]["최대매수가"] = confirmed["최대매수가"] + 100
+    db.profile_set(uid, profile)
+    statement = client.get("/api/buying-power").json()
+    assert statement["확정"] != statement["최대매수가"]
+    assert statement["재확인필요"] is True
+
+
 def test_confirmed_assumptions_survive_reload(client):
     """규제지역·생애최초·금리는 프로필 필드가 없다 — 확정 가정이 유일한 기억."""
     client.post("/api/buying-power/confirm", json={
