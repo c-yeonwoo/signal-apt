@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -51,11 +50,13 @@ def _quicksales(regions: set[str], budget: float, *, uid: int | None = None) -> 
     if not QUICKSALE_FILE.exists():
         return []
     try:
-        rows = json.loads(QUICKSALE_FILE.read_text(encoding="utf-8")).get("listings", [])
+        from realty_signal import api
+        rows = api._radar_verified_rows(QUICKSALE_FILE, api._QUICKSALE_SCAN_VER)
     except Exception:  # noqa: BLE001
         return []
     out = [m for m in rows
-           if m.get("지역") in regions and (m.get("호가") or 0) and m["호가"] <= budget]
+           if m.get("지역") in regions and api._listing_region_matches_kb(m.get("지역"), m.get("시도"))
+           and (m.get("호가") or 0) and m["호가"] <= budget]
     out.sort(key=lambda m: m.get("급매갭") if m.get("급매갭") is not None else 0)
     return out
 

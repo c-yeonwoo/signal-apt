@@ -1,5 +1,6 @@
 """The primary market API must not leak an unsafe raw grade as a display label."""
 
+import json
 from datetime import date
 
 import pandas as pd
@@ -74,3 +75,20 @@ def test_listing_signal_assessment_failure_fails_closed(monkeypatch):
     assert row["원시시그널"] == "STRONG_BUY"
     assert row["시그널"] == "HELD"
     assert row["판정상태"] == "held"
+
+
+def test_integrated_listing_does_not_borrow_same_named_other_province_signal(monkeypatch, tmp_path):
+    cache = tmp_path / "quicksale.json"
+    cache.write_text(json.dumps({"_scan_ver": api._QUICKSALE_SCAN_VER,
+                                 "listings": [{"naver_id": "1", "단지명": "동명단지", "지역": "중구",
+                                               "시도": "인천", "호가": 50000, "평형": 25,
+                                               "시그널": "STRONG_BUY", "급매갭": -5}]}), encoding="utf-8")
+    monkeypatch.setattr(api, "QUICKSALE_FILE", cache)
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(api, "_sido_of", lambda *_: "서울")
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-03")
+    monkeypatch.setattr(md, "assessed_signal_labels", lambda today: {
+        "중구": {"display_signal": "STRONG_BUY", "assessment_status": "ready"}})
+    row = api._build_listings({"급매"}, include_private=True)[0]
+    assert row["원시시그널"] == "STRONG_BUY"
+    assert row["시도"] == "인천" and row["시그널"] == "HELD"

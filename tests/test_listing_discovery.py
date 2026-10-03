@@ -28,6 +28,14 @@ def test_alternatives_separate_source_id_from_name_only():
     assert "확인 필요" in listing_discovery.alternatives(base, [cross_source])[0]["reason"]
 
 
+def test_same_named_district_across_provinces_is_not_report_alternative():
+    base = {**_row("일반매물:seoul", name="동명단지", complex_id="cx1"),
+            "지역": "중구", "시도": "서울"}
+    other = {**_row("일반매물:incheon", name="동명단지", complex_id="cx1"),
+             "지역": "중구", "시도": "인천"}
+    assert listing_discovery.alternatives(base, [other]) == []
+
+
 def test_headlines_are_candidates_not_project_facts():
     now = datetime(2026, 9, 29, tzinfo=timezone.utc)
     recent = (now-timedelta(days=2)).strftime("%a, %d %b %Y")

@@ -24,7 +24,7 @@ def _positive(value) -> float | None:
 
 
 def _same_complex(a: dict, b: dict) -> str | None:
-    if a.get("지역") != b.get("지역") or not a.get("단지명") or a.get("단지명") != b.get("단지명"):
+    if not listing_watch.same_region(a, b) or not a.get("단지명") or a.get("단지명") != b.get("단지명"):
         return None
     ar, br = a.get("ref") or {}, b.get("ref") or {}
     for field in ("hanbang_complex_id", "complex_no"):
@@ -59,7 +59,7 @@ def alternatives(row: dict, candidates: list[dict], budget: float | None = None)
         if identity:
             reason = "같은 원천 단지 ID" if identity == "source_id" else "같은 지역·단지명(동일 단지 확인 필요)"
             group = 0
-        elif other["region"] == src["region"] and same_area and same_price:
+        elif listing_watch.same_region(row, candidate) and same_area and same_price:
             reason = "같은 지역·비슷한 전용면적·호가대"
             group = 1
         else:

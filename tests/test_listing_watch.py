@@ -36,6 +36,14 @@ def test_price_change_same_complex_and_similar_are_not_confused():
         ("급매:3", "같은 지역·유형·비슷한 가격대")]
 
 
+def test_same_named_district_in_other_province_is_not_watch_alternative():
+    seoul = {**_row("급매:seoul", name="중구아파트", region="중구"), "시도": "서울"}
+    incheon = {**_row("급매:incheon", name="중구아파트", region="중구"), "시도": "인천"}
+    unknown = _row("급매:unknown", name="중구아파트", region="중구")
+    saved = [{"key": seoul["key"], "saved_price": seoul["총액"]}]
+    assert watch.build(saved, [seoul, incheon, unknown])[0]["alternatives"] == []
+
+
 def test_unseen_listing_is_not_called_sold_and_presale_dday_is_kept():
     saved = [{"key": "급매:missing", "kind": "급매", "name": "A", "region": "노원구",
               "saved_price": 50_000, "created_at": 1}]
