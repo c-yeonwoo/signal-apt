@@ -75,6 +75,11 @@ CREATE INDEX IF NOT EXISTS ix_decision_notes_v2_uid ON decision_notes_v2(uid, up
 CREATE TABLE IF NOT EXISTS decision_note_revisions_v2(
     note_id INTEGER NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
     PRIMARY KEY(note_id, revision));
+CREATE TABLE IF NOT EXISTS report_snapshots_v2(
+    uid INTEGER NOT NULL, report_id TEXT NOT NULL, subject_key TEXT NOT NULL,
+    kind TEXT NOT NULL, data TEXT NOT NULL, saved_at INTEGER NOT NULL,
+    PRIMARY KEY(uid, report_id));
+CREATE INDEX IF NOT EXISTS ix_report_snapshots_v2_user ON report_snapshots_v2(uid, saved_at DESC);
 """
 
 _migrated = [False]

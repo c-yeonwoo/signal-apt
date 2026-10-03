@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from realty_signal.routes import deps
 from realty_signal.services import market_data as md
 from realty_signal.services import decision_notes_v2 as notes
+from realty_signal.services import report_snapshots_v2 as snapshots
 
 router = APIRouter(tags=["reports-v2"])
 PRIVATE = {"Cache-Control": "private, no-store"}
@@ -70,6 +71,52 @@ def listing_report(request: Request, key: str):
               "next_actions": base.get("questions") or []}
     report["report_id"] = _id(report)
     return JSONResponse(report, headers=PRIVATE)
+
+
+@router.post("/api/v2/report-snapshots")
+def report_snapshot_save(request: Request, data: dict = Body(...)):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    key, expected = data.get("key"), data.get("report_id")
+    if (not isinstance(key, str) or not 1 <= len(key) <= 180 or ":" not in key
+            or not isinstance(expected, str) or len(expected) != 64
+            or any(ch not in "0123456789abcdef" for ch in expected)):
+        raise HTTPException(422, "저장할 리포트를 확인해 주세요.")
+    if key.split(":", 1)[0] in snapshots.PRIVATE_KINDS and not deps.personal_listings_allowed(request):
+        raise HTTPException(403, "개인 매물 접근권이 필요합니다.")
+    current = json.loads(listing_report(request, key).body)
+    if current["report_id"] != expected:
+        raise HTTPException(409, "매물 자료나 내 조건이 바뀌었습니다. 리포트를 다시 열어 주세요.")
+    try:
+        saved = snapshots.save(uid, current)
+    except ValueError as exc:
+        raise HTTPException(413, "리포트가 너무 커서 저장하지 못했습니다.") from exc
+    return JSONResponse(saved, status_code=201, headers=PRIVATE)
+
+
+@router.get("/api/v2/report-snapshots")
+def report_snapshots_list(request: Request, key: str | None = None):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if key is not None and (not 1 <= len(key) <= 180 or ":" not in key):
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.")
+    return JSONResponse({"items": snapshots.list_for(
+        uid, key=key, private_allowed=deps.personal_listings_allowed(request))}, headers=PRIVATE)
+
+
+@router.get("/api/v2/report-snapshots/{report_id}")
+def report_snapshot_get(request: Request, report_id: str):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if len(report_id) != 64 or any(ch not in "0123456789abcdef" for ch in report_id):
+        raise HTTPException(404, "저장본을 찾지 못했습니다.")
+    result = snapshots.get(uid, report_id, private_allowed=deps.personal_listings_allowed(request))
+    if result is None:
+        raise HTTPException(404, "저장본을 찾지 못했습니다.")
+    return JSONResponse(result, headers=PRIVATE)
 
 
 @router.post("/api/v2/comparisons")

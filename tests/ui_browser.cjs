@@ -13,6 +13,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const page = await browser.newPage({viewport:{width:360,height:800}});
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
+    const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
@@ -91,6 +92,22 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         positive:[{text:'동일 조건 실거래가 있습니다.'}],
         cautions:[{text:'현재 판매 여부는 확인되지 않았습니다.'}],
         next_actions:['실제 호가 확인'],evidence:[{label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
+      if(url.pathname==='/api/v2/listings/report') reportsByKey.set(url.searchParams.get('key'),data);
+      if(url.pathname==='/api/v2/report-snapshots' && route.request().method()==='POST') {
+        const request=route.request().postDataJSON(), report=reportsByKey.get(request.key);
+        if(!report || request.report_id!==report.report_id) return route.fulfill({status:409,json:{}});
+        savedReports.set(request.report_id,{report:structuredClone(report),saved_at:1780000000});
+        return route.fulfill({status:201,json:{report_id:request.report_id,saved_at:1780000000}});
+      }
+      if(url.pathname==='/api/v2/report-snapshots') data={items:[...savedReports.values()]
+        .filter(saved=>!url.searchParams.get('key')||saved.report.subject.key===url.searchParams.get('key'))
+        .map(saved=>({report_id:saved.report.report_id,subject_key:saved.report.subject.key,
+          kind:saved.report.subject.kind,name:saved.report.subject.name,asof:saved.report.asof,
+          saved_at:saved.saved_at}))};
+      if(url.pathname.startsWith('/api/v2/report-snapshots/')) {
+        const saved=savedReports.get(decodeURIComponent(url.pathname.split('/').at(-1)));
+        return route.fulfill(saved?{json:saved}:{status:404,json:{}});
+      }
       if(url.pathname==='/api/general-listings') data={ready:true,state:'partial',regions:['테스트구'],last_success_at:1780000000,
         refresh:{limited_regions:['테스트구'],failed_requests:0},listings:[{hanbang_id:'synthetic-hb-1',단지명:'한방테스트단지',지역:'테스트구',호가:50000,전용면적:84.5,층:12,등록일:'2026-09-29'}]};
       if(url.pathname==='/api/listing-analysis'){
@@ -311,6 +328,18 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#v2LocationResult').textContent(),/직선 550m/);
     assert.equal(calls.filter(path=>path==='/api/listing-location').length,locationCalls+1);
     assert.equal(nickPayloads.length,0);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'이 리포트 저장'}).click();
+    await page.locator('#v2SaveReportStatus').getByText(/저장했습니다/).waitFor();
+    const reportFetches=calls.filter(path=>path==='/api/v2/listings/report').length;
+    await page.locator('#v2ReportBody').getByRole('button',{name:'저장본 보기'}).click();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'당시 리포트 보기'}).click();
+    await page.locator('#v2ReportBody').getByText(/저장 당시 · 한방테스트단지/).waitFor();
+    assert.match(await page.locator('#v2ReportBody').textContent(),/현재 호가·판매 여부/);
+    assert.equal(calls.filter(path=>path==='/api/v2/listings/report').length,reportFetches);
+    assert.equal(nickPayloads.length,0);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
+    await page.locator('#v2ReportBody').getByRole('button',{name:'내 계정에서 열기 링크 복사'}).waitFor();
     await page.evaluate(()=>{
       Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__copiedReportLink=value;}}});
     });
