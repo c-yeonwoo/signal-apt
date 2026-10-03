@@ -52,3 +52,22 @@ def test_nbhd_metrics_includes_volume():
     m = _nbhd_metrics({"시그널": "BUY", "매물": {"급매": 1}, "거래량": {"거래량비": 1.3},
                        "국면": {"phase": "회복"}})
     assert m["거래량비"] == 1.3
+
+
+def test_gongsi_samples_use_verified_complex_code_only(monkeypatch):
+    from realty_signal import db
+
+    monkeypatch.setattr(db, "fav_list", lambda uid: [
+        {"kind": "complex", "key": "중구|옛 단지"},
+        {"kind": "complex", "key": "kb:1114000000|서울 단지"}])
+    monkeypatch.setattr(db, "complex_favorite_region", lambda ref: (
+        {"status": "ready", "name": "중구", "code": "1114000000"}
+        if ref.startswith("kb:") else {"status": "needs_reselection"}))
+    cache_keys = []
+    def cached(key, **kw):
+        cache_keys.append(key)
+        return {"㎡단가": 1000000} if key.startswith("gongsi:") else {"최근평단가": 4000}
+    monkeypatch.setattr(db, "kv_get", cached)
+    rows = pl.fav_gongsi_samples(1, "중구")
+    assert rows[0]["단지명"] == "서울 단지"
+    assert cache_keys == ["gongsi:중구:서울 단지", "complex:11140:서울 단지"]

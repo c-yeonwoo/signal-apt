@@ -448,6 +448,34 @@ def users_with_region_favs() -> list[dict]:
 AMBIGUOUS_LEGACY_REGION_KEYS = frozenset({"중구"})
 
 
+def complex_favorite_region(ref: str) -> dict:
+    """Resolve a complex favorite's saved region without upgrading an old name key."""
+    if ref in AMBIGUOUS_LEGACY_REGION_KEYS:
+        return {"status": "needs_reselection", "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다."}
+    if ref.startswith("kb:"):
+        try:
+            from realty_signal.services import market_data as md
+            identity = md.current_region_identity(ref)
+            if identity:
+                return {"status": "ready", "name": identity["name"],
+                        "code": identity["code"], "sido": identity["sido"],
+                        "label": f'{identity["sido"]} · {identity["name"]}'}
+        except Exception:  # noqa: BLE001 — identity failure must not borrow another region's cache
+            pass
+        return {"status": "unverified", "message": "저장한 지역 코드를 현재 자료에서 확인할 수 없습니다."}
+    try:
+        from realty_signal.services import market_data as md
+        code = str(md.code_of(ref) or "")
+        if code[:5].isdigit() and code[2:5] == "000":
+            return {"status": "unverified", "message": f"'{ref}' 처럼 시·도 단위로 등록된 단지는 실거래를 특정할 수 없습니다 — 시군구로 다시 등록해 주세요"}
+        if code[:5].isdigit() and code[2:5] != "000":
+            return {"status": "ready", "name": ref, "code": code,
+                    "sido": md.SIDO_LABELS.get(code[:2], ""), "label": ref}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"status": "unverified", "message": "관심단지의 지역 코드를 확인할 수 없습니다."}
+
+
 def _favorite_region_name(key: str) -> str | None:
     """Read verified code favorites by current name without rewriting old rows."""
     if not key or key in AMBIGUOUS_LEGACY_REGION_KEYS:

@@ -148,3 +148,28 @@ def test_collect_digests_uses_assessed_grades_not_raw_dataframe(monkeypatch):
     assert "강남구: 현재 판정 확인 필요" in unavailable["body"]
     assert "서구: 현재 판정 확인 필요" in unavailable["body"]
     assert unavailable["changes"] == []
+
+
+def test_digest_code_complex_uses_verified_cache_and_ignores_old_ambiguous(monkeypatch):
+    import pandas as pd
+    from realty_signal import personal_layer as pl
+    from realty_signal.services import market_data as md
+
+    monkeypatch.setattr(md, "assessed_signal_labels", lambda today: {})
+    monkeypatch.setattr(db, "users_with_region_favs", lambda: [
+        {"id": 1, "email": "a@b.com", "regions": ["중구"]}])
+    monkeypatch.setattr(db, "fav_list", lambda uid: [
+        {"kind": "complex", "key": "중구|옛 단지"},
+        {"kind": "complex", "key": "kb:1114000000|서울 단지"}])
+    monkeypatch.setattr(db, "complex_favorite_region", lambda ref: (
+        {"status": "ready", "name": "중구", "code": "1114000000"}
+        if ref.startswith("kb:") else {"status": "needs_reselection"}))
+    cache_keys = []
+    monkeypatch.setattr(db, "kv_get", lambda key, **kw: cache_keys.append(key) or {
+        "평형별": [{"매매건수": 2, "전세가율": 66, "갭": 10000}]})
+    monkeypatch.setattr(pl, "macro_latest", lambda: {})
+    monkeypatch.setattr(pl, "volume_summary", lambda region: {})
+    frame = pd.DataFrame([{"region": "중구", "signal": "BUY"}])
+    result = digest.collect_digests(signal_df=frame, changes=[], as_of="2026-10-04")[0]
+    assert "서울 단지" in result["body"] and "옛 단지" not in result["body"]
+    assert cache_keys == ["complex:11140:서울 단지"]

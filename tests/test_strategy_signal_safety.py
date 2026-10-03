@@ -95,6 +95,24 @@ def test_agent_favorite_context_excludes_ambiguous_complex(monkeypatch):
     assert deps.fav_context(7)["관심단지"] == ["현재 단지"]
 
 
+def test_myfeed_uses_verified_complex_code_and_preserves_saved_key(monkeypatch):
+    monkeypatch.setattr(api, "_uid", lambda request: 1)
+    monkeypatch.setattr(api.db, "fav_list", lambda uid: [
+        {"kind": "complex", "key": "kb:1114000000|현행 단지"}])
+    monkeypatch.setattr(api.db, "actionable_region_favs", lambda uid: [])
+    monkeypatch.setattr(api.db, "complex_favorite_region", lambda ref: {
+        "status": "ready", "name": "중구", "code": "1114000000"})
+    fetched = []
+    monkeypatch.setattr(api.db, "kv_get", lambda key, **kw: fetched.append(key) or None)
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {})
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **kwargs: False)
+    monkeypatch.setattr(api, "_presale", lambda: [])
+    monkeypatch.setattr(api, "_kb", lambda: SimpleNamespace(last_date=pd.Timestamp("2026-09-28")))
+    item = api.myfeed(object())["items"][0]
+    assert item["key"] == "kb:1114000000|현행 단지" and item["region"] == "중구"
+    assert fetched == ["complex:11140:현행 단지"]
+
+
 def test_nick_filters_and_describes_only_safe_grades(monkeypatch):
     rows = [
         {"region": "보류구", "signal": "STRONG_BUY", "display_signal": "HELD", "assessment_status": "held"},

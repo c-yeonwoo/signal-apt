@@ -162,12 +162,11 @@ def cache_loader():
     네트워크를 부르지 않는다 — 홈 카드가 관심단지 수만큼 국토부 API 를 때리면
     홈이 느려진다. 캐시를 채우는 건 주간 워밍과 단지 상세 조회의 몫이다.
     """
-    from realty_signal import api as app_api
-
     def _load(region: str, name: str):
-        if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
-            return {"_unavailable": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 관심 기록은 유지하되 실거래 변화는 보류합니다"}, None
-        code = app_api._code_of(region) or ""
+        identity = db.complex_favorite_region(region)
+        if identity["status"] != "ready":
+            return {"_unavailable": identity.get("message") or "관심단지 지역 확인 전입니다"}, None
+        code = identity["code"]
         if not (len(code) >= 5 and code[:5].isdigit()):
             return {"_unavailable": f"'{region}' 의 지역코드를 찾지 못했습니다"}, None
         if code[2:5] == "000":
@@ -203,29 +202,30 @@ def scan(favorites: list[tuple[str, str]], loader, prev_all: dict,
 
     for region, name in favorites:
         key = f"{region}|{name}"
-        if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        identity = db.complex_favorite_region(region)
+        if identity["status"] != "ready":
             unavailable.append({"key": key, "단지명": name, "지역": region,
-                                "reason": "이름만 저장된 중구의 시·도를 확인할 수 없어 실거래 변화를 보류합니다. 원래 관심 기록은 유지됩니다."})
+                                "reason": f'{identity.get("message", "지역 확인 전입니다")} 실거래 변화는 보류합니다. 원래 관심 기록은 유지됩니다.'})
             continue
         data, ts = loader(region, name)
         snap = snapshot_of(data or {})
         if not snap:
             # '왜 없는지' 는 loader 가 안다(시도 단위 등록·미수집 등) — 뭉개지 않고 그대로 옮긴다
             unavailable.append({
-                "key": key, "단지명": name, "지역": region,
+                "key": key, "단지명": name, "지역": identity["name"],
                 "reason": (data or {}).get("_unavailable")
                           or "실거래를 아직 수집하지 않았습니다"})
             continue
         snaps[key] = snap
         age = round((now - ts) / 86400, 1) if ts else None
         if snap.get("none"):
-            items.append({"key": key, "단지명": name, "지역": region,
+            items.append({"key": key, "단지명": name, "지역": identity["name"],
                           "quiet": True, "data_days": age,
                           "말": "최근 24개월 실거래가 없습니다"})
             continue
         changes = diff_one(prev_all.get(key) or {}, snap, budget=budget)
         items.append({
-            "key": key, "단지명": name, "지역": region,
+            "key": key, "단지명": name, "지역": identity["name"],
             "평단가": snap.get("ppy"), "평형": snap.get("flat"),
             "거래가": snap.get("amt"), "전세가율": snap.get("ratio"),
             "data_days": age,

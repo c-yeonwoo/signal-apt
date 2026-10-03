@@ -168,9 +168,8 @@ def favorites_get(request: Request):
     for favorite in favorites:
         if favorite["kind"] == "region":
             favorite["region_identity"] = _favorite_region_identity(favorite["key"])
-        elif favorite["kind"] == "complex" and favorite["key"].partition("|")[0] in db.AMBIGUOUS_LEGACY_REGION_KEYS:
-            favorite["complex_identity"] = {"status": "needs_reselection",
-                                            "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다."}
+        elif favorite["kind"] == "complex":
+            favorite["complex_identity"] = db.complex_favorite_region(favorite["key"].partition("|")[0])
     return {"favorites": favorites}
 
 
@@ -232,6 +231,8 @@ def _complex_favorite_error(key: object) -> str | None:
         return "단지와 시군구를 다시 선택해 주세요."
     if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
         return "이름만 적힌 중구는 서울·개편 전 인천을 구별할 수 없어 관심단지로 새로 등록할 수 없습니다."
+    if region.startswith("kb:"):
+        return None if db.complex_favorite_region(region)["status"] == "ready" else "현재 지역 코드를 확인할 수 없습니다. 현행 지역을 다시 선택해 주세요."
     try:
         code = md.code_of(region)
     except Exception:  # noqa: BLE001
@@ -274,12 +275,17 @@ def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dic
                 {"ok": False, "error": "untrackable_complex", "message": error},
                 status_code=422,
             )
+        region, name = (part.strip() for part in key.split("|", 1))
+        key = f"{region}|{name}"
     db.fav_add(uid, kind, key, identity["label"] if kind == "region" else data.get("label", ""))
     if kind == "complex" and "|" in key:
         region, name = key.split("|", 1)
         if region and name:
             background_tasks.add_task(_warm_complex_after_favorite, region, name)
-            return {"ok": True, "warming": "queued"}
+            out = {"ok": True, "warming": "queued"}
+            if region.startswith("kb:"):
+                out["key"] = key
+            return out
     return {"ok": True, "key": key} if kind == "region" else {"ok": True}
 
 

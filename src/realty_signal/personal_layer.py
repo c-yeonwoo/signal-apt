@@ -133,22 +133,19 @@ def fav_gongsi_samples(uid: int | None, region: str, limit: int = 3) -> list[dic
 
     if not uid:
         return []
-    codes = {}
-    try:
-        codes = json.loads(store.CODES_FILE.read_text(encoding="utf-8")) if store.CODES_FILE.exists() else {}
-    except Exception:  # noqa: BLE001
-        codes = {}
-    code = codes.get(region) or ""
     result: list[dict] = []
     for f in db.fav_list(uid):
         if f.get("kind") != "complex":
             continue
         key = f.get("key") or ""
-        reg, _, nm = key.partition("|")
-        if reg in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        ref, _, nm = key.partition("|")
+        identity = db.complex_favorite_region(ref)
+        if identity["status"] != "ready":
             continue
+        reg = identity["name"]
         if reg != region or not nm:
             continue
+        code = identity["code"]
         g = db.kv_get(f"gongsi:{region}:{nm}", max_age=90 * 86400) or {}
         if not g.get("㎡단가"):
             continue

@@ -40,8 +40,8 @@ def fav_context(uid_: int) -> dict:
     return {
         "관심지역": db.actionable_region_favs(uid_),
         "관심단지": [(f.get("label") or f["key"]).split("|")[-1] for f in fav
-                 if f["kind"] == "complex" and f["key"].partition("|")[0]
-                 not in db.AMBIGUOUS_LEGACY_REGION_KEYS],
+                 if f["kind"] == "complex" and
+                 db.complex_favorite_region(f["key"].partition("|")[0])["status"] == "ready"],
     }
 
 
