@@ -234,6 +234,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       window.addEventListener('hashchange',routeFromHash);
     });
     await page.getByText('호가단지',{exact:true}).waitFor();
+    assert.match(await page.locator('#dashShortlistWrap').textContent(),/예산 범위 매물 후보/);
+    assert.match(await page.locator('#dashShortlistWrap').textContent(),/대출 승인·규제·권리·판매 여부는 별도 확인/);
+    assert.doesNotMatch(await page.locator('#dashShortlistWrap').textContent(),/지금 살 수 있는 집/);
     assert.equal(await page.locator('#dashShortlistWrap').evaluate(el=>!!el.closest('details')),false);
     for(const url of ['/api/regime','/api/complex-watch','/api/news','/api/shortlist']) assert(!calls.includes(url),`eager hidden source ${url}`);
     const width=await page.evaluate(()=>({viewport:innerWidth,body:document.body.scrollWidth,root:document.documentElement.scrollWidth}));
