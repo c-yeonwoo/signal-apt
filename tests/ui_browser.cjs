@@ -112,9 +112,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           const commuteFail=commuteChecked&&!commutePass;
           candidate.listing.coordinate=[37.65,127.06];
           candidate.listing.commute=commuteChecked?{status:'observed',minutes:54}:null;
+          candidate.verify_next='저장된 직장까지의 대중교통 경로를 확인하세요.';
           candidate.constraints=[{field:'max_commute_minutes',status:commutePass?'pass':commuteFail?'fail':'unknown'}];
           candidate.eligibility=commutePass?'matched':commuteFail?'exceeded':'verify';
-          data.commute_context={status:'ready'};
+          data.commute_context={status:spec.prefer_region_code==='11160'?'missing_work':'ready'};
           data.counts={matched:commutePass?1:0,verify:commuteChecked?0:1,explore:0,exceeded:commuteFail?1:0};
           data.groups={matched:commutePass?[candidate]:[],verify:commuteChecked?[]:[candidate],explore:[],
             exceeded:spec.include_exceeded&&commuteFail?[candidate]:[]};
@@ -844,6 +845,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('[data-v2-finance-setup]').click();
     assert.equal(await page.locator('#v2DiscoverDlg').evaluate(el=>el.open),false);
     assert.equal(await page.locator('#view-mypage').isVisible(),true);
+    await page.evaluate(()=>SignalV2.openDiscovery());
+    await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('');
+    await page.locator('#v2DiscoverForm [name=max_commute_minutes]').fill('60');
+    await page.locator('#v2DiscoverForm [name=region_code]').selectOption('11160');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText(/내 정보에서 직장 위치를 먼저 저장하세요/).waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-commute]').count(),0);
+    await page.locator('[data-v2-work-setup]').click();
+    assert.equal(await page.locator('#mp_work').evaluate(el=>el===document.activeElement),true);
     await page.evaluate(()=>SignalV2.openDiscovery('중구'));
     await page.getByText(/선택한 지역을 확인할 수 없습니다/).waitFor();
     assert.equal(await page.locator('#v2DiscoverForm [type=submit]').isDisabled(),true);
