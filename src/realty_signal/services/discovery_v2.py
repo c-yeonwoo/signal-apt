@@ -11,10 +11,11 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-4"
+VERSION = "discovery-v2-5"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region",
-          "prefer_max_price_manwon", "prefer_min_area_m2"}
+          "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
+PRIORITIES = {"balanced", "region", "price", "area"}
 
 
 def _number(value):
@@ -49,6 +50,10 @@ def validate(spec: dict) -> dict:
         cleaned["prefer_region"] = spec["prefer_region"].strip()
     if cleaned.get("region") and cleaned.get("prefer_region"):
         raise ValueError("conflicting_region_conditions")
+    priority = spec.get("priority", "balanced")
+    if not isinstance(priority, str) or priority not in PRIORITIES:
+        raise ValueError("invalid_priority")
+    cleaned["priority"] = priority
     limit = spec.get("limit", 12)
     if type(limit) is not int or not 1 <= limit <= 50:
         raise ValueError("invalid_limit")
@@ -91,7 +96,7 @@ def _monthly(finance: dict | None) -> float | None:
 
 
 def _preference(listing: dict, spec: dict) -> dict:
-    """Unknown observations keep their place in the denominator, never earn fit."""
+    """One explicit priority doubles its weight; unknowns remain in the denominator."""
     details = []
     definitions = (("region", "선호 지역", spec.get("prefer_region"), listing["region"],
                     bool(listing["region"]), lambda v, target: v == target),
@@ -104,16 +109,24 @@ def _preference(listing: dict, spec: dict) -> dict:
     for field, label, target, value, known, meets in definitions:
         if target is None or target == "":
             continue
+        weight = 2 if field == spec.get("priority") else 1
         details.append({"field": field, "label": label, "status": "unknown" if not known else
-                        "matched" if meets(value, target) else "missed", "value": value, "target": target})
+                        "matched" if meets(value, target) else "missed", "value": value,
+                        "target": target, "weight": weight})
     total = len(details)
     known = sum(x["status"] != "unknown" for x in details)
     satisfied = sum(x["status"] == "matched" for x in details)
+    weight_total = sum(x["weight"] for x in details)
+    weight_known = sum(x["weight"] for x in details if x["status"] != "unknown")
+    weight_satisfied = sum(x["weight"] for x in details if x["status"] == "matched")
+    applied_priority = spec.get("priority") if any(x["field"] == spec.get("priority") for x in details) else "balanced"
     return {"region": spec.get("prefer_region"),
             "matched": any(x["field"] == "region" and x["status"] == "matched" for x in details),
-            "score": round(100 * satisfied / total) if total else None,
-            "coverage": round(100 * known / total) if total else None,
-            "satisfied": satisfied, "known": known, "total": total, "details": details}
+            "score": round(100 * weight_satisfied / weight_total) if weight_total else None,
+            "coverage": round(100 * weight_known / weight_total) if weight_total else None,
+            "satisfied": satisfied, "known": known, "total": total, "details": details,
+            "priority": applied_priority, "weight_total": weight_total,
+            "weight_satisfied": weight_satisfied, "weight_known": weight_known}
 
 
 def _freshness(listing: dict) -> int:

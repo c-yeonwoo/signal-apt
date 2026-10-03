@@ -72,6 +72,33 @@ def test_preferences_keep_unknown_in_denominator_and_do_not_exclude():
     assert [x["listing"]["name"] for x in out["groups"]["explore"]] == ["a", "c", "b"]
 
 
+def test_explicit_priority_changes_order_but_never_counts_unknown_as_matched():
+    rows = [_row("region", price=55_000, area=None, region="노원구"),
+            _row("price", price=45_000, area=None, region="강남구")]
+    spec = {"prefer_region": "노원구", "prefer_max_price_manwon": 50_000,
+            "prefer_min_area_m2": 84}
+    by_region = discovery.discover(rows, {**spec, "priority": "region"})["groups"]["explore"]
+    by_price = discovery.discover(rows, {**spec, "priority": "price"})["groups"]["explore"]
+    assert [x["listing"]["name"] for x in by_region] == ["region", "price"]
+    assert [x["listing"]["name"] for x in by_price] == ["price", "region"]
+    assert by_price[0]["preference"]["score"] == 50
+    assert by_price[0]["preference"]["coverage"] == 75
+    assert by_price[0]["preference"]["details"][2]["status"] == "unknown"
+    assert by_price[0]["preference"]["priority"] == "price"
+
+
+def test_priority_without_corresponding_preference_has_no_hidden_bonus():
+    rows = [_row("first", price=40_000), _row("second", price=45_000)]
+    base = discovery.discover(rows, {"prefer_max_price_manwon": 50_000})
+    unused = discovery.discover(rows, {"prefer_max_price_manwon": 50_000, "priority": "area"})
+    assert [x["listing"]["name"] for x in base["groups"]["explore"]] == [
+        x["listing"]["name"] for x in unused["groups"]["explore"]]
+    assert unused["groups"]["explore"][0]["preference"]["priority"] == "balanced"
+    for value in ("unknown", None, [], {}):
+        with pytest.raises(ValueError, match="invalid_priority"):
+            discovery.validate({"priority": value})
+
+
 def test_unrequested_low_price_is_not_a_ranking_bonus():
     rows = [_row("z-cheap", price=10_000), _row("a-costly", price=50_000)]
     out = discovery.discover(rows, {"max_price_manwon": 60_000})
@@ -115,6 +142,7 @@ def test_cursor_cannot_change_conditions_or_seek_outside_results():
     spec = {"max_price_manwon": 60000, "limit": 2}
     cursor = discovery.discover(rows, spec)["next_cursor"]
     for query in ({**spec, "min_area_m2": 60, "cursor": cursor},
+                  {**spec, "priority": "price", "cursor": cursor},
                   {**spec, "cursor": "not-base64!"},
                   {**spec, "cursor": cursor + "x"}):
         with pytest.raises(ValueError, match="invalid_cursor"):

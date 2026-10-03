@@ -7224,8 +7224,9 @@ async function startApp(needOnboard){
         <div class="v2-preference-fields">
           <label>선호 호가 · 만원 이하<input name="prefer_max_price_manwon" type="number" min="1" step="1" placeholder="예: 50000"></label>
           <label>선호 전용면적 · ㎡ 이상<input name="prefer_min_area_m2" type="number" min="1" step="1" placeholder="예: 84"></label>
+          <label>가장 중요한 선호<select name="priority"><option value="balanced">모두 비슷하게</option><option value="region">지역</option><option value="price">호가</option><option value="area">전용면적</option></select></label>
         </div>
-        <p class="v2-muted">입력한 선호는 후보를 제외하지 않고 같은 그룹 안에서만 정렬합니다. 자료가 없으면 충족으로 세지 않습니다.</p>
+        <p class="v2-muted">선택한 중요 조건은 정렬에서 2배로 셉니다. 입력하지 않은 조건은 우선순위에 영향을 주지 않습니다. 자료가 없으면 충족으로 세지 않습니다.</p>
       </details>
       <button class="btn primary" type="submit">후보 찾기</button>
     </form>
