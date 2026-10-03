@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS decision_notes_v2(
     horizon_weeks INTEGER NOT NULL, report_id TEXT, revision INTEGER NOT NULL,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS ix_decision_notes_v2_uid ON decision_notes_v2(uid, updated_at DESC);
+CREATE INDEX IF NOT EXISTS ix_decision_notes_v2_page ON decision_notes_v2(uid, updated_at DESC, id DESC);
 CREATE TABLE IF NOT EXISTS decision_note_revisions_v2(
     note_id INTEGER NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
     PRIMARY KEY(note_id, revision));

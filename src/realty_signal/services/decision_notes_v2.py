@@ -2,10 +2,41 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import time
+from hashlib import sha256
 
 from realty_signal import db
+
+PAGE_SIZE = 100
+
+
+def _scope(uid: int, subject_type: str | None, subject_key: str | None) -> str:
+    return sha256(json.dumps([uid, subject_type, subject_key], separators=(",", ":")).encode()).hexdigest()
+
+
+def _cursor_encode(updated_at: int, note_id: int, scope: str) -> str:
+    raw = json.dumps({"updated_at": updated_at, "id": note_id, "scope": scope},
+                     separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _cursor_decode(cursor: str, scope: str) -> tuple[int, int]:
+    try:
+        if not isinstance(cursor, str) or not 1 <= len(cursor) <= 512 or not cursor.isascii():
+            raise ValueError("invalid_cursor")
+        raw = base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
+        payload = json.loads(raw)
+        updated_at, note_id = payload["updated_at"], payload["id"]
+        if (set(payload) != {"updated_at", "id", "scope"} or payload["scope"] != scope
+                or type(updated_at) is not int or updated_at < 0
+                or type(note_id) is not int or note_id < 1):
+            raise ValueError("invalid_cursor")
+        return updated_at, note_id
+    except (ValueError, TypeError, KeyError, UnicodeError, binascii.Error) as exc:
+        raise ValueError("invalid_cursor") from exc
 
 
 def _clean(data: dict) -> dict:
@@ -47,7 +78,10 @@ def create(uid: int, subject_type: str, subject_key: str, data: dict) -> dict:
         c.close()
 
 
-def list_for(uid: int, subject_type: str | None = None, subject_key: str | None = None) -> list[dict]:
+def list_page(uid: int, subject_type: str | None = None, subject_key: str | None = None,
+              cursor: str | None = None) -> dict:
+    scope = _scope(uid, subject_type, subject_key)
+    position = _cursor_decode(cursor, scope) if cursor is not None else None
     c = db.conn()
     try:
         sql = ("SELECT id,subject_type,subject_key,thesis,counter_condition,horizon_weeks,"
@@ -57,12 +91,25 @@ def list_for(uid: int, subject_type: str | None = None, subject_key: str | None 
             sql += " AND subject_type=?"; args.append(subject_type)
         if subject_key:
             sql += " AND subject_key=?"; args.append(subject_key)
-        sql += " ORDER BY updated_at DESC,id DESC LIMIT 100"
-        return [dict(zip(("id", "subject_type", "subject_key", "thesis", "counter_condition",
-                          "horizon_weeks", "report_id", "revision", "created_at", "updated_at"), row))
-                for row in c.execute(sql, args)]
+        if position:
+            sql += " AND (updated_at<? OR (updated_at=? AND id<?))"
+            args.extend([position[0], position[0], position[1]])
+        sql += " ORDER BY updated_at DESC,id DESC LIMIT ?"
+        args.append(PAGE_SIZE + 1)
+        rows = c.execute(sql, args).fetchall()
+        items = [dict(zip(("id", "subject_type", "subject_key", "thesis", "counter_condition",
+                           "horizon_weeks", "report_id", "revision", "created_at", "updated_at"), row))
+                 for row in rows[:PAGE_SIZE]]
+        next_cursor = (_cursor_encode(rows[PAGE_SIZE - 1][-1], rows[PAGE_SIZE - 1][0], scope)
+                       if len(rows) > PAGE_SIZE else None)
+        return {"notes": items, "next_cursor": next_cursor}
     finally:
         c.close()
+
+
+def list_for(uid: int, subject_type: str | None = None, subject_key: str | None = None) -> list[dict]:
+    """Compatibility for callers that need only the first page."""
+    return list_page(uid, subject_type, subject_key)["notes"]
 
 
 def update(uid: int, note_id: int, revision: int, data: dict) -> dict | None:

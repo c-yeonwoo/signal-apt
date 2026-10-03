@@ -342,7 +342,7 @@ def _note_subject(request: Request, kind: str, key: str) -> None:
 
 @router.get("/api/v2/decision-notes")
 def decision_notes_list(request: Request, subject_type: str | None = None,
-                        subject_key: str | None = None):
+                        subject_key: str | None = None, cursor: str | None = None):
     uid = deps.uid(request)
     if not uid:
         raise HTTPException(401, "로그인이 필요합니다.")
@@ -350,7 +350,11 @@ def decision_notes_list(request: Request, subject_type: str | None = None,
         raise HTTPException(422, "대상 유형이 올바르지 않습니다.")
     if subject_key is not None and len(subject_key) > 180:
         raise HTTPException(422, "대상 식별자가 올바르지 않습니다.")
-    return JSONResponse({"notes": notes.list_for(uid, subject_type, subject_key)}, headers=PRIVATE)
+    try:
+        page = notes.list_page(uid, subject_type, subject_key, cursor)
+    except ValueError as exc:
+        raise HTTPException(422, "목록 위치를 확인해 주세요.") from exc
+    return JSONResponse(page, headers=PRIVATE)
 
 
 @router.post("/api/v2/decision-notes")
