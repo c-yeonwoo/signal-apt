@@ -61,6 +61,24 @@ def test_discovery_region_choices_require_verified_current_unique_codes(monkeypa
         reports_v2._canonical_discovery_region({"region_code": "11140"})
 
 
+def test_discovery_route_passes_verified_region_hint_for_uncoded_source_rows(monkeypatch):
+    from realty_signal.services import discovery_v2
+
+    monkeypatch.setattr(reports_v2, "_discovery_regions", lambda: [
+        {"code": "11140", "name": "중구", "sido": "서울", "label": "서울 · 중구"}])
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: False)
+    captured = {}
+    original = discovery_v2.discover
+
+    def record(rows, spec, **kwargs):
+        captured.update(kwargs)
+        return original(rows, spec, **kwargs)
+
+    monkeypatch.setattr(discovery_v2, "discover", record)
+    reports_v2.discovery(None, {"region_code": "11140"})
+    assert captured["region_hint"] == {"name": "중구", "sido": "서울"}
+
+
 def test_listing_report_keeps_price_evidence_when_buyer_profile_fails(monkeypatch):
     from realty_signal import api, db
     from realty_signal.services import property_analysis

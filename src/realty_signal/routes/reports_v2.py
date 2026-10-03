@@ -197,7 +197,10 @@ def _discovery_regions() -> list[dict]:
         if len(names) != 1:
             continue
         name = next(iter(names))
-        options.append({"code": code, "name": name, "label": f"{sido.get(code[:2], '지역')} · {name}"})
+        source_sido = sido.get(code[:2])
+        if source_sido:
+            options.append({"code": code, "name": name, "sido": source_sido,
+                            "label": f"{source_sido} · {name}"})
     options.sort(key=lambda item: (item["label"], item["code"]))
     return options
 
@@ -294,9 +297,14 @@ def discovery(request: Request, data: dict = Body(...)):
             scenario.status = "profile_unavailable"
     fingerprint = {"sources": sources, "finance": scenario.fingerprint,
                    "finance_status": scenario.status} if scenario else sources
+    region_hint = None
+    if selected_code := spec.get("region_code"):
+        region_hint = next(({"name": option["name"], "sido": option["sido"]}
+                            for option in _discovery_regions() if option["code"] == selected_code), None)
     try:
         result = discovery_v2.discover(rows, spec, source_fingerprint=fingerprint,
-                                       finance_of=scenario.for_row if scenario else None)
+                                       finance_of=scenario.for_row if scenario else None,
+                                       region_hint=region_hint)
     except ValueError as exc:
         if str(exc) == "stale_cursor":
             raise HTTPException(409, "수집 결과가 바뀌었습니다. 처음부터 다시 검색하세요.") from exc

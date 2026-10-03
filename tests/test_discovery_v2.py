@@ -67,6 +67,22 @@ def test_region_code_separates_same_named_districts_and_unknown_identity():
             discovery.validate({"region_code": code})
 
 
+def test_required_region_does_not_mix_obviously_other_uncoded_districts_into_verify():
+    same = _row("same-no-code", price=50_000, region="중구")
+    other = _row("other-no-code", price=50_000, region="성동구")
+    wrong_province = _row("wrong-province", price=50_000, region="중구")
+    wrong_province["시도"] = "인천"
+    coded = _row("coded", price=50_000, region="표기차이")
+    coded["지역코드"] = "11140"
+    result = discovery.discover([same, other, wrong_province, coded],
+                                {"region_code": "11140", "include_exceeded": True},
+                                region_hint={"name": "중구", "sido": "서울"})
+    assert [x["listing"]["name"] for x in result["groups"]["matched"]] == ["coded"]
+    assert [x["listing"]["name"] for x in result["groups"]["verify"]] == ["same-no-code"]
+    assert {x["listing"]["name"] for x in result["groups"]["exceeded"]} == {
+        "other-no-code", "wrong-province"}
+
+
 def test_one_complex_cannot_fill_initial_diversified_candidates():
     rows = [_row("same-1", price=40000), _row("same-2", price=41000),
             _row("same-3", price=42000), _row("other", price=45000)]
