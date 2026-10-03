@@ -17,7 +17,8 @@ from realty_signal.ingest.kb_weekly import KBWeekly
 from realty_signal.signals.engine import SignalConfig
 
 VERSION = "signal-assessment-v1"
-GUARD_VERSION = "source-and-price-v1"
+GUARD_VERSION = "source-and-price-v2"
+MAX_OBSERVATION_AGE_DAYS = 8
 LABELS = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
           "NEUTRAL": "중립", "SELL_RISK": "매도주의"}
 
@@ -100,7 +101,7 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
         risk_flags.append("market_inputs_stale")
     if ambiguous:
         risk_flags.append("region_identity_ambiguous")
-    if (today - asof).days > 14:
+    if (today - asof).days > MAX_OBSERVATION_AGE_DAYS:
         risk_flags.append("source_stale")
     raw = str(row.get("signal") or "NEUTRAL")
     if raw in {"BUY", "STRONG_BUY"} and momentum is not None and momentum < 0:

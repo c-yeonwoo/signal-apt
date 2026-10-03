@@ -10,7 +10,7 @@
     market_inputs_missing:'전세수급 또는 매수심리 자료가 없습니다',
     market_inputs_stale:'전세수급 또는 매수심리 기준일이 다릅니다',
     region_identity_ambiguous:'동명이 지역의 코드 매핑을 확인해야 합니다',
-    source_stale:'지역 자료가 14일 넘게 갱신되지 않았습니다',
+    source_stale:'KB 관측 기준일이 8일을 넘어서 현재 판정을 보류합니다',
     price_direction_conflict:'매수 신호와 최근 가격 하락이 충돌합니다',
   };
   let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0;

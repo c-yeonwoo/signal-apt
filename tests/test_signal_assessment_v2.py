@@ -127,3 +127,16 @@ def test_same_market_data_can_become_held_when_source_ages():
     comparison = sa.with_previous(current)
     assert comparison["change"]["type"] == "freshness_change"
     assert comparison["change"]["changed_reasons"] == ["safety_status"]
+
+
+def test_twelve_day_old_kb_observation_cannot_display_strong_buy():
+    asof = date(2026, 9, 28)
+    current = sa.build(_kb(), _row("STRONG_BUY"), SignalConfig(),
+                       asof=asof, today=date(2026, 10, 10))
+    assert current["raw_grade"] == "STRONG_BUY"
+    assert current["assessment_status"] == "held"
+    assert current["display_grade"] == "판단 보류"
+    assert "source_stale" in current["risk_flags"]
+    at_limit = sa.build(_kb(), _row("STRONG_BUY"), SignalConfig(),
+                        asof=asof, today=date(2026, 10, 6))
+    assert at_limit["assessment_status"] == "ready"
