@@ -788,6 +788,29 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm [name=region_code]').selectOption('28125');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     assert.equal(discoveryPayloads.at(-1).prefer_region_code,'28125');
+    await page.evaluate(()=>document.getElementById('v2DiscoverDlg').close());
+    await page.evaluate(()=>{
+      window.__savedPagingFetch=window.fetch;
+      window.fetch=(input,...args)=>{
+        const url=new URL(String(input),location.href);
+        if(url.pathname==='/api/v2/report-snapshots'&&(!args[0]||!args[0].method)){
+          const older=!!url.searchParams.get('cursor');
+          const n=older?1:2;
+          return Promise.resolve({ok:true,json:async()=>({items:[{
+            report_id:String(n).repeat(64),subject_key:`kb:${n}`,kind:'지역',
+            name:`저장 지역 ${n}`,asof:'2026-09-21',saved_at:1780000000-n}],
+            next_cursor:older?null:'older-page'})});
+        }
+        return window.__savedPagingFetch(input,...args);
+      };
+    });
+    await page.evaluate(()=>SignalV2.openSavedReports());
+    await page.getByText('저장 지역 2').waitFor();
+    assert.match(await page.locator('#v2ReportBody').textContent(),/삭제 전까지 보관하며 공개 공유 링크는 만들지 않습니다/);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'이전 저장본 더 보기'}).click();
+    await page.getByText('저장 지역 1').waitFor();
+    assert.equal(await page.locator('#v2ReportBody [data-saved-report]').count(),2);
+    await page.evaluate(()=>{window.fetch=window.__savedPagingFetch;delete window.__savedPagingFetch;});
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }
