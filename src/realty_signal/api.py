@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import date
 from functools import lru_cache
@@ -86,6 +87,11 @@ def _kb_refresh_due(last_fetch: float, data_age_days: float | None, now: float) 
     interval = (_STALE_REFRESH_EVERY_DAYS if data_age_days is None or data_age_days > 8
                 else _REFRESH_EVERY_DAYS)
     return now - last_fetch >= interval * 86400
+
+
+def _kb_due_now() -> bool:
+    last = db.kv_get("last_kb_fetch") or 0
+    return not store.CACHE_FILE.exists() or _kb_refresh_due(last, _data_age_days(), time.time())
 
 
 def _do_refresh() -> dict:
@@ -189,8 +195,7 @@ async def _auto_refresh_loop():
     import time
 
     def kb_job():
-        last = db.kv_get("last_kb_fetch") or 0
-        if store.CACHE_FILE.exists() and not _kb_refresh_due(last, _data_age_days(), time.time()):
+        if not _kb_due_now():
             return
         db.kv_set(_KB_LAST_ATTEMPT, time.time())
         try:
@@ -241,7 +246,8 @@ async def _auto_refresh_loop():
     async def serve(name, fn, interval):
         while True:
             try:
-                await asyncio.to_thread(jobs.run, name, fn, interval=interval, retry=3600)
+                await asyncio.to_thread(jobs.run, name, fn, interval=interval, retry=3600,
+                                        expedite=name == "kb" and _kb_due_now())
             except Exception:
                 log.error("job state failure: %s", name)
             await asyncio.sleep(60)

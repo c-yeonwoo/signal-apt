@@ -1,6 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import time
 
 import pytest
 
@@ -30,6 +31,17 @@ def test_failure_does_not_prevent_another_job():
     assert by["healthy"]["failures"] == 0
 
 
+def test_due_source_expedites_persisted_noop_interval():
+    assert jobs.run("stale_kb", lambda: None, interval=6 * 3600)["status"] == "complete"
+    assert jobs.run("stale_kb", lambda: None, interval=6 * 3600)["status"] == "not_due_or_running"
+    assert jobs.run("stale_kb", lambda: None, interval=6 * 3600, expedite=True)["status"] == "complete"
+
+
+def test_expedite_respects_failure_retry_clock():
+    assert jobs.run("failed_kb", lambda: {"ok": False}, interval=6 * 3600)["status"] == "failed"
+    assert jobs.run("failed_kb", lambda: None, interval=6 * 3600, expedite=True)["status"] == "not_due_or_running"
+
+
 def test_scheduler_launches_sources_independently(monkeypatch):
     calls = []
     monkeypatch.setattr(jobs, "run", lambda name, *a, **kw: calls.append(name))
@@ -48,6 +60,18 @@ def test_kb_refresh_checks_stale_observation_daily():
     assert not api._kb_refresh_due(now - day, 7.9, now)
     assert api._kb_refresh_due(now - 7 * day, 7.9, now)
     assert api._kb_refresh_due(now - day, None, now)
+
+
+def test_kb_due_now_reflects_source_freshness(monkeypatch, tmp_path):
+    from realty_signal import store
+    cache = tmp_path / "kb.json"
+    cache.touch()
+    monkeypatch.setattr(store, "CACHE_FILE", cache)
+    monkeypatch.setattr(api, "_data_age_days", lambda: 12)
+    db.kv_set("last_kb_fetch", time.time() - 2 * 86400)
+    assert api._kb_due_now()
+    db.kv_set("last_kb_fetch", time.time())
+    assert not api._kb_due_now()
 
 
 def test_kb_refresh_records_unchanged_observation(monkeypatch, synthetic_market):
