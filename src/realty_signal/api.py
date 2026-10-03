@@ -3241,6 +3241,13 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
         out = eng_rank.apply_engagement_bonus(out, scores)
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
     out = _attach_card_lines(out, uid)
+    from realty_signal.services import property_analysis
+    profile = db.profile_get(uid) or {} if uid else {}
+    confirmed = buying_power.validated_confirmed_power(profile)
+    for row in out:
+        if row.get("유형") in {"일반매물", "급매", "찐매물"}:
+            row["budget_fit"] = property_analysis.buyer_fit(
+                property_analysis.snapshot(row), profile, confirmed_power=confirmed)
     asof = _timing_asof()
     kinds = ("경매", "급매", "찐매물", "일반매물", "청약", "재건축")
     return {
@@ -3252,6 +3259,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "data_age_days": round(_data_age_days() or 0, 1),
             "engagement_boost": bool(scores),
             "private_access": private_access,
+            "confirmed_budget": bool(confirmed and (profile.get("매수지역코드")
+                or ((profile.get("매수력") or {}).get("가정") or {}).get("지역코드"))),
         },
         "counts": {k: sum(1 for x in out if x["유형"] == k) for k in kinds},
     }

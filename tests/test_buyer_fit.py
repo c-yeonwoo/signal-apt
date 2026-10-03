@@ -44,11 +44,47 @@ def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypat
     listing["stale"] = True
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
     listing["stale"] = False
+    no_region = {"가용자본": 50000, "연소득": 9000}
+    no_region["매수력"] = buying_power.statement(buying_power.params_from_profile(no_region))
+    assert property_analysis.buyer_fit(listing, no_region)["status"] == "unknown"
     profile["가용자본"] = 51000
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
     profile["가용자본"] = 50000
     profile["매수력"]["최대매수가"] += 10000
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+
+
+def test_integrated_list_budget_uses_only_validated_same_region_asking(monkeypatch):
+    from realty_signal.brain import ranking
+
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
+    profile = {"가용자본": 50000, "연소득": 9000, "매수지역": "노원구",
+               "매수지역코드": "kb:1135000000"}
+    profile["매수력"] = buying_power.statement(buying_power.params_from_profile(profile))
+    ceiling = profile["매수력"]["최대매수가"]
+    rows = [{**_row("일반매물:within", price=ceiling - 1000), "기회도": 50},
+            {**_row("일반매물:above", price=ceiling + 1000), "기회도": 50},
+            {**_row("일반매물:other", price=ceiling - 1000), "지역코드": "11680", "기회도": 50},
+            {**_row("일반매물:stale", price=ceiling - 1000), "stale": True, "기회도": 50}]
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **_kwargs: True)
+    monkeypatch.setattr(api, "_uid", lambda _request: 7)
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: rows)
+    monkeypatch.setattr(api, "_attach_card_lines", lambda items, _uid: items)
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-09-28")
+    monkeypatch.setattr(api, "_data_age_days", lambda: 1)
+    monkeypatch.setattr(ranking, "engagement_scores", lambda **_kwargs: {})
+    monkeypatch.setattr(db, "profile_get", lambda _uid: profile)
+    result = api.listings_all(None, "일반매물")
+    by_key = {item["key"]: item["budget_fit"]["status"] for item in result["listings"]}
+    assert result["meta"]["confirmed_budget"] is True
+    assert by_key == {"일반매물:within": "within", "일반매물:above": "above",
+                      "일반매물:other": "unknown", "일반매물:stale": "unknown"}
+
+    profile["가용자본"] += 1000
+    result = api.listings_all(None, "일반매물")
+    assert result["meta"]["confirmed_budget"] is False
+    assert all(item["budget_fit"]["status"] == "unknown" for item in result["listings"])
 
 
 def test_listing_alternatives_do_not_borrow_stale_saved_budget(monkeypatch):

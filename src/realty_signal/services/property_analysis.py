@@ -9,6 +9,7 @@ from realty_signal.services import quote_check
 
 ANALYZABLE = frozenset({"일반매물", "급매", "찐매물", "경매"})
 PRIVATE = frozenset({"일반매물", "급매", "찐매물"})
+_UNSET = object()
 
 
 def resolve(key: str, *, private_allowed: bool) -> dict:
@@ -71,7 +72,7 @@ def snapshot(row: dict) -> dict:
     }
 
 
-def buyer_fit(listing: dict, profile: dict | None = None) -> dict:
+def buyer_fit(listing: dict, profile: dict | None = None, *, confirmed_power=_UNSET) -> dict:
     """확정 매수력과 호가만 비교한다. 구매 가능성/대출 승인이 아니다."""
     from realty_signal import buying_power
 
@@ -84,12 +85,13 @@ def buyer_fit(listing: dict, profile: dict | None = None) -> dict:
         return {"status": "unknown", "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
     if listing.get("stale"):
         return {"status": "unknown", "reason": "지난 수집 호가라 현재 예산 적합성을 판단하지 않았습니다."}
-    confirmed = buying_power.validated_confirmed_power(profile)
+    confirmed = (buying_power.validated_confirmed_power(profile)
+                 if confirmed_power is _UNSET else confirmed_power)
     if confirmed is None:
         return {"status": "unknown", "reason": "저장한 자금·지역 가정이 현재 조건과 달라 매수력을 다시 확정해야 합니다."}
     budget, params = confirmed
     saved_code = profile.get("매수지역코드") or (saved.get("가정") or {}).get("지역코드")
-    if saved_code and (
+    if (
         not isinstance(saved_code, str) or not saved_code.startswith("kb:")
         or not params.region or str(listing.get("region_code") or "") != saved_code[3:8]
         or listing.get("region") != params.region
