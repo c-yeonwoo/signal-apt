@@ -46,6 +46,43 @@ def test_evaluate_payload():
     assert payload["digest"][0]["region"] == "강남구"
 
 
+def test_raw_upgrade_history_does_not_notify_when_current_assessment_is_held_or_changed():
+    history = [{"region": "강남구", "from": "WATCH", "to": "BUY", "date": "2026-07-15"}]
+    for current in ("HELD", "WATCH"):
+        payload = alerts.evaluate({"강남구"}, {}, signal_changes=history,
+                                  signal_map={"강남구": current}, seen_before="2026-07-14")
+        assert payload["changes"][0]["to"] == "BUY"  # immutable raw history
+        assert payload["changes"][0]["current_signal"] == current
+        assert payload["changes"][0]["actionable"] is False
+        assert payload["digest"] == [{"region": "강남구", "signal": current}]
+        assert payload["unread"] == 0
+    ready = alerts.evaluate({"강남구"}, {}, signal_changes=history,
+                            signal_map={"강남구": "BUY"}, seen_before="2026-07-14")
+    assert ready["changes"][0]["actionable"] is True
+    assert ready["unread"] == 1
+
+
+def test_alert_route_uses_current_safe_signal_map(monkeypatch):
+    from realty_signal import api as app_api
+    from realty_signal.routes import alerts as alerts_route
+
+    monkeypatch.setattr(alerts_route.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(db, "fav_list", lambda uid: [{"kind": "region", "key": "강남구"}])
+    monkeypatch.setattr(db, "kv_get", lambda key: (
+        [{"region": "강남구", "from": "WATCH", "to": "BUY", "date": "2026-07-15"}]
+        if key == "signal_changes" else "2026-07-14"))
+    monkeypatch.setattr(db, "alert_prefs_get", lambda uid: {"high_timing": False})
+    monkeypatch.setattr(app_api, "_user_nbhd_diffs", lambda uid, favs: {})
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"강남구": "HELD"})
+    monkeypatch.setattr(alerts_route.md, "signal_map", lambda: (_ for _ in ()).throw(
+        AssertionError("raw signal map must not reach alerts")))
+
+    payload = alerts_route.alerts(object())
+    assert payload["changes"][0]["actionable"] is False
+    assert payload["digest"] == [{"region": "강남구", "signal": "HELD"}]
+    assert payload["unread"] == 0
+
+
 def test_config_store_apply(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "c.db")
     db._migrated[0] = False

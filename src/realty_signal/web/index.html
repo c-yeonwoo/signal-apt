@@ -6869,12 +6869,13 @@ function renderAlerts(d){
         ${feedbackButtons('nbhd_change',n.region||'',`fbNbhd${i}`)}</div>`).join('');
   }
   if(d.changes && d.changes.length){
-    html += `<div style="font-weight:700;font-size:13px;margin:${html?16:0}px 0 8px${html?';padding-top:12px;border-top:1px solid var(--line)':''}">시그널 승급 <span style="color:var(--dim);font-weight:400">${d.changes.length}건</span></div>`
+    html += `<div style="font-weight:700;font-size:13px;margin:${html?16:0}px 0 8px${html?';padding-top:12px;border-top:1px solid var(--line)':''}">과거 원시 시그널 변동 <span style="color:var(--dim);font-weight:400">${d.changes.length}건</span></div>`
+      + `<p style="font-size:11px;color:var(--dim);margin:0 0 8px">당시 원시 등급 기록입니다. 현재 판정과 다를 수 있으며, 보류된 승급은 새 알림으로 세지 않습니다.</p>`
       + d.changes.map((c,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
         <b style="min-width:62px">${c.region}</b>
         <span style="color:${col(c.from)};font-size:12px">${lbl[c.from]||c.from}</span><span style="color:var(--dim)">→</span>
         <span style="color:${col(c.to)};font-weight:700">${lbl[c.to]||c.to}</span>
-        <span style="margin-left:auto;color:var(--dim);font-size:11px">${c.date}</span>
+        <span style="margin-left:auto;color:var(--dim);font-size:11px">${c.date}${c.actionable?'':' · 현재 '+(lbl[c.current_signal]||'판정 보류')}</span>
         ${feedbackButtons('signal_upgrade',c.region||'',`fbChg${i}`)}</div>`).join('');
   } else if(!html){
     html += `<div style="color:var(--dim);font-size:13px;padding:4px 0 10px">아직 알림이 없습니다.<br><span style="font-size:12px">★ 즐겨찾기 지역·동네 리포트 열람 후 변동·고타이밍 매물이 여기 모입니다.</span></div>`;
