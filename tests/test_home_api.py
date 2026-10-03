@@ -152,6 +152,28 @@ def test_region_favorite_identity_failure_does_not_claim_ready(client, monkeypat
     assert favorite["region_identity"]["status"] == "unverified"
 
 
+def test_legacy_jung_gu_favorite_is_archived_not_personalized_as_seoul(client, monkeypatch):
+    """A name-only pre-reform Incheon favorite cannot become Seoul by accident."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(auth_routes.md, "kb", lambda: SimpleNamespace(
+        codes={"중구": "1114000000", "강남구": "1168000000"},
+        regions=["중구", "강남구"], identity_verified=True))
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "region", "중구", "중구")
+    assert client.post("/api/favorites", json={"kind": "region", "key": "중구"}).status_code == 422
+    favorites = client.get("/api/favorites").json()["favorites"]
+    assert favorites[0]["key"] == "중구"
+    assert favorites[0]["region_identity"]["status"] == "needs_reselection"
+    assert db.actionable_region_favs(uid) == []
+    assert "중구" not in db.all_fav_regions()
+    assert db.users_with_region_favs() == []
+
+    assert client.post("/api/favorites", json={"kind": "region", "key": "강남구"}).json()["ok"]
+    assert db.actionable_region_favs(uid) == ["강남구"]
+    assert db.users_with_region_favs()[0]["regions"] == ["강남구"]
+
+
 def test_action_plan_requires_login(client):
     client.cookies.clear()
     assert client.get("/api/action-plan").status_code == 401

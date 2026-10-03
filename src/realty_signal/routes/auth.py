@@ -172,6 +172,10 @@ def _favorite_region_identity(region: str) -> dict:
     """과거 관심지역은 보존하되, 현행 시그널/알림으로 오해하지 않게 한다."""
     from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
 
+    if region in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        return {"status": "needs_reselection",
+                "message": "이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 코드 기반 재선택 기능 전까지 알림을 보류합니다."}
+
     try:
         kb = md.kb()
         code = str((kb.codes or {}).get(region) or "")
@@ -215,6 +219,10 @@ def _complex_favorite_error(key: object) -> str | None:
 @router.post("/api/favorites")
 def favorites_add(request: Request, background_tasks: BackgroundTasks, data: dict = Body(...)):
     kind, key = data.get("kind", "region"), data.get("key", "")
+    if kind == "region" and key in db.AMBIGUOUS_LEGACY_REGION_KEYS:
+        return JSONResponse({"ok": False, "error": "ambiguous_region",
+                             "message": "중구는 이름만으로 등록할 수 없습니다. 코드 기반 관심지역 선택 기능을 준비 중입니다."},
+                            status_code=422)
     if kind == "region" and _favorite_region_identity(key)["status"] == "needs_reselection":
         return JSONResponse({"ok": False, "error": "retired_region",
                              "message": "이 지역은 2026-07 인천 구역 개편 전 이름입니다. 현행 지역을 선택해 주세요."},

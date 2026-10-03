@@ -35,7 +35,7 @@ def _email(uid: int | None) -> dict:
     last_run = db.kv_get("last_digest_run")
     me_ready = False
     if uid:
-        me_ready = bool([f for f in db.fav_list(uid) if f["kind"] == "region"])
+        me_ready = bool(db.actionable_region_favs(uid))
     out = {
         "channel": "email",
         "label": "이메일 주간 다이제스트",

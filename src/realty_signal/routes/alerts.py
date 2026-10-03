@@ -37,7 +37,7 @@ def alerts(request: Request):
     from realty_signal import api as app_api
 
     uid = deps.uid(request)
-    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
+    favs = set(db.actionable_region_favs(uid)) if uid else set()
     log_ = db.kv_get("signal_changes") or []
     seen = db.kv_get(f"alerts_seen:{uid}") or "" if uid else ""
     prefs = db.alert_prefs_get(uid) if uid else {}

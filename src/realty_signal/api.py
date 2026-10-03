@@ -420,7 +420,7 @@ def myfeed(request: Request):
     if not uid:
         return {"ok": False, "reason": "login_required"}
     favs = db.fav_list(uid)
-    regions = [f["key"] for f in favs if f["kind"] == "region"]
+    regions = db.actionable_region_favs(uid)
     complexes = [f["key"] for f in favs if f["kind"] == "complex"]   # "region|name"
     if not regions and not complexes:
         return {"ok": True, "empty": True, "items": []}
@@ -1208,7 +1208,7 @@ def _default_region(request: Request, profile: dict) -> str | None:
         return saved
     uid = _uid(request)
     if uid:
-        favs = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+        favs = db.actionable_region_favs(uid)
         if favs:
             return favs[0]
     return None
@@ -1438,7 +1438,7 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
     uid = _uid(request)
     profile = dict(db.profile_get(uid) or {})
     if uid:
-        profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+        profile["_favs"] = db.actionable_region_favs(uid)
     if budget is None:
         p = _buyer_params(profile)
         if p.capital <= 0:
@@ -3269,8 +3269,8 @@ def _scan_regions() -> list[str]:
            if df is not None else [])
     owner_email = config.personal_listing_email()
     owner = db.user_by_email(owner_email) if owner_email else None
-    favs = ([f["key"] for f in db.fav_list(owner["id"])
-             if f["kind"] == "region" and f["key"] in valid] if owner else [])
+    favs = ([region for region in db.actionable_region_favs(owner["id"])
+             if region in valid] if owner else [])
     seen, out = set(), []
     for r in buy + favs:
         if r not in seen and _scan_region_current(r):
@@ -3296,8 +3296,8 @@ def _hanbang_regions() -> list[str]:
     owner_email = config.personal_listing_email()
     owner = db.user_by_email(owner_email) if owner_email else None
     known = set(_bundled_centroids())
-    favorites = ([f["key"] for f in db.fav_list(owner["id"])
-                  if f["kind"] == "region" and f["key"] in known and _scan_region_current(f["key"])] if owner else [])
+    favorites = ([region for region in db.actionable_region_favs(owner["id"])
+                  if region in known and _scan_region_current(region)] if owner else [])
     if len(favorites) >= 3:
         return list(dict.fromkeys(favorites))[:3]
     return list(dict.fromkeys(favorites + _scan_regions()))[:3]

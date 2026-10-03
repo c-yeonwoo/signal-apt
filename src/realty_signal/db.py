@@ -401,7 +401,7 @@ def all_fav_regions() -> list[str]:
     c = conn()
     rows = c.execute("SELECT DISTINCT key FROM favorites WHERE kind='region'").fetchall()
     c.close()
-    return [k for (k,) in rows if k]
+    return [k for (k,) in rows if k and k not in AMBIGUOUS_LEGACY_REGION_KEYS]
 
 
 def users_with_telegram() -> list[dict]:
@@ -434,10 +434,23 @@ def users_with_region_favs() -> list[dict]:
     c.close()
     out = []
     for uid, email, keys in rows:
-        regions = [k for k in (keys or "").split("|") if k]
+        regions = [k for k in (keys or "").split("|")
+                   if k and k not in AMBIGUOUS_LEGACY_REGION_KEYS]
         if regions:
             out.append({"id": uid, "email": email, "regions": regions})
     return out
+
+
+# A pre-reform, name-only "중구" favorite may have meant either Seoul or the
+# former Incheon district. The original selection was not stored, so it must
+# never silently become a current Seoul preference or notification target.
+AMBIGUOUS_LEGACY_REGION_KEYS = frozenset({"중구"})
+
+
+def actionable_region_favs(uid: int) -> list[str]:
+    """Exclude unrecoverable name collisions; downstream signal gates still apply."""
+    return [f["key"] for f in fav_list(uid)
+            if f["kind"] == "region" and f["key"] not in AMBIGUOUS_LEGACY_REGION_KEYS]
 
 
 # ---------- funnel events ----------

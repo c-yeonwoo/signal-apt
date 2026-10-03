@@ -25,7 +25,7 @@ def weekly_change(request: Request):
     from realty_signal import weekly
 
     uid = deps.uid(request)
-    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
+    favs = set(db.actionable_region_favs(uid)) if uid else set()
     try:
         out = weekly.for_user(favs)
         # 배너가 "왜 멈췄는지" 를 말하려면 수집 건강 상태가 같이 와야 한다
@@ -186,7 +186,7 @@ def threshold_watch(request: Request):
     from realty_signal.services import market_data as md, threshold_watch as tw
 
     uid = deps.uid(request)
-    favs = {f["key"] for f in db.fav_list(uid) if f["kind"] == "region"} if uid else set()
+    favs = set(db.actionable_region_favs(uid)) if uid else set()
     try:
         kb = md.kb()
         as_of = str(kb.last_date.date())

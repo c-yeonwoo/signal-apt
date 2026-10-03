@@ -243,7 +243,7 @@ def plan(uid: int) -> dict:
     from realty_signal.services import shortlist as sl
 
     profile = dict(db.profile_get(uid) or {})
-    profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+    profile["_favs"] = db.actionable_region_favs(uid)
     confirmed = bool((profile.get("매수력") or {}).get("최대매수가"))
     p = buying_power.params_from_profile(profile)
     budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
@@ -275,7 +275,7 @@ def build(uid: int, *, force: bool = False) -> dict:
     from realty_signal.services import complex_watch as cw, shortlist as sl
 
     profile = dict(db.profile_get(uid) or {})
-    profile["_favs"] = [f["key"] for f in db.fav_list(uid) if f["kind"] == "region"]
+    profile["_favs"] = db.actionable_region_favs(uid)
     p = buying_power.params_from_profile(profile)
     budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
     if not budget:

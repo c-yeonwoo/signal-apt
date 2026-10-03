@@ -4696,11 +4696,12 @@ function rowEl(r, lv){
   const shared = `전세 ${r['전세수급']??'–'}·매수우위 ${r['매수우위지수']??'–'}`;
   // 경기 일반구는 '구명'만 짧게 표기
   const disp = lv===2 ? r.region.split(' ').slice(1).join(' ')||r.region : r.region;
+  const unresolvedFav = _favRegionIdentity.has(r.region) && _favRegionIdentity.get(r.region)?.status!=='ready';
   const faved = _favs.has('region:'+r.region);
   row.innerHTML = `<span class="nm">${disp}</span>${badge(displaySignal(r))}
-    <span class="fav" title="즐겨찾기" style="cursor:pointer;color:${faved?'#b45309':'var(--dim)'};margin-left:auto">${faved?'★':'☆'}</span>
+    <span class="fav" title="${unresolvedFav?'기존 관심지역의 구분이 필요합니다':'즐겨찾기'}" style="cursor:pointer;color:${unresolvedFav?'var(--danger)':faved?'#b45309':'var(--dim)'};margin-left:auto">${unresolvedFav?'확인 필요':faved?'★':'☆'}</span>
     <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
-  row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); toggleFav('region', r.region, r.region); };
+  row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation(); if(unresolvedFav) openFavList(); else toggleFav('region', r.region, r.region); };
   row.onclick = () => selectRegion(r.region);
   return row;
 }
@@ -5647,7 +5648,7 @@ function cmpAddCol(name,region){
 function openFavList(){ renderFavList(); document.getElementById('favListDlg').showModal(); }
 async function renderFavList(){
   const body=document.getElementById('favListBody'); if(!body) return;
-  const regions=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
+  const regions=[..._favRegionIdentity.keys()];
   const complexes=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8));
   const cxMeta={};
   try{ const d=await (await fetch('/api/myfeed')).json();
@@ -7168,12 +7169,12 @@ async function loadListingWatch(){
 }
 async function loadFavs(){
   try{ const d=await (await fetch('/api/favorites')).json();
-    _favs = new Set((d.favorites||[]).map(f=>f.kind+':'+f.key));
+    _favs = new Set((d.favorites||[]).filter(f=>f.kind!=='region'||f.region_identity?.status==='ready').map(f=>f.kind+':'+f.key));
     _favRegionIdentity = new Map((d.favorites||[]).filter(f=>f.kind==='region').map(f=>[f.key,f.region_identity])); }catch(e){}
 }
 async function toggleFav(kind, key, label){
   const id=kind+':'+key;
-  if(_favs.has(id)){ _favs.delete(id);
+  if(_favs.has(id)||(kind==='region'&&_favRegionIdentity.has(key))){ _favs.delete(id);
     await fetch('/api/favorites?kind='+kind+'&key='+encodeURIComponent(key),{method:'DELETE'}); }
   else { _favs.add(id);
     let out={}, response;
