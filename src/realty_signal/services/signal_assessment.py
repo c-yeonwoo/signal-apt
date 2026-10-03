@@ -54,6 +54,21 @@ def _metric(reason_id: str, label: str, value: float | None, unit: str,
             "source_region": source, "inherited": False}
 
 
+def _held_summary(flags: list[str], asof: date, today: date) -> str:
+    if "source_stale" in flags:
+        return (f"KB {asof.isoformat()} 관측 후 {(today - asof).days}일이 지났습니다. "
+                "새 기준일을 확인하기 전에는 과거 매수·매도 등급을 현재 판단으로 사용하지 않습니다.")
+    if "region_identity_ambiguous" in flags:
+        return "같은 이름의 다른 지역과 자료 출처를 구분할 수 없어 지역 판정을 보류합니다."
+    if "market_inputs_missing" in flags or "market_inputs_stale" in flags:
+        return "전세수급·매수심리 자료가 없거나 가격 기준일과 맞지 않아 지역 판정을 보류합니다."
+    if "sale_weeks_incomplete" in flags:
+        return "최근 4주 가격 자료가 이어지지 않아 지역 판정을 보류합니다."
+    if "price_direction_conflict" in flags:
+        return "기존 매수 규칙과 최근 가격 하락이 충돌해 지역 판정을 보류합니다."
+    return "자료 또는 가격 방향을 확인한 뒤 판단합니다."
+
+
 def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
           asof: date | None = None, today: date | None = None) -> dict:
     """Create a deterministic assessment without reading or writing issuance history."""
@@ -122,7 +137,7 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     return {**basis, "assessment_id": _hash(basis), "region": region,
             "display_grade": LABELS.get(raw, "판단 보류") if status == "ready" else "판단 보류",
             "assessment_status": status,
-            "summary": ("자료 또는 가격 방향을 확인한 뒤 판단합니다." if status == "held" else
+            "summary": (_held_summary(risk_flags, asof, today) if status == "held" else
                         f"지역 시장 신호는 {LABELS.get(raw, '판단 보류')}입니다. 개별 매물의 적정 가격이나 미래 수익을 뜻하지 않습니다."),
             "scope_note": (f"전세수급과 매수심리는 {source} 권역 자료를 함께 사용합니다."
                            if source != region else "이 지역 자료를 사용합니다."),

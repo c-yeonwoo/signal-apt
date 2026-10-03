@@ -4709,13 +4709,15 @@ function renderList(){
   let rows = allSignals.filter(r => active.has(displaySignal(r)))
     .filter(r => !r['급지'] || activeGrade.has(r['급지']))   // 급지 없는 지방은 항상 통과
     .filter(r => !grp || r.group===grp).filter(r => !q || r.region.includes(q));
-  // 시그널 강한 순 → 전세수급 높은 순 → 가나다
+  // 표시 시그널 강한 순 → 전세수급 높은 순 → 가나다. 보류는 강세 신호로 정렬하지 않는다.
   rows.sort((a,b)=> (_SIGRANK[displaySignal(a)]??9)-(_SIGRANK[displaySignal(b)]??9)
     || (b['전세수급']||0)-(a['전세수급']||0) || a.region.localeCompare(b.region));
   const favs = rows.filter(r => _favs.has('region:'+r.region));
   const rest = rows.filter(r => !_favs.has('region:'+r.region));
   if(favs.length){ list.appendChild(miniHead('★ 관심 지역')); favs.forEach(r=>list.appendChild(rowEl(r,0))); }
-  list.appendChild(miniHead(`전체 <span class="cnt">${rest.length} · 시그널 강한 순</span>`));
+  const allHeld = rows.length>0 && rows.every(r=>displaySignal(r)==='HELD');
+  const orderLabel = allHeld ? '모두 판단 보류 · 수급 참고 순' : '현재 판정 순';
+  list.appendChild(miniHead(`${favs.length?'그 밖의 지역':'전체'} <span class="cnt">${rest.length} · ${orderLabel}</span>`));
   rest.forEach(r => list.appendChild(rowEl(r, 0)));
 }
 function renderZoneLegend(){
