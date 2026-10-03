@@ -14,7 +14,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const reportsByKey=new Map(), savedReports=new Map();
-    let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false;
+    let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -107,10 +107,27 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           data.groups={matched:occupancyPass?[candidate]:[],verify:occupancyChecked?[]:[candidate],explore:[],exceeded:spec.include_exceeded&&occupancyFail?[candidate]:[]};
           data.next_cursor=null;
         }
+        if(spec.max_commute_minutes){
+          const commutePass=commuteChecked&&spec.max_commute_minutes>=54;
+          const commuteFail=commuteChecked&&!commutePass;
+          candidate.listing.coordinate=[37.65,127.06];
+          candidate.listing.commute=commuteChecked?{status:'observed',minutes:54}:null;
+          candidate.constraints=[{field:'max_commute_minutes',status:commutePass?'pass':commuteFail?'fail':'unknown'}];
+          candidate.eligibility=commutePass?'matched':commuteFail?'exceeded':'verify';
+          data.commute_context={status:'ready'};
+          data.counts={matched:commutePass?1:0,verify:commuteChecked?0:1,explore:0,exceeded:commuteFail?1:0};
+          data.groups={matched:commutePass?[candidate]:[],verify:commuteChecked?[]:[candidate],explore:[],
+            exceeded:spec.include_exceeded&&commuteFail?[candidate]:[]};
+          data.next_cursor=null;
+        }
       }
       if(url.pathname==='/api/v2/discovery/occupancy') {
         occupancyChecked=true;
         data={status:'dated',date:'2026-12-08',source:'hanbang_detail'};
+      }
+      if(url.pathname==='/api/v2/discovery/commute') {
+        commuteChecked=true;
+        data={status:'observed',minutes:54,source:'Kakao 대중교통 경로'};
       }
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
         return route.fulfill({status:403,json:{detail:'forbidden'}});
@@ -777,6 +794,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByRole('status').getByText(/요청한 2026-11-30보다 늦어 기본 후보에서 제외/).waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),0);
     await page.locator('#v2DiscoverForm [name=move_in_by]').fill('');
+    await page.locator('#v2DiscoverForm [name=max_commute_minutes]').fill('60');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    assert.equal(discoveryPayloads.at(-1).max_commute_minutes,60);
+    await page.locator('#v2DiscoverResults [data-v2-commute]').click();
+    await page.getByText(/대중교통 안내 54분/).first().waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-group="matched"] [data-v2-card]').count(),1);
+    commuteChecked=false;
+    await page.locator('#v2DiscoverForm [name=max_commute_minutes]').fill('45');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.locator('#v2DiscoverResults [data-v2-commute]').click();
+    await page.getByRole('status').getByText(/설정한 45분을 넘어 기본 후보에서 제외/).waitFor();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),0);
+    await page.locator('#v2DiscoverForm [name=max_commute_minutes]').fill('');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/총 월 상환 약 120만원/).waitFor();

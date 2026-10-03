@@ -237,6 +237,7 @@ def discovery(request: Request, data: dict = Body(...)):
     from realty_signal.services import discovery_v2
     from realty_signal.services import discovery_finance
     from realty_signal.services import discovery_occupancy
+    from realty_signal.services import discovery_commute
 
     try:
         spec = _canonical_discovery_region(discovery_v2.validate(data))
@@ -284,20 +285,28 @@ def discovery(request: Request, data: dict = Body(...)):
             if not source["regions"]:
                 source["regions"] = sorted({row.get("지역") for row in source_rows if row.get("지역")})
     scenario = None
-    if allowed and "max_monthly_manwon" in spec:
+    profile = None
+    profile_failed = False
+    if allowed and ({"max_monthly_manwon", "max_commute_minutes"} & spec.keys()):
         from realty_signal import db
         uid = deps.uid(request)
-        profile_failed = False
         try:
             profile = db.profile_get(uid) if uid else None
         except Exception:  # noqa: BLE001 — 자금 프로필 장애가 매물 검색 전체를 막지 않게 한다.
             profile = None
             profile_failed = True
+    if allowed and "max_monthly_manwon" in spec:
         scenario = discovery_finance.FinanceScenario(profile, sido_of=app_api._sido_of)
         if profile_failed:
             scenario.status = "profile_unavailable"
-    fingerprint = {"sources": sources, "finance": scenario.fingerprint,
-                   "finance_status": scenario.status} if scenario else sources
+    commute_context = discovery_commute.work_context(profile) if allowed and "max_commute_minutes" in spec else None
+    if commute_context and profile_failed:
+        commute_context = {"status": "profile_unavailable"}
+    fingerprint = {"sources": sources}
+    if scenario:
+        fingerprint.update(finance=scenario.fingerprint, finance_status=scenario.status)
+    if commute_context:
+        fingerprint.update(commute=commute_context.get("identity"), commute_status=commute_context["status"])
     region_hint = None
     if selected_code := spec.get("region_code"):
         region_hint = next(({"name": option["name"], "sido": option["sido"]}
@@ -306,10 +315,14 @@ def discovery(request: Request, data: dict = Body(...)):
     if allowed and "move_in_by" in spec and (uid := deps.uid(request)):
         occupancy = discovery_occupancy.cached(uid, {row["key"]: row.get("fetched_at") or 0
             for row in rows if row.get("유형") == "일반매물" and row.get("key")})
+    commute = {}
+    if allowed and "max_commute_minutes" in spec and (uid := deps.uid(request)) and commute_context["status"] == "ready":
+        commute = discovery_commute.cached(uid, rows, profile)
     try:
         result = discovery_v2.discover(rows, spec, source_fingerprint=fingerprint,
                                        finance_of=scenario.for_row if scenario else None,
-                                       region_hint=region_hint, occupancy_by_key=occupancy)
+                                       region_hint=region_hint, occupancy_by_key=occupancy,
+                                       commute_by_key=commute)
     except ValueError as exc:
         if str(exc) == "stale_cursor":
             raise HTTPException(409, "수집 결과가 바뀌었습니다. 처음부터 다시 검색하세요.") from exc
@@ -326,6 +339,8 @@ def discovery(request: Request, data: dict = Body(...)):
         result["finance_context"] = {"status": scenario.status,
                                      "policy_status": scenario.policy["status"],
                                      "policy_declared_asof": scenario.policy["declared_asof"]}
+    if commute_context:
+        result["commute_context"] = {"status": commute_context["status"]}
     result["coverage"] = {"scope": "collected_sample", "regions": sorted({region for source in sources
                                                                             for region in source["regions"]}),
                           "source_count": len(sources)}
@@ -356,6 +371,33 @@ def discovery_occupancy_lookup(request: Request, data: dict = Body(...)):
     except Exception as exc:  # noqa: BLE001 — 외부 상세 장애를 입주 가능일 부재로 단정하지 않는다.
         raise HTTPException(502, "입주 가능일 상세 원천을 확인하지 못했습니다.") from exc
     return JSONResponse(value, headers=PRIVATE)
+
+
+@router.post("/api/v2/discovery/commute")
+def discovery_commute_lookup(request: Request, data: dict = Body(...)):
+    """현재 매물 한 건과 저장 직장의 참고 경로만 명시 요청으로 조회한다."""
+    from realty_signal import db
+    from realty_signal.services import discovery_commute, discovery_v2, property_analysis
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if not deps.personal_listings_allowed(request):
+        raise HTTPException(403, "개인용 매물 접근 권한이 없습니다.")
+    try:
+        row = property_analysis.resolve(data.get("key"), private_allowed=True)
+    except ValueError as exc:
+        raise HTTPException(422, "매물 키를 확인해 주세요.") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "현재 수집분에서 매물을 찾지 못했습니다.") from exc
+    if row.get("유형") not in discovery_v2.KINDS:
+        raise HTTPException(422, "일반·급매·찐매물만 통근 경로를 확인할 수 있습니다.")
+    profile = db.profile_get(uid)
+    try:
+        value = discovery_commute.lookup(uid, row, profile)
+    except ValueError as exc:
+        raise HTTPException(422, "저장된 직장 위치 또는 경로 API 설정을 확인해 주세요.") from exc
+    return JSONResponse(discovery_commute.public(value), headers=PRIVATE)
 
 
 def _note_subject(request: Request, kind: str, key: str) -> None:

@@ -616,11 +616,13 @@
     }
   }
 
-  function discoveryCard(x, spec) {
+  function discoveryCard(x, spec, commuteContext) {
     const finance = x.finance;
     const preference = x.preference || {};
     const move = x.listing.move_in;
     const moveCheck = (x.constraints || []).find(check => check.field === 'move_in_by');
+    const commute = x.listing.commute;
+    const commuteCheck = (x.constraints || []).find(check => check.field === 'max_commute_minutes');
     const moveText = move?.status === 'immediate' ? '원천 표시: 즉시 입주' :
       move?.status === 'dated' ? `원천 표시: ${esc(move.date)} 입주 가능` :
       move?.status === 'approximate' ? '원천이 초·중·하순 등 시기로 표시 · 날짜 확인 필요' :
@@ -635,6 +637,7 @@
     return `<div class="v2-row${x.eligibility === 'exceeded' ? ' v2-caution' : ''}" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${money(x.listing.asking_manwon)}
       <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}${x.listing.rooms != null ? ` · 방 ${esc(x.listing.rooms)}개` : ''}</p>
       ${moveText ? `<p>${moveText}${moveCheck?.status === 'fail' ? ' · 요청한 입주일보다 늦음' : ''}</p>` : ''}
+      ${spec.max_commute_minutes ? `<p>${commute?.status === 'observed' ? `저장된 직장까지 대중교통 안내 ${esc(commute.minutes)}분${commuteCheck?.status === 'fail' ? ' · 설정한 상한 초과' : ''}` : x.listing.coordinate ? '직장까지 통근 안내시간 미확인' : '매물 표시 좌표가 없어 통근 미확인'} · 실제 출입구·시간대와 다를 수 있습니다.</p>` : ''}
       ${x.eligibility === 'exceeded' ? '<p>설정한 필수 조건을 넘는 비교용 후보입니다. 구매 가능 추천이 아닙니다.</p>' : ''}
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
       <p>${x.eligibility === 'verify' || x.eligibility === 'exceeded' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
@@ -642,6 +645,7 @@
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
       ${spec.move_in_by && x.listing.kind === '일반매물' && !move ? `<button type="button" class="btn" data-v2-occupancy="${esc(x.listing.key)}">입주일 확인</button>` : ''}
+      ${spec.max_commute_minutes && commuteContext?.status === 'ready' && x.listing.coordinate && !commute ? `<button type="button" class="btn" data-v2-commute="${esc(x.listing.key)}">직장 경로 확인</button>` : ''}
       <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button>
       ${watchAction(x.listing)}</div>`;
   }
@@ -676,7 +680,7 @@
     const form = document.getElementById('v2DiscoverForm');
     const result = document.getElementById('v2DiscoverResults');
     const spec = {};
-    for (const field of ['max_price_manwon', 'min_area_m2', 'min_rooms', 'max_monthly_manwon',
+    for (const field of ['max_price_manwon', 'min_area_m2', 'min_rooms', 'max_commute_minutes', 'max_monthly_manwon',
                          'prefer_max_price_manwon', 'prefer_min_area_m2']) {
       const value = form.elements[field].value.trim();
       if (value) spec[field] = Number(value);
@@ -721,6 +725,11 @@
           data.finance_context?.status !== 'ready' ? '매수력을 설정·확정해야 월 부담을 계산할 수 있습니다.' :
           data.finance_context?.policy_status !== 'verified' ? `대출 규제·세율 최신성이 검증되지 않았습니다(${esc(data.finance_context?.policy_declared_asof || '기준일 미확인')} 기준 가정). 월 부담은 참고용이며 후보는 확인 필요로 분류됩니다.` :
           '월 부담은 입력 가정의 추정치이며 대출 승인이 아닙니다.' : '';
+        const commuteNotice = spec.max_commute_minutes ?
+          data.commute_context?.status === 'missing_work' ? '내 정보에서 직장 위치를 저장해야 통근 안내시간을 확인할 수 있습니다. 아직 후보를 조건 부합으로 판정하지 않습니다.' :
+          data.commute_context?.status === 'profile_unavailable' ? '직장 위치를 지금 읽지 못해 통근을 판정하지 않습니다.' :
+          data.commute_context?.status === 'unconfigured' ? '경로 API가 설정되지 않아 통근을 판정하지 않습니다.' :
+          '통근 안내시간은 후보별 ‘직장 경로 확인’을 누를 때만 조회합니다. 매물 표시 좌표 기준이며 실제 출입구·출퇴근 시간대의 소요시간이 아닙니다.' : '';
         const hasPreference = !!(spec.prefer_region_code || spec.prefer_max_price_manwon || spec.prefer_min_area_m2);
         const priorityApplied = spec.priority === 'region' ? !!spec.prefer_region_code :
           spec.priority === 'price' ? !!spec.prefer_max_price_manwon :
@@ -730,14 +739,19 @@
           ${feedback ? `<p class="v2-row" role="status">${esc(feedback)}</p>` : ''}
           ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}
           ${financeNotice ? `<p class="v2-row v2-caution">${financeNotice}</p>` : ''}
+          ${commuteNotice ? `<p class="v2-row v2-caution">${commuteNotice}</p>` : ''}
           ${spec.move_in_by ? '<p class="v2-row v2-caution">입주일은 상세 확인이 가능한 한방 후보를 먼저 보여 줍니다. 카드의 ‘입주일 확인’을 눌러 원천을 확인한 뒤에만 조건 부합으로 분류하며, 실제 입주는 중개사에게 다시 확인하세요.</p>' : ''}
           ${spec.max_monthly_manwon && data.finance_context?.status !== 'ready' && data.finance_context?.status !== 'profile_unavailable' ?
-            '<button type="button" class="btn" data-v2-finance-setup>매수력 설정으로 이동</button>' : ''}${outside}
+            '<button type="button" class="btn" data-v2-finance-setup>매수력 설정으로 이동</button>' : ''}
+          ${spec.max_commute_minutes && data.commute_context?.status === 'missing_work' ?
+            '<button type="button" class="btn" data-v2-work-setup>직장 위치 저장으로 이동</button>' : ''}${outside}
           <div id="v2DiscoveryGroups"></div><div id="v2DiscoveryPaging"></div>`;
       }
       const groupHost = result.querySelector('#v2DiscoveryGroups');
       const setup = result.querySelector('[data-v2-finance-setup]');
       if (setup) setup.onclick = () => { document.getElementById('v2DiscoverDlg').close(); switchTab('mypage'); };
+      const workSetup = result.querySelector('[data-v2-work-setup]');
+      if (workSetup) workSetup.onclick = () => { document.getElementById('v2DiscoverDlg').close(); switchTab('mypage'); };
       const sections = [['matched','조건 부합'],['verify','확인 필요'],['explore','탐색 후보'],
         ['exceeded','조건 초과 · 비교용']];
       for (const [name,label] of sections) {
@@ -750,12 +764,12 @@
           section.innerHTML = `<h3>${label} · ${data.counts[name]}건</h3><div data-v2-items></div>`;
           groupHost.appendChild(section);
         }
-        section.querySelector('[data-v2-items]').insertAdjacentHTML('beforeend', rows.map(x => discoveryCard(x, spec)).join(''));
+        section.querySelector('[data-v2-items]').insertAdjacentHTML('beforeend', rows.map(x => discoveryCard(x, spec, data.commute_context)).join(''));
       }
       if (!groupHost.querySelector('[data-v2-card]') && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty')
         groupHost.innerHTML = `<p>현재 조건의 기본 후보가 없습니다.${data.counts.exceeded && !spec.include_exceeded ? ` 조건 초과 ${esc(data.counts.exceeded)}건을 비교용으로 보려면 위 선택란을 켜세요.` : ' 가격·면적·지역을 하나씩 조정해 보세요.'}</p>`;
       if (!cursor && !data.counts.matched && data.source_state !== 'unavailable' && data.source_state !== 'partial_empty') {
-        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',min_rooms:'최소 방 개수',move_in_by:'입주 필요일',
+        const labels = {max_price_manwon:'호가 상한',min_area_m2:'최소 전용면적',min_rooms:'최소 방 개수',move_in_by:'입주 필요일',max_commute_minutes:'통근 상한',
           max_monthly_manwon:'월 상환 상한',region_code:'필수 지역'};
         const options = Object.entries(data.single_condition_relaxations || {}).filter(([field,count]) => labels[field] && count > 0);
         if (options.length) {
@@ -804,6 +818,29 @@
             exact ? `${name}: 원천 입주 가능일 ${occupancy.date}을 확인했습니다. 실제 입주는 중개사에게 다시 확인하세요.` :
             `${name}: 원천 상세에도 정확한 입주일이 없어 확인 필요로 남겼습니다. 실제 입주일은 중개사에게 확인하세요.`;
           await runDiscovery(null, form.elements.move_in_by.value === requestedDay ? feedback : '');
+        } catch (error) {
+          button.textContent = error.message;
+          button.disabled = false;
+        }
+      });
+      result.querySelectorAll('[data-v2-commute]').forEach(button => button.onclick = async () => {
+        const name = button.closest('[data-v2-card]')?.querySelector('b')?.textContent || '선택한 매물';
+        const requestedMinutes = spec.max_commute_minutes;
+        const requestGeneration = discoveryGeneration;
+        button.disabled = true;
+        button.textContent = '직장 경로 확인 중…';
+        try {
+          const response = await fetch('/api/v2/discovery/commute', {method:'POST',
+            headers:{'Content-Type':'application/json'},body:JSON.stringify({key:button.dataset.v2Commute})});
+          if (!response.ok) throw new Error('직장 경로를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+          const commute = await response.json();
+          if (requestGeneration !== discoveryGeneration || !document.getElementById('v2DiscoverDlg').open) return;
+          const feedback = commute.status !== 'observed' ?
+            `${name}: 경로 안내시간을 확인하지 못해 확인 필요로 남겼습니다.` :
+            commute.minutes > requestedMinutes ?
+              `${name}: 매물 표시 좌표 기준 대중교통 안내 ${commute.minutes}분으로 설정한 ${requestedMinutes}분을 넘어 기본 후보에서 제외했습니다. 조건 초과 후보에서 비교할 수 있습니다.` :
+              `${name}: 매물 표시 좌표 기준 대중교통 안내 ${commute.minutes}분입니다. 실제 출입구·출퇴근 시간대는 별도로 확인하세요.`;
+          await runDiscovery(null, form.elements.max_commute_minutes.value === String(requestedMinutes) ? feedback : '');
         } catch (error) {
           button.textContent = error.message;
           button.disabled = false;
