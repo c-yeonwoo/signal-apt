@@ -137,6 +137,17 @@ def test_twelve_day_old_kb_observation_cannot_display_strong_buy():
     assert current["assessment_status"] == "held"
     assert current["display_grade"] == "판단 보류"
     assert "source_stale" in current["risk_flags"]
+    assert "12일" in current["summary"]
+    assert "과거 매수·매도 등급" in current["summary"]
     at_limit = sa.build(_kb(), _row("STRONG_BUY"), SignalConfig(),
                         asof=asof, today=date(2026, 10, 6))
     assert at_limit["assessment_status"] == "ready"
+
+
+def test_hold_summary_names_identity_and_price_conflict():
+    ambiguous = sa.build(_kb(identity_verified=False), _row(), SignalConfig(),
+                         asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    assert "같은 이름의 다른 지역" in ambiguous["summary"]
+    falling = sa.build(_kb((-0.15,) * 4), _row(), SignalConfig(),
+                       asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    assert "가격 하락" in falling["summary"]

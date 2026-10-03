@@ -515,6 +515,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       return result;
     });
     assert.deepEqual(guarded,{badge:'HELD',buyOnlyPass:false,unknown:'HELD'});
+    await page.evaluate(()=>renderList());
+    assert.match(await page.locator('#list').textContent(),/모두 판단 보류 · 수급 참고 순/);
     await page.evaluate(()=>{
       document.getElementById('advPanel').style.display='none';
       document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
