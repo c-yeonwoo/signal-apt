@@ -294,7 +294,12 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
         raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 분석할 수 있습니다.") from exc
     except LookupError as exc:
         raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
-    profile = db.profile_get(deps.uid(request)) or {}
+    profile_unavailable = False
+    try:
+        profile = db.profile_get(deps.uid(request)) or {}
+    except Exception:  # noqa: BLE001 — 개인 자금 저장소 장애로 가격 근거까지 숨기지 않는다.
+        profile = {}
+        profile_unavailable = True
     if stage == "base":
         listing = analysis.snapshot(row)
         out = {"listing": listing, "buyer_fit": analysis.buyer_fit(listing, profile), "status": "base"}
@@ -314,20 +319,19 @@ def listing_analysis(request: Request, key: str, stage: str = "full"):
             zones = []
         schedule = analysis.official_schedule(row.get("단지명"), zones)
         out = {"status": "ready", **analysis.build(row, detail, profile=profile, schedule=schedule)}
-        try:
-            from realty_signal.services import buyer_decision
-            params = app_api._buyer_params(profile)
-        except Exception:  # noqa: BLE001
-            params = None
-            buyer_decision = None
-        if buyer_decision is not None:
+        if not profile_unavailable:
             try:
+                from realty_signal.services import buyer_decision
+                params = app_api._buyer_params(profile)
                 packet = buyer_decision.annotate(
                     dict(row), params, uid=deps.uid(request), sido_of=app_api._sido_of)
                 out["lines"] = packet["lines"]
                 out["decision"] = packet["decision"]
             except Exception:  # noqa: BLE001
                 pass
+    if profile_unavailable:
+        out["buyer_fit"] = {"status": "unknown", "reason": "내 자금 프로필을 불러오지 못했습니다. 가격 근거와 별도로 다시 확인하세요."}
+        out["partial_failures"] = ["buyer_profile_unavailable"]
     return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
 
 

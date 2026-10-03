@@ -102,6 +102,7 @@
       body.innerHTML = `<h2>${esc(item.name || '매물')} · ${money(item.asking_manwon)}</h2>
         <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)} · 수집 ${esc(item.collected_at || '시각 미확인')}${item.stale ? ' · 지난 수집 결과' : ''}</p>
         <p>${esc((report.lines || {}).cash || '자금 계산은 확인이 필요합니다.')}</p>
+        ${(report.partial_failures || []).includes('buyer_profile_unavailable') ? '<p class="v2-row v2-caution">내 자금 프로필을 불러오지 못해 예산 적합성은 보류했습니다. 가격 근거는 별도로 확인할 수 있습니다.</p>' : ''}
         <p>${esc((report.lines || {}).price || '현재 판매 여부와 실제 호가를 확인하세요.')}</p>
         <h3>가격 근거</h3><div class="v2-row">${esc(price['이유'] ||
           (price['상태'] === '관측비교' ? `동일 조건 실거래 ${price['표본수']}건과 비교했습니다.` :

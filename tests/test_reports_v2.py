@@ -40,6 +40,32 @@ def test_region_code_route_rejects_unverified_legacy_cache(monkeypatch):
     assert error.value.status_code == 404
 
 
+def test_listing_report_keeps_price_evidence_when_buyer_profile_fails(monkeypatch):
+    from realty_signal import api, db
+    from realty_signal.services import property_analysis
+    from realty_signal.routes import market
+
+    row = listing_row("profile-failure", price=50_000, area=70)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
+    monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
+    monkeypatch.setattr(api, "complex_detail", lambda region, name: {"평형별": []})
+    monkeypatch.setattr(api, "_buyer_params", lambda profile: (_ for _ in ()).throw(
+        AssertionError("must not estimate finance from missing profile")))
+    monkeypatch.setattr(db, "profile_get", lambda uid: (_ for _ in ()).throw(OSError("profile unavailable")))
+    monkeypatch.setattr(db, "kv_get", lambda *args, **kwargs: [])
+
+    base = json.loads(market.listing_analysis(None, row["key"], stage="base").body)
+    assert base["buyer_fit"]["status"] == "unknown"
+    assert base["partial_failures"] == ["buyer_profile_unavailable"]
+    report = json.loads(reports_v2.listing_report(None, row["key"]).body)
+    assert report["subject"]["key"] == row["key"]
+    assert report["price"]["상태"] == "보류"  # 거래 자료는 별도 미확인, 리포트 자체는 유지
+    assert report["buyer_fit"]["status"] == "unknown"
+    assert report["partial_failures"] == ["buyer_profile_unavailable"]
+    assert report["lines"] is None
+
+
 def test_private_discovery_does_not_open_source_without_personal_access(monkeypatch):
     from realty_signal import api
     monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: False)

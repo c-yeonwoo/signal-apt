@@ -68,6 +68,7 @@ def listing_report(request: Request, key: str):
               "positive": base.get("pros") or [], "cautions": base.get("cautions") or [],
               "unknowns": base.get("questions") or [], "evidence": base.get("evidence") or [],
               "building": base.get("building"), "development": base.get("development"),
+              "partial_failures": base.get("partial_failures") or [],
               "next_actions": base.get("questions") or []}
     report["report_id"] = _id(report)
     return JSONResponse(report, headers=PRIVATE)
