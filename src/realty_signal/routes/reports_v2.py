@@ -51,18 +51,18 @@ def region_report(region: str):
     return JSONResponse(report, headers=PRIVATE)
 
 
-@router.get("/api/v2/listings/report")
-def listing_report(request: Request, key: str):
+def _listing_report(request: Request, key: str, *, cache_only: bool) -> JSONResponse:
     from realty_signal.routes.market import listing_analysis
 
-    legacy = listing_analysis(request, key, stage="full")
+    legacy = listing_analysis(request, key, stage="full", cache_only=cache_only)
     base = json.loads(legacy.body)
     listing = base.get("listing") or {}
     if not listing.get("key"):
         raise HTTPException(404, "매물을 찾지 못했습니다.")
     report = {"schema_version": "report-v2-1", "type": "listing",
               "subject": listing, "asof": listing.get("collected_at"),
-              "status": "stale" if listing.get("stale") else "ready",
+              "status": ("stale" if listing.get("stale") else
+                         "partial" if base.get("partial_failures") else "ready"),
               "price": base.get("price"), "buyer_fit": base.get("buyer_fit"),
               "decision": base.get("decision"), "lines": base.get("lines"),
               "positive": base.get("pros") or [], "cautions": base.get("cautions") or [],
@@ -72,6 +72,21 @@ def listing_report(request: Request, key: str):
               "next_actions": base.get("questions") or []}
     report["report_id"] = _id(report)
     return JSONResponse(report, headers=PRIVATE)
+
+
+@router.get("/api/v2/listings/report")
+def listing_report(request: Request, key: str):
+    """Fast, cache-only read; missing trade evidence remains explicit."""
+    return _listing_report(request, key, cache_only=True)
+
+
+@router.post("/api/v2/listings/report-enrich")
+def listing_report_enrich(request: Request, data: dict = Body(...)):
+    """User-requested trade refresh; the normal report GET never starts source I/O."""
+    key = data.get("key") if isinstance(data, dict) else None
+    if not isinstance(key, str):
+        raise HTTPException(422, "매물 식별자가 올바르지 않습니다.")
+    return _listing_report(request, key, cache_only=False)
 
 
 @router.post("/api/v2/report-snapshots")

@@ -49,7 +49,7 @@ def test_listing_report_keeps_price_evidence_when_buyer_profile_fails(monkeypatc
     monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
     monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
     monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
-    monkeypatch.setattr(api, "complex_detail", lambda region, name: {"평형별": []})
+    monkeypatch.setattr(api, "complex_detail", lambda region, name, **kwargs: {"평형별": []})
     monkeypatch.setattr(api, "_buyer_params", lambda profile: (_ for _ in ()).throw(
         AssertionError("must not estimate finance from missing profile")))
     monkeypatch.setattr(db, "profile_get", lambda uid: (_ for _ in ()).throw(OSError("profile unavailable")))
@@ -64,6 +64,57 @@ def test_listing_report_keeps_price_evidence_when_buyer_profile_fails(monkeypatc
     assert report["buyer_fit"]["status"] == "unknown"
     assert report["partial_failures"] == ["buyer_profile_unavailable"]
     assert report["lines"] is None
+
+
+def test_listing_report_get_uses_cache_and_post_requests_refresh(monkeypatch):
+    from realty_signal import api
+    from realty_signal.services import property_analysis
+
+    row = listing_row("selective-trade", price=50_000, area=70)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
+    monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
+    calls = []
+    def detail(region, name, *, cache_only=False):
+        calls.append(cache_only)
+        return {"status": "unavailable" if cache_only else "ready", "평형별": []}
+    monkeypatch.setattr(api, "complex_detail", detail)
+    monkeypatch.setattr(api, "_buyer_params", lambda profile: (_ for _ in ()).throw(ValueError()))
+    first = json.loads(reports_v2.listing_report(None, row["key"]).body)
+    assert calls == [True]
+    assert "trade_cache_unavailable" in first["partial_failures"]
+    assert first["status"] == "partial"
+    refreshed = json.loads(reports_v2.listing_report_enrich(None, {"key": row["key"]}).body)
+    assert calls == [True, False]
+    assert "trade_cache_unavailable" not in refreshed["partial_failures"]
+
+
+def test_failed_trade_enrichment_remains_partial(monkeypatch):
+    from realty_signal import api
+    from realty_signal.services import property_analysis
+    row = listing_row("trade-fail", price=50_000, area=70)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
+    monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
+    monkeypatch.setattr(api, "complex_detail", lambda region, name: {"status": "failed", "평형별": []})
+    monkeypatch.setattr(api, "_buyer_params", lambda profile: (_ for _ in ()).throw(ValueError()))
+    report = json.loads(reports_v2.listing_report_enrich(None, {"key": row["key"]}).body)
+    assert report["status"] == "partial"
+    assert "trade_source_unavailable" in report["partial_failures"]
+
+
+def test_cache_only_complex_detail_does_not_open_trade_or_gongsi_source(monkeypatch):
+    from realty_signal import api
+    from realty_signal.ingest import complex as cx
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(api, "_display_signal_map", lambda: {})
+    monkeypatch.setattr(api, "_code_of", lambda region: "11140")
+    monkeypatch.setattr(cx, "fetch_complex", lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("GET must not fetch trades")))
+    monkeypatch.setattr(api, "_gongsi_for", lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("GET must not fetch gongsi")))
+    result = api.complex_detail("중구", "테스트단지", cache_only=True)
+    assert result["status"] == "unavailable"
 
 
 def test_private_discovery_does_not_open_source_without_personal_access(monkeypatch):

@@ -107,6 +107,7 @@
         <h3>가격 근거</h3><div class="v2-row">${esc(price['이유'] ||
           (price['상태'] === '관측비교' ? `동일 조건 실거래 ${price['표본수']}건과 비교했습니다.` :
             '비교 가능한 실거래가 부족합니다.'))}</div>
+        ${(report.partial_failures || []).includes('trade_cache_unavailable') ? '<p class="v2-muted">저장된 실거래 근거가 없거나 오래됐습니다. 요청할 때만 국토부 자료를 다시 확인합니다.</p><button type="button" class="btn" id="v2RefreshTrades">실거래 근거 새로 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}
         <h3>장점</h3>${pros || '<p>확인된 장점이 없습니다. 비교 자료를 더 살펴보세요.</p>'}
         <h3>주의할 점</h3>${cautions || '<p>현재 확인된 자료에서 별도 주의 항목이 없습니다. 현장 상태는 확인이 필요합니다.</p>'}
         <h3>다음 확인</h3>${(report.next_actions || []).map(x => `<p>• ${esc(x)}</p>`).join('')}
@@ -137,6 +138,27 @@
       };
       body.querySelector('#v2ListingLink').onclick = () => copyListingLink(item.key);
       body.querySelector('#v2ListingLocation').onclick = () => loadLocation(key, generation);
+      const refreshTrades = body.querySelector('#v2RefreshTrades');
+      if (refreshTrades) refreshTrades.onclick = async () => {
+        refreshTrades.disabled = true;
+        const status = body.querySelector('#v2RefreshTradesStatus');
+        status.textContent = '실거래 원천을 확인하고 있습니다…';
+        try {
+          const updated = await json('/api/v2/listings/report-enrich', {method:'POST',
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
+          if (generation === listingGeneration && dialog.open) {
+            if ((updated.partial_failures || []).some(x => x.startsWith('trade_'))) {
+              status.textContent = '실거래 원천을 확인했지만 새 근거를 얻지 못했습니다. 가격 비교는 보류합니다.';
+              refreshTrades.disabled = false;
+            } else openListing(key);
+          }
+        } catch (error) {
+          if (generation === listingGeneration && dialog.open) {
+            status.textContent = error.message;
+            refreshTrades.disabled = false;
+          }
+        }
+      };
       body.querySelector('#v2SaveReport').onclick = async event => {
         const status = body.querySelector('#v2SaveReportStatus');
         const button = event.currentTarget;

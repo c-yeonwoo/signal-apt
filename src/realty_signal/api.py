@@ -2034,13 +2034,15 @@ def _complex_signal(region: str, data: dict, signal: str | None, gongsi_ratio: f
 
 
 
-def _gongsi_for(region: str, name: str) -> dict | None:
+def _gongsi_for(region: str, name: str, *, cache_only: bool = False) -> dict | None:
     """단지 공동주택 공시가격(VWorld WFS) — 좌표 bbox 조회 → 이름/최근접 매칭. 캐시(90일, 공시가 연1회)."""
     from realty_signal import db
     ck = f"gongsi:{region}:{name}"
     cached = db.kv_get(ck, max_age=90 * 86400)
     if cached is not None:
         return cached or None
+    if cache_only:
+        return None
     config.load_env()
     key = config.vworld_data_key()
     if not key:
@@ -2062,7 +2064,7 @@ def _gongsi_for(region: str, name: str) -> dict | None:
     return match
 
 
-def complex_detail(region: str, name: str):
+def complex_detail(region: str, name: str, *, cache_only: bool = False):
     """단지 deep-dive — 실거래 매매·전세 추이 + 평형별 + 전세가율·갭 + 단지 시그널 + 공시가격. DB 캐시(7일)."""
     from realty_signal import db
     from realty_signal.services.complex_signal import region_price_context
@@ -2071,11 +2073,11 @@ def complex_detail(region: str, name: str):
 
     def deco(d):   # 급지·시그널·공시가격·단지시그널·지역대비는 응답 시점에 부착(각자 캐시)
         out = {**d, "region": region, "급지": grade, "시그널": signal}
-        if d.get("status") in {"ambiguous", "failed"}:
+        if d.get("status") in {"ambiguous", "failed", "stale", "unavailable"}:
             return out
         ratio = None
         try:                                                     # 공시가격 먼저 → 단지시그널 가격 성분에 사용
-            g = _gongsi_for(region, name)
+            g = _gongsi_for(region, name, cache_only=cache_only)
             if g and g.get("㎡단가"):
                 out["공시가격"] = g
                 last, gpy = out.get("최근평단가"), g["㎡단가"] * 3.3058 / 10000
@@ -2097,6 +2099,11 @@ def complex_detail(region: str, name: str):
     cached = db.kv_get(ckey, max_age=_COMPLEX_TTL)
     if cached is not None and cached.get("schema_version") == 4:
         return deco({**cached, "cached": True})
+    if cache_only:
+        previous = db.kv_get(ckey)
+        return deco({**previous, "status": "stale", "degraded": True}
+                    if isinstance(previous, dict) and previous.get("schema_version") == 4 else
+                    {"단지명": name, "status": "unavailable", "평형별": [], "매매추이": []})
     from realty_signal.ingest import complex as cx
     config.load_env()
     pk = config.public_data_key()
