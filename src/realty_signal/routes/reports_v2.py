@@ -119,6 +119,18 @@ def report_snapshot_get(request: Request, report_id: str):
     return JSONResponse(result, headers=PRIVATE)
 
 
+@router.delete("/api/v2/report-snapshots/{report_id}")
+def report_snapshot_delete(request: Request, report_id: str):
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if len(report_id) != 64 or any(ch not in "0123456789abcdef" for ch in report_id):
+        raise HTTPException(404, "저장본을 찾지 못했습니다.")
+    if not snapshots.delete(uid, report_id):
+        raise HTTPException(404, "저장본을 찾지 못했습니다.")
+    return JSONResponse({"deleted": True}, headers=PRIVATE)
+
+
 @router.post("/api/v2/comparisons")
 def comparison_report(request: Request, data: dict = Body(...)):
     from realty_signal.routes.market import listing_compare
