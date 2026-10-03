@@ -609,7 +609,8 @@
       if (!cursor) {
         const regions = data.coverage?.regions || [];
         const labels = {ready:'정상',empty:'조회 0건',partial:'일부 제한',partial_empty:'일부 실패',
-          stale:'지난 수집',stale_failed:'갱신 실패',unverified:'검증 대기',failed:'조회 실패',never_scanned:'미수집'};
+          stale:'지난 수집',stale_failed:'갱신 실패',unverified:'검증 대기',identity_unverified:'지역 출처 재확인 중',
+          failed:'조회 실패',never_scanned:'미수집'};
         const sources = (data.sources || []).map(s => `${esc(s.kind)} ${labels[s.state] || '상태 미확인'}`).join(' · ');
         const warning = data.source_state === 'unavailable' ? '아직 수집된 원천이 없습니다. 전국 매물 0건이라는 뜻은 아닙니다.' :
           data.source_state === 'partial_empty' ? '원천 일부가 실패하거나 제한돼 0건을 확정할 수 없습니다.' :

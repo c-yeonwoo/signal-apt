@@ -52,6 +52,19 @@ def test_scheduler_launches_sources_independently(monkeypatch):
     assert set(calls) == {"kb", "quicksale", "certified", "hanbang", "localities", "school_zones", "digest", "backup"}
 
 
+def test_scheduler_expedites_unverified_hanbang_rescan(monkeypatch):
+    from realty_signal import config
+    calls = {}
+    monkeypatch.setattr(config, "personal_listing_email", lambda: "owner@example.com")
+    monkeypatch.setattr(api, "_hanbang_stale", lambda: True)
+    monkeypatch.setattr(jobs, "run", lambda name, *a, **kw: calls.setdefault(name, kw))
+    async def exercise():
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(api._auto_refresh_loop(), timeout=.2)
+    asyncio.run(exercise())
+    assert calls["hanbang"]["expedite"] is True
+
+
 def test_kb_refresh_checks_stale_observation_daily():
     day = 86400
     now = 100 * day

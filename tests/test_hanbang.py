@@ -68,12 +68,37 @@ def test_source_error_is_not_empty_success(monkeypatch):
     assert rows == [] and not status["ok"] and "TimeoutError" in status["error"]
 
 
+def test_scan_rejects_cross_province_same_named_district(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.56, 126.99]})
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(api, "_signal_map", lambda: {"중구": "BUY"})
+    monkeypatch.setattr(hanbang, "fetch_region_with_status", lambda *_: (
+        [hanbang.normalize(_raw(sggNm="중구"))],
+        {"ok": True, "source_sgg": "중구", "source_ctpv": "인천광역시", "complete": True}))
+    rows, status = api._hanbang_scan_with_status(["중구"])
+    assert rows == [] and status["failed_requests"] == 1
+    assert status["successful_regions"] == []
+
+
+def test_scan_rejects_mixed_source_district_without_claiming_empty_success(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.56, 126.99]})
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(api, "_signal_map", lambda: {"중구": "BUY"})
+    monkeypatch.setattr(hanbang, "fetch_region_with_status", lambda *_: (
+        [hanbang.normalize(_raw(1, sggNm="중구")),
+         hanbang.normalize(_raw(2, sggNm="동구"))],
+        {"ok": True, "source_sgg": "중구", "source_ctpv": "서울특별시", "complete": True}))
+    rows, status = api._hanbang_scan_with_status(["중구"])
+    assert rows == [] and status["failed_requests"] == 1
+    assert status["successful_regions"] == []
+
+
 def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch):
     monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
     cache = tmp_path / "hanbang.json"
     cache.write_text(json.dumps({"ready": True, "listings": [
         {**hanbang.normalize(_raw()), "지역": "노원구", "fetched_at": time.time()}],
-        "regions": ["노원구"], "_scan_ver": 1}, ensure_ascii=False), encoding="utf-8")
+        "regions": ["노원구"], "_scan_ver": api._HANBANG_SCAN_VER}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(api, "HANBANG_FILE", cache)
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {"노원구": {"급지": "C"}}})
     owner, guest = _client("owner@example.com"), _client("guest@example.com")
@@ -107,9 +132,23 @@ def test_failed_refresh_preserves_previous_cache(tmp_path, monkeypatch):
     assert api._radar_refresh_status(cache)["ok"] is False
 
 
+def test_old_unverified_cache_is_hidden_from_general_and_integrated_listings(tmp_path, monkeypatch):
+    monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
+    cache = tmp_path / "hanbang.json"
+    cache.write_text(json.dumps({"ready": True, "_scan_ver": 1, "listings": [
+        {**hanbang.normalize(_raw()), "지역": "노원구", "fetched_at": time.time()}],
+        "regions": ["노원구"]}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(api, "HANBANG_FILE", cache)
+    owner = _client("owner@example.com")
+    general = owner.get("/api/general-listings").json()
+    assert general["state"] == "identity_unverified" and general["listings"] == []
+    assert api._hanbang_verified_rows() == []
+    assert owner.get("/api/listings/all?types=일반매물").json()["listings"] == []
+
+
 def test_limited_region_keeps_only_previous_rows_in_current_scope(tmp_path, monkeypatch):
     cache = tmp_path / "hanbang.json"
-    cache.write_text(json.dumps({"listings": [
+    cache.write_text(json.dumps({"_scan_ver": api._HANBANG_SCAN_VER, "listings": [
         {"hanbang_id": "old-in-scope", "지역": "노원구"},
         {"hanbang_id": "old-out-of-scope", "지역": "서초구"},
     ]}, ensure_ascii=False), encoding="utf-8")
