@@ -108,6 +108,10 @@
         <h3>장점</h3>${pros || '<p>확인된 장점이 없습니다. 비교 자료를 더 살펴보세요.</p>'}
         <h3>주의할 점</h3>${cautions || '<p>현재 확인된 자료에서 별도 주의 항목이 없습니다. 현장 상태는 확인이 필요합니다.</p>'}
         <h3>다음 확인</h3>${(report.next_actions || []).map(x => `<p>• ${esc(x)}</p>`).join('')}
+        <h3>교통·학교·생활권</h3>
+        <p class="v2-muted">표시 좌표 기준 참고 자료입니다. 출입구·통학 배정·실제 출퇴근 시간은 확인이 필요합니다.</p>
+        <button type="button" class="btn" id="v2ListingLocation">입지 근거 확인</button>
+        <div id="v2LocationResult" aria-live="polite"></div>
         <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details>
         <p class="v2-muted">${fit.status === 'within' ? '호가가 저장된 가격 상한 안입니다. 대출 승인은 별도입니다.' :
           fit.status === 'above' ? '저장된 가격 상한을 넘습니다.' : '예산 적합성은 아직 확인되지 않았습니다.'}</p>
@@ -127,8 +131,56 @@
         listingCompareOpen();
       };
       body.querySelector('#v2ListingLink').onclick = () => copyListingLink(item.key);
+      body.querySelector('#v2ListingLocation').onclick = () => loadLocation(key, generation);
     } catch (error) {
       if (generation === listingGeneration) body.textContent = error.message;
+    }
+  }
+
+  function locationRoute(route, label) {
+    if (route?.status === 'observed' && route.minutes != null && Number.isFinite(Number(route.minutes)) && Number(route.minutes) >= 0)
+      return `${esc(label)} ${esc(route.destination || '')} · 약 ${esc(route.minutes)}분${route.distance_m != null ? ` · ${esc(route.distance_m)}m` : ''}`;
+    return `${esc(label)} · ${esc(route?.reason || '경로를 확인하지 못했습니다.')}`;
+  }
+
+  function renderLocation(data) {
+    const mobility = data.mobility || {}, school = data.school || {}, amenities = data.amenities || {};
+    const zones = school.status === 'candidate' ? school.zones || [] : [];
+    const schools = [...new Set(zones.flatMap(zone => (zone.schools || []).map(item => item.name).filter(Boolean)))];
+    const schoolText = zones.length ? `통학구역 후보 · ${esc((schools.length ? schools : zones.map(z => z.name)).slice(0,5).join(' · '))}` :
+      esc(school.reason || '통학구역 후보를 확인하지 못했습니다.');
+    const places = Object.values(amenities.by_category || {}).slice(0,5).map(category => {
+      const first = category.places?.[0];
+      if (category.status === 'unavailable') return `${esc(category.label || '시설')} · 조회 실패`;
+      if (!first) return `${esc(category.label || '시설')} · 조회 결과 없음`;
+      return `${esc(category.label || '시설')} · ${esc(first.name)}${first.distance_m != null ? ` · 직선 ${esc(first.distance_m)}m` : ''}`;
+    });
+    const sources = (data.evidence || []).map(item => `${esc(item.label)} · ${esc(item.asof || '기준일 미확인')} · ${esc(item.status)}`);
+    return `<div class="v2-row"><b>교통·직장</b><p>${locationRoute(mobility.station_walk, '가까운 역')}</p>
+      <p>${locationRoute(mobility.work_transit, '저장된 직장')}</p><p class="v2-muted">${esc(mobility.reason || '표시 좌표 기준입니다.')} ${esc(mobility.api_reason || '')} ${esc(mobility.transit_note || '')}</p></div>
+      <div class="v2-row"><b>통학구역</b><p>${schoolText}</p><p class="v2-muted">${school.boundary_near ? '통학구역 경계와 가까울 수 있습니다. ' : ''}${esc(school.coordinate_note || '실제 주소의 배정 학교는 교육청에 확인하세요.')}</p></div>
+      <div class="v2-row"><b>가까운 시설</b><p>${places.join('<br>') || esc(amenities.reason || '주변 시설을 확인하지 못했습니다.')}</p>
+      <p class="v2-muted">${esc(amenities.coordinate_note || '직선거리이며 실제 이동 경로·영업 상태는 확인되지 않았습니다.')}</p></div>
+      <details><summary>입지 자료와 기준일</summary><p class="v2-muted">${sources.join('<br>') || '확인된 입지 자료가 없습니다.'}</p></details>`;
+  }
+
+  async function loadLocation(key, generation) {
+    const body = document.getElementById('v2ReportBody');
+    const host = body.querySelector('#v2LocationResult');
+    const button = body.querySelector('#v2ListingLocation');
+    if (!host || !button) return;
+    host.textContent = '입지 자료를 확인하고 있습니다…';
+    button.disabled = true;
+    try {
+      const data = await json(`/api/listing-location?key=${encodeURIComponent(key)}`);
+      if (generation !== listingGeneration || !document.getElementById('v2ReportDlg').open) return;
+      host.innerHTML = renderLocation(data);
+      button.textContent = '입지 근거 다시 확인';
+    } catch (error) {
+      if (generation !== listingGeneration || !document.getElementById('v2ReportDlg').open) return;
+      host.textContent = error.message;
+    } finally {
+      if (generation === listingGeneration) button.disabled = false;
     }
   }
 
