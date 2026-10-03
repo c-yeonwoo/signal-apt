@@ -811,7 +811,41 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('저장 지역 1').waitFor();
     assert.equal(await page.locator('#v2ReportBody [data-saved-report]').count(),2);
     await page.evaluate(()=>{window.fetch=window.__savedPagingFetch;delete window.__savedPagingFetch;});
+    await page.evaluate(()=>{
+      window.__notePagingFetch=window.fetch;
+      window.__noteRecord=(id,key,thesis)=>({id,subject_type:'region',subject_key:key,
+        thesis,counter_condition:'가격이 달라지면 재검토',horizon_weeks:12,revision:1,report_id:null});
+      window.fetch=(input,...args)=>{
+        const url=new URL(String(input),location.href);
+        if(url.pathname==='/api/v2/decision-notes'&&(!args[0]||!args[0].method)){
+          if(url.searchParams.get('subject_key')==='A')
+            return new Promise(resolve=>{window.__resolveNoteA=()=>resolve({ok:true,json:async()=>({
+              notes:[window.__noteRecord(1,'A','늦은 기록')],next_cursor:null})});});
+          const older=url.searchParams.get('cursor')==='older-note';
+          const key=url.searchParams.get('subject_key');
+          const notes=key==='B'?[window.__noteRecord(2,'B','새 대상 기록')]:
+            [window.__noteRecord(older?3:4,'전체',older?'과거 기록':'최신 기록')];
+          return Promise.resolve({ok:true,json:async()=>({notes,
+            next_cursor:key||older?null:'older-note'})});
+        }
+        return window.__notePagingFetch(input,...args);
+      };
+    });
+    await page.evaluate(()=>SignalV2.openNote('region','A'));
+    await page.evaluate(()=>SignalV2.openNote('region','B'));
+    await page.getByText('새 대상 기록').waitFor();
+    await page.evaluate(()=>window.__resolveNoteA());
+    await page.waitForTimeout(20);
+    assert.doesNotMatch(await page.locator('#v2NoteList').textContent(),/늦은 기록/);
+    await page.evaluate(()=>SignalV2.openNotes());
+    await page.getByText('최신 기록').waitFor();
+    await page.locator('#v2NoteList [data-note-more]').click();
+    await page.getByText('과거 기록').waitFor();
+    assert.equal(await page.locator('#v2NoteList [data-note-edit]').count(),2);
+    assert.equal(await page.locator('#v2NoteList [data-note-more]').count(),0);
+    await page.evaluate(()=>{document.getElementById('v2NoteDlg').close();window.fetch=window.__notePagingFetch;
+      delete window.__notePagingFetch;delete window.__noteRecord;delete window.__resolveNoteA;});
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence, listing report and Nick context');
+    console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

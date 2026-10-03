@@ -15,6 +15,7 @@
   };
   let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0, discoveryRegionGeneration = 0;
   let noteSubject = null, editingNote = null, notesCache = [];
+  let noteList = {generation:0, next_cursor:null, loading:false};
   let savedReportList = {key:null, items:[], next_cursor:null, policy:null};
 
   async function json(url, options) {
@@ -524,24 +525,45 @@
     refreshNotes();
   }
 
-  async function refreshNotes() {
+  async function refreshNotes(cursor = null) {
+    if (cursor && (noteList.loading || cursor !== noteList.next_cursor)) return;
+    if (!cursor) {
+      noteList.generation += 1;
+      noteList.next_cursor = null;
+      notesCache = [];
+    }
+    const generation = noteList.generation;
+    const subject = noteSubject && {...noteSubject};
+    noteList.loading = true;
     const list = document.getElementById('v2NoteList');
-    list.textContent = '저장한 기록을 불러오는 중…';
+    if (!cursor) list.textContent = '저장한 기록을 불러오는 중…';
     try {
-      const search = noteSubject ? '?' + new URLSearchParams({subject_type:noteSubject.type,
-        subject_key:noteSubject.key}) : '';
-      const data = await json('/api/v2/decision-notes' + search);
-      notesCache = data.notes || [];
-      list.innerHTML = `<h3>저장한 판단 · ${notesCache.length}건</h3>` +
+      const params = new URLSearchParams();
+      if (subject) {
+        params.set('subject_type', subject.type);
+        params.set('subject_key', subject.key);
+      }
+      if (cursor) params.set('cursor', cursor);
+      const data = await json('/api/v2/decision-notes' + (params.size ? '?' + params : ''));
+      if (generation !== noteList.generation || !document.getElementById('v2NoteDlg').open) return;
+      notesCache = cursor ? [...notesCache, ...(data.notes || [])] : (data.notes || []);
+      noteList.next_cursor = data.next_cursor || null;
+      list.innerHTML = `<h3>저장한 판단 · ${notesCache.length}건 표시</h3>` +
         (notesCache.length ? notesCache.map(n => `<div class="v2-row">
           <b>${esc(n.subject_key)} · ${n.horizon_weeks}주 뒤 복기</b>
           <p>${esc(n.thesis)}</p><p class="v2-muted">다시 생각할 조건: ${esc(n.counter_condition)}</p>
           <button type="button" class="btn" data-note-edit="${n.id}">수정</button>
           <button type="button" class="btn" data-note-delete="${n.id}">삭제</button>
-        </div>`).join('') : '<p class="v2-muted">아직 기록이 없습니다.</p>');
+        </div>`).join('') : '<p class="v2-muted">아직 기록이 없습니다.</p>') +
+        (noteList.next_cursor ? '<button type="button" class="btn" data-note-more>이전 판단 기록 더 보기</button>' : '');
+      const more = list.querySelector('[data-note-more]');
+      if (more) more.onclick = () => refreshNotes(noteList.next_cursor);
       list.querySelectorAll('[data-note-edit]').forEach(button => button.onclick = () => {
         const n = notesCache.find(x => x.id === Number(button.dataset.noteEdit));
         if (!n) return;
+        noteList.generation += 1;
+        noteList.next_cursor = null;
+        list.querySelector('[data-note-more]')?.remove();
         editingNote = n;
         noteSubject = {type:n.subject_type,key:n.subject_key,reportId:n.report_id};
         const form = document.getElementById('v2NoteForm');
@@ -562,7 +584,11 @@
         }
       });
     } catch (error) {
-      list.textContent = error.message;
+      if (generation !== noteList.generation || !document.getElementById('v2NoteDlg').open) return;
+      if (cursor) document.getElementById('v2NoteStatus').textContent = error.message;
+      else list.textContent = error.message;
+    } finally {
+      if (generation === noteList.generation) noteList.loading = false;
     }
   }
 
