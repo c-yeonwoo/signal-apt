@@ -330,11 +330,12 @@ test('market snapshot revalidates date and guard revision without refetching sta
     '/api/regime': {}, '/api/macro': {},
   };
   const ctx = vm.createContext({
-    meta:null, allSignals:[], selected:null, active:new Set(['BUY']), window:{},
+    meta:null, allSignals:[], selected:null, active:new Set(['BUY']),
+    activeGrade:new Set(['A','B','C','D','E']), _favRegionKeyByName:new Map(), window:{},
     displaySignal:r=>r?.display_signal||r?.signal||'HELD',
     localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},
     document:{getElementById:id=>{
-      if(!elements.has(id)) elements.set(id,{style:{},textContent:'',innerHTML:''});
+      if(!elements.has(id)) elements.set(id,{style:{},textContent:'',innerHTML:'',value:''});
       return elements.get(id);
     }},
     fetch:async url=>{calls.push(url); return {ok:true,json:async()=>payload[url]};},
@@ -354,6 +355,32 @@ test('market snapshot revalidates date and guard revision without refetching sta
   assert.equal(calls.filter(x=>x.startsWith('/api/')).length,15);
   await ctx.loadData(true);
   assert.equal(calls.filter(x=>x.startsWith('/api/')).length,19);
+});
+
+test('first signal report opens a verified visible favorite before the global top grade', () => {
+  const inputs={search:{value:''},groupFilter:{value:''}};
+  const ctx=vm.createContext({
+    allSignals:[
+      {region:'강북구',group:'서울',display_signal:'STRONG_BUY',assessment_status:'ready'},
+      {region:'노원구',group:'서울',display_signal:'BUY',assessment_status:'ready'},
+      {region:'중구',group:'서울',display_signal:'HELD',assessment_status:'held'},
+    ],
+    active:new Set(['STRONG_BUY','BUY','HELD']), activeGrade:new Set(['A','B','C','D','E']),
+    _favRegionKeyByName:new Map([['노원구','kb:1135000000']]),
+    document:{getElementById:id=>inputs[id]},
+    displaySignal:r=>r.assessment_status==='ready'?r.display_signal:'HELD',
+  });
+  vm.runInContext(extract('function _defaultSignalRegion(){', 'function _applyMarketData('),ctx);
+  assert.equal(ctx._defaultSignalRegion(),'노원구');
+  inputs.search.value='강북';
+  assert.equal(ctx._defaultSignalRegion(),'강북구');
+  inputs.search.value='';
+  ctx._favRegionKeyByName=new Map([['중구','kb:1114000000']]);
+  assert.equal(ctx._defaultSignalRegion(),'중구');
+  ctx.active.delete('HELD');
+  assert.equal(ctx._defaultSignalRegion(),'강북구');
+  ctx._favRegionKeyByName=new Map([['사라진 지역','kb:9999900000']]);
+  assert.equal(ctx._defaultSignalRegion(),'강북구');
 });
 
 test('stale weekly observations do not appear as this week signal changes', async () => {
