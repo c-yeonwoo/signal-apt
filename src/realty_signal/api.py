@@ -2971,6 +2971,10 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
     except Exception as exc:  # noqa: BLE001 — 판정 불가 시 원시 등급으로 되돌아가지 않는다.
         log.warning("listing signal assessment unavailable: %s", exc)
         assessed = {}
+    safe_auction_signals = {region: label.get("display_signal")
+                            for region, label in assessed.items()
+                            if label.get("assessment_status") == "ready"
+                            and label.get("display_signal") in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}}
     out = []
 
     def add(kind, name, region, signal, mlabel, mval, munit, raw, lat, lng, ref, total=None):
@@ -3011,8 +3015,12 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
         out.append(row)
 
     if "경매" in want:
-        for r in auction.enrich(auction.load(), _signal_map(), {}):
-            add("경매", r.get("단지명"), r.get("region"), r.get("지역시그널"),
+        try:
+            raw_auction_signals = _signal_map()
+        except Exception:  # noqa: BLE001 — 원시 등급 장애가 경매 매물 조회를 막지 않는다.
+            raw_auction_signals = {}
+        for r in auction.enrich(auction.load(), safe_auction_signals, {}):
+            add("경매", r.get("단지명"), r.get("region"), raw_auction_signals.get(r.get("region")),
                 "총비용우위", r.get("총비용우위율"), "%", r, r.get("lat"), r.get("lng"),
                 {"id": r.get("id")}, total=r.get("최저매각가") or r.get("권장입찰가"))
     if "급매" in want and QUICKSALE_FILE.exists():
