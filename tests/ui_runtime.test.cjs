@@ -21,6 +21,25 @@ test('regional trend chart does not overlay one national affordability line on e
   assert.match(html, /전국 구매력지수는 이 지역의 지표가 아니므로 차트에 겹치지 않으며/);
 });
 
+test('KB freshness legend changes to held at the same nine-calendar-day boundary as signal assessment', async () => {
+  const box={innerHTML:''}, source={textContent:''};
+  const now=Date.parse('2026-10-04T00:00:00Z')/1000;
+  const data={now,기준일:'2026-09-25',sources:[{key:'signal',label:'KB 시장 시그널',asof:'2026-09-25',ts:now,cycle:'주간'}]};
+  const ctx=vm.createContext({
+    document:{getElementById:id=>id==='freshBox'?box:id==='sourceAsOf'?source:null},
+    fetch:async()=>({json:async()=>data}),
+  });
+  vm.runInContext(extract('function _relTime(', 'async function openHistModal('),ctx);
+  await ctx.loadFreshness();
+  assert.match(box.innerHTML,/시그널 판단 보류/);
+  assert.match(box.innerHTML,/background:#dc2626/);
+  assert.doesNotMatch(box.innerHTML,/KB 관측 14일 이내/);
+  data.sources[0].asof='2026-09-26';
+  await ctx.loadFreshness();
+  assert.doesNotMatch(box.innerHTML,/시그널 판단 보류/);
+  assert.match(box.innerHTML,/background:#16a34a/);
+});
+
 test('inline app scripts parse and browse navigation keeps one list and the signal map', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));
