@@ -11,10 +11,10 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-6"
+VERSION = "discovery-v2-7"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "max_monthly_manwon", "region", "prefer_region",
-          "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
+          "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
 PRIORITIES = {"balanced", "region", "price", "area"}
 
 
@@ -49,6 +49,14 @@ def validate(spec: dict) -> dict:
             raise ValueError("invalid_region")
         cleaned["prefer_region"] = spec["prefer_region"].strip()
     if cleaned.get("region") and cleaned.get("prefer_region"):
+        raise ValueError("conflicting_region_conditions")
+    for key in ("region_code", "prefer_region_code"):
+        if spec.get(key) is not None:
+            code = spec[key]
+            if not isinstance(code, str) or len(code) != 5 or not code.isdigit():
+                raise ValueError("invalid_region_code")
+            cleaned[key] = code
+    if sum(bool(cleaned.get(key)) for key in ("region", "prefer_region", "region_code", "prefer_region_code")) > 1:
         raise ValueError("conflicting_region_conditions")
     priority = spec.get("priority", "balanced")
     if not isinstance(priority, str) or priority not in PRIORITIES:
@@ -95,11 +103,18 @@ def _monthly(finance: dict | None) -> float | None:
     return float(value)
 
 
+def _region_code(listing: dict) -> str | None:
+    code = str(listing.get("region_code") or "")
+    return code if len(code) == 5 and code.isdigit() else None
+
+
 def _preference(listing: dict, spec: dict) -> dict:
     """One explicit priority doubles its weight; unknowns remain in the denominator."""
     details = []
-    definitions = (("region", "선호 지역", spec.get("prefer_region"), listing["region"],
-                    bool(listing["region"]), lambda v, target: v == target),
+    region_code = spec.get("prefer_region_code")
+    region_value = _region_code(listing) if region_code else listing["region"]
+    definitions = (("region", "선호 지역", region_code or spec.get("prefer_region"),
+                    region_value, bool(region_value), lambda v, target: v == target),
                    ("price", "선호 호가", spec.get("prefer_max_price_manwon"),
                     listing["asking_manwon"], listing["asking_manwon"] is not None and not listing["stale"],
                     lambda v, target: v <= target),
@@ -120,7 +135,7 @@ def _preference(listing: dict, spec: dict) -> dict:
     weight_known = sum(x["weight"] for x in details if x["status"] != "unknown")
     weight_satisfied = sum(x["weight"] for x in details if x["status"] == "matched")
     applied_priority = spec.get("priority") if any(x["field"] == spec.get("priority") for x in details) else "balanced"
-    return {"region": spec.get("prefer_region"),
+    return {"region": spec.get("prefer_region_code") or spec.get("prefer_region"),
             "matched": any(x["field"] == "region" and x["status"] == "matched" for x in details),
             "score": round(100 * weight_satisfied / weight_total) if weight_total else None,
             "coverage": round(100 * weight_known / weight_total) if weight_total else None,
@@ -159,6 +174,11 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
     if "region" in spec and spec["region"]:
         checks.append({"field": "region", "status": "pass" if listing["region"] == spec["region"] else "fail",
                        "value": listing["region"], "limit": spec["region"]})
+    if "region_code" in spec:
+        region_code = _region_code(listing)
+        checks.append({"field": "region_code", "status": "unknown" if region_code is None else
+                       "pass" if region_code == spec["region_code"] else "fail",
+                       "value": region_code, "limit": spec["region_code"]})
     preference = _preference(listing, spec)
     tier = "exceeded" if any(x["status"] == "fail" for x in checks) else (
         "verify" if any(x["status"] == "unknown" for x in checks) or listing["stale"] or
@@ -170,7 +190,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
         reason = {"max_price_manwon": "설정한 호가 상한 안입니다.",
                   "min_area_m2": "원하는 전용면적 이상입니다.",
                   "max_monthly_manwon": "입력 가정의 월 부담 상한 안입니다.",
-                  "region": "선택한 지역입니다."}[passed[0]["field"]]
+                  "region": "선택한 지역입니다.", "region_code": "선택한 지역입니다."}[passed[0]["field"]]
     else:
         reason = "조건을 입력하면 적합성을 비교합니다." if not checks else "조건 충족을 확인하지 못했습니다."
     if preference["matched"]:
@@ -180,11 +200,13 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None) -> dict:
     failed_reason = {"max_price_manwon": "호가가 설정한 상한보다 높습니다.",
                      "min_area_m2": "전용면적이 원하는 최소 면적보다 작습니다.",
                      "max_monthly_manwon": "입력 자본으로 구매비용을 충당할 수 없거나 월 부담 상한을 넘습니다.",
-                     "region": "선택한 필수 지역 밖의 매물입니다."}
+                     "region": "선택한 필수 지역 밖의 매물입니다.",
+                     "region_code": "선택한 필수 지역 밖의 매물입니다."}
     tradeoff = (" ".join(failed_reason[x["field"]] for x in failed) if failed else
                 "현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다.")
     verify = ("매물 판매 여부와 실제 호가를 확인하세요." if listing["stale"] else
               finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
+              "매물의 시군구 코드를 확인하세요." if missing and missing[0]["field"] == "region_code" else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else
               "실제 자금·매물 상태를 확인하세요.")
     return {"listing": listing, "eligibility": tier, "constraints": checks,
@@ -227,7 +249,7 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
             else:
                 overflow.append(item)
         items[:] = selected + overflow
-        if not spec.get("region"):
+        if not spec.get("region") and not spec.get("region_code"):
             # In broad discovery, one district cannot monopolize the first page.
             selected, overflow, region_counts = [], [], {}
             for item in items:

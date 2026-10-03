@@ -60,12 +60,18 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           {key:'signal',label:'시장 시그널 (KB)',asof:'2026-09-21',ts:now-3600,cycle:'주 1회',note:'KB 자료'},
           {key:'trade',label:'국토부 실거래',ts:now-3600,cycle:'조회 시',note:'거래 자료'}]};
       }
+      if(url.pathname==='/api/v2/discovery/regions') data={status:'ready',regions:[
+        {code:'11140',name:'테스트구',label:'서울 · 테스트구'},
+        {code:'11150',name:'조건없음',label:'서울 · 조건없음'},
+        {code:'11160',name:'프로필없음',label:'서울 · 프로필없음'},
+        {code:'11170',name:'중구',label:'서울 · 중구'},
+        {code:'28125',name:'중구',label:'인천 · 중구'}]};
       if(url.pathname==='/api/v2/discovery') {
         const spec=route.request().postDataJSON()||{};
         discoveryPayloads.push(spec);
         const next=!!spec.cursor, finance=!!spec.max_monthly_manwon;
-        const noMatch=spec.region==='조건없음';
-        const noProfile=finance&&spec.prefer_region==='프로필없음';
+        const noMatch=spec.region_code==='11150';
+        const noProfile=finance&&spec.prefer_region_code==='11160';
         const preferred=!!spec.prefer_max_price_manwon||!!spec.prefer_min_area_m2;
         const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
           name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000},
@@ -86,7 +92,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         data={private_access:true,source_state:'partial',coverage:{regions:['테스트구']},
           sources:[{kind:'일반매물',state:'partial'},{kind:'급매',state:'failed'}],
           counts:finance?{matched:0,verify:1,explore:0,exceeded:1}:{matched:noMatch?0:2,verify:0,explore:0,exceeded:1},
-          single_condition_relaxations:noMatch?{region:1}:{},
+          single_condition_relaxations:noMatch?{region_code:1}:{},
           next_cursor:finance||next?null:'synthetic-next',
           finance_context:finance?{status:noProfile?'no_confirmed_profile':'ready',policy_status:'unverified'}:null,
           groups:{matched:finance||noMatch?[]:[candidate],verify:finance?[candidate]:[],explore:[],
@@ -596,7 +602,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     await page.evaluate(()=>SignalV2.openDiscovery('테스트구'));
+    await page.waitForFunction(()=>document.querySelector('#v2DiscoverForm [name=region_code]')?.value==='11140');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    assert.equal(discoveryPayloads.at(-1).prefer_region_code,'11140');
     await page.getByText('첫번째 후보').waitFor();
     assert.match(await page.locator('#v2DiscoverResults').textContent(),/일부 원천이 실패·제한/);
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),1);
@@ -643,21 +651,26 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(discoveryPayloads.at(-1).include_exceeded,true);
     await page.locator('#v2DiscoverForm [name=include_exceeded]').uncheck();
     await page.locator('#v2DiscoverForm [name=region_mode]').selectOption('must');
-    await page.locator('#v2DiscoverForm [name=region]').fill('조건없음');
+    await page.locator('#v2DiscoverForm [name=region_code]').selectOption('11150');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText(/조건 초과 1건을 비교용으로 보려면/).waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),0);
-    await page.locator('#v2DiscoverResults [data-v2-relax=region]').click();
-    assert.equal(await page.locator('#v2DiscoverForm [name=region]').evaluate(el=>el===document.activeElement),true);
-    assert.equal(await page.locator('#v2DiscoverForm [name=region]').inputValue(),'조건없음');
+    await page.locator('#v2DiscoverResults [data-v2-relax=region_code]').click();
+    assert.equal(await page.locator('#v2DiscoverForm [name=region_code]').evaluate(el=>el===document.activeElement),true);
+    assert.equal(await page.locator('#v2DiscoverForm [name=region_code]').inputValue(),'11150');
     await page.locator('#v2DiscoverForm [name=region_mode]').selectOption('prefer');
-    await page.locator('#v2DiscoverForm [name=region]').fill('테스트구');
-    await page.locator('#v2DiscoverForm [name=region]').fill('프로필없음');
+    await page.locator('#v2DiscoverForm [name=region_code]').selectOption('11160');
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('200');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.locator('[data-v2-finance-setup]').click();
     assert.equal(await page.locator('#v2DiscoverDlg').evaluate(el=>el.open),false);
     assert.equal(await page.locator('#view-mypage').isVisible(),true);
+    await page.evaluate(()=>SignalV2.openDiscovery('중구'));
+    await page.getByText(/선택한 지역을 확인할 수 없습니다/).waitFor();
+    assert.equal(await page.locator('#v2DiscoverForm [type=submit]').isDisabled(),true);
+    await page.locator('#v2DiscoverForm [name=region_code]').selectOption('28125');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    assert.equal(discoveryPayloads.at(-1).prefer_region_code,'28125');
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }
