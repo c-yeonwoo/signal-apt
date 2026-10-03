@@ -5036,6 +5036,9 @@ async function _fetchMarketData(){
     get('/api/meta'),get('/api/signals'),get('/api/regime').catch(()=>null),get('/api/macro').catch(()=>null)]);
   return {meta:freshMeta,signals,regime,macro};
 }
+function _marketRevision(meta){
+  return [meta?.last_date,meta?.signal_config_version,meta?.signal_guard_version].join('|');
+}
 function _applyMarketData(data){
   meta=data.meta; allSignals=data.signals;
   _signalTrendRegion=null;
@@ -5062,20 +5065,28 @@ function _applyMarketData(data){
   if(allSignals.length) selectRegion(keep ? selected : (allSignals.find(r=>active.has(displaySignal(r)))||allSignals[0]).region);
 }
 async function loadData(force=false){
-  const generation=++_marketGeneration;
   const cached=force?null:_marketCached();
   if(cached){
     _applyMarketData(cached.data);
-    // 오래된 화면은 즉시 보여주고, 15분 뒤부터 백그라운드 재검증한다.
-    if(Date.now()-cached.at>900000 && !_marketRevalidation){
-      _marketRevalidation=_fetchMarketData().then(fresh=>{
+    // 목록은 즉시 그리되, 매 진입마다 가벼운 메타만 확인한다. 같은 날 새 KB
+    // 관측·판정 규칙이 배포되면 15분 캐시도 즉시 무효화해야 한다.
+    if(!_marketRevalidation){
+      const generation=_marketGeneration;
+      _marketRevalidation=(async()=>{
+        const response=await fetch('/api/meta',{cache:'no-store'});
+        if(!response.ok) throw new Error('market meta unavailable');
+        const current=await response.json();
+        if(generation!==_marketGeneration) return;
+        if(_marketRevision(current)===_marketRevision(cached.data.meta) && Date.now()-cached.at<=900000) return;
+        const fresh=await _fetchMarketData();
         if(generation!==_marketGeneration) return;
         _marketRemember(fresh);
         if(JSON.stringify(fresh)!==JSON.stringify(cached.data)) _applyMarketData(fresh);
-      }).catch(()=>{}).finally(()=>{_marketRevalidation=null;});
+      })().catch(()=>{}).finally(()=>{_marketRevalidation=null;});
     }
-    return;
+    return _marketRevalidation;
   }
+  const generation=++_marketGeneration;
   const fresh=await _fetchMarketData();
   if(generation!==_marketGeneration) return;
   _marketRemember(fresh);
@@ -5938,7 +5949,7 @@ function openSources(){
     + `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <thead><tr style="color:var(--dim);font-size:11px;text-align:left"><th style="padding:7px 6px">지표</th><th style="padding:7px 6px">출처</th><th style="padding:7px 6px;white-space:nowrap">갱신주기</th></tr></thead>
       <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 6px">${r[0]}</td><td style="padding:8px 6px;color:var(--dim)">${r[1]}</td><td style="padding:8px 6px;color:var(--dim);white-space:nowrap">${r[2]}</td></tr>`).join('')}</tbody></table>`
-    + `<div style="font-size:11px;color:var(--dim);margin-top:12px">현재 ${asof} · 앱은 주간 자동 갱신됩니다. 지표는 참고용이며 실제 투자 판단·실거래 확인은 이용자 책임입니다.</div>`;
+    + `<div style="font-size:11px;color:var(--dim);margin-top:12px">현재 <span id="sourceAsOf">${asof}</span> · 앱은 주간 자동 갱신됩니다. 지표는 참고용이며 실제 투자 판단·실거래 확인은 이용자 책임입니다.</div>`;
   document.getElementById('sourceDlg').showModal();
   loadFreshness();
 }
@@ -5957,6 +5968,8 @@ async function loadFreshness(){
   const box=document.getElementById('freshBox'); if(!box) return;
   let d; try{ d=await (await fetch('/api/freshness')).json(); }
   catch(e){ box.innerHTML='<div style="color:var(--dim);font-size:12px">신선도 정보를 불러오지 못했습니다.</div>'; return; }
+  const sourceAsOf=document.getElementById('sourceAsOf');
+  if(sourceAsOf) sourceAsOf.textContent=`KB 기준 ${d['기준일']||'미확인'}`;
   const now=d.now||Math.floor(Date.now()/1000);
   const kbAsOf=d.sources.find(s=>s.key==='signal')?.asof;
   const kbAsOfTs=/^\d{4}-\d{2}-\d{2}$/.test(kbAsOf||'') ? Date.parse(`${kbAsOf}T00:00:00Z`)/1000 : null;

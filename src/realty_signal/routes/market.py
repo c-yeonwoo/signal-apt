@@ -84,6 +84,7 @@ def meta():
     kb = md.kb()
     c = md.signal_config()
     from realty_signal.brain.config_store import active_meta
+    from realty_signal.services.signal_assessment import GUARD_VERSION
     cfg_meta = active_meta()
     jeonse_zones = [
         {"from": 0, "to": c.jeonse_oversupply, "label": "공급우위", "color": "#3b82f6",
@@ -102,6 +103,7 @@ def meta():
         "metrics": [{"key": k, "label": _METRIC_LABEL.get(k, k)} for k in kb.metrics],
         "last_date": str(kb.last_date.date()),
         "signal_config_version": cfg_meta.get("version", "v1"),
+        "signal_guard_version": GUARD_VERSION,
         "zones": {
             "jeonse_supply": jeonse_zones,
             "buyer_demand_buy": c.demand_buy,

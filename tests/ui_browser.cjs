@@ -243,6 +243,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#freshBox').textContent(),/관측 2026-09-21 · 최종 수집 1시간 전/);
     assert.match(await page.locator('#freshBox').textContent(),/최신 공표를 확인하기 전까지/);
     assert.match(await page.locator('#freshBox').textContent(),/최근 수집 확인에서도 새 관측일이 없었습니다/);
+    assert.match(await page.locator('#sourceAsOf').textContent(),/KB 기준 2026-09-21/);
     await page.keyboard.press('Escape');
     await page.locator('#dashMarketExtra > summary').click();
     await page.waitForFunction(()=>document.getElementById('dashRegimeWrap').textContent.length>0);
