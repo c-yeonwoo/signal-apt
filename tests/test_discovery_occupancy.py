@@ -70,6 +70,20 @@ def test_move_in_constraint_stays_unknown_until_exact_detail_is_checked():
             discovery_v2.validate({"move_in_by": value})
 
 
+def test_move_in_search_surfaces_fetchable_general_listing_without_hiding_quicksale():
+    general = _row("general", price=50000, area=70)
+    quicksale = _row("quicksale", price=50000, area=70)
+    quicksale.update(key="급매:quicksale", 유형="급매", source="baroezip",
+                     fetched_at=general["fetched_at"] + 86400)
+    ordinary = discovery_v2.discover([general, quicksale], {"limit": 1})
+    assert ordinary["groups"]["explore"][0]["listing"]["kind"] == "급매"
+    first = discovery_v2.discover([general, quicksale], {"move_in_by": "2027-03-31", "limit": 1})
+    assert first["groups"]["verify"][0]["listing"]["kind"] == "일반매물"
+    second = discovery_v2.discover([general, quicksale], {
+        "move_in_by": "2027-03-31", "limit": 1, "cursor": first["next_cursor"]})
+    assert second["groups"]["verify"][0]["listing"]["kind"] == "급매"
+
+
 def test_lookup_route_requires_personal_access_and_current_hanbang_id(monkeypatch):
     from realty_signal.services import property_analysis
 

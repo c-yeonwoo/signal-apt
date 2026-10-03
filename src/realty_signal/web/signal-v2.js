@@ -729,7 +729,7 @@
           <p class="v2-muted">정렬: ${hasPreference ? '입력한 선호 충족·자료 확인도 → 수집일' : '최근 수집일'}${priorityApplied ? ' · 중요 선호 2배' : spec.priority ? ' · 선택한 중요 선호는 아직 입력되지 않아 균등 적용' : ''} · 호가가 저렴하다는 이유만으로 우선하지 않습니다.</p>
           ${warning ? `<p class="v2-row v2-caution">${warning}</p>` : ''}
           ${financeNotice ? `<p class="v2-row v2-caution">${financeNotice}</p>` : ''}
-          ${spec.move_in_by ? '<p class="v2-row v2-caution">입주일은 한방 후보 카드의 ‘입주일 확인’을 눌러 상세 원천을 확인한 뒤에만 조건 부합으로 분류합니다. 실제 입주 가능 여부는 중개사에게 다시 확인하세요.</p>' : ''}
+          ${spec.move_in_by ? '<p class="v2-row v2-caution">입주일은 상세 확인이 가능한 한방 후보를 먼저 보여 줍니다. 카드의 ‘입주일 확인’을 눌러 원천을 확인한 뒤에만 조건 부합으로 분류하며, 실제 입주는 중개사에게 다시 확인하세요.</p>' : ''}
           ${spec.max_monthly_manwon && data.finance_context?.status !== 'ready' && data.finance_context?.status !== 'profile_unavailable' ?
             '<button type="button" class="btn" data-v2-finance-setup>매수력 설정으로 이동</button>' : ''}${outside}
           <div id="v2DiscoveryGroups"></div><div id="v2DiscoveryPaging"></div>`;
