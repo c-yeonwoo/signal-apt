@@ -25,6 +25,20 @@ def test_primary_signal_api_keeps_raw_for_audit_but_displays_held(monkeypatch):
     assert result[0]["signal"] == "BUY"
     assert result[0]["display_signal"] == "HELD"
     assert result[0]["assessment_status"] == "held"
+    assert market.signals(only="BUY") == []
+    assert market.signals(only="HELD")[0]["signal"] == "BUY"
+
+
+def test_signal_api_assessment_failure_still_returns_held_rows(monkeypatch):
+    monkeypatch.setattr(md, "kb", lambda: _kb((-0.15,) * 4))
+    monkeypatch.setattr(md, "signals_df", lambda: pd.DataFrame([_row("STRONG_BUY")]))
+    def unavailable(today):
+        raise RuntimeError("assessment unavailable")
+    monkeypatch.setattr(md, "assessed_signal_labels", unavailable)
+    result = market.signals()
+    assert result[0]["signal"] == "STRONG_BUY"
+    assert result[0]["display_signal"] == "HELD"
+    assert market.signals(only="STRONG_BUY") == []
 
 
 def test_listing_cards_and_timing_use_guarded_region_signal(monkeypatch):

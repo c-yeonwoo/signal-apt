@@ -544,13 +544,21 @@ def regulation_api():
 
 def _adv_region_row(r: dict) -> dict:
     """자문 tool 용 지역 시그널 축약(+규제지역)."""
-    out = {k: r.get(k) for k in ("region", "signal", "급지", "전세수급", "매수우위지수",
+    out = {k: r.get(k) for k in ("region", "급지", "전세수급", "매수우위지수",
            "매매모멘텀", "공급압력", "저평가도", "수급출처", "근거", "해설") if r.get(k) is not None}
+    out["signal"] = _adv_safe_grade(r)
+    out["assessment_status"] = r.get("assessment_status") or "held"
     tags = _regulation_of(r.get("region") or "")
     if tags:
         out["규제지역"] = tags
         out["규제기준"] = _REGULATION_ASOF
     return out
+
+
+def _adv_safe_grade(row: dict) -> str:
+    grade = row.get("display_signal")
+    return grade if row.get("assessment_status") == "ready" and grade in {
+        "STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"} else "HELD"
 
 
 def advisor_tools(uid: int, listing_key: str | None = None,
@@ -631,10 +639,11 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         rows = signals()
         want = (args.get("signal") or "").upper()
         if want:
-            rows = [r for r in rows if r.get("signal") == want]
-        rows = sorted(rows, key=lambda r: (_ADV_RANK.get(r.get("signal"), 9), -(r.get("전세수급") or 0)))
+            rows = [r for r in rows if _adv_safe_grade(r) == want]
+        rows = sorted(rows, key=lambda r: (_ADV_RANK.get(_adv_safe_grade(r), 9), -(r.get("전세수급") or 0)))
         lim = min(int(args.get("limit") or 15), 40)
-        return {"regions": [{"region": r.get("region"), "signal": r.get("signal"),
+        return {"regions": [{"region": r.get("region"), "signal": _adv_safe_grade(r),
+                             "assessment_status": r.get("assessment_status") or "held",
                              "급지": r.get("급지"), "전세수급": r.get("전세수급"),
                              "매수우위지수": r.get("매수우위지수")} for r in rows[:lim]]}
     if name == "get_region_signal":
@@ -722,7 +731,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
     if name == "get_presale":
         region = (args.get("region") or "").strip()
         try:
-            items = _presale()
+            items = _presale_visible_items()
         except Exception:  # noqa: BLE001
             return {"error": "청약 조회 실패"}
         if region:
@@ -740,7 +749,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         if not db_has_redev_cache(region):
             return {"result": f"{region} 재건축 데이터가 아직 준비되지 않았습니다(관리자 워밍 후 조회 가능)."}
         cands = (_redev_candidates(region) or [])[:10]
-        return {"region": region, "시그널": _signal_map().get(region, ""), "candidates": cands}
+        return {"region": region, "시그널": _display_signal_map().get(region, "HELD"), "candidates": cands}
     if name == "get_listings":
         region = (args.get("region") or "").strip()
         kind = args.get("kind") or "급매"
@@ -1032,6 +1041,7 @@ def _presale():
         sgg = d["시군구"]
         # 시군구명 + 시도 둘 다 일치할 때만 결합(부산 강서구↔서울 강서구 오매칭 방지)
         region = sgg if (sgg in sig and region_sido.get(sgg) == d["시도"]) else None
+        d["_signal_region"] = region
         d["지역"] = sgg or d["시도"] or ""
         d["시그널"] = sig.get(region, "")
         rg = regions.get(region) if region else None
@@ -1047,15 +1057,25 @@ def _presale():
     return out
 
 
+def _presale_visible_items() -> list[dict]:
+    """Cached announcement facts stay reusable; current signal safety is overlaid at read time."""
+    safe = _display_signal_map()
+    items = []
+    for row in _presale():
+        item = dict(row)
+        item["시그널"] = safe.get(item.pop("_signal_region", None), "HELD")
+        items.append(item)
+    return items
+
+
 def presale_list(request: Request):
     """청약 단지(청약홈) — 지역 시그널 결합 + 거주지 당해 판정. 당해→임박→BUY+ 정렬."""
-    sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "": 5}
+    sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "HELD": 5}
     st_rank = {"접수중": 0, "접수예정": 1, "발표대기": 2, "계약중": 3, "공고": 4, "완료": 5}
     home = (db.profile_get(_uid(request)).get("거주지") or "").strip()  # 거주 시군구
 
     items = []
-    for d in _presale():
-        d = dict(d)
+    for d in _presale_visible_items():
         # 당해(해당지역 우선공급): 거주 시군구가 단지 지역/주소에 일치
         d["당해"] = bool(home and (home == d.get("지역") or home in (d.get("주소") or "")))
         items.append(d)
@@ -1704,9 +1724,9 @@ def _redev_candidates(region: str):
 
 def redev_candidates(region: str):
     """지역 내 재건축 잠재력 단지 랭킹 (구축, 연식·용적률·세대수·시세 기반)."""
-    sig = _signal_map()
+    sig = _display_signal_map()
     cands = _redev_candidates(region)
-    return {"region": region, "시그널": sig.get(region, ""),
+    return {"region": region, "시그널": sig.get(region, "HELD"),
             "cached": db_has_redev_cache(region), "candidates": cands}
 
 
