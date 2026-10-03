@@ -1,26 +1,54 @@
 """확정 매수력과 선택 매물·대안 통근의 분리된 판단."""
 
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
-from realty_signal import api, auth, db
+from realty_signal import api, auth, buying_power, db
 from realty_signal.ingest import kakao_places
-from realty_signal.services import listing_discovery, property_analysis
+from realty_signal.services import listing_discovery, market_data as md, property_analysis
 
 
 def _row(key, name="시험단지", price=50000, lat=37.65):
     return {"key": key, "유형": "일반매물", "단지명": name, "지역": "노원구",
-            "총액": price, "lat": lat, "lng": 127.07, "ref": {"전용면적": 84.9}}
+            "지역코드": "11350", "시도": "서울", "총액": price,
+            "lat": lat, "lng": 127.07, "ref": {"전용면적": 84.9}}
 
 
-def test_budget_fit_uses_confirmed_buying_power_only():
+def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypatch):
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
+        codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
     listing = property_analysis.snapshot(_row("일반매물:a"))
     assert property_analysis.buyer_fit(listing, {})["status"] == "unknown"
     assert property_analysis.buyer_fit(listing, {"가용자본": 80000})["status"] == "unknown"
-    within = property_analysis.buyer_fit(listing, {"매수력": {"최대매수가": 52000}})
+    assert property_analysis.buyer_fit(listing, {"매수력": {"최대매수가": 52000}})["status"] == "unknown"
+    profile = {"가용자본": 50000, "연소득": 9000, "매수지역": "노원구",
+               "매수지역코드": "kb:1135000000"}
+    profile["매수력"] = buying_power.statement(buying_power.params_from_profile(profile))
+    budget = profile["매수력"]["최대매수가"]
+    listing["asking_manwon"] = budget - 2000
+    within = property_analysis.buyer_fit(listing, profile)
     assert within["status"] == "within" and within["gap_manwon"] == 2000
     assert "대출 승인" in within["note"]
-    above = property_analysis.buyer_fit(listing, {"매수력": {"최대매수가": 48000}})
+    listing["asking_manwon"] = budget + 2000
+    above = property_analysis.buyer_fit(listing, profile)
     assert above["status"] == "above" and above["gap_manwon"] == -2000
+    listing["region_code"] = "11680"
+    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    listing["region_code"] = None
+    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    listing["region_code"] = "11350"
+    listing["region_sido"] = "경기"
+    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    listing["region_sido"] = "서울"
+    listing["stale"] = True
+    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    listing["stale"] = False
+    profile["가용자본"] = 51000
+    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    profile["가용자본"] = 50000
+    profile["매수력"]["최대매수가"] += 10000
+    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
 
 
 def test_commute_is_on_demand_bounded_and_does_not_expose_work_coordinates(monkeypatch):

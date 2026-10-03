@@ -73,12 +73,39 @@ def snapshot(row: dict) -> dict:
 
 def buyer_fit(listing: dict, profile: dict | None = None) -> dict:
     """확정 매수력과 호가만 비교한다. 구매 가능성/대출 승인이 아니다."""
-    budget = _number(((profile or {}).get("매수력") or {}).get("최대매수가"))
+    from realty_signal import buying_power
+    from realty_signal.services.buyer_decision import finance_fingerprint
+
+    profile = profile or {}
+    saved = profile.get("매수력") or {}
+    budget = _number(saved.get("최대매수가"))
     asking = _number(listing.get("asking_manwon"))
-    if budget is None:
-        return {"status": "unknown", "reason": "확정 매수력이 없어 예산 적합성을 판단하지 않았습니다."}
+    if budget is None or not saved.get("가정버전"):
+        return {"status": "unknown", "reason": "검증 가능한 확정 매수력이 없어 예산 적합성을 판단하지 않았습니다."}
     if asking is None:
         return {"status": "unknown", "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
+    if listing.get("stale"):
+        return {"status": "unknown", "reason": "지난 수집 호가라 현재 예산 적합성을 판단하지 않았습니다."}
+    try:
+        params = buying_power.params_from_profile(profile)
+        current_budget = buying_power.max_purchase(params)[0]
+        if (params.capital <= 0 or finance_fingerprint(params) != saved["가정버전"]
+                or abs(current_budget - budget) > 1):
+            return {"status": "unknown", "reason": "저장한 자금 가정이 현재 조건과 달라 매수력을 다시 확정해야 합니다."}
+    except (TypeError, ValueError, OverflowError):
+        return {"status": "unknown", "reason": "자금 가정을 확인할 수 없어 매수력을 다시 확정해야 합니다."}
+    if saved.get("지역식별") in {"reselection_required", "unverified_name"}:
+        return {"status": "unknown", "reason": "매수 예정 지역을 다시 선택한 뒤 예산을 비교해 주세요."}
+    saved_code = profile.get("매수지역코드") or (saved.get("가정") or {}).get("지역코드")
+    if params.region and not saved_code:
+        return {"status": "unknown", "reason": "예전 지역 이름만 저장돼 있어 매수 예정 지역을 다시 선택해야 합니다."}
+    if saved_code and (
+        not isinstance(saved_code, str) or not saved_code.startswith("kb:")
+        or not params.region or str(listing.get("region_code") or "") != saved_code[3:8]
+        or listing.get("region") != params.region
+        or (listing.get("region_sido") and listing["region_sido"] != params.sido)
+    ):
+        return {"status": "unknown", "reason": "매수력을 확정한 지역과 이 매물의 지역 코드가 다르거나 확인되지 않았습니다."}
     return {"status": "within" if asking <= budget else "above", "budget_manwon": budget,
             "asking_manwon": asking, "gap_manwon": round(budget - asking),
             "note": "호가와 확정 매수력만 비교합니다. 취득세·수리비·대출 승인·월 부담은 별도로 확인해야 합니다."}

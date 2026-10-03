@@ -105,6 +105,27 @@ def test_listing_report_keeps_price_evidence_when_buyer_profile_fails(monkeypatc
     assert report["lines"] is None
 
 
+def test_listing_report_does_not_reintroduce_affordable_line_for_stale_budget(monkeypatch):
+    from realty_signal import api, db
+    from realty_signal.services import property_analysis
+
+    row = listing_row("stale-budget", price=50_000, area=70)
+    row["자금"] = {"가능": True, "필요현금": 20_000, "월상환": 100}
+    row["예산내"] = True
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
+    monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
+    monkeypatch.setattr(api, "complex_detail", lambda region, name, **kwargs: {"평형별": []})
+    monkeypatch.setattr(db, "profile_get", lambda uid: {
+        "가용자본": 50_000, "매수력": {"최대매수가": 100_000}})
+    monkeypatch.setattr(db, "kv_get", lambda *args, **kwargs: [])
+    report = json.loads(reports_v2.listing_report(None, row["key"]).body)
+    assert report["buyer_fit"]["status"] == "unknown"
+    assert "검증 가능한 확정 매수력이 없어" in report["lines"]["cash"]
+    assert "계산상 됩니다" not in report["lines"]["cash"]
+    assert report["decision"]["feasibility"] == "unknown"
+
+
 def test_listing_report_get_uses_cache_and_post_requests_refresh(monkeypatch):
     from realty_signal import api
     from realty_signal.services import property_analysis

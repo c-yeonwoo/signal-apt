@@ -328,9 +328,17 @@ def listing_analysis(request: Request, key: str, stage: str = "full", cache_only
         if not profile_unavailable:
             try:
                 from realty_signal.services import buyer_decision
-                params = app_api._buyer_params(profile)
+                fit = out.get("buyer_fit") or {}
+                finance_ready = fit.get("status") in {"within", "above"}
+                params = app_api._buyer_params(profile) if finance_ready else None
+                decision_row = dict(row)
+                # 원천·과거 카드의 자금/예산내 값은 이 리포트의 현재 가정이 아니다.
+                decision_row.pop("자금", None)
+                decision_row.pop("예산내", None)
                 packet = buyer_decision.annotate(
-                    dict(row), params, uid=deps.uid(request), sido_of=app_api._sido_of)
+                    decision_row, params, uid=deps.uid(request), sido_of=app_api._sido_of)
+                if not finance_ready:
+                    packet["lines"]["cash"] = fit.get("reason") or "매수력을 다시 확인해야 자금을 비교할 수 있습니다."
                 out["lines"] = packet["lines"]
                 out["decision"] = packet["decision"]
             except Exception:  # noqa: BLE001
