@@ -363,6 +363,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#analysisFixture button').click();
     await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
     assert.equal(nickPayloads.length,0);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'가격이 싼가?'}).click();
+    assert.match(await page.locator('#v2QuickAnswer').textContent(),/동일 조건 실거래 3건과 비교/);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'내 예산에 맞나?'}).click();
+    assert.match(await page.locator('#v2QuickAnswer').textContent(),/대출 승인·세금·수리비 확인 전/);
+    await page.locator('#v2ReportBody').getByRole('button',{name:'뭘 조심해야 하나?'}).click();
+    assert.match(await page.locator('#v2QuickAnswer').textContent(),/현재 판매 여부는 확인되지/);
+    assert.equal(nickPayloads.length,0);
     const locationCalls=calls.filter(path=>path==='/api/listing-location').length;
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
     await page.locator('#v2LocationResult').getByText(/테스트역 · 약 8분/).waitFor();
