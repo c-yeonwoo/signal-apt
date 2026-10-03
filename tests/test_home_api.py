@@ -80,7 +80,8 @@ def test_weekly_visit_is_consumed_only_by_seen_ack(client, monkeypatch):
 
 def test_budget_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
     uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
-    db.profile_set(uid, {"매수력": {"최대매수가": 90_000}})
+    confirmed = client.post("/api/buying-power/confirm", json={"capital": 100_000, "income": 0})
+    assert confirmed.status_code == 200
     rows = [{"key": "급매:1", "총액": 80_000, "유형": "급매", "단지명": "테스트", "지역": "노원구"}]
     monkeypatch.setattr(app_api, "_build_listings", lambda kinds, **_kw: rows)
 
@@ -90,6 +91,37 @@ def test_budget_watch_is_consumed_only_by_seen_ack(client, monkeypatch):
 
     assert client.post("/api/budget-watch/seen").json()["ok"] is True
     assert db.kv_get(bw.KV_PREFIX + str(uid))["items"]
+
+
+def test_budget_watch_rejects_stale_saved_max_without_advancing_seen(client, monkeypatch):
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.profile_set(uid, {"매수력": {"최대매수가": 90_000}})
+    monkeypatch.setattr(app_api, "_build_listings", lambda kinds, **_kw: (
+        (_ for _ in ()).throw(AssertionError("stale budget must stop before listing fetch"))))
+    result = client.get("/api/budget-watch").json()
+    assert result["ready"] is False and result["reason"] == "reconfirm_required"
+    assert client.post("/api/budget-watch/seen").json() == {
+        "ok": False, "reason": "reconfirm_required"}
+    assert db.kv_get(bw.KV_PREFIX + str(uid)) is None
+
+    client.post("/api/buying-power/confirm", json={"capital": 100_000, "income": 0})
+    profile = db.profile_get(uid)
+    profile["가용자본"] = 120_000
+    db.profile_set(uid, profile)
+    changed = client.get("/api/budget-watch").json()
+    assert changed["reason"] == "reconfirm_required"
+
+
+def test_complex_watch_ignores_stale_budget_but_keeps_trade_updates(client, monkeypatch):
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    db.profile_set(uid, {"매수력": {"최대매수가": 90_000}})
+    monkeypatch.setattr(cw, "favorites_of", lambda _uid: [("노원구", "테스트아파트")])
+    monkeypatch.setattr(cw, "cache_loader", lambda: lambda *_args: ({}, None))
+    budgets = []
+    monkeypatch.setattr(cw, "compute", lambda _uid, _favs, _loader, *, budget: (
+        budgets.append(budget) or {"ready": True, "_snaps": {}}))
+    assert client.get("/api/complex-watch").json()["ready"] is True
+    assert budgets == [None]
 
 
 def test_complex_watch_is_consumed_only_by_seen_ack(client, monkeypatch):

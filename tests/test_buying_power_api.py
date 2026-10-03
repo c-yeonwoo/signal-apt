@@ -136,6 +136,12 @@ def test_confirm_remembers_region(client, monkeypatch):
     assert d["규제"]["규제지역"] is True
     assert d["확정"] == d["최대매수가"]
 
+    uid = auth.current_user(client.cookies.get(auth.COOKIE))["id"]
+    profile = db.profile_get(uid)
+    assert app_api.buying_power.validated_confirmed_power(profile) is not None
+    profile["매수지역코드"] = "kb:1168000000"
+    assert app_api.buying_power.validated_confirmed_power(profile) is None
+
 
 def test_ambiguous_jung_gu_requires_verified_code_for_finance(client, monkeypatch):
     source = SimpleNamespace(codes={"중구": "1114000000", "강남구": "1168000000"},

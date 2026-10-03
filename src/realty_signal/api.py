@@ -1500,7 +1500,7 @@ def shortlist(request: Request, limit: int = 3, budget: float | None = None):
         return {"ready": False, "reason": "no_budget",
                 "message": "매수력을 먼저 확정해 주세요."}
     out = sl.build(profile, budget, limit=max(1, min(10, limit)), budget_is_ceiling=explicit_budget)
-    out["확정예산"] = bool((profile.get("매수력") or {}).get("최대매수가"))
+    out["확정예산"] = buying_power.validated_confirmed_power(profile) is not None
     _remember_decisions(uid, out.get("candidates") or [])
     return out
 
