@@ -516,10 +516,12 @@ def users_with_region_favs() -> list[dict]:
     c.close()
     out = []
     for uid, email, keys in rows:
-        regions = list(dict.fromkeys(name for key in (keys or "").split("|")
-                                     if (name := _favorite_region_name(key))))
-        if regions:
-            out.append({"id": uid, "email": email, "regions": regions})
+        identities = list({identity["region_id"]: identity for key in (keys or "").split("|")
+                           if (identity := verified_region_favorite_identity(key))}.values())
+        if identities:
+            out.append({"id": uid, "email": email,
+                        "regions": [identity["name"] for identity in identities],
+                        "region_ids": [identity["region_id"] for identity in identities]})
     return out
 
 
@@ -562,25 +564,28 @@ def complex_favorite_region(ref: str) -> dict:
     return {"status": "unverified", "message": "관심단지의 지역 코드를 확인할 수 없습니다."}
 
 
-def _favorite_region_name(key: str) -> str | None:
-    """Read verified code favorites by current name without rewriting old rows."""
-    if not key or key in AMBIGUOUS_LEGACY_REGION_KEYS:
+def verified_region_favorite_identity(key: str) -> dict | None:
+    """Resolve a saved favorite to a source-proven current ID; never migrate its key."""
+    if not isinstance(key, str) or not key or key in AMBIGUOUS_LEGACY_REGION_KEYS:
         return None
     try:
         from realty_signal.services import market_data as md
-        from realty_signal.services.signal_assessment import INCHEON_RETIRED_CODES
         if key.startswith("kb:"):
-            if key[3:8] in INCHEON_RETIRED_CODES:
-                return None
-            return md.region_for_ref(key)
+            return md.current_region_identity(key)
         source = md.kb()
         code = str((source.codes or {}).get(key) or "")
-        if (not source.identity_verified or key not in source.regions
-                or not code or code[:5] in INCHEON_RETIRED_CODES):
+        if not source.identity_verified or key not in source.regions:
             return None
-        return key if md.region_for_ref(f"kb:{code}") == key else None
+        identity = md.current_region_identity(f"kb:{code}")
+        return identity if identity and identity["name"] == key else None
     except Exception:  # noqa: BLE001 — 원천 장애 시 과거 이름을 현행 지역으로 추측하지 않는다.
         return None
+
+
+def _favorite_region_name(key: str) -> str | None:
+    """Compatibility view for name-based display consumers; identity remains code-first."""
+    identity = verified_region_favorite_identity(key)
+    return identity["name"] if identity else None
 
 
 def actionable_region_favs(uid: int) -> list[str]:

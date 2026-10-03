@@ -184,15 +184,14 @@ def _favorite_region_identity(region: str) -> dict:
 
     if region.startswith("kb:"):
         try:
-            name = md.region_for_ref(region)
+            identity = md.current_region_identity(region)
             code = region[3:]
             if code[:5] in INCHEON_RETIRED_CODES:
                 return {"status": "needs_reselection",
                         "message": "2026-07 인천 구역 개편 전 코드입니다. 현행 지역을 다시 선택해 주세요."}
-            if name:
-                sido = md.SIDO_LABELS.get(code[:2], "")
-                return {"status": "ready", "name": name, "region_id": region,
-                        "label": f"{sido} · {name}" if sido else name, "message": ""}
+            if identity:
+                return {"status": "ready", "name": identity["name"], "region_id": region,
+                        "label": f'{identity["sido"]} · {identity["name"]}', "message": ""}
         except Exception:  # noqa: BLE001 — 인증된 지역 자료를 읽을 수 없으면 보류한다.
             pass
         return {"status": "unverified", "message": "지역 코드를 확인하지 못해 관심 알림 판정을 보류합니다."}
@@ -207,11 +206,11 @@ def _favorite_region_identity(region: str) -> dict:
             return {"status": "unverified", "message": "지역 코드 확인 전이라 관심 알림 판정을 보류합니다."}
         if region not in kb.regions:
             return {"status": "no_current_series", "message": "현재 KB 시그널 자료에 없는 지역입니다. 새 지역을 확인해 주세요."}
-        if md.region_for_ref(f"kb:{code}") != region:
+        identity = md.current_region_identity(f"kb:{code}")
+        if not identity or identity["name"] != region:
             return {"status": "unverified", "message": "지역 코드가 다른 지역과 겹쳐 관심 알림 판정을 보류합니다."}
-        sido = md.SIDO_LABELS.get(code[:2], "")
         return {"status": "ready", "name": region, "region_id": f"kb:{code}",
-                "label": f"{sido} · {region}" if sido else region, "message": ""}
+                "label": f'{identity["sido"]} · {region}', "message": ""}
     except Exception:  # noqa: BLE001 — KB 장애도 과거 키를 정상으로 단정하지 않는다
         return {"status": "unverified", "message": "지역 자료를 확인하지 못해 관심 알림 판정을 보류합니다."}
 
