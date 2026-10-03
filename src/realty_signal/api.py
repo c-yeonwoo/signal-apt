@@ -239,6 +239,10 @@ async def _auto_refresh_loop():
         from realty_signal.services import region_alerts_v2
         return region_alerts_v2.scan_issued()
 
+    def presale_alert_job():
+        from realty_signal.services import presale_alerts_v2
+        return presale_alerts_v2.scan_fresh_announcements()
+
     specs = [
         ("kb", kb_job, 6*3600),
         ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
@@ -251,6 +255,7 @@ async def _auto_refresh_loop():
         ("backup", backup_job, 86400),
         ("watch_alerts", watch_alert_job, 900),
         ("region_alerts", region_alert_job, 900),
+        ("presale_alerts", presale_alert_job, 6*3600),
     ]
     # Each loop owns a renewable lease and its own retry/due clock.
     async def serve(name, fn, interval):
@@ -472,7 +477,8 @@ def myfeed(request: Request):
     # 청약(지역별, 임박)
     ps = []
     try:
-        ps = [d for d in _presale() if (d.get("Dday") is not None and d["Dday"] >= 0 and d["Dday"] <= 45)]
+        ps = [_presale_current(raw) for raw in _presale()]
+        ps = [d for d in ps if d.get("Dday") is not None and 0 <= d["Dday"] <= 45]
     except Exception:  # noqa: BLE001
         ps = []
     items = []
@@ -1070,8 +1076,10 @@ _SIDO = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "
 
 def _presale_since() -> str:
     """최근 ~4개월 공고부터 (진행중·예정 위주)."""
-    from datetime import date
-    y, m = date.today().year, date.today().month
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    y, m = today.year, today.month
     m -= 4
     if m <= 0:
         y, m = y - 1, m + 12
@@ -1081,10 +1089,14 @@ def _presale_since() -> str:
 def _presale_status(d: dict, today: str) -> tuple[str, str | None]:
     """청약 진행상태 + 다음 일정일자. 날짜 문자열 비교(YYYY-MM-DD)."""
     def ok(s):
-        return s if (s and len(str(s)) == 10 and str(s)[4] == "-") else None
-    sp_s, sp_e = ok(d["특공접수시작"]), ok(d["특공접수마감"])
-    r_s, r_e = ok(d["청약접수시작"]), ok(d["청약접수마감"])
-    win, ct_e = ok(d["당첨발표"]), ok(d["계약종료"])
+        try:
+            value = str(s)
+            return value if date.fromisoformat(value).isoformat() == value else None
+        except (TypeError, ValueError):
+            return None
+    sp_s, sp_e = ok(d.get("특공접수시작")), ok(d.get("특공접수마감"))
+    r_s, r_e = ok(d.get("청약접수시작")), ok(d.get("청약접수마감"))
+    win, ct_e = ok(d.get("당첨발표")), ok(d.get("계약종료"))
     starts = [x for x in (sp_s, r_s) if x]
     ends = [x for x in (sp_e, r_e) if x]
     first, last = (min(starts) if starts else None), (max(ends) if ends else None)
@@ -1104,23 +1116,28 @@ def _presale_status(d: dict, today: str) -> tuple[str, str | None]:
 @lru_cache(maxsize=1)
 def _presale():
     from realty_signal.ingest import applyhome
-    from datetime import date
+    from datetime import date, datetime
+    from zoneinfo import ZoneInfo
     config.load_env()
     key = config.public_data_key()
     if not key:
         log.warning("PUBLIC_DATA_KEY 없음 — 청약 목록 비움")
+        db.kv_set("presale_fetch_status", {"ok": False, "reason": "key_missing", "ts": time.time()})
         return []
     applyhome.set_key(key)
     try:
         raw = applyhome.fetch_pblanc(_presale_since())
     except Exception as e:  # noqa: BLE001
         log.error("청약홈 fetch 실패: %s", e)
+        db.kv_set("presale_fetch_status", {"ok": False, "reason": type(e).__name__, "ts": time.time()})
         return []
+    db.kv_set("presale_fetch_status", {"ok": True, "count": len(raw), "ts": time.time()})
     sig = _signal_map()
     regions = _regime().get("regions", {})
     codes = _kb().codes or {}
     region_sido = {r: _SIDO.get((c or "")[:2]) for r, c in codes.items()}  # 시군구→시도 (동명이군 구분)
-    today = date.today().isoformat()
+    today_date = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today_date.isoformat()
     out = []
     for d in raw:
         sgg = d["시군구"]
@@ -1137,7 +1154,7 @@ def _presale():
         st, nxt = _presale_status(d, today)
         d["상태"] = st
         d["다음일정"] = nxt
-        d["Dday"] = (date.fromisoformat(nxt) - date.today()).days if nxt else None
+        d["Dday"] = (date.fromisoformat(nxt) - today_date).days if nxt else None
         out.append(d)
     return out
 
@@ -1147,10 +1164,35 @@ def _presale_visible_items() -> list[dict]:
     safe = _display_signal_map()
     items = []
     for row in _presale():
-        item = dict(row)
+        item = _presale_current(row)
         item["시그널"] = safe.get(item.pop("_signal_region", None), "HELD")
         items.append(item)
     return items
+
+
+def _presale_current(row: dict) -> dict:
+    """Recompute a cached announcement's relative date on each read in Korea time."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    item = dict(row)
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    if not any(item.get(key) for key in ("특공접수시작", "특공접수마감", "청약접수시작",
+                                         "청약접수마감", "당첨발표", "계약종료")):
+        if item.get("다음일정"):
+            try:
+                item["Dday"] = (date.fromisoformat(item["다음일정"]) - today).days
+            except (TypeError, ValueError):
+                item["Dday"] = None
+        return item
+    status, next_date = _presale_status(item, today.isoformat())
+    item["상태"] = status
+    item["다음일정"] = next_date
+    try:
+        item["Dday"] = (date.fromisoformat(next_date) - today).days if next_date else None
+    except ValueError:
+        item["Dday"] = None
+    return item
 
 
 def presale_list(request: Request):
@@ -3291,10 +3333,12 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                  "등록일": m.get("등록일"), "검증표시": m.get("검증표시")},
                 total=m.get("호가"))
     if "청약" in want:
-        for d in _presale():
+        for raw in _presale():
+            d = _presale_current(raw)
             add("청약", d.get("단지명"), d.get("지역"), d.get("시그널"),
                 "청약상태", d.get("상태"), "", d, None, None,
-                {"관리번호": d.get("관리번호"), "Dday": d.get("Dday"), "주소": d.get("주소")})
+                {"관리번호": d.get("관리번호"), "Dday": d.get("Dday"),
+                 "다음일정": d.get("다음일정"), "주소": d.get("주소")})
     if "재건축" in want:
         sig = _signal_map()
         for region, s in sig.items():                     # 캐시된 지역만 — 라이브 재계산 없이(opt-in)

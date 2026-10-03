@@ -19,6 +19,7 @@ DEFAULT_PREFS = {
     "listing_price": True,
     "new_alternative": True,
     "region_evidence": True,
+    "presale_deadline": True,
     "timing_min": 70,
 }
 
