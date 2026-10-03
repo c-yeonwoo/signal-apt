@@ -5472,9 +5472,10 @@ function renderNbhd(d){
      ${loc['transit_min']!=null?_nbStat((loc['최단업무지구']||'업무')+'까지', loc['transit_min']+'분'):''}
      ${loc['공원']!=null?_nbStat('공원', loc['공원']):''}${loc['대형마트']!=null?_nbStat('마트', loc['대형마트']):''}</div>
      <div style="font-size:10px;color:var(--dim);margin-top:4px">학원밀도=소상공인 교육업 프록시 · OSM 공원/마트</div>`);
-  more+=_nbSec('미래가치',
-    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${dev.length?'8px':'0'}">${fv['재건축후보수']!=null?_nbStat('재건축 후보', fv['재건축후보수']+'곳'):_nbStat('재건축', '워밍 필요')}</div>
-     ${dev.length?`<div style="font-size:12px;color:var(--dim)">${dev.map(x=>`<b style="color:var(--txt)">${x.title}</b>`).join(' · ')}</div>`:''}`);
+  more+=_nbSec('개발·정비 참고',
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${fv['재건축후보수']!=null?_nbStat('재건축 검토 후보', fv['재건축후보수']+'곳'):_nbStat('재건축', '자료 준비 중')}</div>
+     ${dev.length?`<div style="font-size:12px;color:var(--dim)">${dev.map(x=>`<b style="color:var(--txt)">${esc(x.title)}</b>${x.source?' · '+esc(x.source):''}${x.eff_date?' · '+esc(x.eff_date):''}`).join('<br>')}</div>`:'<div style="font-size:12px;color:var(--dim)">이 지역에 등록된 개발·정비 자료가 없습니다.</div>'}
+     <div style="font-size:10px;color:var(--dim);margin-top:6px">지역별 등록 자료와 검토 후보입니다. 계획 확정·사업 단계·실제 가격 영향은 확인된 근거가 아니므로 공식 공고를 다시 확인하세요.</div>`);
   if(Object.keys(cm).length){
     more+=_nbSec('업무지구 통근', `<div style="display:flex;gap:8px;flex-wrap:wrap">
        ${Object.entries(cm).map(([k,v])=>_nbStat(k, (v&&v.min!=null?v.min+'분':'–'))).join('')}</div>

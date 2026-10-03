@@ -801,6 +801,17 @@ def policy_all(limit: int = 200) -> list[dict]:
     return [_policy_row(r) for r in rows]
 
 
+def policy_local_development(region: str, limit: int = 3) -> list[dict]:
+    """District-specific development notes; national/metro policy is not a local project."""
+    c = conn()
+    rows = c.execute(
+        "SELECT id,title,category,region,tags,source,eff_date,body,ts FROM policy "
+        "WHERE region=? AND category IN ('개발계획','정비사업') "
+        "ORDER BY ts DESC,id DESC LIMIT ?", (region, limit)).fetchall()
+    c.close()
+    return [_policy_row(row) for row in rows]
+
+
 def policy_delete(pid: int) -> None:
     c = conn()
     c.execute("DELETE FROM policy WHERE id=?", (pid,))
@@ -852,7 +863,7 @@ def _expand(toks: set[str]) -> set[str]:
 
 
 def policy_search(query: str, region: str = "", limit: int = 5) -> list[dict]:
-    """한국어 토큰화 + 동의어 확장 + BM25형 필드가중 검색. 쿼리 비면 최근순."""
+    """한국어 토큰화 + 동의어 확장 검색. 지정 지역은 다른 지역과 혼합하지 않는다."""
     rows = policy_all(200)
     q = (query or "").strip()
     if not q and not region:
@@ -875,6 +886,9 @@ def policy_search(query: str, region: str = "", limit: int = 5) -> list[dict]:
             df[t] = df.get(t, 0) + 1
     scored = []
     for r, (title_t, meta_t, body_t) in zip(rows, doc_tok):
+        scope = (r["region"] or "").strip()
+        if region and scope not in (region, "전국", ""):
+            continue
         s = 0.0
         for t in qtoks:
             if t not in title_t and t not in meta_t and t not in body_t:
@@ -882,13 +896,13 @@ def policy_search(query: str, region: str = "", limit: int = 5) -> list[dict]:
             idf = math.log(1 + N / (1 + df.get(t, 0)))
             w = 3 if t in title_t else (2 if t in meta_t else 1)
             s += w * idf
-        if region and (region in (r["region"] or "") or (r["region"] or "") in region or not r["region"]):
+        if region and scope == region:
             s += 2.0
         if s > 0:
             scored.append((s, r))
     scored.sort(key=lambda x: x[0], reverse=True)
     out = [r for _, r in scored[:limit]]
-    return out or rows[:limit]
+    return out
 
 
 # ---------- news (부동산 뉴스 KB — 누적) ----------

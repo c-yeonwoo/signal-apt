@@ -2691,6 +2691,12 @@ def _nbhd_week() -> str:
         return _dt.date.today().strftime("%G-W%V")
 
 
+def _local_development_docs(region: str) -> list[dict]:
+    """Only documents explicitly scoped to this district may appear as local plans."""
+    return [{"title": row["title"], "source": row["source"], "eff_date": row["eff_date"]}
+            for row in db.policy_local_development(region)]
+
+
 def neighborhood(request: Request, region: str):
     """동네 딥다이브 — 보유 데이터 재조립 + 생활인프라. 로그인 시 주간 스냅샷 저장·지난 대비 diff."""
     sigrow = next((r for r in signals() if r.get("region") == region), None)
@@ -2722,9 +2728,7 @@ def neighborhood(request: Request, region: str):
         pass
     # 미래가치
     redev_n = len(_redev_candidates(region) or []) if db_has_redev_cache(region) else None
-    dev = db.policy_search(region, region=region, limit=3)
-    dev = [{"title": d["title"], "eff_date": d["eff_date"]} for d in dev
-           if d.get("category") in ("개발계획", "정비사업")]
+    dev = _local_development_docs(region)
     c = _region_centroid(region, _code_of(region))
     # 생활인프라(카카오, 30일 캐시)
     ck = f"nbhd_infra:{region}"
