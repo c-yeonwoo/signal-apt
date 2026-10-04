@@ -369,6 +369,38 @@ test('grouped map pins keep per-listing selection and one marker per group', () 
   assert.doesNotMatch(st.markers[0].popup,/가격 미확인/);
 });
 
+test('dense listing maps cluster nearby pins without breaking viewport filtering or row focus', async () => {
+  const layers=new Set(), clusters=[];
+  const map={addLayer:m=>layers.add(m),removeLayer:m=>layers.delete(m),hasLayer:m=>layers.has(m),
+    getBounds:()=>({contains:c=>c[0]<37.4}),invalidateSize(){}};
+  const st={map,markers:{},sel:null};
+  const ctx=vm.createContext({_ms:{test:st},initMap:()=>st,setTimeout(){},esc:s=>String(s),_eok:v=>String(v),
+    _boundsKey:()=> 'test-bounds',
+    renderMsList(){},hideMapCta(){},L:{divIcon:o=>o,latLng:(...c)=>c,DomEvent:{stopPropagation(){}},
+      marker:(coord,opts)=>({coord,opts,events:{},bindPopup(){return this;},on(name,fn){this.events[name]=fn;return this;},
+        getLatLng(){return coord;},openPopup(){this.opened=true;},getElement(){return null;}}),
+      markerClusterGroup:()=>{const members=new Set();const cluster={members,
+        addLayers:ms=>ms.forEach(m=>members.add(m)),addLayer:m=>members.add(m),removeLayer:m=>members.delete(m),
+        hasLayer:m=>members.has(m),zoomToShowLayer:(m,cb)=>{assert(members.has(m));cb();}};
+        clusters.push(cluster);return cluster;}}});
+  vm.runInContext(extract('function applyViewportFilter(', 'async function selectMsRow('),ctx);
+  vm.runInContext(extract('function _pinGroups(', '// 핀 포커스:'),ctx);
+  vm.runInContext(extract('async function _focusPinOnly(', 'async function focusPin('),ctx);
+  const items=Array.from({length:81},(_,i)=>({단지명:`단지${i}`,지역:'시험구'}));
+  const coords=Object.fromEntries(items.map((_,i)=>[i,[37+i/100,127]]));
+  ctx.plotPins('test',items,coords,{label:x=>x.단지명},{keepView:true});
+  assert.equal(clusters.length,1);
+  assert.equal(clusters[0].members.size,81);
+  assert.equal(layers.size,1,'cluster layer replaces individual map markers');
+  ctx.applyViewportFilter('test',{lock:true});
+  assert.equal(clusters[0].members.size,40);
+  st._selectionGen=1;
+  await ctx._focusPinOnly('test',0,1);
+  assert.equal(st.sel,0);
+  assert.equal(st.markers[0].opened,true);
+  assert.equal(clusters[0].members.size,40);
+});
+
 test('general listing status distinguishes personal-only, source failure, and limited coverage', () => {
   const ctx = vm.createContext({});
   vm.runInContext(extract('function generalStatusText(data){', 'async function loadGeneralListings('), ctx);

@@ -10,6 +10,8 @@
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   :root {
     /* 표면·텍스트 — 차분한 잉크 톤 */
@@ -373,6 +375,9 @@
   .mpin.group { width:26px; height:26px; display:grid; place-items:center; color:#fff; font-size:10px; font-weight:800; }
   .mpin.group.sel { width:28px; height:28px; }
   .mpin.fb { opacity:.55; border-style:dashed; }
+  .mcluster { display:grid; place-items:center; width:38px; height:38px; border:3px solid #fff;
+              border-radius:50%; background:#1d4ed8; color:#fff; font-size:13px; font-weight:800;
+              box-shadow:0 1px 8px rgba(15,23,42,.35); }
   .sec { margin-bottom:18px; }
   .sec h3 { font-size:14px; margin:0 0 8px; color:#475569; }
   .hot { display:flex; gap:6px; flex-wrap:wrap; }
@@ -807,7 +812,7 @@
       <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.</span>
       <button type="button" class="btn" id="laGeneralRetry" onclick="retryGeneralFromAll()">일반매물 다시 수집</button>
     </div>
-    <div id="laSourceScope" role="status" style="display:none;margin:5px 0 8px;color:var(--dim);font-size:12px;line-height:1.5"></div>
+    <div id="laSourceScope" role="status" style="display:none;margin:7px 0 9px;padding:8px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;color:var(--txt);font-size:13px;font-weight:600;line-height:1.45"></div>
     <div id="laBudgetNote" style="display:none;font-size:12px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
       <label id="laSaleFilterLabel" style="font-size:12px">매매 표시
         <select id="laSaleFilter" class="ctrl" onchange="_laSaleFilter=this.value;renderAllListings()">
@@ -4099,8 +4104,9 @@ function applyViewportFilter(mapId, opts){
     const mk=st.markers[k]; if(mk) markerVisibility.set(mk,(markerVisibility.get(mk)||false)||visible.has(+k));
   });
   markerVisibility.forEach((on,mk)=>{
-    if(on && !st.map.hasLayer(mk)) mk.addTo(st.map);
-    if(!on && st.map.hasLayer(mk)) st.map.removeLayer(mk);
+    const layer=st.clusterLayer||st.map;
+    if(on && !layer.hasLayer(mk)) st.clusterLayer?layer.addLayer(mk):mk.addTo(st.map);
+    if(!on && layer.hasLayer(mk)) layer.removeLayer(mk);
   });
   renderMsList(mapId, indices); hideMapCta(mapId); st._vpApplying=false;
   if(prevSel!=null&&indices.includes(prevSel)) selectMsRow(mapId, prevSel);
@@ -4388,10 +4394,19 @@ function plotPins(mapId, items, coords, opt, opts){
   const st=initMap(mapId);
   opts=opts||{};
   st.items=items; st.opt=opt; st.coords=coords;   // 클릭 시 on-demand 지오코딩용
-  new Set(Object.values(st.markers)).forEach(mk=>st.map.removeLayer(mk)); st.markers={};
+  if(st.clusterLayer){ st.map.removeLayer(st.clusterLayer); st.clusterLayer=null; }
+  else new Set(Object.values(st.markers)).forEach(mk=>st.map.removeLayer(mk));
+  st.markers={};
   const fb=opt._fb||new Set();
   const viewSet=st._vpLocked&&st.viewIndices? new Set(st.viewIndices): null;
-  _pinGroups(items,coords).forEach(group=>{
+  const groups=_pinGroups(items,coords), useClusters=groups.length>=80&&typeof L.markerClusterGroup==='function';
+  if(useClusters) st.clusterLayer=L.markerClusterGroup({maxClusterRadius:48,disableClusteringAtZoom:16,
+    showCoverageOnHover:false,spiderfyOnMaxZoom:true,
+    iconCreateFunction:cluster=>{const count=cluster.getChildCount();return L.divIcon({className:'',
+      html:`<div class="mcluster" aria-label="표시 위치 ${count}곳 묶음">${count>999?'999+':count}</div>`,
+      iconSize:[38,38],iconAnchor:[19,19]});}});
+  const visibleMarkers=[];
+  groups.forEach(group=>{
     const i=group[0], it=items[i], c=coords[i], multi=group.length>1;
     const color=multi?'var(--accent)':(opt.color&&opt.color(it))||'var(--accent)';
     const isfb=group.some(j=>fb.has(j)), size=multi?28:16;
@@ -4416,9 +4431,12 @@ function plotPins(mapId, items, coords, opt, opts){
     });
     group.forEach(j=>{st.markers[j]=mk;});
     // 뷰포트 잠금 중이면 화면 안 핀만 올린다 (다시 찾기 결과 유지)
-    if(!viewSet || group.some(j=>viewSet.has(j))) mk.addTo(st.map);
+    if(!viewSet || group.some(j=>viewSet.has(j))){
+      if(st.clusterLayer) visibleMarkers.push(mk); else mk.addTo(st.map);
+    }
   });
-  const ms=[...new Set(Object.values(st.markers))].filter(mk=>st.map.hasLayer(mk));
+  if(st.clusterLayer){ st.clusterLayer.addLayers(visibleMarkers); st.map.addLayer(st.clusterLayer); }
+  const ms=st.clusterLayer?visibleMarkers:[...new Set(Object.values(st.markers))].filter(mk=>st.map.hasLayer(mk));
   const skipFit=opts.keepView || st._vpLocked;
   if(ms.length && !skipFit){ st._suppressCtaUntil=Date.now()+900;
     const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
@@ -4438,9 +4456,14 @@ async function _focusPinOnly(mapId,i,selectionGen){
   const st2=_ms[mapId], mk=st2.markers[i];
   if(st2._selectionGen!==selectionGen) return;
   if(st2.sel!=null && st2.markers[st2.sel]){ const e=st2.markers[st2.sel].getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.remove('sel');} }
-  if(mk){ st2._suppressCtaUntil=Date.now()+900;
-    st2.map.setView(mk.getLatLng(),14,{animate:true}); mk.openPopup();
-    const e=mk.getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.add('sel');} st2.sel=i; } }
+  if(mk){ st2._suppressCtaUntil=Date.now()+1500; st2.sel=i;
+    const show=()=>{ if(st2._selectionGen!==selectionGen) return;
+      mk.openPopup(); const e=mk.getElement(); if(e){const d=e.querySelector('.mpin'); d&&d.classList.add('sel');} };
+    if(st2.clusterLayer){
+      if(!st2.clusterLayer.hasLayer(mk)) st2.clusterLayer.addLayer(mk);
+      st2.clusterLayer.zoomToShowLayer(mk,show);
+    } else { st2.map.setView(mk.getLatLng(),14,{animate:true}); show(); }
+  } }
 async function focusPin(mapId,i){ await selectMsRow(mapId, i); }
 // ===== 범용 대출계산기 (경매/급매/청약/재건축 공통) =====
 function openLoanCalc(price, label, ltv){
