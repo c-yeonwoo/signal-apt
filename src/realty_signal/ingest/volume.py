@@ -11,15 +11,8 @@ import xml.etree.ElementTree as ET
 
 
 def _yms(n: int) -> list[str]:
-    from datetime import date
-
-    y, m, out = date.today().year, date.today().month, []
-    for _ in range(n):
-        m -= 1
-        if m == 0:
-            y, m = y - 1, 12
-        out.append(f"{y}{m:02d}")
-    return list(reversed(out))
+    from realty_signal.time_kst import previous_months
+    return list(reversed(previous_months(n)))
 
 
 def monthly_count(lawd5: str, ym: str, key: str) -> int | None:
