@@ -54,9 +54,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
-      if(url.pathname==='/api/complex-watch') data={ready:true,total:1,moved_total:1,quiet:false,
-        items:[{key:'테스트구|호가단지','단지명':'호가단지','지역':'테스트구','평형':25,'거래가':48000,data_days:1,
-          changes:[{kind:'new_trade','말':'새 실거래'}]}],unavailable:[]};
+      if(url.pathname==='/api/complex-watch') data={ready:true,total:6,moved_total:1,quiet:false,
+        items:[
+          ...[1,2,3,4,5].map(i=>({key:`테스트구|조용한단지${i}`,'단지명':`조용한단지${i}`,'지역':'테스트구',changes:[]})),
+          {key:'테스트구|호가단지','단지명':'호가단지','지역':'테스트구','평형':25,'거래가':48000,data_days:1,
+            changes:[{kind:'new_trade','말':'새 실거래'}]}
+        ],unavailable:[]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/freshness') {
         const now=Date.parse('2026-10-03T12:00:00Z')/1000;
@@ -305,6 +308,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('호가단지',{exact:true}).waitFor();
     assert.match(await page.locator('#dashCxWrap').textContent(),/테스트구/);
     assert.match(await page.locator('#dashCxWrap').textContent(),/새 실거래/);
+    assert.equal(await page.locator('#dashCxWrap [data-complex-index]').first().textContent(),'호가단지',
+      'changed favorite complexes are prioritized ahead of unchanged ones');
+    assert.match(await page.locator('#dashCxWrap').textContent(),/관심단지 전체 6곳 보기/);
+    assert.equal(await page.locator('#dashCxWrap [data-complex-index]').count(),6,
+      'the full list is available inside progressive disclosure');
     assert.equal(await page.locator('#dashCxWrap').evaluate(el=>!!el.closest('details')),false);
     assert.equal(calls.includes('/api/complex-watch'),true,'favorite complexes are loaded for the home');
     assert.equal(calls.includes('/api/asks'),false,'budget candidates are not loaded on the home');
