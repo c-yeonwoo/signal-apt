@@ -577,6 +577,16 @@ def signal_v2_script():
                     headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
+@app.get("/assets/gtx-evidence.json")
+def gtx_evidence():
+    """Versioned, source-linked GTX map evidence; only fetched when the layer is opened."""
+    from fastapi.responses import Response
+
+    return Response((WEB_DIR / "gtx-evidence.json").read_text(encoding="utf-8"),
+                    media_type="application/json; charset=utf-8",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/legal/terms", response_class=HTMLResponse)
 def legal_terms():
     from realty_signal.legal import TERMS_HTML
