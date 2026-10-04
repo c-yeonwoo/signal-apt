@@ -56,6 +56,39 @@ test('unverified regulation is not drawn or labeled as a current designation', (
   assert.doesNotMatch(rendered,/>규제지역<|>비규제</);
 });
 
+test('GTX evidence is opt-in, coexists with map overlays, and separates operating from construction', async () => {
+  const data=JSON.parse(fs.readFileSync(path.join(__dirname,'../src/realty_signal/web/gtx-evidence.json'),'utf8'));
+  const lines=[], pins=[], removed=[];
+  const chain=()=>({addTo(){return this},bindTooltip(){return this},bindPopup(html){pins.push(html);return this}});
+  const L={layerGroup:chain,polyline:(points,style)=>{lines.push({points,style});return chain()},circleMarker:()=>chain()};
+  const pane={style:{}}, legend={style:{display:'none'},innerHTML:'',textContent:''};
+  const map={_gtxLegend:legend,getPane:()=>null,createPane:()=>pane,removeLayer:layer=>removed.push(layer)};
+  const attrs={}; const classes=new Set();
+  const button={classList:{toggle:(c,on)=>on?classes.add(c):classes.delete(c),remove:c=>classes.delete(c)},
+    setAttribute:(k,v)=>{attrs[k]=v}};
+  let calls=0;
+  const ctx=vm.createContext({L,fetch:async()=>{calls++;return {ok:true,json:async()=>data}}});
+  vm.runInContext(extract('const _GTX_COLORS=', 'function attachOverlayControl('),ctx);
+  assert.match(extract('function attachOverlayControl(', 'function initMap('),/button\[data-m\].*button\[data-gtx\]/s);
+  await ctx._toggleGtx(map,button);
+  assert.equal(calls,1);
+  assert.equal(attrs['aria-pressed'],'true');
+  assert.match(legend.innerHTML,/실제 철도 선형·도보거리/);
+  assert.match(legend.innerHTML,/B 공사 중/);
+  assert.equal(lines.filter(x=>!x.style.dashArray).length,2);
+  assert.equal(lines.filter(x=>x.style.dashArray).length,3);
+  assert.ok(pins.some(p=>p.includes('GTX-A')&&p.includes('GTX-B')&&p.includes('운행 중')&&p.includes('공사 중')));
+  assert.ok(pins.some(p=>p.includes('미개통 · 운행 불가')&&p.includes('삼성역 일대')));
+  assert.match(ctx._gtxPopup({...data,asof:'2025-01-01'},'서울',[data.sections[0]]),/기준일 당시 운행 중/);
+  assert.match(legend.innerHTML,/좌표 © OpenStreetMap 기여자/);
+  await ctx._toggleGtx(map,button);
+  assert.equal(attrs['aria-pressed'],'false');
+  assert.equal(legend.style.display,'none');
+  assert.equal(removed.length,1);
+  await ctx._toggleGtx(map,button);
+  assert.equal(calls,1); // shared same-day in-browser evidence cache
+});
+
 test('inline app scripts parse and signal/listing navigation are separate tasks', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));

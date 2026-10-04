@@ -97,11 +97,21 @@
   details.sec > summary::-webkit-details-marker { display:none; }
   details.sec > summary::after { content:'▾'; color:var(--dim); font-weight:400; }
   details.sec[open] > summary::after { content:'▴'; }
-  /* 지도 오버레이 컨트롤(급지/규제/끄기) */
+  /* GTX는 급지/규제와 독립적으로 켜는 근거 레이어 */
   .ov-ctl { display:flex; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.18); }
   .ov-ctl button { border:none; border-right:1px solid var(--line); background:var(--panel); color:var(--dim); font-size:11px; font-weight:600; padding:5px 9px; cursor:pointer; }
   .ov-ctl button:last-child { border-right:none; }
   .ov-ctl button.on { background:var(--accent); color:#fff; }
+  .ov-ctl button[data-gtx] { border-left:2px solid var(--line); color:#1d4ed8; }
+  .ov-ctl button[data-gtx].on { background:#1d4ed8; color:#fff; }
+  .gtx-legend { background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:8px 10px;
+    width:min(238px,calc(100vw - 88px)); max-height:38vh; overflow-y:auto; box-shadow:0 2px 10px #0002;
+    color:var(--txt); font:11px/1.45 "Pretendard",sans-serif; }
+  .gtx-legend b { font-size:12px; }
+  .gtx-legend p { margin:5px 0; color:var(--dim); }
+  .gtx-legend a { color:#1d4ed8; }
+  .gtx-swatch { display:inline-block; width:15px; border-top:3px solid; margin-right:5px; vertical-align:3px; }
+  .gtx-swatch.future { border-top-style:dashed; }
   .filterbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap;
     background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; margin-bottom:14px; }
   .filterbar label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:7px; white-space:nowrap; }
@@ -3932,16 +3942,100 @@ async function setOverlay(map, mode, onClick){
       if(onClick) l.on('click',()=>onClick(f.properties.name)); }
   }).addTo(map);
 }
+const _GTX_COLORS={A:'#c2410c',B:'#2563eb',C:'#16a34a'};
+const _GTX_STATES={operating:'운행 중',not_operating:'미개통 · 운행 불가',under_construction:'공사 중 · 이용 불가'};
+let _gtxEvidencePromise=null;
+function _gtxEvidence(){
+  if(!_gtxEvidencePromise) _gtxEvidencePromise=fetch('/assets/gtx-evidence.json')
+    .then(r=>{ if(!r.ok) throw Error('GTX 자료 요청 실패'); return r.json(); })
+    .then(d=>{ if(!d||!Array.isArray(d.sections)||!d.stations||!d.sources||!/^\d{4}-\d{2}-\d{2}$/.test(d.asof))
+      throw Error('GTX 자료 형식 오류'); return d; })
+    .catch(e=>{ _gtxEvidencePromise=null; throw e; });
+  return _gtxEvidencePromise;
+}
+function _gtxSource(data, key){
+  const url=data.sources[key];
+  // 외부 데이터가 링크 HTML을 주입하거나 근거를 다른 사이트로 바꾸지 못하게 제한한다.
+  return typeof url==='string' && /^https:\/\/(www\.)?molit\.go\.kr\//.test(url)?url:null;
+}
+function _gtxEscape(v){ return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _gtxSectionRows(data){
+  return data.sections.filter(s=>_GTX_COLORS[s.line]&&_GTX_STATES[s.state]&&Array.isArray(s.station_names)
+    &&_gtxSource(data,s.source))
+    .map(s=>({...s,points:s.station_names.map(n=>data.stations[n]).filter(p=>Array.isArray(p)&&p.length===2
+      &&Number.isFinite(+p[0])&&Number.isFinite(+p[1])&&+p[0]>36&&+p[0]<39&&+p[1]>125&&+p[1]<129)}))
+    .filter(s=>s.points.length>=2&&s.points.length===s.station_names.length);
+}
+function _gtxIsStale(data){ return Date.now()-Date.parse(data.asof+'T00:00:00+09:00')>90*86400000; }
+function _gtxPopup(data, name, rows){
+  const title=`<b>${_gtxEscape(name)}역 일대</b><div style="color:#64748b;margin:3px 0">${_gtxEscape(data.asof)} 확인 기준 · 위치는 참고용</div>`;
+  const parts=rows.map(s=>`<div style="margin:4px 0"><b style="color:${_GTX_COLORS[s.line]}">GTX-${s.line}</b> · ${_gtxIsStale(data)?'기준일 당시 ':''}${_GTX_STATES[s.state]} · <a href="${_gtxSource(data,s.source)}" target="_blank" rel="noopener noreferrer">국토부 근거 ↗</a></div>`).join('');
+  return title+parts+'<div style="color:#64748b;margin-top:5px">출입구·도보시간과 가격 상승은 이 지도에서 판정하지 않습니다.</div>';
+}
+function _gtxLegendHtml(data){
+  return `<b>GTX 교통 근거</b> · ${_gtxEscape(data.asof)}${_gtxIsStale(data)?' <span style="color:#b45309">(상태 재확인 필요)</span>':''}`+
+    '<p><span class="gtx-swatch" style="border-color:#c2410c"></span>A 운행 구간 <span class="gtx-swatch future" style="border-color:#c2410c"></span>A 미개통</p>'+
+    '<p><span class="gtx-swatch future" style="border-color:#2563eb"></span>B 공사 중 <span class="gtx-swatch future" style="border-color:#16a34a"></span>C 공사 중</p>'+
+    `<p>${_gtxEscape(data.geometry_note)} ${_gtxEscape(data.coordinate_note)}</p>`+
+    `<a href="${_gtxSource(data,'A_gap')}" target="_blank" rel="noopener noreferrer">A 근거</a> · `+
+    `<a href="${_gtxSource(data,'B')}" target="_blank" rel="noopener noreferrer">B 근거</a> · `+
+    `<a href="${_gtxSource(data,'C')}" target="_blank" rel="noopener noreferrer">C 근거</a>`+
+    '<br><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">역 중심 좌표 © OpenStreetMap 기여자</a>';
+}
+function _drawGtx(map, data){
+  if(map._gtxLayer) map.removeLayer(map._gtxLayer);
+  if(!map.getPane('gtxPane')){ const pane=map.createPane('gtxPane'); pane.style.zIndex='450'; }
+  const layer=L.layerGroup().addTo(map), rows=_gtxSectionRows(data), byStation=new Map();
+  rows.forEach(s=>{
+    L.polyline(s.points,{pane:'gtxPane',color:_GTX_COLORS[s.line],weight:s.state==='operating'?4:3,
+      opacity:s.state==='operating'?0.9:0.8,dashArray:s.state==='operating'?null:'7 6',interactive:false}).addTo(layer);
+    s.station_names.forEach(n=>{ if(!byStation.has(n)) byStation.set(n,[]); byStation.get(n).push(s); });
+  });
+  byStation.forEach((sections,name)=>{
+    const unique=[...new Map(sections.map(s=>[s.line+'|'+s.state,s])).values()];
+    L.circleMarker(data.stations[name],{pane:'gtxPane',radius:6,color:'#fff',weight:2,
+      fillColor:'#0f172a',fillOpacity:1}).bindTooltip(`GTX · ${_gtxEscape(name)}역 일대`)
+      .bindPopup(_gtxPopup(data,name,unique),{maxWidth:260}).addTo(layer);
+  });
+  map._gtxLayer=layer;
+}
+async function _toggleGtx(map, button){
+  const generation=map._gtxGeneration=(map._gtxGeneration||0)+1;
+  map._gtxWanted=!map._gtxWanted;
+  button.classList.toggle('on',map._gtxWanted);
+  button.setAttribute('aria-pressed',String(map._gtxWanted));
+  button.setAttribute('aria-label',`GTX 교통 근거 지도 ${map._gtxWanted?'끄기':'켜기'}`);
+  if(!map._gtxWanted){ if(map._gtxLayer){map.removeLayer(map._gtxLayer);map._gtxLayer=null;}
+    map._gtxLegend.style.display='none'; return; }
+  map._gtxLegend.innerHTML='<b>GTX 근거를 불러오는 중…</b>';
+  map._gtxLegend.style.display='block';
+  try{
+    const data=await _gtxEvidence();
+    if(!map._gtxWanted||generation!==map._gtxGeneration) return;
+    _drawGtx(map,data);
+    map._gtxLegend.innerHTML=_gtxLegendHtml(data);
+  }catch(e){
+    if(!map._gtxWanted||generation!==map._gtxGeneration) return;
+    map._gtxWanted=false; button.classList.remove('on'); button.setAttribute('aria-pressed','false');
+    button.setAttribute('aria-label','GTX 교통 근거 지도 켜기');
+    map._gtxLegend.textContent='GTX 근거를 불러오지 못했습니다. 버튼을 다시 눌러 주세요.';
+  }
+}
 function attachOverlayControl(map, initial, onClick){
   const ctl=L.control({position:'topright'});
   ctl.onAdd=function(){ const d=L.DomUtil.create('div','ov-ctl');
-    d.innerHTML='<button data-m="grade">급지색</button><button data-m="reg">규제</button><button data-m="">끄기</button>';
+    d.innerHTML='<button data-m="grade">급지색</button><button data-m="reg">규제</button><button data-m="">끄기</button><button data-gtx="1" aria-label="GTX 교통 근거 지도 켜기" aria-pressed="false" title="GTX 노선·역 근거 보기">GTX</button>';
     L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
-    d.querySelectorAll('button').forEach(b=>{ if((b.dataset.m||null)===(initial||null)) b.classList.add('on');
+    d.querySelectorAll('button[data-m]').forEach(b=>{ if((b.dataset.m||null)===(initial||null)) b.classList.add('on');
       b.onclick=()=>{ setOverlay(map, b.dataset.m||null, onClick);
-        d.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); }; });
+        d.querySelectorAll('button[data-m]').forEach(x=>x.classList.toggle('on',x===b)); }; });
+    d.querySelector('button[data-gtx]').onclick=e=>_toggleGtx(map,e.currentTarget);
     return d; };
   ctl.addTo(map);
+  const legend=L.control({position:'bottomright'});
+  legend.onAdd=function(){ const d=L.DomUtil.create('div','gtx-legend'); d.style.display='none';
+    L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d); map._gtxLegend=d; return d; };
+  legend.addTo(map);
   _syncRegOverlayButtons();
   setOverlay(map, initial||null, onClick);
 }
