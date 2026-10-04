@@ -65,6 +65,8 @@
   .la-more { display:none; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;
     padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
   .la-more.open { display:flex; }
+  #laSaleFilterLabel { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:10px; max-width:100%; }
+  #laSaleFilter { min-width:0; max-width:100%; box-sizing:border-box; }
   /* 가격대 듀얼 레인지 — 트랙 투명, 썸만 조작 */
   #laPriceFilter input[type=range]{ height:22px; }
   #laPriceFilter input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); border:2px solid #fff; box-shadow:0 1px 3px rgba(2,32,71,.35); cursor:pointer; pointer-events:auto; margin-top:0; }
@@ -471,6 +473,8 @@
     #view-all .ms-map { min-width:0; width:100%; min-height:240px; box-sizing:border-box; }
     #view-all .ms-list .btn { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
     #laPriceFilter,#laPriceFilter > div { min-width:0 !important; }
+    #laMoreFilters > span,#laMoreFilters > label { min-width:0; max-width:100%; flex-wrap:wrap; }
+    #laMoreFilters select { min-width:0; max-width:100%; box-sizing:border-box; }
     #v2DiscoverDlg .v2-panel,#v2ReportDlg .v2-panel { padding:12px; overflow-wrap:anywhere; }
     #v2DiscoverDlg .v2-form label { width:100%; min-width:0; overflow-wrap:anywhere; }
     #v2DiscoverDlg .v2-form input,#v2DiscoverDlg .v2-form select { width:100%; min-width:0; box-sizing:border-box; }
@@ -691,7 +695,8 @@
 <!-- 통합 매물(전체) 탭 -->
 <div id="view-all" style="display:none">
   <div style="padding:20px 20px 0">
-    <h2 class="page-head">매물</h2>
+    <h2 class="page-head">매물 찾기</h2>
+    <p class="page-sub">여러 공급사의 매매 매물을 한곳에서 비교하세요. 공급사 급매·인증 표시는 가격 우위나 현재 판매를 보증하지 않습니다.</p>
     <div id="listingFocus" role="status" aria-live="polite" style="font-size:12px;color:var(--dim);display:none;margin-bottom:10px"></div>
     <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
@@ -700,6 +705,11 @@
       <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
     </div>
     <div id="laBudgetNote" style="display:none;font-size:12px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
+      <label id="laSaleFilterLabel" style="font-size:12px">매매 표시
+        <select id="laSaleFilter" class="ctrl" onchange="_laSaleFilter=this.value;renderAllListings()">
+          <option value="all">전체 매매</option><option value="certified">공급사 인증 표시</option><option value="urgent">공급사 급매 표시</option>
+        </select>
+      </label>
     <div id="laMoreFilters" class="la-more">
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
@@ -1779,9 +1789,11 @@ function _groupOf(v){
   for(const g in _GROUPS) if(_GROUPS[g].includes(v)) return g;
   return null;
 }
-function openTypedList(type){
-  _laSel=new Set([type]);
-  switchTab('all');
+function openTypedList(type,fromHistory=false){
+  _laSel=new Set(_SALE_TYPES.includes(type)||type==='매매'?_SALE_TYPES:[type]);
+  _laSaleFilter=type==='급매'?'urgent':type==='찐매물'?'certified':'all';
+  const filter=document.getElementById('laSaleFilter'); if(filter) filter.value=_laSaleFilter;
+  switchTab('all',fromHistory);
 }
 let _listingSub='all';
 let _focusRegion=null;   // 관심지역 → 매물 좁히기(옵션, 강제 X)
@@ -1859,7 +1871,7 @@ function routeFromHash(){
   let h; try{ h=decodeURIComponent(location.hash.slice(1)); }catch(e){ return false; }
   if(!h){ switchTab('dashboard', true); return true; }
   if(h==='auction-paste'){ switchTab('auction'); openPasteFromClipboard(); return true; }
-  if(_TYPE_HASH[h]){ _laSel=new Set([_TYPE_HASH[h]]); switchTab('all', true); return true; }
+  if(_TYPE_HASH[h]){ openTypedList(_TYPE_HASH[h],true); return true; }
   if(_GONE[h]){ switchTab(_GONE[h], true); return true; }
   if(_ROUTES.includes(h)){ switchTab(h, true); return true; }
   return false;
@@ -3429,7 +3441,9 @@ function openQuicksaleEvidence(btn){
   return openComplex(name,region,{asking:+asking,exclusive_m2:+area,floor:parsedFloor});
 }
 // ===== 통합 매물(전체) — /api/listings/all 정규화 렌더 =====
-const _LA_TYPES=['일반매물','경매','급매','찐매물','청약','재건축'];
+const _SALE_TYPES=['일반매물','급매','찐매물'];
+const _LA_TYPES=['매매','청약','경매','재건축'];
+let _laSaleFilter='all';
 const _LA_COLOR={일반매물:'#2563eb', 경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null, _laAccessDenied=false;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 let _laConfirmedBudget=false;
@@ -3438,7 +3452,7 @@ let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
 function _laViewKey(types){
   return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_laSort,
-    _laPrice?.min,_laPrice?.max,_laPrice?.active]);
+    _laPrice?.min,_laPrice?.max,_laPrice?.active,_laSaleFilter]);
 }
 function _laApplyResponse(types,d,preservePrice=false){
   const price=preservePrice && _laPrice ? {..._laPrice} : null;
@@ -3454,7 +3468,7 @@ function _laApplyResponse(types,d,preservePrice=false){
   const budgetOption=document.querySelector('#laSort option[value="budget"]');
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
-  document.getElementById('laStatus').textContent=`${_laData.length}건 · KB 관측 ${d.asof||'–'}${info.data_age_days!=null?` · 관측 ${info.data_age_days}일 경과`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''}`;
+  document.getElementById('laStatus').textContent=`수집 매물 ${_laData.length}건${info.duplicate_records_collapsed?` · 같은 원천 중복 ${info.duplicate_records_collapsed}건 통합`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''} · KB 관측 ${d.asof||'–'}${info.data_age_days!=null?` · 관측 ${info.data_age_days}일 경과`:''} · 수집 범위 내 결과`;
   initLaPriceFilter();
   if(price && _laPrice){
     _laPrice.active=!!price.active;
@@ -3489,7 +3503,7 @@ function toggleLaMore(){
   const open=box.classList.toggle('open');
   if(btn){ btn.classList.toggle('on', open); btn.textContent=open?'필터 닫기':'필터'; }
 }
-function _laInitSel(){ if(_laSel) return; _laSel=new Set(['일반매물','경매','급매']); if((_profile||{})['청약관심']) _laSel.add('청약'); }
+function _laInitSel(){ if(_laSel) return; _laSel=new Set(_SALE_TYPES); }
 function initLaPriceFilter(){
   const box=document.getElementById('laPriceFilter');
   const priced=_laData.map(x=>x['총액']).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
@@ -3558,10 +3572,30 @@ async function loadAllListings(){
 }
 function renderLaTypeChips(){
   const el=document.getElementById('laTypeChips'); if(!el) return;
+  const selected=t=>t==='매매'?_SALE_TYPES.some(k=>_laSel.has(k)):_laSel.has(t);
   el.innerHTML='<span style="font-size:11px;color:var(--dim)">유형</span>'+_LA_TYPES.map(t=>
-    `<span class="chip${_laSel.has(t)?' on':''}" style="font-size:12px" data-t="${t}">${t}</span>`).join('');
+    `<button type="button" class="chip${selected(t)?' on':''}" aria-pressed="${selected(t)}" style="font-size:12px" data-t="${t}">${t}</button>`).join('');
   el.querySelectorAll('[data-t]').forEach(c=>c.onclick=()=>{ const t=c.dataset.t;
-    _laSel.has(t)?_laSel.delete(t):_laSel.add(t); if(!_laSel.size)_laSel.add(t); loadAllListings(); });
+    const kinds=t==='매매'?_SALE_TYPES:[t], was=selected(t);
+    kinds.forEach(k=>was?_laSel.delete(k):_laSel.add(k));
+    if(!_laSel.size) kinds.forEach(k=>_laSel.add(k));
+    loadAllListings(); });
+  const label=document.getElementById('laSaleFilterLabel');
+  if(label) label.style.display=selected('매매')?'':'none';
+}
+function _laSalePass(x){
+  if(!_SALE_TYPES.includes(x['유형'])||_laSaleFilter==='all') return true;
+  if(Array.isArray(x.supplier_flags)) return x.supplier_flags.includes(_laSaleFilter);
+  return (x.source_labels||[x['유형']]).includes(_laSaleFilter==='certified'?'찐매물':'급매');
+}
+function _laSourceLabel(x){
+  if(!_SALE_TYPES.includes(x['유형'])) return x['유형'];
+  const labels=x.source_labels||[x['유형']];
+  const certified=x.supplier_flags?x.supplier_flags.includes('certified'):labels.includes('찐매물');
+  const urgent=x.supplier_flags?x.supplier_flags.includes('urgent'):labels.includes('급매');
+  return [x.source==='hanbang'?'한방':x.source==='baroezip'?'바로이집':'매매',
+    certified?'공급사 인증 표시':'',urgent?'공급사 급매 표시':'',
+    x.source_conflict?'원천 정보 불일치':''].filter(Boolean).join(' · ');
 }
 function _laAsk(x){
   const v=x&&x['총액'];
@@ -3588,7 +3622,7 @@ function _laPricePass(x){
 function renderAllListings(){
   _laRenderedKey=_laViewKey(_laCurrentTypes);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역']) &&
-    (!_mtBuyOnly || ['STRONG_BUY','BUY'].includes(x['시그널'])) && _laPricePass(x));
+    (!_mtBuyOnly || ['STRONG_BUY','BUY'].includes(x['시그널'])) && _laPricePass(x) && _laSalePass(x));
   const opp=x=>x['기회도']??-1, tot=x=>_laAsk(x);
   const sr=x=>_SIGRANK[x['시그널']]??9;
   rows=rows.slice().sort((a,b)=>{
@@ -3608,22 +3642,22 @@ function renderAllListings(){
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
     '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
-  const rowBadge=x=>`${typeBadge(x['유형'])} ${badge(x['시그널']||'HELD')}`;
+  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'<span class="pill">매매</span>':typeBadge(x['유형'])} ${badge(x['시그널']||'HELD')}`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${x['단지명']||'–'} ${rowBadge(x)}`,
-      right:_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${_laBudgetLabel(x)?`<span style="color:var(--dim)">${_laBudgetLabel(x)}</span> · `:''}${x['유형']} · ${x['시도']?x['시도']+' ':''}${x['지역']||''}${x['지역식별상태']!=='held'&&_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''}`}),
+      right:_SALE_TYPES.includes(x['유형'])?_mtMetric('호가',`<b>${_eok(x['총액'])}</b>`):_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
+      sub:`${_SALE_TYPES.includes(x['유형'])?qsAreaLabel(x.ref||{}):x['평형']!=null?x['평형']+'평':''} · ${esc(_laSourceLabel(x))} · ${x['시도']?x['시도']+' ':''}${x['지역']||''}${_laBudgetLabel(x)?' · '+_laBudgetLabel(x):''}`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="openTypedList('청약')">청약 목록 →</span>`
         : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
       const priced=['일반매물','급매','찐매물','경매'].includes(x['유형']) && x['총액'];
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
-      return `${_buyerFourHtml(x, _eok)}${x.budget_fit?.status==='unknown'?`<div style="font-size:11px;color:var(--warn);margin-top:6px">예산 비교 보류 · ${esc(x.budget_fit.reason||'확정 매수력과 호가를 다시 확인해 주세요.')}</div>`:''}<div class="kv" style="margin-top:8px"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
+      return `${_buyerFourHtml(x, _eok)}${x.budget_fit?.status==='unknown'?`<div style="font-size:11px;color:var(--warn);margin-top:6px">예산 비교 보류 · ${esc(x.budget_fit.reason||'확정 매수력과 호가를 다시 확인해 주세요.')}</div>`:''}<div class="kv" style="margin-top:8px"><span>${esc(_laSourceLabel(x))}</span>${_SALE_TYPES.includes(x['유형'])?`<span>${qsAreaLabel(x.ref||{})}</span>`:x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}${x['지표값']!=null?`<span>${x['지표라벨']} <b>${x['지표값']}${x['지표단위']||''}</b></span>`:''}<span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
         ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
         ${x['유형']==='일반매물'?`<div style="font-size:11px;color:var(--dim);margin-top:5px">한방 매물번호 ${esc(x['ref']?.['hanbang_id']||'–')} · 최신 표본, 현재 판매 여부 미확인</div>`:''}
         ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">자료 확인 필요 · 규칙 기반 참고 점수</div>`:''}
         ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
-        <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(x['key'])}${reportBtn(x['key'])}${acts}</div>`; },
+        <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(x['key'],x.listing_aliases)}${reportBtn(x['key'])}${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
@@ -3633,7 +3667,7 @@ function renderAllListings(){
       return id&&x['지역코드']&&x['단지명']?
         `${x.source||x['유형']}|${x['지역코드']}|${id}|${x['단지명'].trim()}`:null; },
     groupLabel:group=>`${group[0]['단지명']} · ${group.length}개 매물 · ${[...new Set(group.map(x=>x['평형']).filter(Boolean))].slice(0,3).join(' / ')||'면적 확인 필요'}${group.some(x=>x['평형'])?'평':''}`,
-    label:x=>`<b>${x['단지명']}</b> ${x['유형']}<br>${x['지역']||''}${x['평형']!=null?' · '+x['평형']+'평':''}${x['총액']?' · '+_eok(x['총액']):''} · ${x['지표라벨']} ${x['지표값']??''}${x['지표단위']||''}`,
+    label:x=>`<b>${x['단지명']}</b><br>${_SALE_TYPES.includes(x['유형'])?qsAreaLabel(x.ref||{}):x['유형']} · ${_eok(x['총액'])}<br>${esc(_laSourceLabel(x))}`,
   });
 }
 // ===== 재사용 좌우 분할 지도 컴포넌트 (Leaflet + CartoDB dark) =====
@@ -7543,32 +7577,51 @@ let _favRegionIdentity = new Map();
 let _favRegionKeyByName = new Map();
 let _favComplexIdentity = new Map();
 let _watchKeys = new Set();
+const _watchPendingKeys = new Set();
+function _watchAliases(btn){
+  try{ const keys=JSON.parse(btn.dataset.watchAliases||'[]');
+    return [...new Set([btn.dataset.watchKey,...(Array.isArray(keys)?keys:[])])].filter(k=>typeof k==='string');
+  }catch(e){return [btn.dataset.watchKey];}
+}
+function _syncWatchButtons(){
+  document.querySelectorAll('.watch-btn').forEach(b=>{
+    const on=_watchAliases(b).some(key=>_watchKeys.has(key));
+    b.textContent=on?'★ 찜함':'☆ 찜하기'; b.setAttribute('aria-pressed',String(on));
+    b.disabled=_watchAliases(b).some(key=>_watchPendingKeys.has(key));
+  });
+}
 async function loadWatchKeys(){
   try{ const r=await fetch('/api/listing-watch'); if(!r.ok) return;
     const d=await r.json(); _watchKeys=new Set((d.items||[]).map(x=>x.key));
-    document.querySelectorAll('.watch-btn').forEach(b=>{ const on=_watchKeys.has(b.dataset.watchKey);
-      b.textContent=on?'★ 찜함':'☆ 찜하기'; b.setAttribute('aria-pressed',String(on)); });
+    _syncWatchButtons();
   }catch(e){}
 }
-function watchBtn(key){
+function watchBtn(key,aliases=[]){
   if(!key || !/^(급매|찐매물|일반매물|청약|경매):/.test(key)) return '';
-  const on=_watchKeys.has(key);
-  return `<button type="button" class="btn watch-btn" style="padding:3px 10px" data-watch-key="${esc(key)}" aria-pressed="${on}" onclick="event.stopPropagation();toggleListingWatch(this)">${on?'★ 찜함':'☆ 찜하기'}</button>`;
+  aliases=Array.isArray(aliases)?aliases:[];
+  const on=[key,...aliases].some(k=>_watchKeys.has(k));
+  return `<button type="button" class="btn watch-btn" style="padding:3px 10px" data-watch-key="${esc(key)}" data-watch-aliases="${esc(JSON.stringify(aliases))}" aria-pressed="${on}" onclick="event.stopPropagation();toggleListingWatch(this)">${on?'★ 찜함':'☆ 찜하기'}</button>`;
 }
 async function toggleListingWatch(btn){
-  const key=btn.dataset.watchKey, on=_watchKeys.has(key);
-  btn.disabled=true;
+  const aliases=_watchAliases(btn);
+  if(aliases.some(k=>_watchPendingKeys.has(k))) return;
+  aliases.forEach(k=>_watchPendingKeys.add(k));
+  const key=btn.dataset.watchKey, saved=aliases.filter(k=>_watchKeys.has(k)), on=saved.length>0;
+  _syncWatchButtons();
   try{
-    const r=await fetch(on?'/api/listing-watch?key='+encodeURIComponent(key):'/api/listing-watch',
-      on?{method:'DELETE'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
-    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.detail||'매물을 저장하지 못했습니다.'); }
-    if(on) _watchKeys.delete(key); else _watchKeys.add(key);
+    const keys=on?saved:[key];
+    const results=await Promise.allSettled(keys.map(async k=>{
+      const r=await fetch(on?'/api/listing-watch?key='+encodeURIComponent(k):'/api/listing-watch',
+        on?{method:'DELETE'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})});
+      if(!r.ok) throw new Error('매물 찜을 변경하지 못했습니다. 다시 확인해 주세요.');
+      if(on) _watchKeys.delete(k); else _watchKeys.add(k);
+    }));
+    _syncWatchButtons();
+    if(results.some(r=>r.status==='rejected')){await loadWatchKeys();throw new Error('일부 찜 변경에 실패했습니다. 현재 상태를 확인해 주세요.');}
     if(!on) track(EVENTS.LISTING_WATCH_ADD,{kind:key.split(':',1)[0]});
-    document.querySelectorAll('.watch-btn').forEach(b=>{if(b.dataset.watchKey!==key)return;
-      const selected=_watchKeys.has(key); b.textContent=selected?'★ 찜함':'☆ 찜하기';
-      b.setAttribute('aria-pressed',String(selected)); b.disabled=false;});
     if(document.getElementById('view-watch').style.display!=='none') loadListingWatch();
-  }catch(e){ btn.disabled=false; toast(e.message||'매물 찜에 실패했습니다.'); }
+  }catch(e){ toast(e.message||'매물 찜에 실패했습니다.'); }
+  finally{aliases.forEach(k=>_watchPendingKeys.delete(k));_syncWatchButtons();}
 }
 async function saveWatchPriceTarget(btn){
   const key=btn.dataset.watchKey;
@@ -7590,6 +7643,7 @@ async function saveWatchPriceTarget(btn){
 }
 function goWatchCandidate(btn){
   const kind=btn.dataset.kind;
+  if(_SALE_TYPES.includes(kind)){openTypedList('매매');return;}
   switchTab(kind==='청약'?'presale':kind==='일반매물'?'general':kind==='급매'||kind==='찐매물'?'quicksale':'auction');
   if(kind==='찐매물') qsMode('찐매물');
 }
