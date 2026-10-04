@@ -1,12 +1,13 @@
 """사용자 입력 호가와 관측 거래 비교는 근거 부족 시 보류한다."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from realty_signal import api
 from realty_signal.services import quote_check
+from realty_signal.time_kst import today_kst
 
 
 def _detail(*, status="관측", n=4, identity="single_observed", asof=None):
@@ -17,7 +18,7 @@ def _detail(*, status="관측", n=4, identity="single_observed", asof=None):
                                {"층": 11, "가격": 48000, "거래월": "2026-09"},
                                {"층": 13, "가격": 49000, "거래월": "2026-09"},
                                {"층": 20, "가격": 55000, "거래월": "2026-09"}],
-                     "기준일": asof or date.today().isoformat()}}]}
+                     "기준일": asof or today_kst().isoformat()}}]}
 
 
 def test_quote_compares_only_separate_user_asking_against_observed_median():
@@ -32,7 +33,7 @@ def test_quote_holds_for_sparse_stale_unidentified_or_other_area():
     scenarios = [
         (_detail(status="표본적음", n=2), 84.9),
         (_detail(identity="unverified"), 84.9),
-        (_detail(asof=(date.today() - timedelta(days=8)).isoformat()), 84.9),
+        (_detail(asof=(today_kst() - timedelta(days=8)).isoformat()), 84.9),
         (_detail(), 59.8),
     ]
     for detail, area in scenarios:

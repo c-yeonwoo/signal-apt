@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from math import isfinite
 
 from fastapi import APIRouter, Body, HTTPException, Request
@@ -11,6 +10,7 @@ from fastapi.responses import JSONResponse
 from realty_signal import db, store
 from realty_signal.routes import deps
 from realty_signal.services import market_data as md
+from realty_signal.time_kst import today_kst
 
 router = APIRouter(tags=["market"])
 
@@ -27,7 +27,7 @@ def ready():
         c.execute("SELECT 1")
         c.close()
         fresh = md.data_age_days()
-        kb_source_fresh = 0 <= (date.today() - md.kb().last_date.date()).days <= 8
+        kb_source_fresh = 0 <= (today_kst() - md.kb().last_date.date()).days <= 8
         ok = store.CACHE_FILE.exists() and fresh is not None and fresh <= 14
         return JSONResponse({"ready": ok, "kb_source_fresh_for_signal": kb_source_fresh},
                             status_code=200 if ok else 503)
@@ -177,12 +177,11 @@ def freshness(request: Request):
 def signals(only: str | None = None):
     import json
     import logging
-    from datetime import date
     df = md.signals_df()
     recs = json.loads(df.to_json(orient="records", force_ascii=False))
     codes = md.kb().codes
     try:
-        labels = md.assessed_signal_labels(date.today().isoformat())
+        labels = md.assessed_signal_labels(today_kst().isoformat())
     except Exception as exc:  # noqa: BLE001 — 화면 판정은 원시 등급으로 되돌리지 않는다.
         logging.getLogger("realty_signal").warning("signal assessment unavailable: %s", exc)
         labels = {}

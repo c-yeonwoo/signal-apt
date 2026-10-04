@@ -10,6 +10,8 @@ from datetime import date
 from math import isfinite
 from statistics import median as median_of
 
+from realty_signal.time_kst import today_kst
+
 
 def validate_input(asking: float, exclusive_m2: float) -> tuple[float, float]:
     """원천 조회 전에 잘못된 입력을 거른다."""
@@ -67,7 +69,7 @@ def assess(detail: dict, *, asking: float, exclusive_m2: float, floor: int | Non
         asof = date.fromisoformat(comp["기준일"])
     except (KeyError, TypeError, ValueError):
         return hold("비교거래의 산정 기준일을 확인할 수 없습니다.")
-    if not 0 <= (date.today() - asof).days <= 7:
+    if not 0 <= (today_kst() - asof).days <= 7:
         return hold("비교거래 근거가 갱신되지 않았습니다.")
     observed = comp
     if floor is not None:

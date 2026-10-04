@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from realty_signal import jsonx
 from realty_signal import auction, auth, buying_power, config, db, store
 from realty_signal.signals.engine import SignalConfig
+from realty_signal.time_kst import today_kst
 
 log = logging.getLogger("realty_signal")
 
@@ -1000,7 +1001,7 @@ def _display_signal_map() -> dict:
         log.warning("raw signal map unavailable: %s", exc)
         return {}
     try:
-        labels = md.assessed_signal_labels(date.today().isoformat())
+        labels = md.assessed_signal_labels(today_kst().isoformat())
     except Exception as exc:  # noqa: BLE001 — 판정 실패는 원시 BUY 노출 사유가 아니다.
         log.warning("display signal assessment unavailable: %s", exc)
         labels = {}
@@ -1081,9 +1082,7 @@ _SIDO = {"11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "
 
 def _presale_since() -> str:
     """최근 ~4개월 공고부터 (진행중·예정 위주)."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today_kst()
     y, m = today.year, today.month
     m -= 4
     if m <= 0:
@@ -1121,8 +1120,7 @@ def _presale_status(d: dict, today: str) -> tuple[str, str | None]:
 @lru_cache(maxsize=1)
 def _presale():
     from realty_signal.ingest import applyhome
-    from datetime import date, datetime
-    from zoneinfo import ZoneInfo
+    from datetime import date
     config.load_env()
     key = config.public_data_key()
     if not key:
@@ -1141,7 +1139,7 @@ def _presale():
     regions = _regime().get("regions", {})
     codes = _kb().codes or {}
     region_sido = {r: _SIDO.get((c or "")[:2]) for r, c in codes.items()}  # 시군구→시도 (동명이군 구분)
-    today_date = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today_date = today_kst()
     today = today_date.isoformat()
     out = []
     for d in raw:
@@ -1177,11 +1175,8 @@ def _presale_visible_items() -> list[dict]:
 
 def _presale_current(row: dict) -> dict:
     """Recompute a cached announcement's relative date on each read in Korea time."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
     item = dict(row)
-    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today_kst()
     if not any(item.get(key) for key in ("특공접수시작", "특공접수마감", "청약접수시작",
                                          "청약접수마감", "당첨발표", "계약종료")):
         if item.get("다음일정"):
@@ -1407,11 +1402,10 @@ def buying_power_confirm(request: Request, data: dict):
     p = _buyer_params(profile, **kw)
     if p.capital <= 0:
         return JSONResponse({"ok": False, "error": "가용자본을 입력해 주세요."}, status_code=400)
-    from datetime import date
     st = buying_power.statement(p)
     st["가정"]["지역코드"] = selected_code
     st["지역식별"] = identity_status
-    st["확정일"] = date.today().isoformat()
+    st["확정일"] = today_kst().isoformat()
     profile["매수력"] = st
     if p.capital:
         profile["가용자본"] = round(p.capital)
@@ -1476,8 +1470,7 @@ def imjang_visit_save(request: Request, data: dict):
     cx = (data.get("단지") or data.get("complex") or "").strip()
     if not region or not cx:
         return JSONResponse({"ok": False, "error": "지역과 단지가 필요합니다."}, status_code=400)
-    from datetime import date as _date
-    visited = (data.get("방문일") or "").strip() or _date.today().isoformat()
+    visited = (data.get("방문일") or "").strip() or today_kst().isoformat()
     checks = ij.clean_checks(data.get("checks"))
     verdict = (data.get("verdict") or "").strip()
     if verdict and verdict not in ij.VERDICTS:
@@ -2771,8 +2764,7 @@ def _nbhd_week() -> str:
     try:
         return _kb().last_date.strftime("%G-W%V")
     except Exception:  # noqa: BLE001
-        import datetime as _dt
-        return _dt.date.today().strftime("%G-W%V")
+        return today_kst().strftime("%G-W%V")
 
 
 def _local_development_docs(region: str) -> list[dict]:
@@ -3227,13 +3219,11 @@ def _listing_key(kind: str, raw: dict, ref: dict, name: str | None, region: str 
 
 def _build_listings(want: set[str], *, include_private: bool = False) -> list[dict]:
     """통합 매물 정규화. 외부 제휴 매물은 명시적 허용 없으면 읽지 않는다."""
-    from datetime import date
-
     if not include_private:
         want = want - {"급매", "찐매물", "일반매물"}
     grade = {r: (v or {}).get("급지") for r, v in _regime().get("regions", {}).items()}
     try:
-        assessed = md.assessed_signal_labels(date.today().isoformat())
+        assessed = md.assessed_signal_labels(today_kst().isoformat())
     except Exception as exc:  # noqa: BLE001 — 판정 불가 시 원시 등급으로 되돌아가지 않는다.
         log.warning("listing signal assessment unavailable: %s", exc)
         assessed = {}
@@ -3447,7 +3437,7 @@ def _scan_regions() -> list[str]:
         log.warning("급매 대상 지역 시그널 미확인: %s", type(exc).__name__)
         df, valid = None, known
     try:
-        labels = md.assessed_signal_labels(date.today().isoformat()) if df is not None else {}
+        labels = md.assessed_signal_labels(today_kst().isoformat()) if df is not None else {}
     except Exception as exc:  # noqa: BLE001 - 오래된 원시 BUY로 스캔 대상을 고르지 않는다
         log.warning("급매 대상 지역 안전 판정 미확인: %s", type(exc).__name__)
         labels = {}

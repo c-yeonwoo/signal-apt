@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from realty_signal import api, auth, backup, jobs, store
 from realty_signal.ingest import pipeline
+from realty_signal.routes import market
 from realty_signal.services import market_data as md
 
 
@@ -27,16 +28,18 @@ def test_scheduled_backup_never_records_missing_upload_as_success(monkeypatch):
 
 
 def test_ready_distinguishes_app_availability_from_kb_signal_age(monkeypatch, tmp_path):
+    today = date(2026, 10, 5)
+    monkeypatch.setattr(market, "today_kst", lambda: today)
     cache = tmp_path / "kb.parquet"
     cache.touch()
     monkeypatch.setattr(store, "CACHE_FILE", cache)
     monkeypatch.setattr(md, "data_age_days", lambda: 9.0)
-    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(last_date=pd.Timestamp(date.today() - timedelta(days=9))))
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(last_date=pd.Timestamp(today - timedelta(days=9))))
     response = TestClient(api.app).get("/ready")
     assert response.status_code == 200
     assert response.json() == {"ready": True, "kb_source_fresh_for_signal": False}
 
-    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(last_date=pd.Timestamp(date.today() - timedelta(days=8))))
+    monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(last_date=pd.Timestamp(today - timedelta(days=8))))
     assert TestClient(api.app).get("/ready").json()["kb_source_fresh_for_signal"] is True
 
 
