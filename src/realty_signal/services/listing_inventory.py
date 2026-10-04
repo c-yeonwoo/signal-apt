@@ -18,6 +18,16 @@ def _timestamp(row):
     return value if type(value) in (int, float) and isfinite(value) else 0
 
 
+def _aliases(row):
+    identity = _identity(row)
+    key = row.get("key")
+    if identity and identity[0] == "baroezip" and key in {
+            f"급매:{identity[1]}", f"찐매물:{identity[1]}"}:
+        # Supplier category changes do not create a new source listing.
+        return {f"급매:{identity[1]}", f"찐매물:{identity[1]}"}
+    return {key} if key else set()
+
+
 def collapse(rows: list[dict]) -> list[dict]:
     """Collapse only proven same-source IDs, keeping the freshest usable observation.
 
@@ -44,8 +54,13 @@ def collapse(rows: list[dict]) -> list[dict]:
                        -_timestamp(row), str(row.get("key") or "")))
         usable = [r for r in group if not r.get("stale") and not r.get("degraded")] or [selected]
         out.append({**selected,
-                    "listing_aliases": sorted({r["key"] for r in group if r.get("key")}),
+                    "listing_aliases": sorted({key for r in group for key in _aliases(r)}),
                     "source_labels": sorted({r["유형"] for r in group if r.get("유형")}),
                     "supplier_flags": sorted({flag for r in usable for flag in r.get("supplier_flags", [])}),
                     "source_record_count": len(group)})
     return out
+
+
+def index_by_key(rows: list[dict]) -> dict[str, dict]:
+    """Read-only lookup for old saved keys after a supplier category change."""
+    return {key: row for row in collapse(rows) for key in row["listing_aliases"] if key}

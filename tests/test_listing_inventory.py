@@ -7,6 +7,7 @@ from realty_signal.services.listing_inventory import collapse
 from realty_signal.services.property_analysis import snapshot, resolve
 from realty_signal import api
 from realty_signal.services.discovery_v2 import classify
+from realty_signal.services import listing_watch
 
 
 def row(kind="급매", **kw):
@@ -61,8 +62,8 @@ def test_equal_name_price_floor_or_different_source_ids_do_not_prove_identity():
 def test_old_report_keys_resolve_independently_and_private_guard_stays(monkeypatch):
     rows = [row(), row("찐매물")]
     monkeypatch.setattr(api, "_build_listings", lambda kinds, **_: [r for r in rows if r["유형"] in kinds])
-    assert resolve("급매:123", private_allowed=True)["key"] == "급매:123"
-    assert resolve("찐매물:123", private_allowed=True)["key"] == "찐매물:123"
+    assert "급매:123" in resolve("급매:123", private_allowed=True)["listing_aliases"]
+    assert "찐매물:123" in resolve("찐매물:123", private_allowed=True)["listing_aliases"]
     with pytest.raises(PermissionError):
         resolve("찐매물:123", private_allowed=False)
 
@@ -80,3 +81,27 @@ def test_discovery_deduplicates_before_counts_and_pagination(monkeypatch):
     assert result["counts"]["matched"] == 1
     assert result["groups"]["matched"][0]["listing"]["key"] == "찐매물:123"
     assert len(result["groups"]["matched"][0]["listing"]["listing_aliases"]) == 2
+
+
+def test_supplier_category_change_preserves_report_and_watch_lookup(monkeypatch):
+    current = row("찐매물", price_kind="asking", 총액=49000)
+    monkeypatch.setattr(api, "_build_listings", lambda kinds, **_: [current] if "찐매물" in kinds else [])
+    assert resolve("급매:123", private_allowed=True)["key"] == "찐매물:123"
+    saved = [{"key": "급매:123", "kind": "급매", "saved_price": 50000}]
+    view = listing_watch.build(saved, [current])[0]
+    assert view["key"] == "급매:123" and view["current"]["key"] == "찐매물:123"
+    assert view["price_change"] == -1000 and view["alternatives"] == []
+
+
+def test_price_alert_keeps_original_saved_key_after_supplier_category_changes():
+    from realty_signal import db
+    from realty_signal.services import watch_alerts_v2 as alerts
+    original = row(price_kind="asking")
+    db.listing_watch_add(7, original)
+    saved = db.listing_watch_list(7)
+    assert alerts.materialize(7, saved, [original], private_allowed=True) == 0
+    current = row("찐매물", price_kind="asking", 총액=49000)
+    assert alerts.materialize(7, saved, [current], private_allowed=True) == 1
+    assert alerts.materialize(7, saved, [current], private_allowed=True) == 0
+    assert db.listing_watch_list(7)[0]["key"] == "급매:123"
+    assert alerts.list_events(7, private_allowed=True)["unread"] == 1

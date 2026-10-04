@@ -23,8 +23,12 @@ def resolve(key: str, *, private_allowed: bool) -> dict:
     if kind in PRIVATE and not private_allowed:
         raise PermissionError("personal_listing")
     from realty_signal import api
-    row = next((r for r in api._build_listings({kind}, include_private=private_allowed)
-                if r.get("key") == key), None)
+    if kind in {"급매", "찐매물"}:
+        from realty_signal.services.listing_inventory import index_by_key
+        row = index_by_key(api._build_listings({"급매", "찐매물"}, include_private=private_allowed)).get(key)
+    else:
+        row = next((r for r in api._build_listings({kind}, include_private=private_allowed)
+                    if r.get("key") == key), None)
     if row is None:
         raise LookupError("listing_not_found")
     return row

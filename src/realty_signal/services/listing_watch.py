@@ -83,7 +83,9 @@ def _similar(a: dict, b: dict) -> bool:
 
 
 def build(saved: list[dict], current: list[dict]) -> list[dict]:
-    by_key = {row.get("key"): row for row in current if row.get("key")}
+    from realty_signal.services.listing_inventory import collapse, index_by_key
+    current = collapse(current)
+    by_key = index_by_key(current)
     out = []
     for watch in saved:
         row = by_key.get(watch["key"])
