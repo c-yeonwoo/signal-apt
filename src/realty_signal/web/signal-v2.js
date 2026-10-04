@@ -287,10 +287,10 @@
       };
     } catch (_) {
       if (generation === regionGeneration && target.dataset.reportRegion === region) {
-        const note = document.createElement('p');
-        note.className = 'v2-muted';
-        note.textContent = '구조화된 근거를 불러오지 못했습니다. 위 자료의 기준일을 확인해 주세요.';
-        target.appendChild(note);
+        target.innerHTML = '<div class="v2-row v2-caution" role="alert"><b>판정 근거를 확인할 수 없습니다</b>' +
+          '<p>지금 보이는 등급만으로 매수 판단하지 마세요. 근거를 다시 불러와 확인해 주세요.</p>' +
+          '<button type="button" class="btn" id="v2RegionRetry">근거 다시 확인</button></div>';
+        target.querySelector('#v2RegionRetry').onclick = () => paintRegion(region, regionId);
       }
     }
   }
