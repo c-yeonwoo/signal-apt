@@ -249,9 +249,11 @@ test('complex star targets verified code favorite before an old name key', () =>
 
 test('old ambiguous Jung-gu can be explicitly reselected with the verified Seoul code', () => {
   const calls=[];
-  const row={style:{},querySelector:()=>({set onclick(fn){this.handler=fn;row.favoriteClick=fn}})};
+  const row={style:{},querySelector:selector=>({set onclick(fn){
+    if(selector==='.fav') row.favoriteClick=fn;
+  }})};
   const ctx=vm.createContext({
-    document:{createElement:()=>row}, selected:null, _SIGC:{HELD:'#aaa'},
+    document:{createElement:()=>row}, selected:null, _SIGC:{HELD:'#aaa'}, SIG_KO:{HELD:'보류'},
     _REGION_GRADE:{}, _favs:new Set(),
     _favRegionIdentity:new Map([['중구',{status:'needs_reselection'}]]),
     _favRegionKeyByName:new Map(), displaySignal:()=> 'HELD',
@@ -521,7 +523,7 @@ test('first signal report opens a verified visible favorite before the global to
 });
 
 test('signal filter button says which conditions are excluded, not selected', () => {
-  const button={innerHTML:''};
+  const button={innerHTML:'',attributes:{},setAttribute(k,v){this.attributes[k]=v;}};
   const ctx=vm.createContext({
     SIGNALS:['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK','HELD'],
     active:new Set(['STRONG_BUY','BUY','WATCH','SELL_RISK','HELD']),
@@ -532,6 +534,7 @@ test('signal filter button says which conditions are excluded, not selected', ()
   ctx.updateFilterToggleLabel();
   assert.match(button.innerHTML,/제외 1개/);
   assert.doesNotMatch(button.innerHTML,/1개 골라 둠/);
+  assert.equal(button.attributes['aria-expanded'],'false');
 });
 
 test('stale weekly observations do not appear as this week signal changes', async () => {
