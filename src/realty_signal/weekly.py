@@ -18,7 +18,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from dataclasses import asdict
+from hashlib import sha256
 
 from realty_signal import db, store
 from realty_signal.signals.engine import SignalConfig, evaluate
@@ -35,6 +38,7 @@ _MOVER_KO = {"전세수급": "전세수급", "매수우위지수": "매수우위
              "매매모멘텀": "매매 주간증감"}
 _MOVER_UNIT = {"매매모멘텀": "%"}
 STALE_DAYS = 10          # KB 는 주 1회 — 10일 넘게 안 바뀌면 갱신이 멈춘 것
+WEEKLY_DIFF_CACHE_VERSION = "v2"  # 계산 의미·표시 라벨 변경 시 이전 결과를 재사용하지 않는다.
 
 
 def _sig_map(df) -> dict[str, str]:
@@ -140,10 +144,22 @@ def _stale_days(as_of: str) -> int:
 
 
 def latest(kb=None, supply=None) -> dict:
-    """홈에서 부르는 진입점. as_of 단위로 캐시 — 엔진을 두 번 돌리는 게 몇 초 걸린다."""
-    kb = kb if kb is not None else store.load()
+    """홈 진입점. 관측일·계산 설정·원천 파일 갱신에 따라 캐시를 분리한다."""
+    if kb is not None or supply is not None:
+        # 호출자가 넘긴 합성/별도 자료를 운영 파일의 캐시 키와 섞지 않는다.
+        return compute(kb, supply)
+    kb = store.load()
     as_of = str(kb.last_date.date())
-    key = f"weekly_diff:{as_of}"
+    config_digest = sha256(json.dumps(asdict(SignalConfig()), sort_keys=True).encode()).hexdigest()[:12]
+    file_revisions = []
+    for path in (store.CACHE_FILE, store.SUPPLY_FILE):
+        try:
+            stat = path.stat()
+            file_revisions.append(f"{stat.st_mtime_ns}:{stat.st_size}")
+        except OSError:
+            file_revisions.append("missing")
+    revision = sha256("|".join(file_revisions).encode()).hexdigest()[:12]
+    key = f"weekly_diff:{WEEKLY_DIFF_CACHE_VERSION}:{as_of}:{config_digest}:{revision}"
     cached = db.kv_get(key)
     if isinstance(cached, dict) and cached.get("as_of") == as_of:
         return {**cached, "stale_days": _stale_days(as_of), "cached": True}
