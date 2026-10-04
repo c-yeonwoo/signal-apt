@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
@@ -110,7 +111,7 @@ def test_confirmed_assumptions_survive_reload(client):
     assert d["확정"] == d["최대매수가"]
 
 
-def test_region_query_applies_current_regulation(client, monkeypatch):
+def test_region_query_applies_stored_regulation_scenario(client, monkeypatch):
     source = SimpleNamespace(codes={"강남구": "1168000000"},
                              regions=["강남구"], identity_verified=True)
     monkeypatch.setattr(md, "kb", lambda: source)
@@ -120,6 +121,7 @@ def test_region_query_applies_current_regulation(client, monkeypatch):
     assert seoul["지역식별"] == "verified"
     assert seoul["가정"]["지역코드"] == "kb:1168000000"
     assert seoul["규제"]["규제지역"] is True
+    assert seoul["규제"]["정책상태"] == "unverified"
     assert seoul["규제"]["절대한도"] == 60_000        # 시가 15억 이하 → 6억
     assert seoul["규제"]["적용만기"] == 30
     assert seoul["LTV상한"] == 0.70
@@ -249,13 +251,30 @@ def test_explicit_finance_code_does_not_fall_back_during_kb_outage(client, monke
     assert "매수력" not in (client.get("/api/auth/me").json()["profile"] or {})
 
 
-def test_regulation_api_lists_current_designations(client):
+def test_unverified_regulation_is_not_published_as_current_designation(client):
     d = client.get("/api/regulation").json()
     assert d["asof"].startswith("2026-07-01")
-    assert len(d["map"]) == 40                       # 서울 25 + 경기 15
-    assert "투기과열지구" in d["map"]["강남구"]
-    assert "화성시 동탄구" in d["map"]
-    assert "화성시" in d["notes"]
+    assert d["status"] == "unverified" and d["map"] == {} and d["notes"] == {}
+    assert app_api._regulation_of("강남구", "서울") == []
+    tool = app_api._advisor_tool("get_regulation", {"region": "강남구"})
+    assert tool["status"] == "unverified"
+    assert tool["current_designations"] is None and tool["LTV"] is None
+    assert "규제지역" not in tool and "대출한도" not in tool
+    row = app_api._adv_region_row({"region": "강남구", "display_signal": "BUY",
+                                   "assessment_status": "ready"})
+    assert row["규제검증상태"] == "unverified" and "규제지역" not in row
+
+
+def test_regulation_designations_require_current_official_review_metadata(client, monkeypatch):
+    monkeypatch.setattr(app_api, "today_kst", lambda: date(2026, 10, 4))
+    def manifest(review_due):
+        return {"status": "verified", "rules": [{"id": "regions", "status": "verified",
+            "sources": ["https://www.molit.go.kr/"], "effective_from": "2026-07-01",
+            "effective_until": None, "verified_at": "2026-10-04", "review_due": review_due}]}
+    monkeypatch.setattr(app_api._reg, "policy_manifest", lambda: manifest("2026-10-04"))
+    assert "투기과열지구" in client.get("/api/regulation").json()["map"]["강남구"]
+    monkeypatch.setattr(app_api._reg, "policy_manifest", lambda: manifest("2026-10-03"))
+    assert client.get("/api/regulation").json()["map"] == {}
 
 
 def test_confirm_rejects_zero_capital(client):

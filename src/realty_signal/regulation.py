@@ -107,7 +107,8 @@ POLICY_LOAN_NOTE = (
     "디딤돌·보금자리론·은행 생애최초 특례보증은 부부합산 소득·주택가격 요건이 따로 있어 "
     "여기 계산과 한도가 다를 수 있어요."
 )
-DISCLAIMER = f"{AS_OF} 기준 공개 규제 요약이며, 실제 한도는 은행 심사·신용도에 따라 달라집니다."
+DISCLAIMER = (f"{AS_OF} 저장 공개자료 기반 가정이며 규제·대출 규칙의 최신성은 미검증입니다. "
+              "실제 지정과 한도는 공식 고시·금융기관 심사로 확인하세요.")
 
 
 def _norm(region: str | None) -> str:
@@ -147,7 +148,7 @@ def is_metro(region: str | None, sido: str | None = None) -> bool:
     return is_regulated(region)
 
 
-# 40곳 모두 투기과열지구·조정대상지역·토지거래허가구역 삼중 지정(토허는 아파트 한정).
+# 2026-07 저장 규칙의 참고 후보. 현재 지정 현황으로 사용하려면 policy_manifest 검증이 필요하다.
 DESIGNATION_TAGS = ("투기과열지구", "조정대상지역", "토지거래허가구역")
 # 지도가 구 단위로 못 쪼개는 곳 — 시 전체가 아니라 일부만 규제다.
 PARTIAL_NOTE = {"화성시": "동탄구만 규제 (2026.7.1~)"}
@@ -159,7 +160,7 @@ def regulated_regions() -> list[str]:
 
 
 def designations(region: str | None, sido: str | None = None) -> list[str]:
-    """해당 지역의 지정 현황. 공백 표기차('성남시분당구')를 흡수한다."""
+    """저장 규칙의 과거 지정 후보. 현재 유효성을 보증하지 않는다."""
     name = _norm(region).replace(" ", "")
     sido = sido or sido_hint(region)
     hit = any(r.replace(" ", "") == name for r in REGULATED_GYEONGGI) and sido in (None, "경기")
