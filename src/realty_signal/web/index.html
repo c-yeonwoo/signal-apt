@@ -543,18 +543,28 @@
   .signal-mode-tabs button[aria-selected="true"] { background:var(--accent-weak); color:var(--accent); }
   #sideOpenToggle:not([hidden]) { display:inline-flex; align-items:center; min-height:44px; }
   #sideOpenToggle[hidden] { display:none !important; }
-  .signal-assessment { margin:12px 16px 4px; padding:14px 17px; max-width:none; border:1px solid var(--line);
+  .signal-assessment { width:100%; box-sizing:border-box; margin:4px 0 6px; padding:14px 17px; max-width:none; border:1px solid var(--line);
     border-left:4px solid var(--accent); border-radius:12px; background:var(--panel); }
-  .signal-assessment .v2-report-lead { margin:0; color:var(--txt); font-size:16px; line-height:1.6; font-weight:650; }
-  .signal-assessment .v2-muted { margin:6px 0 0; font-size:12px; }
-  .signal-assessment-caution { margin:8px 0 0; padding:8px 10px; border-radius:8px; background:#fff7ed;
-    color:#9a3412; font-size:13px; line-height:1.5; }
-  .signal-evidence-details { margin-top:10px; border-top:1px solid var(--line); padding-top:8px; }
+  .signal-assessment-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+  .signal-assessment .v2-report-lead { margin:0; color:var(--txt); font-size:16px; line-height:1.45; font-weight:650; }
+  .signal-assessment .v2-muted { margin:3px 0 0; font-size:12px; }
+  .signal-assessment-highlights { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:10px; margin-top:10px; }
+  .signal-assessment-highlight { min-width:0; padding:9px 11px; border-radius:9px; background:var(--bg); }
+  .signal-assessment-highlight h3 { margin:0 0 5px; font-size:12px; line-height:1.4; color:var(--dim); }
+  .signal-assessment-fact { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:2px 0; font-size:13px; line-height:1.45; }
+  .signal-assessment-fact b { flex:0 0 auto; color:var(--txt); }
+  .signal-assessment-fact span { min-width:0; color:var(--dim); text-align:right; }
+  .signal-assessment-caution { background:#fff7ed; color:#9a3412; }
+  .signal-assessment-caution .signal-assessment-fact b,
+  .signal-assessment-caution .signal-assessment-fact span { color:#9a3412; }
+  .signal-assessment-highlight > p { margin:0; font-size:13px; line-height:1.45; }
+  .signal-assessment-unknown { padding-top:4px; color:#9a3412; font-size:12px !important; }
+  .signal-evidence-details { margin-top:8px; border-top:1px solid var(--line); padding-top:4px; }
   .signal-evidence-details > summary { cursor:pointer; min-height:40px; display:flex; align-items:center;
     color:var(--accent); font-size:14px; font-weight:700; }
   .signal-pane { flex:1; min-height:0; overflow:auto; background:var(--bg); }
   .signal-pane[hidden] { display:none !important; }
-  #haesolPanel { max-height:none; overflow:visible; padding:8px 18px 28px; max-width:820px; margin:0 auto; }
+  #haesolPanel { width:100%; max-height:none; overflow:visible; box-sizing:border-box; padding:8px 16px 14px; max-width:none; margin:0; }
   #signalPanelTrend { display:flex; flex-direction:column; }
   .signal-trend-status { color:var(--dim); font-size:13px; padding:0 14px; }
   .signal-trend-status:not(:empty) { padding-top:10px; padding-bottom:10px; }
@@ -597,7 +607,12 @@
     .signal-listings-link { margin-left:auto; }
     .signal-mode-tabs { padding:6px 10px; gap:2px; }
     .signal-mode-tabs button { flex:1 0 auto; padding:8px 10px; font-size:14px; }
-    #haesolPanel { padding:4px 12px 24px; }
+    #haesolPanel { padding:4px 12px 12px; }
+    .signal-assessment { padding:11px 12px; }
+    .signal-assessment-heading { display:block; }
+    .signal-assessment-highlights { grid-template-columns:minmax(0,1fr); gap:7px; margin-top:8px; }
+    .signal-assessment-fact { align-items:flex-start; flex-wrap:wrap; gap:2px 8px; }
+    .signal-assessment-fact span { text-align:left; }
     #sigMapWrap { min-height:300px; }
   }
 </style>

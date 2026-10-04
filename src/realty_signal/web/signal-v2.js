@@ -42,6 +42,17 @@
     return `<div class="v2-row"><b>${esc(reason.label)}</b><br>${value}${threshold}${verdict}${source}${prior}</div>`;
   }
 
+  function briefReason(item, includeComparison = false) {
+    if (!item) return '';
+    const unit = item.unit === '%/주' ? '%/주' : item.unit ? ` ${esc(item.unit)}` : '';
+    const value = item.value == null ? '자료 미확인' : `${esc(item.value)}${unit}`;
+    const threshold = item.threshold == null ? '' : ` · 기준 ${esc(item.threshold)}${unit}`;
+    const prior = !includeComparison || item.previous_value == null || String(item.previous_value) === String(item.value)
+      ? '' : ` · 이전 ${esc(item.previous_value)}${unit}`;
+    const status = item.role === 'driver' ? (item.passing ? '충족' : '미충족') : '';
+    return `<div class="signal-assessment-fact"><b>${esc(item.label)}</b><span>${value}${threshold}${prior}${status ? ` · ${status}` : ''}</span></div>`;
+  }
+
   function listingQuickAnswer(report, question) {
     const lines = report.lines || {};
     if (question === 'price') return {
@@ -214,9 +225,19 @@
           '이전 발행 판정에서 확인된 근거 변화가 없습니다.';
       const cautionLead = report.cautions?.[0];
       target.innerHTML = `<section class="signal-assessment" aria-label="지역 시그널 요약과 근거">
-        <p class="v2-report-lead">${esc(a.summary)}</p>
-        <p class="v2-muted">KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
-        ${cautionLead ? `<p class="signal-assessment-caution">주의: ${esc(cautionLead.label)}${cautionLead.value == null ? '' : ` ${esc(cautionLead.value)}${cautionLead.unit === '%/주' ? '%/주' : ''}`}</p>` : ''}
+        <div class="signal-assessment-heading">
+          <p class="v2-report-lead">${esc(a.summary)}</p>
+          <p class="v2-muted">KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
+        </div>
+        <div class="signal-assessment-highlights">
+          <section class="signal-assessment-highlight"><h3>판정 이유</h3>
+            ${report.positive.length ? report.positive.slice(0,2).map(item => briefReason(item)).join('') : '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
+          </section>
+          <section class="signal-assessment-highlight signal-assessment-caution"><h3>함께 확인할 점</h3>
+            ${cautionLead ? briefReason(cautionLead, true) : '<p>연결된 지표에서 별도 반대 근거를 찾지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
+            ${report.unknowns.length ? `<p class="signal-assessment-unknown">미확인 자료 ${report.unknowns.length}건 · 자세한 항목은 근거에서 확인</p>` : ''}
+          </section>
+        </div>
         <details class="signal-evidence-details"><summary>판정 근거와 한계 보기</summary>
           <h3>이번 판정의 근거</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
             '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
