@@ -1050,6 +1050,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     // 360 CSS px 화면을 200% 확대했을 때의 리플로우 폭을 근사한다.
     // OS/브라우저 실제 확대·스크린리더 실사용 검증을 대신하지는 않는다.
     await page.setViewportSize({width:180,height:400});
+    await page.evaluate(()=>{document.getElementById('view-all').style.display='block';});
+    const zoomListingMap=await page.evaluate(()=>({viewport:innerWidth,
+      page:document.documentElement.scrollWidth,
+      map:document.getElementById('laMap').getBoundingClientRect().width,
+      available:document.getElementById('laMap').parentElement.getBoundingClientRect().width}));
+    assert(zoomListingMap.page<=zoomListingMap.viewport,`200% reflow listing page overflows: ${JSON.stringify(zoomListingMap)}`);
+    assert(zoomListingMap.map<=zoomListingMap.available,`200% reflow listing map overflows: ${JSON.stringify(zoomListingMap)}`);
+    await page.evaluate(()=>{document.getElementById('view-all').style.display='none';});
     await page.evaluate(()=>SignalV2.openDiscovery());
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.locator('#v2DiscoverResults [data-v2-card]').first().waitFor();
