@@ -1134,7 +1134,6 @@
   document.getElementById('v2DiscoverForm')?.addEventListener('input', updateDiscoveryExtraSummary);
   document.getElementById('v2DiscoverForm')?.addEventListener('change', updateDiscoveryExtraSummary);
   document.getElementById('v2DiscoverCompare')?.addEventListener('click', () => {
-    document.getElementById('v2DiscoverDlg').close();
     listingCompareOpen();
   });
   document.getElementById('v2DiscoverForm')?.elements.region_code.addEventListener('change', () => {
