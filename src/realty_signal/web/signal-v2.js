@@ -34,7 +34,8 @@
     const value = reason.value == null ? '자료 미확인' : `${esc(reason.value)}${reason.unit === '%/주' ? '%/주' : ''}`;
     const source = reason.inherited ? ` · ${esc(reason.source_region)} 권역 자료` : '';
     const threshold = reason.threshold == null ? '' : ` · 관찰선 ${esc(reason.threshold)}${reason.unit === '%/주' ? '%/주' : ''}`;
-    const prior = reason.previous_value == null ? '' : ` · 이전 발행 ${esc(reason.previous_value)}${reason.unit === '%/주' ? '%/주' : ''}`;
+    const prior = reason.previous_value == null || String(reason.previous_value) === String(reason.value)
+      ? '' : ` · 이전 발행 ${esc(reason.previous_value)}${reason.unit === '%/주' ? '%/주' : ''}`;
     const verdict = reason.role === 'driver' ? (reason.passing ? ' · 조건 충족' : ' · 조건 미충족') : '';
     return `<div class="v2-row"><b>${esc(reason.label)}</b><br>${value}${threshold}${verdict}${source}${prior}</div>`;
   }

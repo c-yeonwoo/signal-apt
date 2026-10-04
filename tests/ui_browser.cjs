@@ -39,8 +39,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           summary:'지역 신호만 보여 줍니다. 개별 매물의 가격 판단은 별도입니다.',raw_grade:'BUY',
           reasons:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
           change:{type:'first_observation',changed_reasons:[]}},
-        positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
-        cautions:[{reason_id:'buyer_interest',label:'매수심리 관찰선 미충족',value:68,threshold:70,unit:'지수',role:'driver',passing:false}],
+        positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,previous_value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
+        cautions:[{reason_id:'buyer_interest',label:'매수심리 관찰선 미충족',value:68,previous_value:66,threshold:70,unit:'지수',role:'driver',passing:false}],
         unknowns:[]};
       if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) regionReport=data;
       if(decoded==='/api/series/테스트구') data={metrics:{},volume:null};
@@ -806,6 +806,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
     await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
+    const regionEvidence=await page.locator('#haesolPanel').textContent();
+    assert.doesNotMatch(regionEvidence,/이전 발행 180/);
+    assert.match(regionEvidence,/이전 발행 66/);
     const explanationCallsBeforeRegion=explanationPayloads.length;
     await page.locator('#v2RegionCounter').click();
     await page.locator('#v2RegionExplanation').getByText(/전세수급 자료와 반대 근거/).waitFor();

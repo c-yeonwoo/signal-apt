@@ -383,6 +383,20 @@ test('first signal report opens a verified visible favorite before the global to
   assert.equal(ctx._defaultSignalRegion(),'강북구');
 });
 
+test('signal filter button says which conditions are excluded, not selected', () => {
+  const button={innerHTML:''};
+  const ctx=vm.createContext({
+    SIGNALS:['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK','HELD'],
+    active:new Set(['STRONG_BUY','BUY','WATCH','SELL_RISK','HELD']),
+    activeGrade:new Set(['A','B','C','D','E']), _filtersOpen:false,
+    document:{getElementById:()=>button},
+  });
+  vm.runInContext(extract('function updateFilterToggleLabel(){', 'function renderFilters(){'),ctx);
+  ctx.updateFilterToggleLabel();
+  assert.match(button.innerHTML,/제외 1개/);
+  assert.doesNotMatch(button.innerHTML,/1개 골라 둠/);
+});
+
 test('stale weekly observations do not appear as this week signal changes', async () => {
   const wrap = {innerHTML:''}, events = [];
   let payload = {ready:true, as_of:'2026-09-21', stale_days:12,
