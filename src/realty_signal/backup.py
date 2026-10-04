@@ -132,6 +132,12 @@ def run_backup(keep: int = 14) -> str | None:
         stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
         key = f"signalapt/app-{stamp}.db.gz"
         s3.put_object(Bucket=c["bucket"], Key=key, Body=data)
+        # A successful PUT does not prove that the object can be read or restored.
+        # Keep older backups until the new object passes the same restore check
+        # operators use for their read-only drill.
+        verified = verify_remote(key)
+        if verified["sha256"] != sha256(data).hexdigest():
+            raise ValueError("backup_remote_checksum_mismatch")
         # 오래된 백업 정리 (최근 keep개만 유지)
         try:
             objs = s3.list_objects_v2(Bucket=c["bucket"], Prefix="signalapt/app-").get("Contents", [])
