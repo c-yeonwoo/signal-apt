@@ -88,6 +88,25 @@ def test_stale_quote_above_budget_is_explicitly_unverified_and_ranked_last():
     assert "원천에서 단지" in conflict["verify_next"]
 
 
+def test_conflicting_source_quote_is_never_a_verified_budget_match_or_top_verify():
+    unknown = _row("unknown", price=None, region="강남구")
+    conflict_within = _row("conflict-within", price=50_000)
+    conflict_above = _row("conflict-above", price=120_000)
+    for row in (conflict_within, conflict_above):
+        row["source_conflict"] = True
+    out = discovery.discover([conflict_above, conflict_within, unknown], {
+        "max_price_manwon": 60_000, "prefer_region": "노원구",
+    })
+    assert out["counts"] == {"matched": 0, "verify": 3, "exceeded": 0, "explore": 0}
+    assert [item["listing"]["name"] for item in out["groups"]["verify"]] == [
+        "unknown", "conflict-within", "conflict-above",
+    ]
+    for item in out["groups"]["verify"][1:]:
+        assert item["constraints"][0]["status"] == "unknown"
+        assert "원천 ID" in item["recommendation_reason"]
+        assert "실제 호가" in item["verify_next"]
+
+
 def test_discovery_route_explains_invalid_input_without_exposing_error_codes(monkeypatch):
     monkeypatch.setattr(reports_v2, "_require_feature", lambda _name: None)
     with pytest.raises(HTTPException) as error:
