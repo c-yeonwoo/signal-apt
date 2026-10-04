@@ -397,6 +397,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       listings:[],asof:'2026-09-28',meta:{private_access:true,general_refresh_failed:true}}));
     assert.equal(await page.locator('#laSourceWarning').isVisible(),true);
     assert.match(await page.locator('#laSourceWarning').textContent(),/현재 목록은 전체가 아니며/);
+    await page.setViewportSize({width:180,height:800});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),
+      'source recovery notice must fit the narrow viewport');
+    await page.setViewportSize({width:360,height:800});
     generalRefreshCooldown=true;
     await page.locator('#laGeneralRetry').click();
     await page.getByText(/10분이 지나야 다시 수집/).waitFor();
