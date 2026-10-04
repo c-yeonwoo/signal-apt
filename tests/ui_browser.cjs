@@ -1188,6 +1188,30 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.setViewportSize({width:1280,height:800});
     assert.equal(await page.locator('#signalSide').isVisible(),true);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
+    const regionAction=page.locator('#signalSide #list .row-select').first();
+    assert.equal(await regionAction.getAttribute('type'),'button');
+    assert.equal(await regionAction.locator('.fav').count(),0,'favorite action stays separate from region selection');
+    await page.locator('#filterToggle').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await regionAction.evaluate(el=>el===document.activeElement),true,
+      'Tab from the filter reaches region selection before the favorite button');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#sigbadge').evaluate(el=>el===document.activeElement),true,
+      'keyboard region selection moves focus to the new report heading');
+    await page.evaluate(()=>renderFilters());
+    await page.locator('#filterToggle').click();
+    assert.equal(await page.locator('#filterToggle').getAttribute('aria-expanded'),'true');
+    const buyChip=page.locator('#filters button[data-signal="BUY"]');
+    const beforeChip=await buyChip.getAttribute('aria-pressed');
+    await buyChip.focus();
+    await page.keyboard.press('Space');
+    assert.notEqual(await buyChip.getAttribute('aria-pressed'),beforeChip);
+    assert.equal(await buyChip.evaluate(el=>el===document.activeElement),true,
+      'keyboard focus remains on the recreated filter button');
+    await page.keyboard.press('Space');
+    assert.equal(await buyChip.getAttribute('aria-pressed'),beforeChip);
+    await page.locator('#filterToggle').click();
+    assert.equal(await page.locator('#filterToggle').getAttribute('aria-expanded'),'false');
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
     await page.locator('#v2ReportBody .v2-field-link').first().waitFor();
     const desktopReport=await page.locator('#v2ReportDlg').evaluate(el=>({left:el.getBoundingClientRect().left,

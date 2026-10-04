@@ -167,7 +167,7 @@
   .filters { display:flex; gap:8px; flex-wrap:wrap; }
   .chip { padding:8px 12px; min-height:36px; border:1px solid var(--line); border-radius:12px; cursor:pointer;
           background:var(--panel); color:var(--txt); font-size:14px; font-weight:600; user-select:none;
-          display:inline-flex; align-items:center; }
+          font-family:inherit; display:inline-flex; align-items:center; }
   .chartbar .chip { font-size:15px; padding:8px 14px; min-height:40px; border-radius:14px; font-weight:700; }
   .chip.on { color:#fff; border-color:var(--accent); background:var(--accent); }
   #list { flex:1; overflow:auto; }
@@ -175,6 +175,10 @@
          align-items:center; gap:8px; flex-wrap:wrap; }
   .row:hover { background:#f8fafc; }
   .row.sel { background:var(--accent-weak); }
+  .row-select { flex:1; min-width:0; min-height:44px; border:0; padding:0; background:transparent;
+                color:inherit; font:inherit; text-align:left; cursor:pointer; display:flex;
+                align-items:center; gap:8px; flex-wrap:wrap; }
+  .row-select:focus-visible { outline:3px solid var(--accent); outline-offset:3px; border-radius:4px; }
   .row .nm { font-weight:700; font-size:16px; }
   .row .mn { width:100%; color:var(--dim); font-size:14px; line-height:1.45; }
   .row .fav { border:0; background:transparent; font-size:20px; line-height:1; min-width:44px; min-height:44px; padding:4px 2px; }
@@ -736,7 +740,7 @@
           <option value="인천">인천</option>
           <option value="지방·광역">지방 · 광역</option>
         </select>
-        <button id="filterToggle" class="side-filter-btn" type="button" onclick="toggleFilters()">신호·급지 <span id="filterCaret">▾</span></button>
+        <button id="filterToggle" class="side-filter-btn" type="button" aria-controls="filterPanel" aria-expanded="false" onclick="toggleFilters()">신호·급지 <span id="filterCaret">▾</span></button>
         <div id="filterPanel" style="display:none;flex-direction:column;gap:8px">
           <div class="filters" id="filters"></div>
         </div>
@@ -5319,13 +5323,17 @@ function updateFilterToggleLabel(){
   const off = SIGNALS.length - active.size + (5 - (typeof activeGrade!=='undefined'?activeGrade.size:5));
   const cnt = off>0 ? ` <span style="color:var(--accent)">· 제외 ${off}개</span>` : '';
   btn.innerHTML = `신호·급지${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
+  btn.setAttribute('aria-expanded',String(_filtersOpen));
 }
 function renderFilters(){
   const f = document.getElementById('filters'); f.innerHTML = '';
   SIGNALS.forEach(s => {
-    const el = document.createElement('span');
+    const el = document.createElement('button'); el.type='button';
     el.className = 'chip' + (active.has(s)?' on':''); el.textContent = SIG_KO[s]||s;
-    el.onclick = () => { active.has(s)?active.delete(s):active.add(s); renderFilters(); renderList(); };
+    el.dataset.signal=s;
+    el.setAttribute('aria-pressed',String(active.has(s)));
+    el.onclick = e => { active.has(s)?active.delete(s):active.add(s); renderFilters(); renderList();
+      if(e.detail===0) f.querySelector(`button[data-signal="${s}"]`)?.focus({preventScroll:true}); };
     f.appendChild(el);
   });
   // 지역 급지 필터 (상~하급지)
@@ -5333,9 +5341,12 @@ function renderFilters(){
   g.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;align-items:center';
   g.innerHTML = '<span style="font-size:14px;font-weight:700;color:var(--dim);align-self:center">급지</span>';
   [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].forEach(([code,lbl]) => {
-    const el = document.createElement('span');
+    const el = document.createElement('button'); el.type='button';
     el.className = 'chip' + (activeGrade.has(code)?' on':''); el.textContent = lbl;
-    el.onclick = () => { activeGrade.has(code)?activeGrade.delete(code):activeGrade.add(code); renderFilters(); renderList(); };
+    el.dataset.grade=code;
+    el.setAttribute('aria-pressed',String(activeGrade.has(code)));
+    el.onclick = e => { activeGrade.has(code)?activeGrade.delete(code):activeGrade.add(code); renderFilters(); renderList();
+      if(e.detail===0) f.querySelector(`button[data-grade="${code}"]`)?.focus({preventScroll:true}); };
     g.appendChild(el);
   });
   f.appendChild(g);
@@ -5362,21 +5373,22 @@ function rowEl(r, lv){
     && _favRegionIdentity.get(r.region)?.status!=='ready';
   const faved = _favs.has('region:'+r.region);
   const favRef = _favRegionKeyByName.get(r.region) || (r.region_id?.startsWith('kb:')?r.region_id:null);
-  row.innerHTML = `<span class="nm">${disp}</span>${badge(displaySignal(r))}
-    <button type="button" class="fav" aria-label="${unresolvedFav&&favRef?`${esc(r.group)} ${esc(r.region)}를 관심지역으로 재선택`:unresolvedFav?'기존 관심지역의 구분 확인':favRef?`${esc(r.group)} ${esc(r.region)} 관심지역 ${faved?'해제':'저장'}`:'지역 코드 확인 후 저장 가능'}" aria-pressed="${faved?'true':'false'}" title="${unresolvedFav&&favRef?`${esc(r.group)} ${esc(r.region)}로 새 관심지역 저장`:unresolvedFav?'기존 관심지역의 구분이 필요합니다':favRef?'즐겨찾기':'지역 코드 확인 후 저장할 수 있습니다'}" style="cursor:pointer;color:${unresolvedFav?'var(--danger)':faved?'#b45309':'var(--dim)'};margin-left:auto;${unresolvedFav?'font-size:11px':''}">${unresolvedFav&&favRef?'재선택':unresolvedFav||!favRef?'확인 필요':faved?'★':'☆'}</button>
-    <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${diff}</b> · `:''}<span style="color:var(--dim)">${shared}</span>${gwonLabel(r['수급출처'])}</span>`;
+  row.innerHTML = `<button type="button" class="row-select" ${selected===r.region?'aria-current="true"':''} aria-label="${esc(r.group)} ${esc(r.region)} · ${esc(SIG_KO[displaySignal(r)]||displaySignal(r))} 보기"><span class="nm">${esc(disp)}</span>${badge(displaySignal(r))}
+    <span class="mn">${gtag?gtag+' · ':''}${diff?`<b style="color:var(--txt)">${esc(diff)}</b> · `:''}<span style="color:var(--dim)">${esc(shared)}</span>${gwonLabel(r['수급출처'])}</span></button>
+    <button type="button" class="fav" aria-label="${unresolvedFav&&favRef?`${esc(r.group)} ${esc(r.region)}를 관심지역으로 재선택`:unresolvedFav?'기존 관심지역의 구분 확인':favRef?`${esc(r.group)} ${esc(r.region)} 관심지역 ${faved?'해제':'저장'}`:'지역 코드 확인 후 저장 가능'}" aria-pressed="${faved?'true':'false'}" title="${unresolvedFav&&favRef?`${esc(r.group)} ${esc(r.region)}로 새 관심지역 저장`:unresolvedFav?'기존 관심지역의 구분이 필요합니다':favRef?'즐겨찾기':'지역 코드 확인 후 저장할 수 있습니다'}" style="cursor:pointer;color:${unresolvedFav?'var(--danger)':faved?'#b45309':'var(--dim)'};margin-left:auto;${unresolvedFav?'font-size:11px':''}">${unresolvedFav&&favRef?'재선택':unresolvedFav||!favRef?'확인 필요':faved?'★':'☆'}</button>`;
   row.querySelector('.fav').onclick = (e)=>{ e.stopPropagation();
     if(favRef) toggleFav('region', favRef, r.region);
     else if(unresolvedFav) openFavList();
     else toast('지역 코드를 확인할 수 없어 관심지역 저장을 보류합니다.'); };
-  row.onclick = () => selectRegion(r.region);
+  row.querySelector('.row-select').onclick = () => selectRegion(r.region, true);
+  row.onclick = e => { if(e.target===row) selectRegion(r.region,true); };
   return row;
 }
 // 전세수급·매수우위가 KB 권역(강북14/강남11/시도) 단위 상속값일 때 표기
 function gwonLabel(src){
   if(!src) return '';
   const s = src.replace('14개구','권').replace('11개구','권');
-  return ` <span class="gwon" title="KB는 전세수급·매수우위를 ${src} 단위로만 발표합니다. 이 두 지표는 ${s} 공통값이며, 구별 차별화는 매매모멘텀·입주물량·입지 모형 가격 차이·급지에서 나옵니다.">${s} 공통</span>`;
+  return ` <span class="gwon" title="KB는 전세수급·매수우위를 ${esc(src)} 단위로만 발표합니다. 이 두 지표는 ${esc(s)} 공통값이며, 구별 차별화는 매매모멘텀·입주물량·입지 모형 가격 차이·급지에서 나옵니다.">${esc(s)} 공통</span>`;
 }
 function header(cls, key, label, count, lv){
   const h = document.createElement('div'); h.className = cls;
@@ -5494,7 +5506,7 @@ function toggleOverlayMenu(e){
   if(open){ const close=(ev)=>{ if(!m.contains(ev.target) && ev.target.id!=='ovlBtn'){ m.style.display='none'; document.removeEventListener('click',close); } };
     setTimeout(()=>document.addEventListener('click',close),0); }
 }
-async function selectRegion(region){
+async function selectRegion(region, focusHeading=false){
   if(_favRegionKeyByName.size && !_favs.has('region:'+region)) _otherSignalRegionsExpanded=true;
   selected = region; renderList();
   const r = allSignals.find(x => x.region===region);
@@ -5505,7 +5517,8 @@ async function selectRegion(region){
   }
   if(_signalTrendRegion!==region){ _signalTrendRegion=null; _lastM=null; }
   setSignalView('trend');
-  document.getElementById('sigbadge').innerHTML = `${region} ${badge(displaySignal(r))}`;
+  document.getElementById('sigbadge').innerHTML = `${esc(region)} ${badge(displaySignal(r))}`;
+  if(focusHeading) document.getElementById('sigbadge').focus({preventScroll:true});
   const ss=document.getElementById('sigsub');
   if(ss) ss.textContent = `KB ${meta?.last_date||'기준일 미확인'} 기준 · 지역 시장 신호, 개별 매물 판정 아님`;
   document.getElementById('haesolPanel').textContent = '판정 근거를 확인하고 있습니다…';
