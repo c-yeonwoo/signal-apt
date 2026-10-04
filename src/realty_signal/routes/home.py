@@ -50,7 +50,8 @@ def weekly_change(request: Request):
             pass
         # 자리를 비운 동안 놓친 것 — '이번 주 변화' 는 직전 1주만 보므로 따로 계산한다
         if uid:
-            out["comeback"] = _comeback_for(uid, favs, out.get("as_of"))
+            out["comeback"] = _comeback_for(
+                uid, favs, out.get("as_of"), current if out["current_check_ready"] else None)
             try:
                 from realty_signal.services import decision_log
                 out["holds"] = decision_log.changes(uid)
@@ -65,7 +66,8 @@ def weekly_change(request: Request):
                 "signals": [], "movers": [], "mine": [], "rest": [], "my_movers": []}
 
 
-def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
+def _comeback_for(uid: int, favs: set[str], as_of: str | None,
+                  current_signals: dict[str, str] | None = None) -> dict:
     """복귀 브리핑을 계산한다. 기준점 이동은 브라우저의 열람 확인 뒤에 별도 처리한다."""
     from realty_signal.services import comeback, market_data as md
 
@@ -73,7 +75,7 @@ def _comeback_for(uid: int, favs: set[str], as_of: str | None) -> dict:
         return {"ready": False, "reason": "no_as_of"}
     try:
         kb_dates = sorted({str(d.date()) for d in md.kb().long["date"].unique()})
-        out = comeback.compute(uid, favs, as_of, kb_dates)
+        out = comeback.compute(uid, favs, as_of, kb_dates, current_signals=current_signals)
     except Exception as e:  # noqa: BLE001
         log.error("복귀 브리핑 실패 uid=%s: %s", uid, e)
         return {"ready": False, "reason": "error", "detail": str(e)}

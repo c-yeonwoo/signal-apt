@@ -59,16 +59,20 @@ def test_weekly_change_splits_my_regions(client, monkeypatch):
 def test_weekly_change_does_not_upgrade_raw_buy_when_current_held(client, monkeypatch):
     monkeypatch.setattr(weekly, "for_user", lambda _favs: {
         **_FAKE_WEEK, "mine": list(_FAKE_WEEK["signals"]), "rest": []})
+    monkeypatch.setattr(home_routes, "_comeback_for",
+                        lambda _uid, _favs, _asof, current_signals=None: {"current": current_signals})
     monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"강남구": "HELD"})
     d = client.get("/api/weekly-change").json()
     assert d["current_check_ready"] is True
     assert d["mine"][0]["to"] == "BUY"  # 감사용 과거 계산은 보존
     assert d["mine"][0]["current_verified"] is False
+    assert d["comeback"]["current"] == {"강남구": "HELD"}
 
     monkeypatch.setattr(app_api, "_display_signal_map", lambda: (_ for _ in ()).throw(OSError()))
     d = client.get("/api/weekly-change").json()
     assert d["current_check_ready"] is False
     assert d["mine"][0]["current_verified"] is False
+    assert d["comeback"]["current"] is None
 
 
 def test_weekly_change_failure_is_not_silence(client, monkeypatch):

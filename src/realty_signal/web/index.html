@@ -2156,37 +2156,37 @@ function _renderComeback(d){
   if(k.quiet){
     el.innerHTML=_dashCard(
       `<div style="font-size:16px;font-weight:750;margin-bottom:4px">${k.weeks}주 만이네요</div>
-       <div style="font-size:14px;color:var(--dim);line-height:1.6">그 사이 등급이 바뀐 지역은 없었습니다.
-         조용한 ${k.weeks}주였습니다 · 기준일 ${k.as_of}</div>`,
+       <div style="font-size:14px;color:var(--dim);line-height:1.6">저장된 과거 계산 기록에는 등급 변화가 없습니다.
+         현재 판정은 시그널 화면에서 따로 확인하세요 · 기준일 ${esc(k.as_of)}</div>`,
       'margin-bottom:14px;border-left:3px solid var(--sig-neutral)');
     return;
   }
-  const row = v => `<div onclick="openNbhd('${v.region}')" style="display:flex;align-items:center;gap:8px;
+  const row = v => `<div data-region="${esc(v.region||'')}" onclick="openNbhd(this.dataset.region)" style="display:flex;align-items:center;gap:8px;
       padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;flex-wrap:wrap">
-    <b style="min-width:92px;font-size:13.5px">${v.region}</b>
-    <span style="font-size:12.5px;color:var(--dim)">${v.from_ko}</span>
-    <span style="color:${v.up?'var(--sig-buy)':'var(--sig-sell)'};font-weight:800">${v.up?'▲':'▼'}</span>
-    <span style="font-size:13px;font-weight:700;color:${v.up?'var(--sig-buy)':'var(--sig-sell)'}">${v.to_ko}</span>
+    <b style="min-width:92px;font-size:13.5px">${esc(v.region||'')}</b>
+    <span style="font-size:12.5px;color:var(--dim)">${esc(v.from_ko||'')}</span>
+    <span style="color:${v.current_verified?(v.up?'var(--sig-buy)':'var(--sig-sell)'):'var(--dim)'};font-weight:800">${v.up?'▲':'▼'}</span>
+    <span style="font-size:13px;font-weight:700;color:${v.current_verified?(v.up?'var(--sig-buy)':'var(--sig-sell)'):'var(--dim)'}">${v.current_verified?'':'당시 '}${esc(v.to_ko||'')}</span>
     ${v.steps>1?`<span style="font-size:10.5px;color:var(--dim)">${v.steps}단계</span>`:''}
-    ${_buyerChip(v.buyer)}
-    <span style="margin-left:auto;font-size:11.5px;color:var(--accent)">동네 리포트 →</span></div>`;
+    ${v.current_verified?_buyerChip(v.buyer):''}
+    <span style="margin-left:auto;font-size:11.5px;color:${v.current_verified?'var(--accent)':'var(--sig-watch)'}">${v.current_verified?'동네 리포트 →':'과거 계산 · 현재 판정 확인 필요 →'}</span></div>`;
 
-  const path = v => (v.path||[]).map(s=>`${s.date} ${s.from_ko}→${s.to_ko}`).join(' · ');
+  const path = v => (v.path||[]).map(s=>`${esc(s.date)} ${esc(s.from_ko)}→${esc(s.to_ko)}`).join(' · ');
   const mineH = mine.length ? `
     <div style="font-size:12px;color:var(--dim);margin:10px 0 2px">내 관심지역</div>
     ${mine.map(row).join('')}
     ${mine.filter(v=>v.steps>1).map(v=>`<div style="font-size:11px;color:var(--dim);padding:4px 0 0">
-        ${v.region} 경로 — ${path(v)}</div>`).join('')}
-    ${mine[0]&&mine[0].buyer?`<div style="font-size:12.5px;color:var(--ink-2,var(--txt));margin-top:8px;line-height:1.6">
-        ${mine[0].buyer.why}</div>`:''}` : '';
+        ${esc(v.region||'')} 경로 — ${path(v)}</div>`).join('')}
+    ${mine[0]?.current_verified&&mine[0].buyer?`<div style="font-size:12.5px;color:var(--ink-2,var(--txt));margin-top:8px;line-height:1.6">
+        ${esc(mine[0].buyer.why)}</div>`:''}` : '';
 
   const restH = rest.length ? _dashMore(`그 외 ${k.rest_total}곳 보기`,
     rest.map(row).join('')) : '';
 
   el.innerHTML=_dashCard(
     `<div style="font-size:16px;font-weight:750;margin-bottom:2px">${k.weeks}주 만이네요 — 그 사이 이런 일이 있었습니다</div>
-     <div style="font-size:12.5px;color:var(--dim)">등급 변화 ${t.regions||0}곳
-       (하향 ${t.down||0} · 상향 ${t.up||0}) · ${k.prev_as_of} → ${k.as_of}</div>
+     <div style="font-size:12.5px;color:var(--dim)">과거 계산 등급 변화 ${t.regions||0}곳
+       (하향 ${t.down||0} · 상향 ${t.up||0}) · ${esc(k.prev_as_of)} → ${esc(k.as_of)}</div>
      ${mineH||`<div style="font-size:13px;color:var(--dim);margin-top:10px">관심지역에는 변화가 없었습니다.</div>`}
      ${restH}`,
     'margin-bottom:14px;border-left:3px solid var(--accent)');
