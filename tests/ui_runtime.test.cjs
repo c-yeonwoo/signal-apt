@@ -762,6 +762,24 @@ test('listing price line shows comparable conditions but never turns missing dat
   assert.match(signalV2,/listingPriceLine\(x\.listing\.price_comparison\)/);
 });
 
+test('trade-evidence sort puts supported lower quotes first and unverified rows last', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('function _laTradePriceEvidence(', 'function renderAllListings(){'),ctx);
+  const lower={기회도:10,price_comparison:{상태:'관측비교',호가차이율:-12,표본수:3}};
+  const near={기회도:90,price_comparison:{상태:'관측비교',호가차이율:-2,표본수:8}};
+  const equal={기회도:50,price_comparison:{상태:'관측비교',호가차이율:0,표본수:5}};
+  const unknown={기회도:100,price_comparison:{상태:'보류',호가차이율:null,표본수:0}};
+  assert.ok(ctx._laCompareTradePrice(lower,near)<0);
+  assert.ok(ctx._laCompareTradePrice(near,equal)<0);
+  assert.ok(ctx._laCompareTradePrice(equal,unknown)<0);
+  assert.ok(ctx._laCompareTradePrice(unknown,near)>0);
+  assert.equal(ctx._laTradePriceEvidence({...lower,price_comparison:{상태:'관측비교',호가차이율:null,표본수:5}}),null);
+  assert.equal(ctx._laTradePriceEvidence({...lower,price_comparison:{상태:'관측비교',호가차이율:-1,표본수:2}}),null);
+  assert.match(html,/같은 면적 실거래보다 낮은순/);
+  assert.match(html,/if\(_laSort==='trade_low'\) return _laCompareTradePrice\(a,b\)/);
+  assert.match(html,/할인율 아님/);
+});
+
 test('merged watch button preserves existing aliases and removes only that listing on explicit toggle', async () => {
   const saved=new Set(['찐매물:123','급매:123','일반매물:999']),calls=[];
   const button={dataset:{watchKey:'급매:123',watchAliases:'["급매:123","찐매물:123"]'},setAttribute(){}};
