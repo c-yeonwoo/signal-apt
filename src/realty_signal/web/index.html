@@ -326,6 +326,9 @@
   .ms-row .sub { color:var(--dim); font-size:12px; margin-top:4px; line-height:1.45; }
   #laList .ms-row .r1 { align-items:flex-start; flex-wrap:wrap; gap:4px 10px; }
   #laList .ms-row .nm { min-width:0; flex:1 1 155px; }
+  #laList .ms-row .badge, #qsList .ms-row .badge, #psList .ms-row .badge, #auctionList .ms-row .badge {
+    display:inline-block; max-width:100%; box-sizing:border-box; white-space:normal; overflow-wrap:anywhere; vertical-align:middle;
+  }
   #laList .ms-row .sub { margin-top:6px; font-size:13px; line-height:1.4; }
   #laList .r1 > span:last-child { min-width:0; max-width:100%; }
   #laList .la-price { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:3px 6px; font-size:13px; overflow-wrap:anywhere; }
@@ -1774,6 +1777,10 @@ window.addEventListener('resize', () => {
 });
 const SIG_KO={STRONG_BUY:'강력매수',BUY:'매수',WATCH:'관망',NEUTRAL:'중립',SELL_RISK:'매도주의',SELL:'매도',HELD:'판단 보류'};
 const badge = s => `<span class="badge ${s}">${SIG_KO[s]||s}</span>`;
+const regionSignalBadge = s => {
+  const grade=Object.hasOwn(SIG_KO,s)?s:'HELD';
+  return `<span class="badge ${grade}" title="지역 시장 시점 신호입니다. 이 매물의 호가 평가나 매수 권고가 아닙니다.">지역 신호 · ${SIG_KO[grade]}</span>`;
+};
 const displaySignal = r => r?.assessment_status==='ready' &&
   ['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK'].includes(r?.display_signal) ? r.display_signal : 'HELD';
 const won = n => n==null ? '–' : (n>=10000 ? (n/10000).toFixed(1)+'억' : Math.round(n)+'만');
@@ -2615,7 +2622,7 @@ async function _loadBudgetWatch(){
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
       <span class="pill" style="font-size:10px">${x['유형']||'매물'}</span>
       <b style="font-size:13px">${x['단지명']||'–'}</b>
-      ${badge(safeMarketSignal(x['지역']))}
+      ${regionSignalBadge(x['시그널']||'HELD')}
       ${cause}
       <span style="margin-left:auto;font-size:12.5px;font-variant-numeric:tabular-nums">
         <b>${_eok(x['총액'])}</b> ${drop}</span></div>`;
@@ -2968,7 +2975,7 @@ async function _loadDashBudget(){
       + ` <span style="font-size:10px">(대출 ${_eok(z['대출'])} · 실효 LTV ${eff||'–'}% · 매수력 엔진)</span></div>`;
     if(listings.length){
       h+=listings.map(L=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="switchTab('all')">
-        <span class="pill" style="font-size:10px">${L['유형']}</span><b style="min-width:90px">${L['단지명']||'–'}</b>${badge(safeMarketSignal(L['지역']))}
+        <span class="pill" style="font-size:10px">${L['유형']}</span><b style="min-width:90px">${L['단지명']||'–'}</b>${regionSignalBadge(L['시그널']||'HELD')}
         <span style="margin-left:auto;color:var(--dim);font-size:12px">${L['지역']||''} · ${_priceLabel(L)}</span></div>`).join('');
       h+=`<div style="margin-top:10px"><span class="btn" style="padding:5px 12px" onclick="switchTab('all')">매물 목록 →</span></div>`;
     } else if(inb.length){
@@ -3513,7 +3520,7 @@ function renderQuicksale(){
     '아직 확인된 수집 결과가 없습니다. 원천 상태를 확인하세요.';
   const accent = _qsMode==='찐매물' ? '#0f766e' : '#ea580c';
   mapSplit('qsList','qsMap',rows,{
-    summary:m=>({nm:`${m['단지명']||'–'} ${_qsMode==='찐매물'?'<span class="pill" style="background:#ccfbf1;color:#0f766e">인증 표시</span> ':''}${m['stale']||source.stale?'<span class="pill">지난 결과</span> ':''}${badge(safeRadarSignal(m))}`,
+    summary:m=>({nm:`${m['단지명']||'–'} ${_qsMode==='찐매물'?'<span class="pill" style="background:#ccfbf1;color:#0f766e">인증 표시</span> ':''}${m['stale']||source.stale?'<span class="pill">지난 결과</span> ':''}${regionSignalBadge(safeRadarSignal(m))}`,
       right:_mtMetric('호가', `<b>${_eok(m['호가'])}</b>`),
       sub:`${m['시도']?m['시도']+' ':''}${m['지역']||''}${safeRadarSignal(m)!=='HELD'&&_mtGradeTag(m['지역'])?' · '+_mtGradeTag(m['지역']):''} · ${qsAreaLabel(m)} · 공급사 ${_qsMode==='찐매물'?'인증':'급매'} 표시`}),
     detail:m=>`<div class="kv"><span>호가 <b>${_eok(m['호가'])}</b></span><span>${qsAreaLabel(m)}</span>
@@ -3869,7 +3876,7 @@ function renderAllListings(){
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
     '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
-  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${badge(x['시그널']||'HELD')}`;
+  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${regionSignalBadge(x['시그널']||'HELD')}`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${esc(x['단지명']||'–')} ${rowBadge(x)}`,
       right:_SALE_TYPES.includes(x['유형'])
@@ -4867,7 +4874,7 @@ function renderPresale(){
     .filter(r => inFocus(r['지역']||'') && _mtPass(r['지역']));
   document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 청약 단지가 없습니다.';
   mapSplit('psList','psMap',rows,{
-    summary:r=>({nm:`${esc(r['단지명']||'–')} ${r['거주지일치']?'<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="시·도와 시군구만 일치합니다. 우선공급 자격은 모집공고에서 확인하세요.">거주지 일치</span>':''} ${badge(safeMarketSignal(r['지역']))} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
+    summary:r=>({nm:`${esc(r['단지명']||'–')} ${r['거주지일치']?'<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="시·도와 시군구만 일치합니다. 우선공급 자격은 모집공고에서 확인하세요.">거주지 일치</span>':''} ${regionSignalBadge(r['시그널']||'HELD')} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
       right:_mtMetric('청약', psStatusBadge(r['상태'],r['Dday'])),
       sub:`${r['지역']||''}${_mtGradeTag(r['지역'])?' · '+_mtGradeTag(r['지역']):''} · ${r['주택구분']||''} · ${subAddr(r['주소'],r['지역'])}`}),
     detail:r=>{ const id='psd'+r['관리번호']; loadPsTypes(r['관리번호'],id);
@@ -5810,7 +5817,7 @@ async function renderAha(){
     const top=(d.cards||[]).filter(c=>c['예산내']).slice(0,3);
     el.innerHTML=`<div style="font-size:12px;color:var(--dim);margin-bottom:6px">매수가능 <b style="color:var(--txt)">${_eok(d.budget)}</b> · <b style="color:var(--accent)">통합 매물 추천</b></div>`
       + (topL.length? `<div style="display:flex;flex-direction:column;gap:5px">`+topL.map(L=>`<div onclick="switchTab('all')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px">
-          <span><span class="pill" style="font-size:10px;margin-right:4px">${L['유형']}</span><b style="font-size:13px">${L['단지명']||'–'}</b></span><span>${badge(safeMarketSignal(L['지역']))}</span></div>`).join('')+`</div>`
+          <span><span class="pill" style="font-size:10px;margin-right:4px">${L['유형']}</span><b style="font-size:13px">${L['단지명']||'–'}</b></span><span>${regionSignalBadge(L['시그널']||'HELD')}</span></div>`).join('')+`</div>`
         : (top.length? `<div style="display:flex;flex-direction:column;gap:5px">`+top.map(c=>`<div onclick="selectRegion('${c.region}')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px">
           <b style="font-size:13px">${c.region}</b><span>${badge(safeMarketSignal(c.region))}</span></div>`).join('')+`</div>`
         : `<div style="font-size:12px;color:var(--dim)">예산 내 STRONG_BUY 매물이 없습니다.</div>`))
@@ -6906,7 +6913,7 @@ function renderAuction(rows){
   mapSplit('auctionList','auctionMap',rows,{
     summary:r=>{ const dl=daysTo(r['입찰기일']);
       const ready=r['입찰상태']==='conditional_bid';
-      return {nm:`${r['단지명']||'–'} ${badge(safeMarketSignal(r['region']))} ${ready?'':`<span class="pill">${r['입찰상태']==='no_bid'?'목표 미달':'확인 필요'}</span>`}`,
+      return {nm:`${r['단지명']||'–'} ${regionSignalBadge(r['지역시그널']||'HELD')} ${ready?'':`<span class="pill">${r['입찰상태']==='no_bid'?'목표 미달':'확인 필요'}</span>`}`,
         right:_mtMetric(ready?'검토용 상한':'입찰 판단', ready?`<b style="color:#16a34a">${won(r['권장입찰가'])}</b>`:'<b style="color:#d97706">보류</b>'),
         sub:`${r['region']||''}${_mtGradeTag(r['region'])?' · '+_mtGradeTag(r['region']):''}${ready?' · 총비용 우위 '+r['총비용우위율']+'%':''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
     detail:r=>`<div class="kv">

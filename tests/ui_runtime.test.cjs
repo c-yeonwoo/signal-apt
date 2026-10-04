@@ -619,7 +619,8 @@ test('radar cards and map ignore legacy cross-area discounts and show exclusive 
     _qsMode:'급매', _qsList:[{단지명:'비교단지',전용면적:59,평형:'84',호가:50000,급매갭:-37.5,중위시세:80000}],
     _qsCertList:[], _qsData:{급매:{state:'ready'}}, _qsViewKey:()=>'',
     mapSplit:(_list,_map,rows,options)=>{rendered={rows,options};},
-    badge:()=>'', safeRadarSignal:()=> 'HELD', _mtMetric:(label,value)=>label+value,
+    regionSignalBadge:grade=>`지역 신호 · ${grade==='HELD'?'판단 보류':grade}`,
+    safeRadarSignal:()=> 'HELD', _mtMetric:(label,value)=>label+value,
     _eok:n=>(n/10000)+'억', txCostsSlot:()=>'', watchBtn:()=>'', reportBtn:()=>'',
     loanBtn:()=>'', cxDetailBtn:()=>'', cxSigBtn:()=>'', naverBtn:()=>'', esc:String,
   });
@@ -630,6 +631,7 @@ test('radar cards and map ignore legacy cross-area discounts and show exclusive 
   const shown=JSON.stringify(card)+rendered.options.detail(row)+rendered.options.label(row);
   assert.match(card.right,/호가.*5억/);
   assert.match(card.sub,/전용 59㎡/);
+  assert.match(card.nm,/지역 신호 · 판단 보류/);
   assert.match(shown,/공급사 급매 표시/);
   assert.doesNotMatch(shown,/-37\.5|8억|84평|중위시세/);
   assert.equal(rendered.options.color(row),rendered.options.color({...row,급매갭:0}));
