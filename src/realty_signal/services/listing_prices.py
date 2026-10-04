@@ -2,6 +2,7 @@
 
 from realty_signal import db
 from realty_signal.services import quote_check, property_analysis
+from realty_signal.services import listing_price_history
 from realty_signal.services.listing_inventory import SALE_KINDS
 
 
@@ -32,4 +33,4 @@ def attach(rows: list[dict]) -> list[dict]:
             detail = {"status": "unavailable"}
         comparison = quote_check.assess_listing(detail, property_analysis.snapshot(row))
         out.append({**row, "price_comparison": comparison})
-    return out
+    return listing_price_history.attach(out)

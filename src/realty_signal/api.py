@@ -3633,6 +3633,15 @@ def _preserve_unscanned(path, listings, scan):
     return listings + old
 
 
+def _record_listing_price_history(source: str, listings: list[dict]) -> None:
+    """History writes follow a successful source-cache publish; failure is non-fatal."""
+    try:
+        from realty_signal.services import listing_price_history
+        listing_price_history.record_source_rows(source, listings)
+    except Exception as exc:  # noqa: BLE001 — current feed remains usable if history storage is unavailable.
+        log.warning("listing price history write failed for %s: %s", source, exc)
+
+
 def quicksale_refresh(data: dict = Body(default={})):
     """급매 레이더 갱신. body {regions:[...]} 없으면 BUY+ ∪ 관심 지역 스캔."""
     import time
@@ -3649,6 +3658,7 @@ def quicksale_refresh(data: dict = Body(default={})):
               "count": len(listings), "_scan_ver": _QUICKSALE_SCAN_VER}
     from realty_signal.storage import atomic_json
     atomic_json(QUICKSALE_FILE, jsonx.loads(jsonx.dumps(result)))
+    _record_listing_price_history("baroezip", listings)
     _record_radar_refresh(QUICKSALE_FILE, status)
     return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}
 
@@ -3669,6 +3679,7 @@ def certified_refresh(data: dict = Body(default={})):
               "count": len(listings), "_scan_ver": _CERTIFIED_SCAN_VER}
     from realty_signal.storage import atomic_json
     atomic_json(CERTIFIED_FILE, jsonx.loads(jsonx.dumps(result)))
+    _record_listing_price_history("baroezip", listings)
     _record_radar_refresh(CERTIFIED_FILE, status)
     return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}
 
@@ -3698,5 +3709,6 @@ def hanbang_refresh(data: dict = Body(default={})):
     atomic_json(HANBANG_FILE, {"ready": True, "listings": listings,
                                "regions": regions, "count": len(listings),
                                "_scan_ver": _HANBANG_SCAN_VER})
+    _record_listing_price_history("hanbang", listings)
     _record_radar_refresh(HANBANG_FILE, status)
     return {"ok": True, "count": len(listings), "regions": len(regions), "scan": status}

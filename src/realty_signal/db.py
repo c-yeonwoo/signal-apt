@@ -109,6 +109,11 @@ CREATE TABLE IF NOT EXISTS listing_watch_state_v2(
 CREATE TABLE IF NOT EXISTS listing_watch_price_targets_v2(
     uid INTEGER NOT NULL, key TEXT NOT NULL, target_price REAL NOT NULL,
     updated_at INTEGER NOT NULL, PRIMARY KEY(uid,key));
+CREATE TABLE IF NOT EXISTS listing_price_history_v1(
+    listing_hash TEXT NOT NULL, observed_at INTEGER NOT NULL, price_manwon REAL NOT NULL,
+    PRIMARY KEY(listing_hash,observed_at));
+CREATE INDEX IF NOT EXISTS ix_listing_price_history_observed
+    ON listing_price_history_v1(observed_at);
 CREATE TABLE IF NOT EXISTS alert_outbox_v2(
     id TEXT PRIMARY KEY, uid INTEGER NOT NULL, subject_type TEXT NOT NULL,
     subject_key TEXT NOT NULL, kind TEXT NOT NULL, evidence_revision TEXT NOT NULL,
