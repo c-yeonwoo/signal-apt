@@ -15,6 +15,16 @@ def _row(key, name="시험단지", price=50000, lat=37.65):
             "lat": lat, "lng": 127.07, "ref": {"전용면적": 84.9}}
 
 
+def test_naver_complex_link_only_uses_validated_provider_number():
+    row = _row("급매:test")
+    row["ref"] = {"complex_no": "12345", "hanbang_complex_id": "98765"}
+    assert property_analysis.snapshot(row)["naver_complex_no"] == "12345"
+    row["ref"] = {"hanbang_complex_id": "98765"}
+    assert property_analysis.snapshot(row)["naver_complex_no"] is None
+    row["ref"] = {"complex_no": "12345/../../", "hanbang_complex_id": "98765"}
+    assert property_analysis.snapshot(row)["naver_complex_no"] is None
+
+
 def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypatch):
     monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
         codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))

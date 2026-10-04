@@ -76,9 +76,9 @@ def test_selected_route_is_per_user_and_profile_location_and_listing_version(tmp
     assert "destination_hash" not in displayed and "origin" not in displayed
     assert commute.cached(8, [row], _profile()) == {}
     assert commute.cached(7, [row], _profile(37.51)) == {}
-    commute.lookup(7, row, _profile(37.51))
+    second = commute.lookup(7, row, _profile(37.51))
     assert len(calls) == 2
-    row["fetched_at"] = first["checked_at"] + 1
+    row["fetched_at"] = second["checked_at"] + 1
     assert commute.cached(7, [row], _profile(37.51)) == {}
     commute.lookup(7, row, _profile(37.51))
     assert len(calls) == 3

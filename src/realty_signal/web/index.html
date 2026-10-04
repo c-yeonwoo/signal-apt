@@ -414,7 +414,31 @@
   .v2-panel button { min-height:44px; }
   #v2ReportDlg,#v2DiscoverDlg { width:min(720px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); border:1px solid var(--line); border-radius:16px; padding:0; background:var(--panel); color:var(--txt); }
   #v2ReportDlg::backdrop,#v2DiscoverDlg::backdrop { background:rgba(15,23,42,.5); }
+  #v2ReportDlg { position:fixed; inset:0 auto 0 0; margin:0; width:min(540px,46vw); height:100dvh; max-width:calc(100vw - 24px);
+    max-height:100dvh; border-radius:0 16px 16px 0; box-shadow:12px 0 30px rgba(15,23,42,.2); overflow:hidden; z-index:1001; }
+  #v2ReportDlg[open] { display:flex; flex-direction:column; }
+  #v2ReportBody { min-height:0; overflow:auto; overscroll-behavior:contain; }
+  .v2-report-heading { border-bottom:1px solid var(--line); padding-bottom:12px; }
+  .v2-panel .v2-eyebrow { color:var(--accent); font-size:12px; font-weight:750; letter-spacing:.04em; }
+  .v2-panel .v2-report-price { font-size:25px; font-weight:750; margin:0 0 8px; }
+  .v2-report-section { padding:14px 0; border-bottom:1px solid var(--line); }
+  .v2-report-section h3:first-child,.v2-field-check h3 { margin-top:0; }
+  .v2-answer { border-left:3px solid var(--accent); padding:7px 0 7px 12px; }
+  .v2-answer b { font-size:15px; line-height:1.45; }
+  .v2-answer .v2-muted { margin-top:5px; }
+  .v2-field-check { padding:16px 0; border-bottom:1px solid var(--line); }
+  .v2-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:12px 0; }
+  .v2-field-link { display:flex; flex-direction:column; justify-content:center; min-height:68px; padding:10px; border:1px solid var(--line);
+    border-radius:10px; color:var(--txt); text-decoration:none; background:var(--bg); overflow-wrap:anywhere; }
+  .v2-field-link:hover,.v2-field-link:focus-visible { border-color:var(--accent); outline:2px solid var(--accent); outline-offset:1px; }
+  .v2-field-link small { color:var(--dim); line-height:1.35; margin-top:4px; }
+  .v2-report-more { border-bottom:1px solid var(--line); padding:4px 0; }
+  .v2-report-more > summary { cursor:pointer; min-height:48px; display:flex; align-items:center; font-weight:700; }
+  .v2-report-more[open] { padding-bottom:14px; }
+  #v2ReportDlg .btn { margin:3px; }
   .v2-top { position:sticky; top:0; display:flex; justify-content:flex-end; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); z-index:1; }
+  #v2ReportDlg .v2-top { align-items:center; justify-content:space-between; gap:8px; }
+  #v2MapSpace { display:none; }
   .v2-form { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
   .v2-form label { display:grid; gap:4px; font-size:13px; }
   .v2-form input { min-height:44px; width:145px; border:1px solid var(--line); border-radius:8px; padding:0 10px; background:var(--bg); color:var(--txt); }
@@ -422,8 +446,23 @@
   .v2-preferences { width:100%; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
   .v2-preferences summary { cursor:pointer; min-height:44px; display:flex; align-items:center; }
   .v2-preference-fields { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
-  @media(max-width:600px) { #v2ReportDlg,#v2DiscoverDlg { width:100vw; height:100dvh; max-width:none; max-height:none; border-radius:0; } }
+  @media(max-width:600px) {
+    #v2DiscoverDlg { width:100vw; height:100dvh; max-width:none; max-height:none; border-radius:0; }
+    #v2ReportDlg { inset:auto 0 0; width:100vw; max-width:none; height:76dvh; max-height:76dvh; border-radius:16px 16px 0 0;
+      border-bottom:none; box-shadow:0 -12px 28px rgba(15,23,42,.22); }
+    #v2ReportDlg.v2-map-expanded { height:48dvh; max-height:48dvh; }
+    #v2MapSpace { display:inline-block; margin-left:auto; }
+    body.v2-report-map.tab-all #laMap,
+    body.v2-report-map.tab-general #hbMap,
+    body.v2-report-map.tab-quicksale #qsMap,
+    body.v2-report-map.tab-auction #auctionMap {
+      position:fixed !important; inset:0 0 auto !important; z-index:900; width:100vw !important;
+      height:52dvh !important; min-height:0 !important; max-height:none !important;
+      margin:0 !important; border-radius:0 !important; box-sizing:border-box; background:#e8edf2; }
+    .v2-field-grid { grid-template-columns:1fr 1fr; }
+  }
   @media(max-width:240px) {
+    #v2ReportDlg .v2-top b { display:none; }
     #view-all > div { padding-left:12px !important; padding-right:12px !important; }
     #view-all .mapsplit,#view-all .ms-list { min-width:0; }
     #view-all .ms-map { min-width:0; width:100%; min-height:240px; box-sizing:border-box; }
@@ -4134,7 +4173,7 @@ let _reportSummary = null;
 function toast(msg){
   let t=document.getElementById('_toast');
   if(!t){ t=document.createElement('div'); t.id='_toast';
-    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;background:#1e293b;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.2);max-width:90vw';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;pointer-events:none;background:#1e293b;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.2);max-width:90vw';
     document.body.appendChild(t); }
   t.textContent=msg; t.style.opacity='1';
   clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';},3200);
@@ -5450,7 +5489,8 @@ async function openScoreboard(){
 }
 // ===== 단지 deep-dive =====
 function naverBtn(cno){
-  return cno ? ` <a class="btn" href="https://new.land.naver.com/complexes/${cno}" target="_blank" rel="noopener" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">네이버부동산 ↗</a>` : '';
+  const no=String(cno||'').trim();
+  return /^[1-9][0-9]{0,11}$/.test(no) ? ` <a class="btn" href="https://new.land.naver.com/complexes/${no}" target="_blank" rel="noopener noreferrer" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">네이버부동산 ↗</a>` : '';
 }
 // 닉 문맥 진입 — 버튼에서 챗봇을 열고 질문을 미리 채워 전송
 function askNick(q){
@@ -7640,7 +7680,7 @@ async function startApp(needOnboard){
   </div>
 </div>
 <dialog id="v2ReportDlg" aria-label="매물 분석 리포트">
-  <div class="v2-top"><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
+  <div class="v2-top"><b>매물 확인 리포트</b><button type="button" class="btn" id="v2MapSpace" aria-pressed="false">지도 크게</button><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
   <div id="v2ReportBody" class="v2-panel" aria-live="polite"></div>
 </dialog>
 <dialog id="v2DiscoverDlg" aria-label="내 조건으로 매물 찾기">
