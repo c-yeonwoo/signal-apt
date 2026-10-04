@@ -521,6 +521,8 @@
   .v2-report-more[open] { padding-bottom:14px; }
   #v2ReportDlg .btn { margin:3px; }
   .v2-top { position:sticky; top:0; display:flex; justify-content:flex-end; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); z-index:1; }
+  #v2DiscoverCompare[hidden] { display:none; }
+  #v2DiscoverCompare { margin-right:auto; }
   #v2ReportDlg .v2-top { align-items:center; justify-content:space-between; gap:8px; }
   #v2MapSpace { display:none; }
   .v2-form { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
@@ -8226,7 +8228,7 @@ async function startApp(needOnboard){
   <div id="v2ReportBody" class="v2-panel" aria-live="polite"></div>
 </dialog>
 <dialog id="v2DiscoverDlg" aria-label="내 조건으로 매물 찾기">
-  <div class="v2-top"><button type="button" class="btn" onclick="document.getElementById('v2DiscoverDlg').close()" aria-label="매물 찾기 닫기">닫기 ✕</button></div>
+  <div class="v2-top"><button type="button" class="btn primary" id="v2DiscoverCompare" hidden>선택 매물 비교하기</button><button type="button" class="btn" onclick="document.getElementById('v2DiscoverDlg').close()" aria-label="매물 찾기 닫기">닫기 ✕</button></div>
   <div class="v2-panel">
     <h2>내 조건으로 빠르게 찾기</h2>
     <p class="v2-muted">확인된 조건에 맞는 매물과 정보가 부족한 매물을 나눠 보여줍니다.</p>
