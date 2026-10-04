@@ -23,6 +23,11 @@ test('retrospective scorecards are not sold as published prediction performance'
   assert.doesNotMatch(html, /검증된 시그널|정말 맞나요\?|초과가 시그널의 실제 기여분/);
 });
 
+test('same-week sell-risk explanation enrichment is not described as a source revision', () => {
+  assert.match(signalV2, /changed === 'explanation_change'/);
+  assert.match(signalV2, /판정은 유지되며 매도주의 보정 근거 설명이 추가됐습니다/);
+});
+
 test('KB national affordability is not presented as the opposite HF burden index or a district metric', () => {
   assert.match(html, /전국 아파트 주택구매력지수/);
   assert.match(html, /전국 구매력지수/);
