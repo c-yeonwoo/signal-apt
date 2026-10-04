@@ -28,6 +28,11 @@ test('same-week sell-risk explanation enrichment is not described as a source re
   assert.match(signalV2, /판정은 유지되며 매도주의 보정 근거 설명이 추가됐습니다/);
 });
 
+test('market charts do not label the ungraded buyer-demand ladder as an actionable signal', () => {
+  assert.match(html, /buyer_demand_buy, name:'매수세 참고선'/);
+  assert.doesNotMatch(html, /buyer_demand_buy, name:'매수신호'/);
+});
+
 test('KB national affordability is not presented as the opposite HF burden index or a district metric', () => {
   assert.match(html, /전국 아파트 주택구매력지수/);
   assert.match(html, /전국 구매력지수/);

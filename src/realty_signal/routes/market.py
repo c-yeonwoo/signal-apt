@@ -118,10 +118,10 @@ def meta():
          "desc": "전세 수급 균형 구간."},
         {"from": c.jeonse_tight, "to": c.jeonse_crunch, "label": "타이트", "color": "#eab308",
          "desc": "전세 매물이 마르기 시작. 전세난 전환 관찰 구간."},
-        {"from": c.jeonse_crunch, "to": c.jeonse_spillover, "label": "전세난", "color": "#f97316",
-         "desc": "전세 구하기 어려움. 수요가 매매로 넘어올 압력."},
-        {"from": c.jeonse_spillover, "to": 200, "label": "매매전이", "color": "#ef4444",
-         "desc": "전세난 심화 → 매매가 상승 압력으로 전이되는 구간."},
+        {"from": c.jeonse_crunch, "to": c.jeonse_spillover, "label": "전세수급 높음", "color": "#f97316",
+         "desc": "전세수급지수가 높은 구간. 실제 매매 전환은 미확인."},
+        {"from": c.jeonse_spillover, "to": 200, "label": "전세수급 매우 높음", "color": "#ef4444",
+         "desc": "앱의 전세 압력 최상위 구간. 실제 매매 전환·가격 상승은 미확인."},
     ]
     return {
         "regions": kb.regions,
