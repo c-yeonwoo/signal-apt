@@ -1230,20 +1230,46 @@ def _presale_current(row: dict) -> dict:
     return item
 
 
+def _verified_home_region(profile: dict) -> dict | None:
+    """Only a current, unambiguous KB identity may personalize a saved residence."""
+    name = str(profile.get("거주지") or "").strip()
+    ref = profile.get("거주지코드")
+    if not name:
+        return None
+    try:
+        if ref:
+            identity = md.current_region_identity(ref)
+        elif name not in buying_power.AMBIGUOUS_PROFILE_REGIONS:
+            code = md.code_of(name)
+            identity = md.current_region_identity(f"kb:{code}") if code else None
+        else:
+            identity = None
+    except Exception:  # noqa: BLE001 — identity source failure must not imply a residence match.
+        return None
+    return identity if identity and identity["name"] == name else None
+
+
+def _same_presale_district(identity: dict | None, row: dict) -> bool:
+    """Geographic coincidence only; announcement-specific priority eligibility is not inferred."""
+    if not identity or row.get("시도") != identity["sido"]:
+        return False
+    district = identity["name"].removeprefix(identity["sido"] + " ")
+    return bool(district and row.get("지역") == district)
+
+
 def presale_list(request: Request):
-    """청약 단지(청약홈) — 지역 시그널 결합 + 거주지 당해 판정. 당해→임박→BUY+ 정렬."""
+    """청약 단지 — 확인된 동일 시군구→임박→안전한 시그널 순서."""
     sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "HELD": 5}
     st_rank = {"접수중": 0, "접수예정": 1, "발표대기": 2, "계약중": 3, "공고": 4, "완료": 5}
-    home = (db.profile_get(_uid(request)).get("거주지") or "").strip()  # 거주 시군구
+    home = _verified_home_region(db.profile_get(_uid(request)))
 
     items = []
     for d in _presale_visible_items():
-        # 당해(해당지역 우선공급): 거주 시군구가 단지 지역/주소에 일치
-        d["당해"] = bool(home and (home == d.get("지역") or home in (d.get("주소") or "")))
+        d["거주지일치"] = _same_presale_district(home, d)
         items.append(d)
 
     def key(d):
-        return (0 if d["당해"] else 1, st_rank.get(d["상태"], 6),
+        return (0 if d["거주지일치"] else 1, st_rank.get(d["상태"], 6),
                 d["Dday"] if d["Dday"] is not None else 999, sig_rank.get(d["시그널"], 5))
     return sorted(items, key=key)
 
@@ -2223,8 +2249,39 @@ def complex_search(q: str):
 
 
 
+def _address_region_identity(address: str) -> dict | None:
+    """Resolve a Kakao address only when both province and district match current KB."""
+    matches = []
+    address_parts = address.split()
+    if len(address_parts) < 2:
+        return None
+    for name, code in (_kb().codes or {}).items():
+        code = str(code)
+        sido = md.SIDO_LABELS.get(code[:2])
+        if not sido or not address_parts[0].startswith(sido):
+            continue
+        district = name.removeprefix(sido + " ")
+        district_parts = district.split()
+        if address_parts[1:1 + len(district_parts)] != district_parts:
+            continue
+        try:
+            identity = md.current_region_identity(f"kb:{code}")
+        except Exception:  # noqa: BLE001 — unverified source stays unselected.
+            return None
+        if identity and identity["name"] == name and identity["sido"] == sido:
+            matches.append(identity)
+    # The source can contain province-level and district-level rows; select the
+    # most specific district only, and never guess across an equally specific tie.
+    matches = [m for m in matches if len(m["code"]) == 10 and m["code"][2:5] != "000"]
+    matches.sort(key=lambda m: len(m["name"].removeprefix(m["sido"] + " ")), reverse=True)
+    if not matches:
+        return None
+    best = len(matches[0]["name"].removeprefix(matches[0]["sido"] + " "))
+    return matches[0] if sum(len(m["name"].removeprefix(m["sido"] + " ")) == best for m in matches) == 1 else None
+
+
 def addr_search(q: str):
-    """거주지 검색 — 도로명/지번/단지 키워드 → {name, address, sigungu}. 카카오 로컬 키워드."""
+    """거주지 검색 — 현재 시·도와 시군구가 확인된 결과에만 지역 코드를 제공."""
     import json as _json
     import urllib.parse
     import urllib.request
@@ -2233,7 +2290,6 @@ def addr_search(q: str):
         config.load_env(); key = config.kakao_key()
     if not key or not q.strip():
         return {"results": []}
-    codes = _kb().codes
     url = "https://dapi.kakao.com/v2/local/search/keyword.json?" + urllib.parse.urlencode({"query": q, "size": 12})
     try:
         data = _json.loads(urllib.request.urlopen(  # noqa: S310
@@ -2244,13 +2300,16 @@ def addr_search(q: str):
     seen, out = set(), []
     for d in data.get("documents", []):
         addr = d.get("road_address_name") or d.get("address_name") or ""
-        sgg = max((k for k in codes if k in addr), key=len, default=None)
+        identity = _address_region_identity(addr)
         nm = d.get("place_name", "")
         key2 = (nm, addr)
-        if not sgg or key2 in seen:
+        if not addr or key2 in seen:
             continue
         seen.add(key2)
-        out.append({"name": nm, "address": addr, "sigungu": sgg})
+        out.append({"name": nm, "address": addr,
+                    "sigungu": identity["name"] if identity else "",
+                    "sido": identity["sido"] if identity else "",
+                    "region_id": identity["region_id"] if identity else None})
         if len(out) >= 8:
             break
     return {"results": out}

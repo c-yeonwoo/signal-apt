@@ -1422,7 +1422,7 @@
       <div style="position:relative">
         <input id="ob_region" placeholder="예: 대치동, 은마, 세종대로" class="ctrl" style="width:100%" oninput="obRegionSearch()" autocomplete="off">
         <div id="obRegionRes" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:220px;overflow:auto;z-index:1200"></div>
-      </div></label>
+      </div><small id="obRegionStatus" style="color:var(--dim)">검색 결과에서 지역을 선택하면 청약 목록에 거주지 일치를 표시합니다.</small></label>
     <label>부양가족 수<br><input id="ob_family" type="number" value="0" class="ctrl" style="width:100%"></label>
     <label>청약통장 가입(개월)<br><input id="ob_account" type="number" value="0" class="ctrl" style="width:100%"></label>
   </div>
@@ -1446,7 +1446,7 @@
       <div style="position:relative">
         <input id="mp_region" placeholder="동·도로명·단지로 검색 (예: 대치동, 은마)" class="ctrl bigsearch" style="width:100%" oninput="mpRegionSearch()" autocomplete="off">
         <div id="mpRegionRes" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:240px;overflow:auto;z-index:900"></div>
-      </div></label>
+      </div><small id="mpRegionStatus" style="color:var(--dim)">검색 결과에서 선택해야 시·도까지 확인됩니다.</small></label>
     <label>관심 평형 <span style="font-size:11px;color:var(--dim)">(복수 · 미선택=전체)</span><br><div id="mp_sizeChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"></div></label>
     <label>출생연도<br><input id="mp_birth" type="number" min="1940" max="2010" placeholder="예: 1990" class="ctrl" style="width:100%"></label>
     <label style="grid-column:1/-1">직장 위치 <span style="font-size:11px;color:var(--dim)">(선택 · 관심단지별 통근시간 계산)</span><br>
@@ -3129,7 +3129,7 @@ const _GLOSSARY=[
   ["특별공급","신혼부부·다자녀·생애최초·노부모 등 별도 물량(경쟁 완화).","앱"],
   ["분양가상한제","분양가를 택지비+건축비 이내로 규제 → 시세보다 저렴."],
   ["전매제한","분양권을 일정 기간 되팔 수 없게 하는 규제."],
-  ["당해 / 기타지역","해당 지역 거주자 우선 물량 vs 그 외. 거주요건 중요.","앱"],
+  ["거주지 일치","저장한 거주지와 공고의 시·도·시군구가 같은 경우. 청약 우선공급 자격은 모집공고의 거주기간·요건을 별도로 확인해야 합니다.","앱"],
   ["무순위(줍줍)","미계약·부적격 물량을 무순위로 재공급."],
   ["공공분양 / 공공임대","공공이 시세 이하로 분양 vs 임대(장기 거주·저렴)."],
 ]],
@@ -4521,7 +4521,7 @@ function renderAiReport(d, eok){
     추천지역: inb.slice(0,5).map(c=>({지역:c.region,시그널:c['시그널'],저평가도:c['저평가도'],
       평단가:c['평단가'],예상매수가_억:+((c['예상매수가']||0)/10000).toFixed(1),
       급매:c['급매건수']||0,청약:c['청약건수']||0,매물수:c['매물수']||0})),
-    거주지당해청약:danghae, 추천지역급매건수:quick };
+    추천지역청약건수:danghae, 추천지역급매건수:quick };
   el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-weight:700;font-size:15px">${_userEmail||'회원'}님을 위한 매수 전략 리포트</div>
       <button class="btn" onclick="genAiReport()" style="background:var(--accent);color:#fff;font-size:12px;padding:5px 11px;white-space:nowrap">AI 심층 분석</button>
@@ -4864,7 +4864,7 @@ function renderPresale(){
     .filter(r => inFocus(r['지역']||'') && _mtPass(r['지역']));
   document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 청약 단지가 없습니다.';
   mapSplit('psList','psMap',rows,{
-    summary:r=>({nm:`${r['단지명']||'–'} ${r['당해']?'<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)">당해</span>':''} ${badge(safeMarketSignal(r['지역']))} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
+    summary:r=>({nm:`${esc(r['단지명']||'–')} ${r['거주지일치']?'<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="시·도와 시군구만 일치합니다. 우선공급 자격은 모집공고에서 확인하세요.">거주지 일치</span>':''} ${badge(safeMarketSignal(r['지역']))} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
       right:_mtMetric('청약', psStatusBadge(r['상태'],r['Dday'])),
       sub:`${r['지역']||''}${_mtGradeTag(r['지역'])?' · '+_mtGradeTag(r['지역']):''} · ${r['주택구분']||''} · ${subAddr(r['주소'],r['지역'])}`}),
     detail:r=>{ const id='psd'+r['관리번호']; loadPsTypes(r['관리번호'],id);
@@ -7186,7 +7186,7 @@ async function logout(){ await fetch('/api/auth/logout',{method:'POST'}); locati
 function saveOnboarding(){
   const v=id=>document.getElementById(id).value;
   _profile={주택수:+v('ob_own'), 무주택기간:+v('ob_nohouse'), 가용자본:+v('ob_capital')||0,
-    관심평수:[..._sizeSel.ob], 거주지:v('ob_region').trim(),
+    관심평수:[..._sizeSel.ob], 거주지:v('ob_region').trim(), 거주지코드:_obRegionCode,
     부양가족:+v('ob_family')||0, 청약통장개월:+v('ob_account')||0};
   fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_profile)});
   if(_profile['가용자본']) track('profile_complete',{capital:_profile['가용자본']});
@@ -7222,6 +7222,8 @@ function fillMyPage(){
   document.getElementById('mp_work').value = p['직장']||'';
   _workLatLng = (p['직장lat'] && p['직장lng']) ? [p['직장lat'], p['직장lng']] : null;
   document.getElementById('mp_region').value = p['거주지']||'';
+  _mpRegionCode = p['거주지코드']||null;
+  document.getElementById('mpRegionStatus').textContent = _mpRegionCode ? '시·도 확인된 거주지입니다. 청약 우선공급 자격은 모집공고를 확인하세요.' : '검색 결과에서 선택해야 시·도까지 확인됩니다.';
   document.getElementById('mp_family').value = p['부양가족']??'';
   document.getElementById('mp_account').value = p['청약통장개월']??'';
   document.getElementById('mp_income').value = p['연소득']??'';
@@ -7241,18 +7243,21 @@ function toggleChungyak(){
   document.getElementById('mp-chungyak-fields').style.display = on ? '' : 'none';
 }
 // 거주지 검색(도로명·동·단지) → 시군구 선택
-let _mpRegionT=null;
-function mpRegionSearch(){ clearTimeout(_mpRegionT); _mpRegionT=setTimeout(_mpRegionDo,350); }
+let _mpRegionT=null, _mpRegionCode=null, _mpRegionSeq=0;
+function mpRegionSearch(){ _mpRegionCode=null; _mpRegionSeq++; document.getElementById('mpRegionStatus').textContent='검색 결과에서 선택해야 시·도까지 확인됩니다.'; clearTimeout(_mpRegionT); _mpRegionT=setTimeout(_mpRegionDo,350); }
 async function _mpRegionDo(){
+  const seq=_mpRegionSeq;
   const q=document.getElementById('mp_region').value.trim(), box=document.getElementById('mpRegionRes');
   if(q.length<2){ box.style.display='none'; return; }
   let d; try{ d=await (await fetch('/api/addr-search?q='+encodeURIComponent(q))).json(); }catch(e){ box.style.display='none'; return; }
-  const rs=d.results||[];
+  if(seq!==_mpRegionSeq || q!==document.getElementById('mp_region').value.trim()) return;
+  const rs=(d.results||[]).filter(r=>r.region_id);
   if(!rs.length){ box.style.display='none'; return; }
   box.style.display='block';
-  box.innerHTML=rs.map(r=>`<div class="acct-item" onclick="mpPickRegion('${(r.sigungu||'').replace(/'/g,'')}')"><b>${r.sigungu}</b> <span style="font-size:11px;color:var(--dim)">${(r.name||'')} · ${(r.address||'')}</span></div>`).join('');
+  box.innerHTML=rs.map((r,i)=>`<div class="acct-item" data-region-index="${i}"><b>${esc(r.sido)} · ${esc(r.sigungu)}</b> <span style="font-size:11px;color:var(--dim)">${esc(r.name)} · ${esc(r.address)}</span></div>`).join('');
+  box.querySelectorAll('[data-region-index]').forEach(el=>el.onclick=()=>mpPickRegion(rs[+el.dataset.regionIndex]));
 }
-function mpPickRegion(sgg){ document.getElementById('mp_region').value=sgg; document.getElementById('mpRegionRes').style.display='none'; }
+function mpPickRegion(row){ _mpRegionSeq++; document.getElementById('mp_region').value=row.sigungu; _mpRegionCode=row.region_id||null; document.getElementById('mpRegionStatus').textContent=`${row.sido} · ${row.sigungu} 확인됨`; document.getElementById('mpRegionRes').style.display='none'; }
 // 직장 위치 — 검색(addr-search) → 선택 시 지오코딩해 좌표 저장(통근시간용)
 let _mpWorkT, _workLatLng=null;
 function mpWorkSearch(){ clearTimeout(_mpWorkT); _mpWorkT=setTimeout(_mpWorkDo,350); }
@@ -7262,8 +7267,10 @@ async function _mpWorkDo(){
   let d; try{ d=await (await fetch('/api/addr-search?q='+encodeURIComponent(q))).json(); }catch(e){ box.style.display='none'; return; }
   const rs=d.results||[]; if(!rs.length){ box.style.display='none'; return; }
   box.style.display='block';
-  box.innerHTML=rs.map(r=>{const nm=(r.name||'').replace(/['"\\]/g,''), q2=((r.name||'')+' '+(r.sigungu||'')).replace(/['"\\]/g,'');
-    return `<div class="acct-item" onclick="mpPickWork('${nm}','${q2}')"><b>${r.name}</b> <span style="font-size:11px;color:var(--dim)">${r.sigungu||''} · ${r.address||''}</span></div>`;}).join('');
+  box.innerHTML=rs.map((r,i)=>`<div class="acct-item" data-work-index="${i}"><b>${esc(r.name)}</b> <span style="font-size:11px;color:var(--dim)">${esc(r.sigungu||'')} · ${esc(r.address)}</span></div>`).join('');
+  box.querySelectorAll('[data-work-index]').forEach(el=>el.onclick=()=>{
+    const row=rs[+el.dataset.workIndex]; mpPickWork(row.name||'', `${row.name||''} ${row.sigungu||row.address||''}`.trim());
+  });
 }
 async function mpPickWork(label, q){
   document.getElementById('mp_work').value=label; document.getElementById('mpWorkRes').style.display='none'; _workLatLng=null;
@@ -7271,17 +7278,20 @@ async function mpPickWork(label, q){
     if(g.coords && g.coords[q]) _workLatLng=g.coords[q]; }catch(e){}
 }
 // 온보딩 거주지 — 도로명·동·단지 검색(addr-search) → 시군구 선택 (마이페이지와 동일)
-let _obRegionT;
-function obRegionSearch(){ clearTimeout(_obRegionT); _obRegionT=setTimeout(_obRegionDo,350); }
+let _obRegionT, _obRegionCode=null, _obRegionSeq=0;
+function obRegionSearch(){ _obRegionCode=null; _obRegionSeq++; document.getElementById('obRegionStatus').textContent='검색 결과에서 지역을 선택하면 청약 목록에 거주지 일치를 표시합니다.'; clearTimeout(_obRegionT); _obRegionT=setTimeout(_obRegionDo,350); }
 async function _obRegionDo(){
+  const seq=_obRegionSeq;
   const q=document.getElementById('ob_region').value.trim(), box=document.getElementById('obRegionRes');
   if(q.length<2){ box.style.display='none'; return; }
   let d; try{ d=await (await fetch('/api/addr-search?q='+encodeURIComponent(q))).json(); }catch(e){ box.style.display='none'; return; }
-  const rs=d.results||[]; if(!rs.length){ box.style.display='none'; return; }
+  if(seq!==_obRegionSeq || q!==document.getElementById('ob_region').value.trim()) return;
+  const rs=(d.results||[]).filter(r=>r.region_id); if(!rs.length){ box.style.display='none'; return; }
   box.style.display='block';
-  box.innerHTML=rs.map(r=>`<div class="acct-item" onclick="obPickRegion('${(r.sigungu||'').replace(/'/g,'')}')"><b>${r.sigungu}</b> <span style="font-size:11px;color:var(--dim)">${(r.name||'')} · ${(r.address||'')}</span></div>`).join('');
+  box.innerHTML=rs.map((r,i)=>`<div class="acct-item" data-region-index="${i}"><b>${esc(r.sido)} · ${esc(r.sigungu)}</b> <span style="font-size:11px;color:var(--dim)">${esc(r.name)} · ${esc(r.address)}</span></div>`).join('');
+  box.querySelectorAll('[data-region-index]').forEach(el=>el.onclick=()=>obPickRegion(rs[+el.dataset.regionIndex]));
 }
-function obPickRegion(sgg){ document.getElementById('ob_region').value=sgg; document.getElementById('obRegionRes').style.display='none'; }
+function obPickRegion(row){ _obRegionSeq++; document.getElementById('ob_region').value=row.sigungu; _obRegionCode=row.region_id||null; document.getElementById('obRegionStatus').textContent=`${row.sido} · ${row.sigungu} 확인됨`; document.getElementById('obRegionRes').style.display='none'; }
 // 관심 평형 복수선택 칩 (59㎡·84㎡·114㎡) — 프로필 '관심평수'를 배열로 저장
 const _SIZE_OPTS=[['59','59㎡','24평'],['84','84㎡','34평'],['114','114㎡','45평']];
 const _sizeSel={ob:new Set(), mp:new Set()};
@@ -7519,7 +7529,7 @@ function saveMyPage(){
   const chungyak=document.getElementById('mp_chungyak').checked;
   const prevPower=(_profile||{})['매수력'];
   _profile = {주택수:+v('mp_own'), 가용자본:+v('mp_capital')||0,
-    관심평수:[..._sizeSel.mp], 거주지:v('mp_region').trim(),
+    관심평수:[..._sizeSel.mp], 거주지:v('mp_region').trim(), 거주지코드:_mpRegionCode,
     직장:v('mp_work').trim(),
     직장lat:_workLatLng?_workLatLng[0]:((_profile||{})['직장lat']||null),
     직장lng:_workLatLng?_workLatLng[1]:((_profile||{})['직장lng']||null),
