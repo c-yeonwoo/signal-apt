@@ -703,6 +703,7 @@
     const dialog = document.getElementById('v2DiscoverDlg');
     const form = document.getElementById('v2DiscoverForm');
     if (!dialog.open) dialog.showModal();
+    syncDiscoveryCompareAction();
     loadDiscoveryRegions(region);
     document.getElementById('v2DiscoverResults').textContent = '조건을 입력하면 현재 수집된 매물을 비교합니다.';
     form.elements.max_price_manwon.focus();
@@ -716,6 +717,14 @@
     if (keys.length >= 3) return '비교함은 최대 3개입니다';
     _listingCompareSave([...keys, key]);
     return `비교함에 담았습니다 · ${keys.length + 1}/3`;
+  }
+
+  function syncDiscoveryCompareAction() {
+    const button = document.getElementById('v2DiscoverCompare');
+    if (!button) return;
+    const count = typeof _listingCompareKeys === 'function' ? _listingCompareKeys().length : 0;
+    button.hidden = count < 2;
+    button.textContent = `선택 매물 ${count}개 비교하기`;
   }
 
   function openNote(type, key, reportId) {
@@ -1069,15 +1078,9 @@
       });
       result.querySelectorAll('[data-v2-compare]').forEach(button => button.onclick = () => {
         button.textContent = addCompare(button.dataset.v2Compare);
+        syncDiscoveryCompareAction();
       });
-      if (_listingCompareKeys().length >= 2) {
-        const button = result.querySelector('[data-v2-open-compare]') || document.createElement('button');
-        button.className = 'btn primary';
-        button.dataset.v2OpenCompare = '';
-        button.textContent = '선택 매물 비교하기';
-        button.onclick = () => { document.getElementById('v2DiscoverDlg').close(); listingCompareOpen(); };
-        if (!button.isConnected) result.prepend(button);
-      }
+      syncDiscoveryCompareAction();
     } catch (error) {
       if (generation === discoveryGeneration) {
         if (cursor) {
@@ -1090,6 +1093,10 @@
   }
 
   document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
+  document.getElementById('v2DiscoverCompare')?.addEventListener('click', () => {
+    document.getElementById('v2DiscoverDlg').close();
+    listingCompareOpen();
+  });
   document.getElementById('v2DiscoverForm')?.elements.region_code.addEventListener('change', () => {
     document.getElementById('v2DiscoverForm').querySelector('[type="submit"]').disabled = false;
     document.getElementById('v2DiscoverRegionStatus').textContent =
