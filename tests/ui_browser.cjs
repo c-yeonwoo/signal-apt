@@ -446,6 +446,25 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(ambiguousFavorite.complexWatch,/서울·개편 전 인천을 구별할 수 없습니다/);
     assert.match(ambiguousFavorite.complexWatch,/중구/);
     assert.doesNotMatch(ambiguousFavorite.complexWatch,/openComplex/);
+    const manyUnavailable=await page.evaluate(async()=>{
+      const originalFetch=window.fetch;
+      window.fetch=(input,...args)=>String(input)==='/api/complex-watch'
+        ? Promise.resolve({ok:true,json:async()=>({ready:true,total:5,moved_total:0,quiet:true,items:[],
+            unavailable:[1,2,3,4,5].map(i=>({key:`지역|${i}단지`,'단지명':`${i}단지`,'지역':'지역',
+              reason:'지역 재선택 전 변화 판정을 보류합니다.'}))})})
+        : originalFetch(input,...args);
+      try {
+        await _loadComplexWatch();
+        const wrap=document.getElementById('dashCxWrap');
+        const details=wrap.querySelector('.dash-unavailable details');
+        return {html:wrap.innerHTML,topRows:wrap.querySelectorAll('.dash-unavailable > div:nth-child(n+2)').length,
+          foldedRows:details?.querySelectorAll('.dash-more-body > div').length||0,folded:details?.open===false};
+      } finally { window.fetch=originalFetch; }
+    });
+    assert.match(manyUnavailable.html,/확인이 필요한 나머지 2곳 보기/);
+    assert.equal(manyUnavailable.topRows,3,'only the first three unavailable favorites are initially visible');
+    assert.equal(manyUnavailable.foldedRows,2,'the remaining unavailable favorites are retained');
+    assert.equal(manyUnavailable.folded,true,'remaining unavailable favorites are folded but retained');
     const reselected=await page.evaluate(async()=>{
       const originalFetch=window.fetch, originalToggle=toggleFav;
       let saved=null;

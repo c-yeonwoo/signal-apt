@@ -2510,11 +2510,15 @@ async function _loadComplexWatch(){
   const renderRows=(rows,offset=0)=>rows.map((it,i)=>row(it,i+offset)).join('');
   const moreItems=items.length>4?_dashMore(`관심단지 전체 ${items.length}곳 보기`,renderRows(items.slice(4),4)):'';
 
-  const dead = (d.unavailable||[]).length
-    ? `<div class="dash-unavailable"><div style="font-size:13px;font-weight:700;margin:8px 0 3px">확인이 필요한 관심단지 ${d.unavailable.length}곳</div>`
-        + d.unavailable.map(u=>`<div style="padding:7px 0;border-bottom:1px solid var(--line)">
-          <b style="font-size:13px">${esc(u['단지명'])}</b> <span style="font-size:12px;color:var(--dim)">${esc(u['지역'])}</span>
-          <div style="font-size:12px;color:var(--dim);margin-top:2px">${esc(u.reason||'자료를 확인할 수 없습니다.')}</div></div>`).join('')+'</div>'
+  const unavailable=d.unavailable||[];
+  const unavailableRow=u=>`<div style="padding:7px 0;border-bottom:1px solid var(--line)">
+    <b style="font-size:13px">${esc(u['단지명'])}</b> <span style="font-size:12px;color:var(--dim)">${esc(u['지역'])}</span>
+    <div style="font-size:12px;color:var(--dim);margin-top:2px">${esc(u.reason||'자료를 확인할 수 없습니다.')}</div></div>`;
+  const unavailableMore=unavailable.length>3
+    ? _dashMore(`확인이 필요한 나머지 ${unavailable.length-3}곳 보기`,unavailable.slice(3).map(unavailableRow).join('')):'';
+  const dead = unavailable.length
+    ? `<div class="dash-unavailable"><div style="font-size:13px;font-weight:700;margin:8px 0 3px">확인이 필요한 관심단지 ${unavailable.length}곳</div>`
+        + unavailable.slice(0,3).map(unavailableRow).join('')+unavailableMore+'</div>'
     : '';
 
   if(d.quiet){
