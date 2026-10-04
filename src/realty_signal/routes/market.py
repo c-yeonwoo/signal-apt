@@ -40,12 +40,14 @@ def operations(request: Request):
     if err := deps.require_admin(request):
         return err
     from realty_signal import backup, jobs, llm
+    from realty_signal.services import report_narrative
     from realty_signal.ingest.pipeline import cache_health
     job_status = jobs.status()
     return {"jobs": job_status,
             "backup": {"configured": backup.enabled(),
                        "upload_job": next((job for job in job_status if job["name"] == "backup"), None)},
             "llm": llm.usage_summary(),
+            "report_explanations": report_narrative.operations_summary(),
             "sources": cache_health(include_private=deps.personal_listings_allowed(request))}
 
 _METRIC_LABEL = {

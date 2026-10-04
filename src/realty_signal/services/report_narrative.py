@@ -201,6 +201,42 @@ def _public(job_id: str, status: str, result: str | None) -> dict:
             "result": json.loads(result) if result else None}
 
 
+def operations_summary() -> dict:
+    """Seven-day aggregate only; never expose user IDs, report text, or error messages."""
+    c = db.conn()
+    try:
+        rows = c.execute("SELECT status,COALESCE(json_extract(CASE WHEN json_valid(result) "
+                         "THEN result ELSE '{}' END,'$.failure_code'),'none'),COUNT(*) "
+                         "FROM report_explanation_jobs_v2 WHERE created_at>=? GROUP BY status,2",
+                         (int(time.time()) - RESULT_RETENTION_SECONDS,)).fetchall()
+        return {"window_days": 7, "jobs": sum(row[2] for row in rows),
+                "by_status": {status: sum(count for state, _, count in rows if state == status)
+                              for status in {row[0] for row in rows}},
+                "by_failure_code": {code: sum(count for _, reason, count in rows if reason == code)
+                                    for code in {row[1] for row in rows} if code != "none"}}
+    finally:
+        c.close()
+
+
+def _failure_code(exc: Exception) -> str:
+    if isinstance(exc, PermissionError):
+        return "source_access_revoked"
+    if isinstance(exc, llm.BudgetExceeded):
+        return "budget_or_capacity"
+    if isinstance(exc, ValueError):
+        return "model_output_rejected"
+    name = type(exc).__name__
+    if name in {"AuthenticationError", "PermissionDeniedError"}:
+        return "provider_access"
+    if name in {"RateLimitError", "OverloadedError"}:
+        return "provider_capacity"
+    if name in {"APIConnectionError", "APITimeoutError"}:
+        return "provider_network"
+    if name in {"AnthropicError", "APIStatusError", "NotFoundError"}:
+        return "provider_error"
+    return "unexpected_error"
+
+
 def get(uid: int, job_id: str, *, private_allowed: bool) -> dict | None:
     if len(job_id) != 32 or any(ch not in "0123456789abcdef" for ch in job_id):
         return None
@@ -226,6 +262,7 @@ def _claim() -> tuple | None:
                             "WHERE status='running' AND lease_until<?", (now,)).fetchall()
         for job_id, mode, payload in expired:
             fallback = _fallback(json.loads(payload), mode)
+            fallback["failure_code"] = "lease_expired"
             c.execute("UPDATE report_explanation_jobs_v2 SET status='failed',updated_at=?,"
                       "result=?,lease_until=0,report_data='',question='' WHERE id=?",
                       (now, json.dumps(fallback, ensure_ascii=False), job_id))
@@ -290,9 +327,12 @@ def run_once(*, private_user_allowed=None) -> bool:
         if private_source and (private_user_allowed is None or not private_user_allowed(uid)):
             raise PermissionError("private_source_revoked")
         result = _generate(uid, report, mode, question)
-        status = "succeeded"
-    except Exception:  # fallback is intentionally the only user-visible error detail
-        pass
+        if result.get("source") == "model_validated":
+            status = "succeeded"
+        else:
+            result["failure_code"] = "insufficient_evidence"
+    except Exception as exc:  # never persist raw provider errors or prompt contents
+        result["failure_code"] = _failure_code(exc)
     c = db.conn()
     try:
         c.execute("UPDATE report_explanation_jobs_v2 SET status=?,result=?,updated_at=?,"
