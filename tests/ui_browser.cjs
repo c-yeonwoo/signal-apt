@@ -1383,6 +1383,34 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(homeMap.legacy,0);
     assert.equal(homeMap.favorite,1);
     assert.match(homeMap.hint,/주소 검색 결과를 다시 선택/);
+    await page.evaluate(()=>{document.getElementById('view-mymap').style.display='block';});
+    for(const width of [360,180]){
+      await page.setViewportSize({width,height:800});
+      const layout=await page.evaluate(()=>{
+        const view=document.getElementById('view-mymap');
+        const map=document.getElementById('myMap'), aside=map.nextElementSibling;
+        const search=document.getElementById('mmSearch');
+        return {viewport:innerWidth,page:document.documentElement.scrollWidth,
+          available:view.getBoundingClientRect().right,
+          map:map.getBoundingClientRect().right,aside:aside.getBoundingClientRect().right,
+          search:search.getBoundingClientRect().right};
+      });
+      assert(layout.page<=layout.viewport,`my map page overflows at ${width}px: ${JSON.stringify(layout)}`);
+      assert(layout.map<=layout.available && layout.aside<=layout.available && layout.search<=layout.available,
+        `my map panel overflows at ${width}px: ${JSON.stringify(layout)}`);
+    }
+    await page.evaluate(()=>{document.getElementById('view-mymap').style.display='none';});
+    const locationCopy=await page.evaluate(()=>{
+      _imj={날짜:'2026-10-10',출발:'10:00',종료:'12:00',총소요:120,이동합:20,체류:50,
+        집기준:true,stops:[],준비물:[]};
+      _renderImjang();
+      const course=document.getElementById('imjBody').textContent;
+      const legend=document.querySelector('#view-mymap aside').textContent;
+      return {course,legend};
+    });
+    assert.match(locationCopy.course,/거주지 시군구 중심 출발/);
+    assert.match(locationCopy.course,/실제 집 위치.*달라질 수 있습니다/);
+    assert.match(locationCopy.legend,/거주지 시군구 중심/);
     assert.equal(nickPayloads.length,0);
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');
