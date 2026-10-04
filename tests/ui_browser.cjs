@@ -412,6 +412,20 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>_laApplyResponse('일반매물',{
       listings:[],asof:'2026-09-28',meta:{private_access:false,general_refresh_failed:true}}));
     assert.equal(await page.locator('#laSourceWarning').isVisible(),false,'guests must not see private refresh status');
+    await page.evaluate(()=>_laApplyResponse('일반매물',{
+      listings:[],asof:'2026-09-28',meta:{private_access:true,
+        general_scope:{failed_regions:1,page_limited_regions:2}}}));
+    assert.equal(await page.locator('#laSourceWarning').isVisible(),false);
+    assert.match(await page.locator('#laSourceScope').textContent(),/1곳 조회 실패 · 2곳 페이지 제한/);
+    assert.equal(await page.locator('#laSourceScope').isVisible(),true);
+    await page.setViewportSize({width:180,height:800});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),
+      'partial collection notice must fit the narrow viewport');
+    await page.setViewportSize({width:360,height:800});
+    await page.evaluate(()=>_laApplyResponse('일반매물',{
+      listings:[],asof:'2026-09-28',meta:{private_access:false,
+        general_scope:{failed_regions:1,page_limited_regions:2}}}));
+    assert.equal(await page.locator('#laSourceScope').isVisible(),false,'guests must not see private coverage');
     const budgetUi=await page.evaluate(()=>{
       mapSplit=(_list,_map,items,opt)=>{window.__budgetItems=items;window.__budgetOpt=opt;};
       const row={key:'일반매물:budget',유형:'일반매물',단지명:'예산테스트단지',지역:'테스트구',

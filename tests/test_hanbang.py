@@ -195,6 +195,7 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     public = guest.get("/api/listings/all?types=일반매물").json()
     assert public["listings"] == [] and public["meta"]["private_access"] is False
     assert public["meta"]["general_refresh_failed"] is False
+    assert public["meta"]["general_scope"] is None
     current = owner.get("/api/listings/all?types=일반매물").json()["listings"][0]
     assert current["동"] == "상계동"
     assert guest.post("/api/listing-locality", json={"key": current["key"], "dong": "상계동"}).status_code == 403
@@ -211,6 +212,7 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     private = owner.get("/api/listings/all?types=일반매물").json()
     assert private["meta"]["private_access"] is True
     assert private["meta"]["general_refresh_failed"] is False
+    assert private["meta"]["general_scope"] is None
     listing = private["listings"][0]
     assert listing["key"] == "일반매물:1" and listing["총액"] == 53_000
     assert listing["지역코드"] == "11350"
@@ -220,8 +222,16 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     failed = owner.get("/api/listings/all?types=일반매물").json()
     assert failed["listings"][0]["stale"]
     assert failed["meta"]["general_refresh_failed"] is True
+    assert failed["meta"]["general_scope"] is None
     assert guest.get("/api/listings/all?types=일반매물").json()["meta"]["general_refresh_failed"] is False
     assert owner.get("/api/listings/all?types=청약").json()["meta"]["general_refresh_failed"] is False
+    api._record_radar_refresh(cache, {"ok": True, "failed_requests": 1,
+                                      "limited_regions": ["노원구"], "requested_regions": 2})
+    partial = owner.get("/api/listings/all?types=일반매물").json()
+    assert partial["meta"]["general_refresh_failed"] is False
+    assert partial["meta"]["general_scope"] == {"failed_regions": 1, "page_limited_regions": 1}
+    assert guest.get("/api/listings/all?types=일반매물").json()["meta"]["general_scope"] is None
+    assert owner.get("/api/listings/all?types=청약").json()["meta"]["general_scope"] is None
     assert owner.post("/api/listing-watch", json={"key": listing["key"]}).json()["ok"]
     assert guest.post("/api/listing-watch", json={"key": listing["key"]}).status_code == 403
     assert guest.get("/api/listing-watch").json()["items"] == []

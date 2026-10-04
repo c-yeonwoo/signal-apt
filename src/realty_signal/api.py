@@ -3532,6 +3532,16 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
                    for row in out]
     asof = _timing_asof()
     kinds = ("경매", "급매", "찐매물", "일반매물", "청약", "재건축")
+    general_refresh = (_radar_refresh_status(HANBANG_FILE)
+                       if private_access and "일반매물" in requested_types else {})
+    general_scope = None
+    if general_refresh.get("ok") is True:
+        failed = general_refresh.get("failed_requests")
+        failed = max(0, min(3, failed)) if type(failed) is int else 0
+        limited = general_refresh.get("limited_regions")
+        limited = min(3, len(limited)) if isinstance(limited, list) else 0
+        if failed or limited:
+            general_scope = {"failed_regions": failed, "page_limited_regions": limited}
     return {
         "listings": public_rows,
         "asof": asof,
@@ -3541,8 +3551,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "data_age_days": round(_data_age_days() or 0, 1),
             "engagement_boost": bool(scores),
             "private_access": private_access,
-            "general_refresh_failed": bool(private_access and "일반매물" in requested_types
-                                           and _radar_refresh_status(HANBANG_FILE).get("ok") is False),
+            "general_refresh_failed": general_refresh.get("ok") is False,
+            "general_scope": general_scope,
             "source_record_count": source_record_count,
             "duplicate_records_collapsed": source_record_count - len(out),
             "confirmed_budget": bool(confirmed and (profile.get("매수지역코드")
