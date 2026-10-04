@@ -684,15 +684,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#laList .ms-row .badge').first().textContent(),'지역 신호 · 판단 보류');
     assert.match(await page.locator('#laList .ms-row .badge').first().getAttribute('title'),/매물의 호가 평가나 매수 권고가 아닙니다/);
     const scopedSignals=await page.evaluate(()=>{
-      const original=mapSplit, oldPresale=_presaleList;
+      const original=mapSplit, originalSignal=safeMarketSignal, oldPresale=_presaleList;
       const seen={};
       try{
         mapSplit=(listId,_mapId,rows,opt)=>{seen[listId]=opt.summary(rows[0]).nm;};
+        safeMarketSignal=()=> 'STRONG_BUY'; // 동명 지역 조회는 매수여도, 서버가 검증한 보류를 표시해야 한다.
         _presaleList=[{단지명:'동명이인 청약',지역:'강서구',시그널:'HELD',상태:'접수예정'}];
         renderPresale();
         renderAuction([{단지명:'동명이인 경매',region:'강서구',지역시그널:'HELD',입찰상태:'no_bid'}]);
         return seen;
-      }finally{mapSplit=original;_presaleList=oldPresale;}
+      }finally{mapSplit=original;safeMarketSignal=originalSignal;_presaleList=oldPresale;}
     });
     assert.match(scopedSignals.psList,/지역 신호 · 판단 보류/);
     assert.match(scopedSignals.auctionList,/지역 신호 · 판단 보류/);
