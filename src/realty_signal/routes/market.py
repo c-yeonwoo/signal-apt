@@ -250,9 +250,11 @@ def strength_api(region: str | None = None):
 
 
 @router.get("/api/pipeline/health")
-def pipeline_health():
+def pipeline_health(request: Request):
     from realty_signal.ingest import pipeline
-    return pipeline.cache_health()
+    # The quick-sale cache is personal-only; public health must not reveal its
+    # existence, freshness, or local cache path.
+    return pipeline.cache_health(include_private=deps.personal_listings_allowed(request))
 
 
 @router.get("/api/regime")
