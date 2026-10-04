@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import isfinite
+import sqlite3
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -49,6 +50,19 @@ def operations(request: Request):
             "llm": llm.usage_summary(),
             "report_explanations": report_narrative.operations_summary(),
             "sources": cache_health(include_private=deps.personal_listings_allowed(request))}
+
+
+@router.get("/api/operations/region-audit")
+def operations_region_audit(request: Request):
+    """Admin-only, read-only aggregate of current and legacy region keys."""
+    if err := deps.require_admin(request):
+        return err
+    from realty_signal import region_identity_audit
+    try:
+        report = region_identity_audit.audit(db.DB, store.load())
+    except (FileNotFoundError, ValueError, OSError, sqlite3.DatabaseError):
+        return JSONResponse({"ok": False, "reason": "audit_unavailable"}, status_code=503)
+    return JSONResponse(report, headers={"Cache-Control": "private, no-store"})
 
 _METRIC_LABEL = {
     "jeonse_supply": "전세수급지수",

@@ -1,10 +1,12 @@
 import json
+import sqlite3
 from types import SimpleNamespace
 
 import pandas as pd
+from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from realty_signal import cli, db, region_identity_audit as audit, store
+from realty_signal import api, auth, cli, db, region_identity_audit as audit, store
 
 
 def _kb(*, verified=True):
@@ -95,3 +97,52 @@ def test_region_audit_cli_outputs_aggregate_json(monkeypatch):
     parsed = json.loads(result.output)
     assert parsed["kb_identity_verified"] is True
     assert "surfaces" in parsed
+
+
+def test_admin_region_audit_route_is_read_only_aggregate_and_access_controlled(monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", "operator@example.com")
+    calls = []
+    monkeypatch.setattr(store, "load", lambda: calls.append("load") or _kb())
+    admin_token, error = auth.signup("operator@example.com", "secret1", accept_tos=True)
+    assert error is None
+    other_token, error = auth.signup("other@example.com", "secret1", accept_tos=True)
+    assert error is None
+    connection = db.conn()
+    connection.execute("INSERT INTO favorites(uid,kind,key,label,ts) "
+                       "VALUES(999,'region','중구','private-label',1)")
+    connection.execute("INSERT INTO favorites(uid,kind,key,label,ts) "
+                       "VALUES(999,'region','노원구','private-label',2)")
+    connection.commit()
+    connection.close()
+
+    guest = TestClient(api.app)
+    assert guest.get("/api/operations/region-audit").status_code == 401
+    other = TestClient(api.app)
+    other.cookies.set(auth.COOKIE, other_token)
+    assert other.get("/api/operations/region-audit").status_code == 403
+    assert calls == []
+
+    admin = TestClient(api.app)
+    admin.cookies.set(auth.COOKIE, admin_token)
+    response = admin.get("/api/operations/region-audit")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert calls == ["load"]
+    assert response.json()["surfaces"]["region_favorites"] == {
+        "needs_reselection": 1, "unique_legacy_name": 1}
+    assert all(value not in response.text for value in
+               ("private-label", "other@example.com", "operator@example.com", "노원구", "중구"))
+    connection = db.conn()
+    assert connection.execute("SELECT COUNT(*) FROM favorites WHERE uid=999").fetchone()[0] == 2
+    connection.close()
+
+    monkeypatch.setattr(store, "load", lambda: (_ for _ in ()).throw(FileNotFoundError("private path")))
+    unavailable = admin.get("/api/operations/region-audit")
+    assert unavailable.status_code == 503
+    assert "private path" not in unavailable.text
+    monkeypatch.setattr(store, "load", lambda: _kb())
+    monkeypatch.setattr(audit, "audit", lambda *_args: (_ for _ in ()).throw(
+        sqlite3.DatabaseError("private schema")))
+    unavailable = admin.get("/api/operations/region-audit")
+    assert unavailable.status_code == 503
+    assert "private schema" not in unavailable.text
