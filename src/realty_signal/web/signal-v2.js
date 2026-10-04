@@ -13,9 +13,16 @@
     market_inputs_missing:'전세수급 또는 매수심리 자료가 없습니다',
     market_inputs_stale:'전세수급 또는 매수심리 기준일이 다릅니다',
     region_identity_ambiguous:'동명이 지역의 코드 매핑을 확인해야 합니다',
+    region_boundary_obsolete:'행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다',
     source_stale:'KB 관측 기준일이 8일을 넘어서 현재 판정을 보류합니다',
     price_direction_conflict:'매수 신호와 최근 가격 하락이 충돌합니다',
   };
+  const historicalGrades = {
+    STRONG_BUY:'강력매수', BUY:'매수', WATCH:'관망', NEUTRAL:'중립',
+    SELL_RISK:'매도주의', SELL:'매도',
+  };
+  const riskLabel = code => Object.hasOwn(risks, code) ? risks[code] : '확인되지 않은 보류 사유가 있습니다';
+  const historicalGradeLabel = code => Object.hasOwn(historicalGrades, code) ? historicalGrades[code] : '표시 불가';
   let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0, discoveryRegionGeneration = 0;
   let noteSubject = null, editingNote = null, notesCache = [];
   let noteList = {generation:0, next_cursor:null, loading:false};
@@ -218,7 +225,7 @@
       const changed = a.change?.type;
       const changedLabels = (a.change?.changed_reasons || []).map(id =>
         id === 'grade' ? '등급' : id === 'safety_status' ? '자료 안전 상태' :
-          a.reasons.find(r => r.reason_id === id)?.label || id);
+          a.reasons.find(r => r.reason_id === id)?.label || '확인되지 않은 변경 항목');
       const change = changed === 'first_observation' ? '비교할 이전 발행 기록이 없습니다.' :
         changed === 'method_change' || changed === 'mixed_change'
           ? '계산 기준이 달라져 지난 판정과 단순 비교할 수 없습니다.' :
@@ -239,7 +246,7 @@
           </section>
           <section class="signal-assessment-highlight signal-assessment-caution"><h3>함께 확인할 점</h3>
             ${cautionLead ? briefReason(cautionLead, true) : '<p>연결된 지표에서 별도 반대 근거를 찾지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
-            ${report.unknowns.length ? `<p class="signal-assessment-unknown">미확인 자료 ${report.unknowns.length}건 · 자세한 항목은 근거에서 확인</p>` : ''}
+            ${report.unknowns.length ? `<p class="signal-assessment-unknown">판단 보류 사유 ${report.unknowns.length}건 · 자세한 항목은 근거에서 확인</p>` : ''}
           </section>
         </div>
         <details class="signal-evidence-details"><summary>판정 근거와 한계 보기</summary>
@@ -247,9 +254,9 @@
             '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
           <h3>반대 근거와 한계</h3>${report.cautions.length ? report.cautions.map(reason).join('') :
             '<p>현재 연결된 지표에서 별도 반대 근거를 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
-          ${report.unknowns.length ? `<p class="v2-row v2-caution">판단 보류 이유: ${report.unknowns.map(x => esc(risks[x] || x)).join(' · ')}</p>` : ''}
+          ${report.unknowns.length ? `<p class="v2-row v2-caution">판단 보류 이유: ${report.unknowns.map(x => esc(riskLabel(x))).join(' · ')}</p>` : ''}
           <p class="v2-muted">${esc(change)}</p>
-          ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(a.raw_grade)} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
+          ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(historicalGradeLabel(a.raw_grade))} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
           <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
           ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
             <button type="button" class="btn" id="v2RegionExplain">쉽게 설명</button>
