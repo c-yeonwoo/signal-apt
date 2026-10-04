@@ -461,7 +461,7 @@ def test_news_tab_is_gone_from_the_shell():
 def test_old_news_link_lands_on_home():
     """없앤 탭의 옛 북마크가 아무 데도 못 가면 안 된다."""
     html = INDEX.read_text(encoding="utf-8")
-    assert "_GONE={news:'dashboard', report:'dashboard', undervalued:'signal'}" in html
+    assert "_GONE={news:'dashboard', report:'dashboard'}" in html
     assert "if(_GONE[h]){ switchTab(_GONE[h], true); return true; }" in html
 
 
@@ -474,6 +474,15 @@ def test_home_renders_the_three_new_cards():
     assert "/api/weekly-issues" in html
     # 주간 카드가 옛 ★변동 카드를 대체했다 — 같은 걸 두 번 그리지 않는다
     assert "dashChangesWrap" not in html
+
+
+def test_market_navigation_keeps_grade_and_regional_price_exploration_discoverable():
+    html = INDEX.read_text(encoding="utf-8")
+    assert "market:   ['signal','undervalued']" in html
+    assert "signal:{l:'가격·수급'" in html
+    assert "undervalued:{l:'지역 가격 비교'" in html
+    assert "undervalued:'signal'" not in html
+    assert "setOverlay(sigMap, 'grade'" in html
 
 
 def test_change_cards_ack_only_after_entering_the_viewport():

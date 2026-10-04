@@ -212,27 +212,31 @@
         changed === 'market_change' || changed === 'source_revision'
           ? `이전 ${esc(a.change.previous_grade || '판정')}에서 ${changedLabels.map(esc).join(' · ')} 근거가 달라졌습니다.${changed === 'source_revision' ? ' 같은 기준일의 원천 수정입니다.' : ''}` :
           '이전 발행 판정에서 확인된 근거 변화가 없습니다.';
-      target.innerHTML = `<section class="v2-panel" aria-label="지역 시그널 근거">
+      const cautionLead = report.cautions?.[0];
+      target.innerHTML = `<section class="signal-assessment" aria-label="지역 시그널 요약과 근거">
         <p class="v2-report-lead">${esc(a.summary)}</p>
         <p class="v2-muted">KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
-        <h3>이번 판정의 근거</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
-          '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
-        <h3>반대 근거와 한계</h3>${report.cautions.length ? report.cautions.map(reason).join('') :
-          '<p>현재 연결된 지표에서 별도 반대 근거를 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
-        ${report.unknowns.length ? `<p class="v2-row v2-caution">판단 보류 이유: ${report.unknowns.map(x => esc(risks[x] || x)).join(' · ')}</p>` : ''}
-        <p class="v2-muted">${change}</p>
-        ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(a.raw_grade)} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
-        <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
-        ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
-          <button type="button" class="btn" id="v2RegionExplain">쉽게 설명</button>
-          <button type="button" class="btn" id="v2RegionCounter">반대 근거 보기</button>
-          <div id="v2RegionExplanation" role="status" aria-live="polite"></div></div>` : ''}
-        <button type="button" class="btn" id="v2RegionDiscover">이 지역 매물 비교</button>
-        <button type="button" class="btn" id="v2RegionNote">관심 이유 기록</button>
-        <details><summary>이 판정 보관하기</summary><p class="v2-muted">저장 당시 근거로 남습니다. 현재 판정은 위에서 다시 확인하세요.</p>
-          <button type="button" class="btn" id="v2RegionSave">현재 판정 저장</button>
-          <button type="button" class="btn" id="v2RegionSaved">저장본 보기</button>
-          <p id="v2RegionSaveStatus" class="v2-muted" role="status"></p></details>
+        ${cautionLead ? `<p class="signal-assessment-caution">주의: ${esc(cautionLead.label)}${cautionLead.value == null ? '' : ` ${esc(cautionLead.value)}${cautionLead.unit === '%/주' ? '%/주' : ''}`}</p>` : ''}
+        <details class="signal-evidence-details"><summary>판정 근거와 한계 보기</summary>
+          <h3>이번 판정의 근거</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
+            '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
+          <h3>반대 근거와 한계</h3>${report.cautions.length ? report.cautions.map(reason).join('') :
+            '<p>현재 연결된 지표에서 별도 반대 근거를 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
+          ${report.unknowns.length ? `<p class="v2-row v2-caution">판단 보류 이유: ${report.unknowns.map(x => esc(risks[x] || x)).join(' · ')}</p>` : ''}
+          <p class="v2-muted">${esc(change)}</p>
+          ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(a.raw_grade)} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
+          <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
+          ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
+            <button type="button" class="btn" id="v2RegionExplain">쉽게 설명</button>
+            <button type="button" class="btn" id="v2RegionCounter">반대 근거 보기</button>
+            <div id="v2RegionExplanation" role="status" aria-live="polite"></div></div>` : ''}
+          <button type="button" class="btn" id="v2RegionDiscover">이 지역 매물 비교</button>
+          <button type="button" class="btn" id="v2RegionNote">관심 이유 기록</button>
+          <details><summary>이 판정 보관하기</summary><p class="v2-muted">저장 당시 근거로 남습니다. 현재 판정은 위에서 다시 확인하세요.</p>
+            <button type="button" class="btn" id="v2RegionSave">현재 판정 저장</button>
+            <button type="button" class="btn" id="v2RegionSaved">저장본 보기</button>
+            <p id="v2RegionSaveStatus" class="v2-muted" role="status"></p></details>
+        </details>
       </section>`;
       target.querySelector('#v2RegionDiscover').onclick = () => openDiscovery(region);
       for (const [id, mode] of [['v2RegionExplain','easy'],['v2RegionCounter','counterevidence']]) {

@@ -54,6 +54,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           중앙값:50000,표본수:4,호가차액:-2000,호가차이율:-4,거래월범위:'2026-08~2026-09'};
       }
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
+      if(url.pathname==='/api/complex-watch') data={ready:true,total:1,moved_total:1,quiet:false,
+        items:[{key:'테스트구|호가단지','단지명':'호가단지','지역':'테스트구','평형':25,'거래가':48000,data_days:1,
+          changes:[{kind:'new_trade','말':'새 실거래'}]}],unavailable:[]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
       if(url.pathname==='/api/freshness') {
         const now=Date.parse('2026-10-03T12:00:00Z')/1000;
@@ -300,11 +303,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       window.addEventListener('hashchange',routeFromHash);
     });
     await page.getByText('호가단지',{exact:true}).waitFor();
-    assert.match(await page.locator('#dashShortlistWrap').textContent(),/예산 범위 매물 후보/);
-    assert.match(await page.locator('#dashShortlistWrap').textContent(),/대출 승인·규제·권리·판매 여부는 별도 확인/);
-    assert.doesNotMatch(await page.locator('#dashShortlistWrap').textContent(),/지금 살 수 있는 집/);
-    assert.equal(await page.locator('#dashShortlistWrap').evaluate(el=>!!el.closest('details')),false);
-    for(const url of ['/api/regime','/api/complex-watch','/api/news','/api/shortlist']) assert(!calls.includes(url),`eager hidden source ${url}`);
+    assert.match(await page.locator('#dashCxWrap').textContent(),/테스트구/);
+    assert.match(await page.locator('#dashCxWrap').textContent(),/새 실거래/);
+    assert.equal(await page.locator('#dashCxWrap').evaluate(el=>!!el.closest('details')),false);
+    assert.equal(calls.includes('/api/complex-watch'),true,'favorite complexes are loaded for the home');
+    assert.equal(calls.includes('/api/asks'),false,'budget candidates are not loaded on the home');
+    for(const url of ['/api/regime','/api/news','/api/shortlist']) assert(!calls.includes(url),`eager hidden source ${url}`);
     const width=await page.evaluate(()=>({viewport:innerWidth,body:document.body.scrollWidth,root:document.documentElement.scrollWidth}));
     assert(width.body<=width.viewport && width.root<=width.viewport,JSON.stringify(width));
     await page.locator('#date').click();
@@ -320,8 +324,6 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#dashMarketExtra > summary').click();
     await page.locator('#dashMarketExtra > summary').click();
     assert.equal(calls.filter(x=>x==='/api/regime').length,1);
-    await page.locator('#dashExtra > summary').click();
-    await page.getByText('가격대별 동네 참고',{exact:true}).waitFor();
     assert.equal(calls.filter(x=>x==='/api/shortlist').length,0);
     await page.getByRole('button',{name:'내 조건',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#mypage');
@@ -330,7 +332,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByRole('button',{name:'시그널',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#signal');
     assert.equal(await page.getByRole('button',{name:'시그널',exact:true}).getAttribute('aria-current'),'page');
-    assert.equal(await page.locator('#groupSubnav').isVisible(),false);
+    assert.equal(await page.locator('#groupSubnav').isVisible(),true);
+    assert.equal(await page.getByRole('button',{name:/가격·수급/}).count(),1);
+    await page.getByRole('button',{name:/지역 가격 비교/}).click();
+    assert.equal(new URL(page.url()).hash,'#undervalued');
+    assert.equal(await page.getByRole('button',{name:/지역 가격 비교/}).getAttribute('class').then(c=>c.includes('on')),true);
+    await page.getByRole('button',{name:/가격·수급/}).click();
+    assert.equal(new URL(page.url()).hash,'#signal');
     await page.evaluate(()=>{mapSplit=()=>{};});
     await page.getByRole('button',{name:'매물 찾기',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#all');
@@ -396,21 +404,24 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       _favs=new Set(['complex:중구|옛 관심단지']);
       _favComplexIdentity=new Map([['중구|옛 관심단지',{status:'needs_reselection',
         message:'이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다.'}]]);
-      window.fetch=(input,...args)=>String(input)==='/api/myfeed'
-        ? Promise.resolve({json:async()=>({ok:true,items:[{type:'complex',region:'중구',name:'옛 관심단지',
-            지역확인필요:true,데이터없음:true}]})}) : originalFetch(input,...args);
+      window.fetch=(input,...args)=>String(input)==='/api/complex-watch'
+        ? Promise.resolve({ok:true,json:async()=>({ready:true,total:1,moved_total:0,quiet:true,items:[],
+            unavailable:[{key:'중구|옛 관심단지','단지명':'옛 관심단지','지역':'중구',
+              reason:'이름만 저장된 중구는 서울·개편 전 인천을 구별할 수 없습니다. 지역 재선택 전 변화 판정을 보류합니다.'}]})})
+        : originalFetch(input,...args);
       try {
-        await renderFavList(); await _loadDashFeed();
+        await renderFavList(); await _loadComplexWatch();
         return {favorite:document.getElementById('favListBody').innerHTML,
-          feed:document.getElementById('dashFeedWrap').innerHTML};
+          complexWatch:document.getElementById('dashCxWrap').innerHTML};
       }
       finally { window.fetch=originalFetch; _favs=oldFavorites; _favComplexIdentity=oldIdentity; }
     });
     assert.match(ambiguousFavorite.favorite,/서울·개편 전 인천을 구별할 수 없습니다/);
     assert.match(ambiguousFavorite.favorite,/지역 재선택/);
     assert.doesNotMatch(ambiguousFavorite.favorite,/＋비교|>상세</);
-    assert.match(ambiguousFavorite.feed,/지역 확인 전 · 변화 판정 보류/);
-    assert.doesNotMatch(ambiguousFavorite.feed,/openComplex/);
+    assert.match(ambiguousFavorite.complexWatch,/서울·개편 전 인천을 구별할 수 없습니다/);
+    assert.match(ambiguousFavorite.complexWatch,/중구/);
+    assert.doesNotMatch(ambiguousFavorite.complexWatch,/openComplex/);
     const reselected=await page.evaluate(async()=>{
       const originalFetch=window.fetch, originalToggle=toggleFav;
       let saved=null;
@@ -916,9 +927,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
     await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
-    const regionEvidence=await page.locator('#haesolPanel').textContent();
-    assert.doesNotMatch(regionEvidence,/이전 발행 180/);
-    assert.match(regionEvidence,/이전 발행 66/);
+    assert.equal(await page.locator('.signal-evidence-details').getAttribute('open'),null);
+    assert.equal(await page.locator('.signal-evidence-details .v2-row').first().isVisible(),false);
+    await page.locator('.signal-evidence-details > summary').click();
+    assert.match(await page.locator('#haesolPanel').textContent(),/이전 발행 66/);
     const explanationCallsBeforeRegion=explanationPayloads.length;
     await page.locator('#v2RegionCounter').click();
     await page.locator('#v2RegionExplanation').getByText(/현재 판정에 반대되는 근거/).waitFor();
@@ -934,35 +946,34 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#v2ReportBody').textContent(),/현재 시그널·자료 신선도/);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     assert(calls.some(x=>decodeURIComponent(x)==='/api/v2/regions/kb:1114000000/report'));
-    assert.equal(await page.locator('#signalPanelReasons').isVisible(),true);
-    assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
+    assert.equal(await page.locator('#signalPanelTrend').isVisible(),true);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
+    assert.equal(await page.locator('.signal-assessment').count(),1);
+    assert.equal(await page.locator('.signal-evidence-details').getAttribute('open'),'');
     assert.equal(await page.locator('#haesolPanel').evaluate(el=>getComputedStyle(el).maxHeight),'none');
-    assert.equal(await page.locator('#signalPanelReasons').evaluate(el=>getComputedStyle(el).overflowY),'auto');
-    assert.equal(calls.some(x=>decodeURIComponent(x)==='/api/series/테스트구'),false);
+    assert.equal(calls.some(x=>decodeURIComponent(x)==='/api/series/테스트구'),true);
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
-    await page.locator('#sideToggle').click();
+    await page.locator('#sideOpenToggle').click();
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),false);
     assert.equal(await page.locator('#sideToggle').getAttribute('aria-expanded'),'true');
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
-    await page.locator('#sideToggle').click();
+    await page.locator('#sideOpenToggle').click();
     await page.locator('#signalSide #list .row').first().click();
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
     assert.equal(await page.locator('#sigbadge').evaluate(el=>el===document.activeElement),true);
     await page.getByRole('tab',{name:'가격·수급 추세'}).click();
     await page.waitForFunction(()=>document.getElementById('signalTrendStatus').textContent==='');
     assert.equal(calls.filter(x=>decodeURIComponent(x)==='/api/series/테스트구').length,1);
-    assert.equal(await page.locator('#signalPanelReasons').isVisible(),false);
-    await page.getByRole('tab',{name:'지역 지도'}).click();
+    await page.getByRole('tab',{name:'급지 지도'}).click();
     assert.equal(await page.locator('#signalPanelMap').isVisible(),true);
     assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
-    await page.getByRole('tab',{name:'판정 근거'}).click();
-    assert.equal(await page.locator('#signalPanelReasons').isVisible(),true);
-    await page.getByRole('tab',{name:'판정 근거'}).focus();
+    await page.getByRole('tab',{name:'급지 지도'}).focus();
     await page.keyboard.press('ArrowLeft');
-    assert.equal(await page.getByRole('tab',{name:'지역 지도'}).getAttribute('aria-selected'),'true');
-    await page.getByRole('tab',{name:'판정 근거'}).click();
+    assert.equal(await page.getByRole('tab',{name:'가격·수급 추세'}).getAttribute('aria-selected'),'true');
+    await page.getByRole('tab',{name:'가격·수급 추세'}).click();
+    await page.locator('.signal-evidence-details > summary').click();
+    assert.match(await page.locator('#haesolPanel').textContent(),/이전 발행 66/);
     await page.setViewportSize({width:1280,height:800});
     assert.equal(await page.locator('#signalSide').isVisible(),true);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
@@ -977,11 +988,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.setViewportSize({width:390,height:800});
     await page.waitForFunction(()=>document.getElementById('signalSide').inert);
     assert((await page.evaluate(()=>document.documentElement.scrollWidth))<=390);
-    assert((await page.locator('#signalPanelReasons').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
+    assert((await page.locator('#signalPanelTrend').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
     await page.setViewportSize({width:360,height:800});
     await page.waitForFunction(()=>document.getElementById('signalSide').inert);
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
-    assert((await page.locator('#signalPanelReasons').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
+    assert((await page.locator('#signalPanelTrend').evaluate(el=>el.getBoundingClientRect().bottom))<=801);
     const reportWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     await page.evaluate(()=>SignalV2.openDiscovery('테스트구'));

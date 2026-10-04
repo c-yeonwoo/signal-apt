@@ -89,6 +89,7 @@ def _auction_alerts() -> list[dict]:
                 sd = date.fromisoformat(s["날짜"])
                 if 0 <= (sd - today).days <= AUCTION_WINDOW:
                     out.append({"kind": "plan", "D": (sd - today).days, "단지": lst.단지명,
+                                "region": lst.region,
                                 "단계": s["단계"], "할일": s["할일"], "금액": s["금액"],
                                 "날짜": s["날짜"]})
                     break
@@ -126,8 +127,12 @@ def _diff_signals(cur: dict, prev: dict) -> list[dict]:
     return out
 
 
-def _act(key: str, title: str, why: str, tab: str, cta: str, *, urgent: bool = False) -> dict:
-    return {"key": key, "title": title, "why": why, "tab": tab, "cta": cta, "urgent": urgent}
+def _act(key: str, title: str, why: str, tab: str, cta: str, *, urgent: bool = False,
+         region: str | None = None) -> dict:
+    action = {"key": key, "title": title, "why": why, "tab": tab, "cta": cta, "urgent": urgent}
+    if region:
+        action["region"] = region
+    return action
 
 
 def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
@@ -150,10 +155,11 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
         if a["kind"] == "bid":
             out.append(_act("auction_bid", f"{a['단지']} 입찰가 확정·보증금 준비",
                             f"입찰기일 {when}({a['날짜']}) — 미루면 끝입니다", "auction",
-                            "입찰가 산정표 열기", urgent=True))
+                            "입찰가 산정표 열기", urgent=True, region=a.get("region")))
         else:
             out.append(_act("auction_step", f"{a['단지']} {a['단계']}",
-                            f"{when} — {a['할일']}", "auction", "낙찰 후 플랜 열기", urgent=True))
+                            f"{when} — {a['할일']}", "auction", "낙찰 후 플랜 열기", urgent=True,
+                            region=a.get("region")))
 
     if not budget:
         out.append(_act("no_budget", "가용자본 입력하기",
@@ -167,7 +173,7 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
         price = top.get("총액") or top.get("호가") or top.get("예상가")
         out.append(_act("asks", f"{top.get('단지명') or '매물'} 매매가 {_eok(price)}",
                         f"예산 안에서 가격이 있는 매물 {len(asks)}곳입니다. 동네 평균으로 짐작한 단지가 아닙니다.",
-                        "dashboard", "이 집 보기"))
+                        "all", "매물 목록에서 보기", region=top.get("지역")))
     else:
         out.append(_act("levers", "같은 돈으로 사는 방법 보기",
                         "예산 안에 맞는 매물이 없습니다. 실거주, 갭, 경매, 재건축을 나란히 봅니다.",
@@ -176,15 +182,18 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
     for s in [x for x in sigs if x["up"]][:2]:
         out.append(_act("signal_up", f"{s['region']} 동네 리포트 다시 보기",
                         f"이번 주 {SIG_LABEL.get(s['from'], s['from'])} → "
-                        f"{SIG_LABEL.get(s['to'], s['to'])}로 올라섰습니다", "signal", "동네 리포트 →"))
+                        f"{SIG_LABEL.get(s['to'], s['to'])}로 올라섰습니다", "signal", "동네 리포트 →",
+                        region=s["region"]))
     for s in [x for x in sigs if not x["up"]][:1]:
         out.append(_act("signal_down", f"{s['region']} 후보 재검토",
                         f"이번 주 {SIG_LABEL.get(s['from'], s['from'])} → "
-                        f"{SIG_LABEL.get(s['to'], s['to'])}로 내려갔습니다", "signal", "시그널 보기 →"))
+                        f"{SIG_LABEL.get(s['to'], s['to'])}로 내려갔습니다", "signal", "시그널 보기 →",
+                        region=s["region"]))
 
     for c in (diff.get("new") or [])[:2]:
         out.append(_act("new_candidate", f"{c['단지']}({c['region']}) 실거래·평면 확인",
-                        "이번 주 새로 후보에 들어온 단지입니다", "dashboard", "단지 상세 →"))
+                        "이번 주 새로 후보에 들어온 단지입니다", "dashboard", "단지 상세 →",
+                        region=c.get("region")))
 
     if cands:
         seen = visited or {}
@@ -192,11 +201,11 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
         if todo:
             out.append(_act("imjang", f"{todo[0]['단지']} 임장 잡기",
                             "현장에서만 알 수 있는 것들이 있습니다 — 코스를 짜 드립니다",
-                            "dashboard", "임장 코스 짜기 →"))
+                            "dashboard", "임장 코스 짜기 →", region=todo[0].get("region")))
         else:
             out.append(_act("imjang_compare", "임장 기록 비교해서 1곳으로 좁히기",
                             "후보를 다 봤습니다 — 점수를 나란히 놓고 고를 차례입니다",
-                            "dashboard", "임장 기록 →"))
+                            "dashboard", "임장 기록 →", region=cands[0].get("region")))
     elif not p.get("_favs"):
         # ★가 있는데 후보만 없는 경우는 예산 문제라 위에서 이미 말했다 — 두 번 시키지 않는다
         out.append(_act("no_favorite", "관심 지역 ★ 추가하기",

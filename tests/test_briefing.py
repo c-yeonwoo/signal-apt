@@ -61,6 +61,13 @@ def test_briefing_does_not_call_supplier_gap_a_verified_discount():
     assert "-10" not in msg
 
 
+def test_action_plan_carries_the_region_for_a_property_task():
+    acts = briefing.actions({}, [], [], [], profile={}, confirmed=True, budget=60000,
+                            asks=[{"단지명": "상계주공", "지역": "서울 노원구 상계동", "호가": 50000}])
+    assert acts[0]["key"] == "asks"
+    assert acts[0]["region"] == "서울 노원구 상계동"
+
+
 def test_unchanged_day_is_not_sent(uid):
     first = briefing.build(uid)
     db.kv_set(briefing.SNAP_KEY.format(uid=uid), first["snapshot"])
