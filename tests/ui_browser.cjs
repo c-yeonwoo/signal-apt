@@ -350,6 +350,20 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(calls.filter(x=>x==='/api/shortlist').length,0);
     await page.getByRole('button',{name:'내 조건',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#mypage');
+    assert.equal(await page.locator('#mp_capital').isVisible(),true);
+    assert.equal(await page.locator('#mp_income').isVisible(),true);
+    assert.equal(await page.locator('#mpExtra').getAttribute('open'),null);
+    assert.equal(await page.locator('#mp_work').isVisible(),false);
+    await page.locator('#mpExtra > summary').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#mp_work').isVisible(),true);
+    assert.equal(await page.locator('#mp_chungyak').isVisible(),true);
+    for(const width of [180,360,390]){
+      await page.setViewportSize({width,height:800});
+      const profileWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
+      assert(profileWidth<=width,`profile page overflows at ${width}px: ${profileWidth}`);
+    }
+    await page.setViewportSize({width:360,height:800});
     await page.goBack();
     await page.waitForFunction(()=>document.body.className==='tab-dashboard');
     await page.getByRole('button',{name:'시그널',exact:true}).click();
@@ -512,8 +526,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('찜 당시보다 하락 1.0억').waitFor();
     assert.equal(await page.locator('.watch-records').getAttribute('open'),null);
     assert.equal(await page.locator('.watch-card-more').getAttribute('open'),null);
+    assert.equal(await page.locator('.watch-card-prior').count(),0);
+    assert.equal(await page.locator('.watch-card-detail-line').isVisible(),false);
     assert.equal(await page.locator('.watch-alternatives').isVisible(),false);
     await page.locator('.watch-card-more > summary').click();
+    assert.match(await page.locator('.watch-card-detail-line').textContent(),/찜 당시 호가/);
     assert.match(await page.locator('.watch-alternatives').textContent(),/같은 단지의 다른 매물/);
     for(const width of [180,360,390,1280]){
       await page.setViewportSize({width,height:800});
