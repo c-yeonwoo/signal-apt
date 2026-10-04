@@ -165,7 +165,7 @@ Nick `get_backtest`는 발생 후 달력 12주가 성숙한 과거 연구용 집
 ### 5.3 스케줄
 
 - KB 갱신 (`_do_refresh` / `signal watch`) → `brain/snapshots` diff → `signal_changes` 로그
-- digest 이메일: `digest.py` (SMTP optional)
+- 텔레그램: 아침 브리핑(`briefing.py`)과 관심단지·찜 매물·청약 일정(`services/telegram_updates.py`), 성공 발송 이벤트만 `telegram_alert_delivery`에 기록
 
 ---
 
@@ -180,7 +180,7 @@ Nick `get_backtest`는 발생 후 달력 12주가 성숙한 과거 연구용 집
 | `data/cache/snapshot.json` | `{as_of, signals:{region→grade}}` (CLI watch) |
 | `db.kv signal_snapshot` | `{region→grade}` (API) |
 
-→ **단일 read/write 경로**로 통합 (watch / digest / refresh 공용).
+→ **단일 read/write 경로**로 통합 (watch / refresh 공용).
 
 ### 6.2 Outcome 스냅샷
 
@@ -288,7 +288,7 @@ Observe → Evaluate → Calibrate → Explain
 - **서비스:** `market_data.py`(KB/시그널 캐시) · `complex_signal.py`(단지 시그널)
 - **인증:** 쿠키 `rsm_session`, `/api/*` 게이트 (`routes/deps.py`). 가입 시 ToS 동의·`/legal/*`·비밀번호 재설정(`/api/auth/forgot-password`)
 - **쓰기 권한:** 경매 CRUD·급매/재건축 갱신·KB refresh·단지백테스트 = `deps.require_admin` (`ADMIN_EMAILS`)
-- **주간 digest:** CLI + 서버 `_auto_refresh_loop` 7일마다 (`last_digest_run`)
+- **텔레그램 알림:** 연결 계정의 아침 브리핑과 확인된 관심 소식. 주간 이메일 다이제스트는 제거했고, SMTP는 비밀번호 재설정에만 사용한다.
 - **캐시 무효화:** `market_data.clear_caches()` (calibration apply · `/api/refresh`)
 
 ### 8.2 프론트
@@ -304,7 +304,6 @@ Observe → Evaluate → Calibrate → Explain
 ```bash
 signal fetch               # KB 수집
 signal watch [--notify]    # 스냅샷 diff + macOS 알림
-signal digest [--send]     # 주간 이메일
 signal outcomes-label      # outcome → N주 후 가격 라벨
 signal calibrate [--save]  # CalibrationProposal (자동 적용 없음)
 signal strength [--rebuild] # 시장강도 프록시 TOP
@@ -395,7 +394,8 @@ src/realty_signal/
 ├── db.py                  # SQLite
 ├── advisor.py             # Nick
 ├── personal_layer.py      # 동네·대출·체크리스트
-├── digest.py              # 주간 이메일
+├── mailer.py              # 비밀번호 재설정 메일만
+├── briefing.py            # 텔레그램 아침 브리핑
 ├── services/
 │   ├── market_data.py     # KB/시그널/국면 캐시 · alert_track_record
 │   └── complex_signal.py  # 단지 시그널 · 주력평형 지표

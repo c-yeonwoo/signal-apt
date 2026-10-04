@@ -117,6 +117,9 @@ CREATE INDEX IF NOT EXISTS ix_alert_outbox_v2_user
     ON alert_outbox_v2(uid,created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_alert_outbox_v2_unread
     ON alert_outbox_v2(uid,seen_at,created_at DESC);
+CREATE TABLE IF NOT EXISTS telegram_alert_delivery(
+    uid INTEGER NOT NULL, event_id TEXT NOT NULL, sent_at INTEGER NOT NULL,
+    PRIMARY KEY(uid,event_id));
 CREATE TABLE IF NOT EXISTS region_watch_state_v2(
     uid INTEGER NOT NULL, favorite_key TEXT NOT NULL,
     assessment_id TEXT NOT NULL, updated_at INTEGER NOT NULL,
@@ -559,13 +562,13 @@ def users_with_telegram() -> list[dict]:
             cid = (json.loads(data or "{}").get("telegram") or {}).get("chat_id")
         except Exception:  # noqa: BLE001
             cid = None
-        if cid:
+        if type(cid) is int and cid > 0:
             out.append({"id": uid, "email": email, "chat_id": cid})
     return out
 
 
 def users_with_region_favs() -> list[dict]:
-    """관심지역(kind=region)이 1개 이상인 유저 목록. 주간 다이제스트용."""
+    """검증 가능한 관심지역(kind=region)이 1개 이상인 유저 목록."""
     c = conn()
     rows = c.execute(
         "SELECT u.id, u.email, GROUP_CONCAT(f.key, '|') "

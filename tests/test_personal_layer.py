@@ -1,9 +1,8 @@
-"""개인 데이터 레이어·다이제스트 확장 단위 테스트."""
+"""개인 데이터 레이어 단위 테스트."""
 
 from __future__ import annotations
 
 from realty_signal import personal_layer as pl
-from realty_signal.digest import build_user_digest
 
 
 def test_volume_summary_shape():
@@ -40,19 +39,6 @@ def test_loan_scenarios_three_ltvs():
     rows = pl.loan_scenarios(30000, 5000, 0.04, 30, fake)
     assert [r["ltv"] for r in rows] == [60, 70, 80]
     assert rows[0]["매수가능가"] < rows[2]["매수가능가"]
-
-
-def test_digest_includes_extras():
-    d = build_user_digest(
-        "a@b.com", ["마포구"], [], {"마포구": "BUY"}, "2026-07-14",
-        extras={
-            "macro": {"대출금리": 3.5, "구매력": 120, "기준": "2026-07"},
-            "volumes": {"마포구": 1.2},
-            "complexes": [{"name": "공덕래미안", "전세가율": 70, "갭": 20000}],
-        },
-    )
-    assert "거시" in d["body"] and "거래량비" in d["body"] and "전세가율" in d["body"]
-    assert "전국 아파트 구매력지수 120.0" in d["body"]
 
 
 def test_nbhd_metrics_includes_volume():

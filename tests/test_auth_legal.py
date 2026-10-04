@@ -43,6 +43,22 @@ def test_reset_unknown_email_no_leak(tmp_path, monkeypatch):
     assert "등록된 이메일" in msg
 
 
+def test_password_reset_still_uses_transactional_mail_after_digest_removal(tmp_path, monkeypatch):
+    from realty_signal import mailer
+    from realty_signal.routes import auth as auth_routes
+
+    monkeypatch.setattr(db, "DB", tmp_path / "app.db")
+    db._migrated[0] = False
+    auth.signup("reset@example.com", "secret1", accept_tos=True)
+    sent = []
+    monkeypatch.setattr(mailer, "smtp_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email", lambda to, subject, body: sent.append((to, subject, body)))
+    response = auth_routes.auth_forgot_password({"email": "reset@example.com"})
+    assert response["ok"] and "dev_reset_link" not in response
+    assert sent[0][0] == "reset@example.com"
+    assert "비밀번호 재설정" in sent[0][1]
+
+
 def test_require_admin_helper():
     class R:
         cookies = {}

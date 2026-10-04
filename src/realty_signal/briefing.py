@@ -287,16 +287,14 @@ def plan(uid: int) -> dict:
 
 def build(uid: int, *, force: bool = False) -> dict:
     """유저 1인 브리핑. 보낼 게 없으면 {'send': False, 'reason': ...}."""
-    from realty_signal.services import complex_watch as cw, shortlist as sl
+    from realty_signal.services import shortlist as sl
 
     profile = dict(db.profile_get(uid) or {})
     profile["_favs"] = db.actionable_region_favs(uid)
     p = buying_power.params_from_profile(profile)
     budget = buying_power.max_purchase(p)[0] if p.capital > 0 else 0
-    if not budget:
-        return {"send": False, "reason": "no_budget"}
-
-    data = sl.build(profile, float(budget), limit=3, budget_is_ceiling=False)
+    data = (sl.build(profile, float(budget), limit=3, budget_is_ceiling=False) if budget else
+            {"budget": 0, "pyeong": None, "candidates": [], "직장": profile.get("직장")})
     cands = data.get("candidates") or []
     from realty_signal import api as app_api
     signal_map = app_api._display_signal_map()
@@ -307,12 +305,6 @@ def build(uid: int, *, force: bool = False) -> dict:
     first = not prev
     diff = _diff_candidates(cands, prev.get("candidates") or {})
     sigs = _diff_signals(cur_sigs, prev.get("signals") or {})
-    # 관심단지는 **브리핑 자기 스냅샷**으로 비교한다 — 홈 카드(`complex_snap:`)와
-    # 키를 공유하면 브리핑이 나갈 때마다 홈의 관심단지 변화가 사라진다.
-    cx_items, cx_snaps, _ = cw.scan(cw.favorites_of(uid), cw.cache_loader(),
-                                    prev.get("complexes") or {}, budget=float(budget))
-    cx_moved = [it for it in cx_items if it.get("changes")]
-
     qs = _quicksales(watch, float(budget), uid=uid)
     asks = asks_within(uid, profile, float(budget))
     qs_new = len(qs) - int(prev.get("quicksale") or 0)
@@ -324,19 +316,17 @@ def build(uid: int, *, force: bool = False) -> dict:
         "candidates": {_key(c): c.get("예상가") for c in cands},
         "signals": cur_sigs,
         "quicksale": len(qs),
-        "complexes": cx_snaps,
     }
     news = len(diff["new"]) + len(diff["dropped"]) + len(diff["moved"]) + len(sigs) \
         + (qs_new if qs_new > 0 else 0) \
-        + sum(1 for a in auctions if a["D"] in ALERT_DDAYS) \
-        + len(cx_moved)
+        + sum(1 for a in auctions if a["D"] in ALERT_DDAYS)
     weekly = today_kst().weekday() == 0
     if not first and not news and not weekly and not force:
         return {"send": False, "reason": "no_news", "snapshot": snapshot}
 
     text = _render(profile, data, diff, sigs, qs, qs_new, first=first,
                    visited=db.imjang_latest(uid), auctions=auctions,
-                   complexes=cx_moved, asks=asks)
+                   asks=asks)
     return {"send": True, "text": text, "snapshot": snapshot, "news": news,
             "first": first, "candidates": cands}
 
@@ -344,21 +334,23 @@ def build(uid: int, *, force: bool = False) -> dict:
 def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             qs: list[dict], qs_new: int, *, first: bool,
             visited: dict | None = None, auctions: list[dict] | None = None,
-            complexes: list[dict] | None = None, asks: list[dict] | None = None) -> str:
+            asks: list[dict] | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
     L = [f"📍 Signal APT 아침 요약 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
-    L.append(f"예산 {_eok(data.get('budget'))} · {data.get('pyeong')}평 기준")
+    L.append((f"예산 {_eok(data.get('budget'))} · {data.get('pyeong')}평 기준"
+              if data.get("budget") else "매수력 미설정 · 관심지역 변화와 일정 중심"))
     L.append("")
 
     if first:
-        L.append("[이번 주 볼 단지]")
+        L.append("[이번 주 볼 단지]" if data.get("budget") else "[시작하기]")
         for c in cands:
             lines = c.get("lines") or {}
             tail = f" | {lines['cash']} | {lines.get('unknown', '')}" if lines.get("cash") else ""
             L.append(f"· {c['단지']} ({c['region']}) {_eok(c.get('예상가'))} — {c.get('근거', '')}{tail}")
         if not cands:
-            L.append("· 예산 안에 드는 후보가 없어요. 매수력이나 관심지역을 조정해 보세요.")
+            L.append("· 매수력을 입력하면 예산에 맞는 후보를 볼 수 있어요." if not data.get("budget")
+                     else "· 예산 안에 드는 후보가 없어요. 매수력이나 관심지역을 조정해 보세요.")
         L.append("")
     else:
         lines = []
@@ -396,14 +388,6 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             L.append(f"· {m.get('단지명')} {py}{_eok(m.get('호가'))}{gap_s}")
         L.append("")
 
-    if complexes:
-        L.append(f"[관심단지] {len(complexes)}곳 변화")
-        for it in complexes[:3]:
-            말 = " · ".join(c["말"] for c in (it.get("changes") or [])[:3])
-            L.append(f"· {it['단지명']}({it['지역']}) — {말}")
-        L.append("※ 실거래는 계약 후 30일 내 신고라 최근 달 건수는 계속 늘어납니다.")
-        L.append("")
-
     if auctions:
         L.append("[경매]")
         for a in auctions[:4]:
@@ -434,6 +418,10 @@ def run(*, send: bool = True, quiet: bool = False, force: bool = False) -> dict:
     users = db.users_with_telegram()
     stats = {"total": len(users), "sent": 0, "skipped": 0, "errors": 0, "dry_run": 0}
     for u in users:
+        sent_key = f"briefing_sent:{today_kst().isoformat()}:{u['id']}"
+        if send and not force and db.kv_get(sent_key):
+            stats["skipped"] += 1
+            continue
         try:
             b = build(u["id"], force=force)
         except Exception as e:  # noqa: BLE001
@@ -453,6 +441,8 @@ def run(*, send: bool = True, quiet: bool = False, force: bool = False) -> dict:
             continue
         if telegram.send_message(u["chat_id"], b["text"]):
             stats["sent"] += 1
+            db.kv_set(sent_key, {"sent": True})
+            db.kv_set(f"telegram_last_sent:{u['id']}", {"kind": "briefing"})
             if snap:               # 발송 성공 후에만 기준점 이동(실패 시 변화 유실 방지)
                 db.kv_set(SNAP_KEY.format(uid=u["id"]), snap)
         else:

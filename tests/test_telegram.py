@@ -41,7 +41,7 @@ def _fake_calls(monkeypatch, updates: list[dict]):
 
 def _start(code: str, chat_id: int = 777, update_id: int = 1) -> dict:
     return {"update_id": update_id,
-            "message": {"chat": {"id": chat_id}, "from": {"username": "nick"},
+            "message": {"chat": {"id": chat_id, "type": "private"}, "from": {"username": "nick"},
                         "text": f"/start {code}"}}
 
 
@@ -54,6 +54,16 @@ def test_link_code_binds_chat_id(uid, monkeypatch):
     assert stats["linked"] == 1
     assert telegram.chat_id_of(db.profile_get(uid)) == 777
     assert sent and "연결됐습니다" in sent[0][1]
+
+
+def test_group_chat_cannot_receive_personal_alerts(uid, monkeypatch):
+    _fake_calls(monkeypatch, [])
+    code = telegram.issue_link_code(uid)["code"]
+    message = _start(code)
+    message["message"]["chat"]["type"] = "group"
+    _fake_calls(monkeypatch, [message])
+    assert telegram.poll_updates()["linked"] == 0
+    assert telegram.chat_id_of(db.profile_get(uid)) is None
 
 
 def test_expired_code_does_not_link(uid, monkeypatch):
@@ -86,7 +96,7 @@ def test_stop_unlinks(uid, monkeypatch):
     code = telegram.issue_link_code(uid)["code"]
     _fake_calls(monkeypatch, [_start(code)])
     telegram.poll_updates()
-    _fake_calls(monkeypatch, [{"update_id": 9, "message": {"chat": {"id": 777}, "text": "/stop"}}])
+    _fake_calls(monkeypatch, [{"update_id": 9, "message": {"chat": {"id": 777, "type": "private"}, "text": "/stop"}}])
     stats = telegram.poll_updates()
     assert stats["stopped"] == 1
     assert telegram.chat_id_of(db.profile_get(uid)) is None
@@ -94,7 +104,7 @@ def test_stop_unlinks(uid, monkeypatch):
 
 def test_users_with_telegram_lists_linked_only(uid, monkeypatch):
     tok, _ = auth.signup("plain@test.io", "secret1", accept_tos=True)
-    db.profile_set(db.session_user(tok)["id"], {"가용자본": 30000})
+    db.profile_set(db.session_user(tok)["id"], {"telegram": {"chat_id": -999}})
     _fake_calls(monkeypatch, [])
     code = telegram.issue_link_code(uid)["code"]
     _fake_calls(monkeypatch, [_start(code)])
@@ -102,6 +112,7 @@ def test_users_with_telegram_lists_linked_only(uid, monkeypatch):
     rows = db.users_with_telegram()
     assert [r["id"] for r in rows] == [uid]
     assert rows[0]["chat_id"] == 777
+    assert telegram.chat_id_of({"telegram": {"chat_id": -999}}) is None
 
 
 def test_send_message_truncates(uid, monkeypatch):

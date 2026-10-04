@@ -75,7 +75,7 @@ def send_message(chat_id: int | str, text: str) -> bool:
 def chat_id_of(profile: dict | None) -> int | None:
     tg = (profile or {}).get("telegram") or {}
     cid = tg.get("chat_id")
-    return cid if cid else None
+    return cid if type(cid) is int and cid > 0 else None
 
 
 def issue_link_code(uid: int) -> dict:
@@ -121,9 +121,11 @@ def poll_updates(limit: int = 50) -> dict:
     for up in (r or {}).get("result", []):
         db.kv_set(OFFSET_KEY, up.get("update_id", 0) + 1)
         msg = up.get("message") or {}
-        chat_id = (msg.get("chat") or {}).get("id")
+        chat = msg.get("chat") or {}
+        chat_id = chat.get("id")
         text = (msg.get("text") or "").strip()
-        if not chat_id or not text:
+        # Personal price and budget details must never be linked to a group chat.
+        if not chat_id or chat.get("type") != "private" or not text:
             continue
         stats["seen"] += 1
         if text.startswith("/stop"):
@@ -142,7 +144,7 @@ def poll_updates(limit: int = 50) -> dict:
         _attach(int(uid), chat_id, msg)
         db.kv_set(f"tg_link:{code}", None)
         stats["linked"] += 1
-        send_message(chat_id, "연결됐습니다. 이제 매일 아침 관심 후보의 변화만 요약해 보내드릴게요.\n"
+        send_message(chat_id, "연결됐습니다. 아침 브리핑과 확인된 관심단지·찜한 매물·청약 일정 변화를 보내드릴게요.\n"
                               "끄려면 /stop 을 보내세요.")
     return stats
 
