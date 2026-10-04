@@ -418,6 +418,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#laSourceWarning').isVisible(),false);
     assert.match(await page.locator('#laSourceScope').textContent(),/1곳 조회 실패 · 2곳 페이지 제한/);
     assert.equal(await page.locator('#laSourceScope').isVisible(),true);
+    assert(await page.locator('#laSourceScope').evaluate(el=>parseFloat(getComputedStyle(el).fontSize)>=13),
+      'partial collection notice must not be tiny body text');
     await page.setViewportSize({width:180,height:800});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),
       'partial collection notice must fit the narrow viewport');
