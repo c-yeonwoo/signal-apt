@@ -953,6 +953,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#haesolPanel').evaluate(el=>getComputedStyle(el).maxHeight),'none');
     assert.equal(calls.some(x=>decodeURIComponent(x)==='/api/series/테스트구'),true);
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
+    assert.equal(await page.locator('#sideOpenToggle').isVisible(),true);
+    assert.equal(await page.locator('#sideOpenToggle').getAttribute('aria-expanded'),'false');
     await page.locator('#sideOpenToggle').click();
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),false);
     assert.equal(await page.locator('#sideToggle').getAttribute('aria-expanded'),'true');

@@ -5007,18 +5007,19 @@ const _signalMobile=()=>window.matchMedia('(max-width:760px)').matches;
 function closeSignalRegions(restoreFocus=true){
   const root=document.getElementById('view-signal'), side=document.getElementById('signalSide');
   const wasOpen=root.classList.contains('picker-open');
+  const mobile=_signalMobile();
   root.classList.remove('picker-open');
   side.removeAttribute('role'); side.removeAttribute('aria-modal');
-  side.inert=_signalMobile();
+  side.inert=mobile;
   const toggle=document.getElementById('sideToggle');
   const collapsed=side.classList.contains('collapsed');
-  toggle.setAttribute('aria-expanded',String(!collapsed));
+  toggle.setAttribute('aria-expanded',String(mobile?false:!collapsed));
   toggle.textContent=collapsed?'지역 목록 열기':'지역 목록 접기';
   const opener=document.getElementById('sideOpenToggle');
-  opener.setAttribute('aria-expanded',String(root.classList.contains('picker-open')||!collapsed));
-  opener.textContent=_signalMobile()?'지역 찾기':collapsed?'지역 목록 열기':'';
-  opener.hidden=_signalMobile()?root.classList.contains('picker-open'):!collapsed;
-  if(wasOpen && restoreFocus) document.getElementById(_signalMobile()?'sideOpenToggle':'sideToggle').focus();
+  opener.setAttribute('aria-expanded',String(mobile?false:!collapsed));
+  opener.textContent=mobile?'지역 찾기':collapsed?'지역 목록 열기':'';
+  opener.hidden=mobile?false:!collapsed;
+  if(wasOpen && restoreFocus) document.getElementById(mobile?'sideOpenToggle':'sideToggle').focus();
 }
 function signalModeKey(event){
   const index=_SIGNAL_VIEWS.findIndex(mode=>event.target.id==='signalMode'+mode[0].toUpperCase()+mode.slice(1));
@@ -5062,7 +5063,7 @@ document.addEventListener('keydown', event=>{
 window.addEventListener('resize',()=>{
   if(!_signalMobile()) closeSignalRegions(false);
   else if(!document.getElementById('view-signal').classList.contains('picker-open'))
-    document.getElementById('signalSide').inert=true;
+    closeSignalRegions(false);
 });
 closeSignalRegions(false);
 async function loadSignalTrend(region){
