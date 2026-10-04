@@ -1146,18 +1146,31 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         assessment:{assessment_status:'held',raw_grade:'BUY',
           summary:'행정구역 개편 전 자료라 현재 판정을 보류합니다.',scope_note:'인천 권역 자료',
           change:{type:'method_change',changed_reasons:[]},reasons:[]},
-        positive:[],cautions:[],unknowns:['sale_weeks_incomplete','region_boundary_obsolete','__proto__']};
+        positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:183.9,
+          threshold:170,unit:'지수',role:'driver',passing:true}],cautions:[],
+        unknowns:['sale_weeks_incomplete','region_boundary_obsolete','__proto__']};
       window.fetch=(input,...args)=>String(input).startsWith('/api/v2/regions/')
         ? Promise.resolve(new Response(JSON.stringify(held),{status:200,headers:{'Content-Type':'application/json'}}))
         : original(input,...args);
       try{await SignalV2.paintRegion('테스트구','kb:1114000000');}
       finally{window.fetch=original;}
     });
-    assert.match(await page.locator('.signal-assessment-highlights').textContent(),/판단 보류 사유 3건/);
-    assert.doesNotMatch(await page.locator('.signal-assessment-highlights').textContent(),/미확인 자료 3건/);
+    const heldHero=await page.locator('.signal-assessment-highlights').textContent();
+    assert.match(heldHero,/판단 보류 이유/);
+    assert.match(heldHero,/최근 주간 가격 4주가 이어지지 않습니다/);
+    assert.match(heldHero,/행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다/);
+    assert.match(heldHero,/그 밖의 사유 1건/);
+    assert.doesNotMatch(heldHero,/전세수급 압력|미확인 자료/);
+    for(const width of [180,360]){
+      await page.setViewportSize({width,height:800});
+      const heldWidth=await page.locator('.signal-assessment').evaluate(el=>({scroll:el.scrollWidth,client:el.clientWidth}));
+      assert(heldWidth.scroll<=heldWidth.client,`held summary overflows at ${width}px: ${JSON.stringify(heldWidth)}`);
+    }
     await page.locator('.signal-evidence-details > summary').click();
     const heldReason=await page.locator('.signal-evidence-details').textContent();
     assert.match(heldReason,/행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다/);
+    assert.match(heldReason,/기본 규칙의 충족 조건 · 현재 판정 아님/);
+    assert.match(heldReason,/전세수급 압력/);
     assert.match(heldReason,/확인되지 않은 보류 사유가 있습니다/);
     assert.doesNotMatch(heldReason,/region_boundary_obsolete|__proto__|\[object Object\]/);
     await page.locator('.signal-evidence-details').getByText('기존 규칙 산출값').click();
