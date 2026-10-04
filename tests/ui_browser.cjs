@@ -1187,10 +1187,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#haesolPanel').textContent(),/이전 발행 66/);
     await page.setViewportSize({width:1280,height:800});
     assert.equal(await page.locator('#signalSide').isVisible(),true);
+    await page.waitForFunction(()=>!document.getElementById('signalSide').inert);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
     const regionAction=page.locator('#signalSide #list .row-select').first();
     assert.equal(await regionAction.getAttribute('type'),'button');
     assert.equal(await regionAction.locator('.fav').count(),0,'favorite action stays separate from region selection');
+    await page.evaluate(()=>{_filtersOpen=false;document.getElementById('filterPanel').style.display='none';updateFilterToggleLabel();});
     await page.locator('#filterToggle').focus();
     await page.keyboard.press('Tab');
     assert.equal(await regionAction.evaluate(el=>el===document.activeElement),true,
