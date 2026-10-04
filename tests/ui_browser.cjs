@@ -16,6 +16,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const watchTargets=new Map();
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
+    let generalRefreshCooldown=false;
     let serverClientVersion='synthetic-v1';
     let regionReportFailures=0, seriesFailures=0;
     page.on('pageerror', e=>errors.push(e.message));
@@ -76,6 +77,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
             changes:[{kind:'new_trade','말':'새 실거래'}]}
         ],unavailable:[]};
       if(url.pathname==='/api/listings/all') data={listings:[],asof:'2026-09-21',meta:{private_access:false,data_age_days:7}};
+      if(url.pathname==='/api/general-listings/refresh' && route.request().method()==='POST')
+        return route.fulfill({json:generalRefreshCooldown?{ok:false,reason:'cooldown'}:{ok:true,count:1,regions:1}});
       if(url.pathname==='/api/freshness') {
         const now=Date.parse('2026-10-03T12:00:00Z')/1000;
         data={now,'기준일':'2026-09-21',kb_fetch:{observation_check:{asof:'2026-09-21',previous_asof:'2026-09-21',changed:false,checked_at:now-3600}},sources:[
@@ -390,6 +393,21 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#listingFocus').getByRole('button',{name:/전체 보기/}).click();
     await page.getByText('일반·급매 매물은 지정된 개인 계정에서만 보입니다.',{exact:false}).waitFor();
     assert.match(await page.locator('#laStatus').textContent(),/지정된 개인 계정만/);
+    await page.evaluate(()=>_laApplyResponse('일반매물',{
+      listings:[],asof:'2026-09-28',meta:{private_access:true,general_refresh_failed:true}}));
+    assert.equal(await page.locator('#laSourceWarning').isVisible(),true);
+    assert.match(await page.locator('#laSourceWarning').textContent(),/현재 목록은 전체가 아니며/);
+    generalRefreshCooldown=true;
+    await page.locator('#laGeneralRetry').click();
+    await page.getByText(/10분이 지나야 다시 수집/).waitFor();
+    assert.equal(await page.locator('#laSourceWarning').isVisible(),true);
+    generalRefreshCooldown=false;
+    await page.locator('#laGeneralRetry').click();
+    await page.waitForFunction(()=>document.getElementById('laSourceWarning').style.display==='none');
+    assert(calls.includes('/api/general-listings/refresh'));
+    await page.evaluate(()=>_laApplyResponse('일반매물',{
+      listings:[],asof:'2026-09-28',meta:{private_access:false,general_refresh_failed:true}}));
+    assert.equal(await page.locator('#laSourceWarning').isVisible(),false,'guests must not see private refresh status');
     const budgetUi=await page.evaluate(()=>{
       mapSplit=(_list,_map,items,opt)=>{window.__budgetItems=items;window.__budgetOpt=opt;};
       const row={key:'일반매물:budget',유형:'일반매물',단지명:'예산테스트단지',지역:'테스트구',
@@ -524,14 +542,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#view-general .watch-btn').count(),1);
     await page.evaluate(()=>switchTab('watch'));
     await page.getByText('찜 당시보다 하락 1.0억').waitFor();
+    assert.equal(await page.locator('.watch-card-head .watch-btn').count(),0,
+      'primary favorite card offers only the candidate action');
+    assert.equal(await page.locator('.watch-card-more > summary').textContent(),'알림·찜 관리');
     assert.equal(await page.locator('.watch-records').getAttribute('open'),null);
     assert.equal(await page.locator('.watch-card-more').getAttribute('open'),null);
     assert.equal(await page.locator('.watch-card-prior').count(),0);
     assert.equal(await page.locator('.watch-card-detail-line').isVisible(),false);
     assert.equal(await page.locator('.watch-alternatives').isVisible(),false);
+    assert.equal(await page.locator('#view-watch .watch-btn').isVisible(),false);
     await page.locator('.watch-card-more > summary').click();
     assert.match(await page.locator('.watch-card-detail-line').textContent(),/찜 당시 호가/);
     assert.match(await page.locator('.watch-alternatives').textContent(),/같은 단지의 다른 매물/);
+    assert.match(await page.locator('#view-watch .watch-btn').textContent(),/찜 해제/);
     for(const width of [180,360,390,1280]){
       await page.setViewportSize({width,height:800});
       const watchWidth=await page.evaluate(()=>{const card=document.querySelector('.watch-card'),edge=card.getBoundingClientRect().right;

@@ -3541,6 +3541,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "data_age_days": round(_data_age_days() or 0, 1),
             "engagement_boost": bool(scores),
             "private_access": private_access,
+            "general_refresh_failed": bool(private_access and "일반매물" in requested_types
+                                           and _radar_refresh_status(HANBANG_FILE).get("ok") is False),
             "source_record_count": source_record_count,
             "duplicate_records_collapsed": source_record_count - len(out),
             "confirmed_budget": bool(confirmed and (profile.get("매수지역코드")
