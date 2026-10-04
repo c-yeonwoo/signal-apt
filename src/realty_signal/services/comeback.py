@@ -85,7 +85,8 @@ def _paths(changes: list[dict]) -> dict[str, dict]:
     return out
 
 
-def compute(uid: int, favs: set[str], as_of: str, kb_dates: list[str]) -> dict:
+def compute(uid: int, favs: set[str], as_of: str, kb_dates: list[str],
+            *, current_signals: dict[str, str] | None = None) -> dict:
     """복귀 브리핑. 준비 안 됐으면 `ready=False` + 사유를 준다.
 
     0 을 이유 없이 비우지 않는다 — '첫 방문'·'최근 방문'·'조용했음' 은 다른 상태다.
@@ -106,6 +107,13 @@ def compute(uid: int, favs: set[str], as_of: str, kb_dates: list[str]) -> dict:
     log = db.kv_get("signal_changes") or []
     rel = [c for c in log if prev_as_of < (c.get("date") or "") <= as_of]
     paths = _paths(rel)
+    for region, item in paths.items():
+        current = (current_signals or {}).get(region, "HELD")
+        verified = current in _RANK and current == item["to"]
+        item["current_verified"] = verified
+        item["current_signal"] = current
+        if not verified:
+            item["buyer"] = None  # Keep the historical route, not a current buying prompt.
 
     mine = [v for r, v in paths.items() if r in favs]
     rest = [v for r, v in paths.items() if r not in favs]

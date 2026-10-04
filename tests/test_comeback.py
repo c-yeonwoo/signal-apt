@@ -46,6 +46,24 @@ def test_multi_step_path_is_restored(tmp_path, monkeypatch):
     assert [s["date"] for s in v["path"]] == ["2026-08-10", "2026-08-31"]
 
 
+def test_historical_upgrade_requires_matching_current_safe_assessment(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    current = cb.compute(1, {"대전"}, "2026-08-31", DATES,
+                         current_signals={"대전": "BUY"})
+    assert current["mine"][0]["current_verified"] is True
+    assert current["mine"][0]["buyer"]["dir"] == "heat"
+
+    held = cb.compute(1, {"대전"}, "2026-08-31", DATES,
+                      current_signals={"대전": "HELD"})
+    assert held["mine"][0]["to"] == "BUY"  # historical path is preserved
+    assert held["mine"][0]["current_verified"] is False
+    assert held["mine"][0]["buyer"] is None
+
+    unavailable = cb.compute(1, {"대전"}, "2026-08-31", DATES)
+    assert unavailable["mine"][0]["current_verified"] is False
+    assert unavailable["mine"][0]["buyer"] is None
+
+
 def test_out_of_window_changes_are_excluded(tmp_path, monkeypatch):
     """마지막 방문 이전 변화는 이미 봤다 — 다시 보여주지 않는다."""
     _setup(tmp_path, monkeypatch)

@@ -501,6 +501,31 @@ test('raw weekly BUY is historical when current safety assessment is held', asyn
   assert.doesNotMatch(wrap.innerHTML,/현재 판정으로 확인된 등급 변화 <b>1곳/);
 });
 
+test('comeback history never turns held raw BUY into current buying advice', () => {
+  const el={innerHTML:''};
+  const ctx=vm.createContext({
+    document:{getElementById:()=>el},
+    _dashCard:x=>x,_dashMore:(label,x)=>label+x,
+    _buyerChip:b=>b?`BUYER ADVICE ${b.why}`:'',
+    esc:x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
+  });
+  vm.runInContext(extract('function _renderComeback(d){', '/** 곧 바뀔 수 있는 동네 워치'),ctx);
+  const changed={region:"악성' onclick='alert(1)",from_ko:'관망',to_ko:'강력매수',up:true,
+    from:'WATCH',to:'STRONG_BUY',steps:1,path:[],current_verified:false,
+    buyer:{why:'선택지가 줄기 전에 확인'}};
+  const comeback={ready:true,quiet:false,weeks:4,as_of:'2026-09-28',prev_as_of:'2026-08-31',
+    totals:{regions:1,up:1,down:0},mine:[changed],rest:[],rest_total:0};
+  ctx._renderComeback({comeback});
+  assert.match(el.innerHTML,/당시 강력매수/);
+  assert.match(el.innerHTML,/과거 계산 · 현재 판정 확인 필요/);
+  assert.doesNotMatch(el.innerHTML,/BUYER ADVICE|선택지가 줄기 전에/);
+  assert.doesNotMatch(el.innerHTML,/onclick='alert/);
+  changed.current_verified=true;
+  ctx._renderComeback({comeback});
+  assert.match(el.innerHTML,/BUYER ADVICE/);
+  assert.doesNotMatch(el.innerHTML,/당시 강력매수/);
+});
+
 test('opening quicksale reaches both APIs and renders', async () => {
   const calls = [], status = {}, region = {options: [0, 1]};
   const ctx = vm.createContext({
