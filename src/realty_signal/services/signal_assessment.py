@@ -136,16 +136,42 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     if supply is not None and supply >= config.supply_glut:
         reasons.append(_metric("supply_pressure", "입주물량 부담", supply, "배",
                                config.supply_glut, True, region, "counterevidence"))
+    overlay = row.get("매도보정")
+    if raw == "SELL_RISK" and isinstance(overlay, dict) and overlay.get("applied"):
+        for factor in overlay.get("factors") or []:
+            if not isinstance(factor, dict) or factor.get("id") in {"sale_decline", "supply_pressure"}:
+                continue  # 가격 하락·공급 부담은 위의 관측 근거와 중복 표시하지 않는다.
+            factor_id = factor.get("id")
+            if factor_id not in {"transaction_volume_low", "lower_tier_surge",
+                                 "regional_cycle_late", "national_rate_rising"}:
+                continue
+            reasons.append({"reason_id": factor_id, "role": "counterevidence",
+                            "label": factor["label"], "value": factor.get("value"),
+                            "unit": factor.get("unit"), "passing": True,
+                            "weight": factor.get("weight"),
+                            "source_region": "전국" if factor_id == "national_rate_rising" else region,
+                            "inherited": False})
     status = "held" if risk_flags else "ready"
     config_hash = _hash(asdict(config))
     basis = {"version": VERSION, "guard_version": GUARD_VERSION, "region_id": region_id,
              "asof": asof.isoformat(), "config_hash": config_hash, "raw_grade": raw,
              "reasons": reasons, "price_weeks": weeks, "risk_flags": risk_flags}
+    if raw == "SELL_RISK" and isinstance(overlay, dict) and overlay.get("applied"):
+        basis["sell_overlay"] = {"score": overlay.get("score"),
+                                 "threshold": overlay.get("threshold"),
+                                 "factor_ids": [factor.get("id") for factor in overlay.get("factors") or []
+                                                if isinstance(factor, dict)]}
+    sell_cautions = [reason["label"] for reason in reasons
+                     if reason["role"] == "counterevidence"]
+    ready_summary = (f"지역 시장 신호는 매도주의입니다. 주요 근거: {' · '.join(sell_cautions[:3])}. "
+                     "개별 매도 지시나 미래 가격 하락 확률은 아닙니다."
+                     if raw == "SELL_RISK" and sell_cautions else
+                     f"지역 시장 신호는 {LABELS.get(raw, '판단 보류')}입니다. "
+                     "개별 매물의 적정 가격이나 미래 수익을 뜻하지 않습니다.")
     return {**basis, "assessment_id": _hash(basis), "region": region,
             "display_grade": LABELS.get(raw, "판단 보류") if status == "ready" else "판단 보류",
             "assessment_status": status,
-            "summary": (_held_summary(risk_flags, asof, today) if status == "held" else
-                        f"지역 시장 신호는 {LABELS.get(raw, '판단 보류')}입니다. 개별 매물의 적정 가격이나 미래 수익을 뜻하지 않습니다."),
+            "summary": _held_summary(risk_flags, asof, today) if status == "held" else ready_summary,
             "scope_note": (f"전세수급과 매수심리는 {source} 권역 자료를 함께 사용합니다."
                            if source != region else "이 지역 자료를 사용합니다."),
             "change": {"type": "first_observation", "previous_grade": None, "changed_reasons": []}}
@@ -186,9 +212,14 @@ def with_previous(assessment: dict) -> dict:
     same_asof = current["asof"] == previous.get("asof")
     freshness_only = (same_asof and set(changed) == {"safety_status"}
                       and (set(current["risk_flags"]) ^ set(previous.get("risk_flags") or [])) == {"source_stale"})
+    explanation_only = (same_asof and not method_changed and not grade_changed and not safety_changed
+                        and previous.get("sell_overlay") is None and current.get("sell_overlay") is not None
+                        and all(reason["reason_id"] not in old_reasons for reason in current["reasons"]
+                                if reason["reason_id"] in changed))
     current["change"] = {
         "type": "mixed_change" if method_changed and changed else "method_change" if method_changed
-                else "freshness_change" if freshness_only else "source_revision" if same_asof and changed
+                else "freshness_change" if freshness_only else "explanation_change" if explanation_only
+                else "source_revision" if same_asof and changed
                 else "market_change" if changed else "unchanged",
         "previous_grade": previous.get("display_grade"), "changed_reasons": changed,
         "previous_assessment_id": previous.get("assessment_id"),

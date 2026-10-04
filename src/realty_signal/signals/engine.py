@@ -585,24 +585,33 @@ def evaluate(
             reasons.append("권역 끝물(급지계단)")
             해설 += " 수도권 A→E 상승 계단이 포착된 유동성 끝물 국면입니다. 지역 매수 시그널과는 별개 축이에요."
 
-        # 매도(끝물) 강화 — 공급과잉 + 유동성감소(금리상승·거래량위축·급지역전·매매하락)
-        bear = 0.0
+        # 매도(끝물) 보정 — 등급을 바꾼 항목을 구조화해 리포트에서 역추적한다.
+        bear_factors = []
         if sale_mom == "하락":
-            bear += 1
+            bear_factors.append({"id": "sale_decline", "label": "지역 매매가격 하락 흐름",
+                                 "value": round(sale_avg, 3), "unit": "%/주", "weight": 1})
         if pd.notna(sp) and sp >= c.supply_glut:
-            bear += 1
+            bear_factors.append({"id": "supply_pressure", "label": "입주물량 부담",
+                                 "value": round(sp, 2), "unit": "배", "weight": 1})
         if vr is not None and vr <= 0.8:
-            bear += 1
+            bear_factors.append({"id": "transaction_volume_low", "label": "거래량 위축",
+                                 "value": vr, "unit": "배", "weight": 1})
         if rg and rg.get("막차"):
-            bear += 1
+            bear_factors.append({"id": "lower_tier_surge", "label": "하위 급지 단기 급등 관측",
+                                 "value": True, "unit": None, "weight": 1})
         if (regime or {}).get("endgame"):
-            bear += 0.5
+            bear_factors.append({"id": "regional_cycle_late", "label": "권역 끝물 국면 추정",
+                                 "value": True, "unit": None, "weight": 0.5})
         if mt.get("rate_dir") == "상승":
-            bear += 0.5
+            bear_factors.append({"id": "national_rate_rising", "label": "전국 대출금리 상승 추세",
+                                 "value": mt.get("rate"), "unit": "%", "weight": 0.5})
+        bear = sum(factor["weight"] for factor in bear_factors)
         endgame_glut = (regime or {}).get("endgame") and pd.notna(sp) and sp >= c.supply_glut
+        overlay_applied = False
         if signal not in ("STRONG_BUY", "BUY") and bear >= 2 and (sale_mom == "하락" or endgame_glut):
+            overlay_applied = signal != "SELL_RISK"
             signal = "SELL_RISK"
-            해설 = "공급과잉·유동성 감소가 겹치는 매도/관망 구간입니다. " + 해설
+            해설 = "지역 하락·공급·거래·금리 등 보정 요인이 겹친 매도주의 관찰 구간입니다. " + 해설
 
         if macro_clause:
             해설 += f" {macro_clause}입니다." if not 해설.rstrip().endswith("입니다.") else f" ({macro_clause})"
@@ -624,6 +633,8 @@ def evaluate(
                 "거래량비": vr,
                 "급지": 급지,
                 "수급출처": inherited_from,   # 전세수급·매수우위가 상속된 상위 권역(있으면 구별 공통값)
+                "매도보정": {"applied": overlay_applied, "score": bear, "threshold": 2,
+                         "factors": bear_factors} if overlay_applied else None,
                 "근거": " · ".join(reasons),
             }
         )

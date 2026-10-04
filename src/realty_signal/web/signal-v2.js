@@ -208,6 +208,7 @@
         changed === 'method_change' || changed === 'mixed_change'
           ? '계산 기준이 달라져 지난 판정과 단순 비교할 수 없습니다.' :
         changed === 'freshness_change' ? '시장 지표는 같지만 원천 갱신이 지연돼 현재 판정을 보류합니다.' :
+        changed === 'explanation_change' ? '같은 기준일의 판정은 유지되며 매도주의 보정 근거 설명이 추가됐습니다.' :
         changed === 'market_change' || changed === 'source_revision'
           ? `이전 ${esc(a.change.previous_grade || '판정')}에서 ${changedLabels.map(esc).join(' · ')} 근거가 달라졌습니다.${changed === 'source_revision' ? ' 같은 기준일의 원천 수정입니다.' : ''}` :
           '이전 발행 판정에서 확인된 근거 변화가 없습니다.';
