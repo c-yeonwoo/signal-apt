@@ -26,7 +26,7 @@ from realty_signal.signals.engine import SignalConfig, evaluate
 log = logging.getLogger("realty_signal.weekly")
 
 _RANK = {"SELL_RISK": 0, "NEUTRAL": 1, "WATCH": 2, "BUY": 3, "STRONG_BUY": 4}
-SIG_KO = {"STRONG_BUY": "적극매수", "BUY": "매수", "WATCH": "관망",
+SIG_KO = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
           "NEUTRAL": "중립", "SELL_RISK": "매도주의"}
 
 # 지표 급변으로 칠 최소폭. 주간 노이즈를 변화라고 부르지 않기 위한 문턱.

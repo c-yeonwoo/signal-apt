@@ -55,7 +55,7 @@ def test_weekly_diff_uses_last_week_slice_not_a_stored_snapshot(monkeypatch):
     assert [s["region"] for s in out["signals"]] == ["강남구"]
     s = out["signals"][0]
     assert (s["from"], s["to"], s["up"]) == ("BUY", "STRONG_BUY", True)
-    assert s["from_ko"] == "매수" and s["to_ko"] == "적극매수"
+    assert s["from_ko"] == "매수" and s["to_ko"] == "강력매수"
     assert out["totals"] == {"regions": 1, "up": 1, "down": 0, "movers": 0}
 
 

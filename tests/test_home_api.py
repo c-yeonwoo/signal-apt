@@ -37,7 +37,7 @@ def client(tmp_path, monkeypatch):
 
 _FAKE_WEEK = {"as_of": "2026-07-20", "prev": "2026-07-13", "ready": True,
               "stale_days": 3, "blocked_reason": None,
-              "signals": [{"region": "강남구", "up": True}],
+              "signals": [{"region": "강남구", "from": "WATCH", "to": "BUY", "up": True}],
               "movers": [], "totals": {"regions": 1, "up": 1, "down": 0, "movers": 0}}
 
 
@@ -45,13 +45,30 @@ def test_weekly_change_splits_my_regions(client, monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setattr(weekly, "latest", lambda kb=None, supply=None: dict(_FAKE_WEEK))
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"강남구": "BUY"})
     monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
         codes={"강남구": "1168000000"}, regions=["강남구"], identity_verified=True))
     client.post("/api/favorites", json={"kind": "region", "key": "강남구"})
     d = client.get("/api/weekly-change").json()
     assert d["ready"] is True and d["prev"] == "2026-07-13"
     assert [s["region"] for s in d["mine"]] == ["강남구"]
+    assert d["mine"][0]["current_verified"] is True
     assert d["rest"] == []
+
+
+def test_weekly_change_does_not_upgrade_raw_buy_when_current_held(client, monkeypatch):
+    monkeypatch.setattr(weekly, "for_user", lambda _favs: {
+        **_FAKE_WEEK, "mine": list(_FAKE_WEEK["signals"]), "rest": []})
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: {"강남구": "HELD"})
+    d = client.get("/api/weekly-change").json()
+    assert d["current_check_ready"] is True
+    assert d["mine"][0]["to"] == "BUY"  # 감사용 과거 계산은 보존
+    assert d["mine"][0]["current_verified"] is False
+
+    monkeypatch.setattr(app_api, "_display_signal_map", lambda: (_ for _ in ()).throw(OSError()))
+    d = client.get("/api/weekly-change").json()
+    assert d["current_check_ready"] is False
+    assert d["mine"][0]["current_verified"] is False
 
 
 def test_weekly_change_failure_is_not_silence(client, monkeypatch):

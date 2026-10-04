@@ -2010,16 +2010,16 @@ async function loadDashboard(){
 function _sigMoveRow(s, mine){
   const col = s.up ? 'var(--sig-buy)' : 'var(--sig-sell)';
   // 복귀 브리핑과 같은 라벨을 쓴다 — 같은 변화를 두 카드가 다르게 말하면 안 된다
-  const chip = _buyerChip(_buyerNoteOf(s.from, s.to));
-  return `<div onclick="openNbhd('${s.region}')" title="${(s['근거']||'').replace(/"/g,'')}"
+  const chip = s.current_verified ? _buyerChip(_buyerNoteOf(s.from, s.to)) : '';
+  return `<div onclick="openNbhd(decodeURIComponent('${encodeURIComponent(s.region||'').replace(/'/g,'%27')}'))" title="${esc(s['근거']||'')}"
       style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;${mine?'background:rgba(37,99,235,.04)':''}">
-    <b style="min-width:96px;font-size:13.5px">${s.region}</b>
+    <b style="min-width:96px;font-size:13.5px">${esc(s.region||'')}</b>
     ${mine?'<span style="font-size:10px;color:var(--accent);font-weight:700">★</span>':''}
-    <span style="font-size:12.5px;color:var(--dim)">${s.from_ko}</span>
+    <span style="font-size:12.5px;color:var(--dim)">${esc(s.from_ko||'')}</span>
     <span style="color:${col};font-weight:800">${s.up?'▲':'▼'}</span>
-    <span style="font-size:13px;font-weight:700;color:${col}">${s.to_ko}</span>
+    <span style="font-size:13px;font-weight:700;color:${col}">${esc(s.to_ko||'')}</span>
     ${chip}
-    <span style="margin-left:auto;font-size:11.5px;color:var(--accent)">동네 리포트 →</span></div>`;
+    <span style="margin-left:auto;font-size:11.5px;color:${s.current_verified?'var(--accent)':'var(--sig-watch)'}">${s.current_verified?'동네 리포트 →':'현재 판정 확인 필요 →'}</span></div>`;
 }
 
 /** 프론트에서 등급 변화 → 매수자 관점 라벨. 서버 `comeback.buyer_note` 와 같은 규칙이다. */
@@ -2062,11 +2062,12 @@ function _moverRow(m){
     ${m.shared?`<span style="font-size:11px;color:var(--dim)" title="KB가 광역 단위로만 발표하는 지표라 소속 시군구가 같은 값을 공유합니다">${m.regions}개 구 공통</span>`:''}</div>`;
 }
 // ★ 지역은 등급이 안 바뀌어도 지표가 움직였으면 알려준다 — 내 지역 얘기가 '그 외' 접힘 안에 묻히면 안 본다.
-function _myWeeklyBlock(mine, myMovers){
+function _myWeeklyBlock(mine, myMovers, hasUnverified=false){
   if(mine.length){
     return `<div style="font-size:12px;color:var(--accent);font-weight:700;margin:2px 0 4px">★ 내 관심 지역 ${mine.length}곳</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px">${mine.map(s=>_sigMoveRow(s,true)).join('')}</div>`;
   }
+  if(hasUnverified) return `<div style="font-size:12px;color:var(--sig-watch);margin-bottom:8px">★ 관심 지역의 과거 계산 변화는 현재 판정 확인이 필요합니다.</div>`;
   if(myMovers.length){
     return `<div style="font-size:12px;color:var(--dim);margin:2px 0 4px">★ 관심 지역은 <b style="color:var(--txt)">등급 변화 없음</b> — 대신 지표가 움직였어요</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px">${myMovers.map(_moverRow).join('')}</div>`;
@@ -2228,30 +2229,41 @@ async function _loadWeekly(){
     wrap.innerHTML=_weeklyQuiet('지난주와 비교할 데이터가 아직 없어요.');
     return;
   }
-  const mine=d.mine||[], rest=d.rest||[], movers=d.movers||[], t=d.totals||{};
+  const allMine=d.mine||[], allRest=d.rest||[], movers=d.movers||[], t=d.totals||{};
+  const mine=allMine.filter(s=>s.current_verified===true), rest=allRest.filter(s=>s.current_verified===true);
+  const unverified=[...allMine.filter(s=>s.current_verified!==true),...allRest.filter(s=>s.current_verified!==true)];
   // 관측 기준이 오래됐으면 이전 등급 비교를 이번 주의 새 변화처럼 제시하지 않는다.
   const stale=_staleBanner(d);
-  const nChange=(t.up||0)+(t.down||0);
+  const nChange=mine.length+rest.length;
+  const currentRows=[...mine,...rest];
+  const up=currentRows.filter(s=>s.up).length, down=nChange-up;
   let conclusion='';
-  if(!mine.length && !rest.length){
+  if(!d.current_check_ready || (!nChange && unverified.length)){
+    conclusion=`<div style="font-size:15px;line-height:1.55">현재 등급 변화 확인 필요`
+      +`<div style="font-size:13px;color:var(--dim);margin-top:6px">과거 KB 계산 변화 ${allMine.length+allRest.length}곳은 현재 판정과 구분합니다.</div></div>`;
+  } else if(!nChange){
     conclusion=`<div style="font-size:15px;line-height:1.55">등급 변화 없음`
       +`<div style="font-size:13px;color:var(--dim);margin-top:6px">${t.regions||0}곳 확인`
       +(movers.length?` · 지표 급변 ${movers.length}건`:'')+`</div></div>`;
   } else {
-    conclusion=`<div style="font-size:15px;line-height:1.55">등급 변화 <b>${nChange}곳</b>
-      <span style="color:#16a34a;font-weight:700">▲${t.up||0}</span>
-      <span style="color:#dc2626;font-weight:700">▼${t.down||0}</span>`
+    conclusion=`<div style="font-size:15px;line-height:1.55">현재 판정으로 확인된 등급 변화 <b>${nChange}곳</b>
+      <span style="color:#16a34a;font-weight:700">▲${up}</span>
+      <span style="color:#dc2626;font-weight:700">▼${down}</span>`
       +(mine.length?`<div style="font-size:13px;color:var(--dim);margin-top:6px">★ 관심 ${mine.length}곳 포함</div>`:'')
       +`</div>`;
   }
-  let detail=_myWeeklyBlock(mine, d.my_movers||[]);
+  let detail=_myWeeklyBlock(mine, d.my_movers||[], allMine.length>mine.length);
   if(rest.length){
     detail+=`<div style="font-size:12px;color:var(--dim);margin:8px 0 4px">전체 변화</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${rest.map(s=>_sigMoveRow(s,false)).join('')}</div>`;
   }
   if(movers.length){
-    detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">등급 그대로 · 지표 급변</div>`
+    detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">KB 지표 변화 · 현재 판정과 별개</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${movers.slice(0,10).map(_moverRow).join('')}</div>`;
+  }
+  if(unverified.length){
+    detail+=`<div style="font-size:12px;color:var(--sig-watch);margin:12px 0 4px">과거 계산 비교 ${unverified.length}곳 · 현재 판정 미확인/불일치</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${unverified.map(s=>_sigMoveRow(s,allMine.includes(s))).join('')}</div>`;
   }
   if(d.stale_days > 8){
     wrap.innerHTML=_dashCard(_dashH('주간 변화 확인 보류')+stale+

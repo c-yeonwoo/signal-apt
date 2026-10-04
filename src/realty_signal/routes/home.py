@@ -28,6 +28,20 @@ def weekly_change(request: Request):
     favs = set(db.actionable_region_favs(uid)) if uid else set()
     try:
         out = weekly.for_user(favs)
+        # KB 원시 등급의 재계산 변화는 현재 안전 판정과 다를 수 있다.
+        # 캐시된 weekly 행은 수정하지 않고 응답에서만 현재성 확인 결과를 붙인다.
+        try:
+            from realty_signal import api as app_api
+            current = app_api._display_signal_map()
+            out["current_check_ready"] = True
+        except Exception:  # noqa: BLE001 - 현재 판정 실패 시 과거 등급을 현재 변화로 승격하지 않는다.
+            current = {}
+            out["current_check_ready"] = False
+        for section in ("signals", "mine", "rest"):
+            out[section] = [{**row, "current_verified": row.get("to") in {
+                "STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}
+                and current.get(row.get("region")) == row.get("to")}
+                            for row in out.get(section) or []]
         # 배너가 "왜 멈췄는지" 를 말하려면 수집 건강 상태가 같이 와야 한다
         try:
             from realty_signal import api as app_api
