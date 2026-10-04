@@ -72,3 +72,15 @@ def test_notes_route_rejects_invalid_page_cursor(monkeypatch):
     assert error.value.status_code == 422
     response = reports_v2.decision_notes_list(None, "region", "노원구")
     assert json.loads(response.body) == {"notes": [], "next_cursor": None}
+
+
+def test_notes_route_explains_invalid_fields_without_exposing_error_codes(monkeypatch):
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda _request: 12)
+    monkeypatch.setattr(reports_v2, "_note_subject", lambda *_args: None)
+    with pytest.raises(HTTPException) as error:
+        reports_v2.decision_note_create(None, {
+            "subject_type": "region", "subject_key": "노원구", "thesis": " ",
+            "counter_condition": "가격 하락", "horizon_weeks": 12,
+        })
+    assert error.value.status_code == 422
+    assert error.value.detail == "관심 이유를 1~500자로 입력해 주세요."

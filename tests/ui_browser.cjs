@@ -1433,6 +1433,29 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#v2NoteList [data-note-more]').count(),0);
     await page.evaluate(()=>{document.getElementById('v2NoteDlg').close();window.fetch=window.__notePagingFetch;
       delete window.__notePagingFetch;delete window.__noteRecord;delete window.__resolveNoteA;});
+    await page.evaluate(()=>{
+      window.__validationFetch=window.fetch;
+      window.fetch=(input,...args)=>{
+        const url=new URL(String(input),location.href);
+        if(url.pathname==='/api/v2/decision-notes' && args[0]?.method==='POST')
+          return Promise.resolve(new Response(JSON.stringify({detail:'관심 이유를 1~500자로 입력해 주세요.'}),
+            {status:422,headers:{'Content-Type':'application/json'}}));
+        if(url.pathname==='/api/v2/discovery' && args[0]?.method==='POST')
+          return Promise.resolve(new Response(JSON.stringify({detail:'호가·면적·방 개수·통근시간 등 숫자 조건을 다시 확인해 주세요.'}),
+            {status:422,headers:{'Content-Type':'application/json'}}));
+        return window.__validationFetch(input,...args);
+      };
+      SignalV2.openNote('region','테스트구');
+    });
+    await page.locator('#v2NoteForm [name="thesis"]').fill('관심 이유');
+    await page.locator('#v2NoteForm [name="counter_condition"]').fill('가격 하락');
+    await page.locator('#v2NoteForm button[type="submit"]').click();
+    await page.getByText('관심 이유를 1~500자로 입력해 주세요.',{exact:true}).waitFor();
+    await page.evaluate(()=>{document.getElementById('v2NoteDlg').close();SignalV2.openDiscovery();});
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText('호가·면적·방 개수·통근시간 등 숫자 조건을 다시 확인해 주세요.',{exact:true}).waitFor();
+    await page.evaluate(()=>{document.getElementById('v2DiscoverDlg').close();window.fetch=window.__validationFetch;
+      delete window.__validationFetch;});
     for (const width of [390, 620, 1280]) {
       await page.setViewportSize({width,height:844});
       await page.evaluate(()=>SignalV2.openDiscovery());

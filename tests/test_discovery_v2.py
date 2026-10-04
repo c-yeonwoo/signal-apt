@@ -1,5 +1,8 @@
-from realty_signal.services import discovery_v2 as discovery
+from fastapi import HTTPException
 import pytest
+
+from realty_signal.routes import reports_v2
+from realty_signal.services import discovery_v2 as discovery
 
 
 def _row(key, *, price=None, area=None, stale=False, region="노원구", signal="NEUTRAL"):
@@ -53,6 +56,22 @@ def test_stale_price_never_passes_and_invalid_input_is_rejected():
             pass
         else:
             raise AssertionError("invalid conditions were accepted")
+
+
+def test_discovery_route_explains_invalid_input_without_exposing_error_codes(monkeypatch):
+    monkeypatch.setattr(reports_v2, "_require_feature", lambda _name: None)
+    with pytest.raises(HTTPException) as error:
+        reports_v2.discovery(None, {"max_price_manwon": -1})
+    assert error.value.status_code == 422
+    assert error.value.detail == "호가·면적·방 개수·통근시간 등 숫자 조건을 다시 확인해 주세요."
+
+    def unexpected(_spec):
+        raise ValueError("private/source/path")
+
+    monkeypatch.setattr(discovery, "validate", unexpected)
+    with pytest.raises(HTTPException) as error:
+        reports_v2.discovery(None, {})
+    assert error.value.detail == "입력값을 확인하고 다시 시도해 주세요."
 
 
 def test_preferred_region_ranks_first_without_excluding_other_regions():
