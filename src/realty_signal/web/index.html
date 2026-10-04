@@ -424,6 +424,11 @@
   .v2-preference-fields { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
   @media(max-width:600px) { #v2ReportDlg,#v2DiscoverDlg { width:100vw; height:100dvh; max-width:none; max-height:none; border-radius:0; } }
   @media(max-width:240px) {
+    #view-all > div { padding-left:12px !important; padding-right:12px !important; }
+    #view-all .mapsplit,#view-all .ms-list { min-width:0; }
+    #view-all .ms-map { min-width:0; width:100%; min-height:240px; box-sizing:border-box; }
+    #view-all .ms-list .btn { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+    #laPriceFilter,#laPriceFilter > div { min-width:0 !important; }
     #v2DiscoverDlg .v2-panel,#v2ReportDlg .v2-panel { padding:12px; overflow-wrap:anywhere; }
     #v2DiscoverDlg .v2-form label { width:100%; min-width:0; overflow-wrap:anywhere; }
     #v2DiscoverDlg .v2-form input,#v2DiscoverDlg .v2-form select { width:100%; min-width:0; box-sizing:border-box; }
