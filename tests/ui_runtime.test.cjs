@@ -15,6 +15,14 @@ test('Nick chat entry points and free-form question composer are absent while re
   assert.match(html, /id="listingCompareDlg"/);
 });
 
+test('retrospective scorecards are not sold as published prediction performance', () => {
+  assert.match(html, /과거 자료로 재구성한 연구용 비교/);
+  assert.match(html, /실제 발행 성과나 미래 상승 확률/);
+  assert.match(html, /시그널의 인과적 기여나 향후 수익을 증명하지 않습니다/);
+  assert.match(html, /과거 등급 변경 로그의 12주 방향 비교/);
+  assert.doesNotMatch(html, /검증된 시그널|정말 맞나요\?|초과가 시그널의 실제 기여분/);
+});
+
 test('KB national affordability is not presented as the opposite HF burden index or a district metric', () => {
   assert.match(html, /전국 아파트 주택구매력지수/);
   assert.match(html, /전국 구매력지수/);

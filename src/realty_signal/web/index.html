@@ -170,7 +170,7 @@
         border-color:color-mix(in srgb,var(--sig-neutral) 16%,transparent);}
   .SELL_RISK{background:color-mix(in srgb,var(--sig-sell) 8%,transparent);color:var(--sig-sell);
              border-color:color-mix(in srgb,var(--sig-sell) 18%,transparent);}
-  /* 성적표: 좁은 화면에선 부차 열을 숨긴다. '초과'가 이 표의 결론이라 잘리면 안 된다. */
+  /* 과거 비교: 좁은 화면에선 부차 열을 숨긴다. 시장 대비 차이는 남긴다. */
   @media (max-width:560px){ .bt-aux{display:none} }
   /* 모션 최소화 설정을 존중한다 */
   @media (prefers-reduced-motion:reduce){
@@ -581,7 +581,7 @@
     <button class="tab" data-group="find" onclick="switchTab('watch')" title="찜한 매물·청약과 관심단지">내 후보</button>
   </div>
   <div class="right">
-    <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 성적표·경기국면·용어·데이터출처">가이드</button>
+    <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 과거 비교·경기국면·용어·데이터출처">가이드</button>
     <button class="navlink" id="alertBtn" onclick="openAlerts()" style="position:relative" title="관심지역 시그널 변동">알림<span id="alertBadge" style="display:none;position:absolute;top:-3px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 3px"></span></button>
     <span class="date" id="date" onclick="openSources()" style="cursor:pointer" title="데이터 신선도 — 소스별 최종 갱신 보기"><span id="dateTxt"></span> <span style="font-size:10px;color:var(--dim)">ⓘ</span></span>
     <div style="position:relative">
@@ -955,12 +955,12 @@
       <h2 style="margin:0;font-size:24px">시그널 APT란?</h2>
     </div>
     <p style="color:var(--txt);font-size:17px;line-height:1.55;margin:6px 0 8px;font-weight:700;letter-spacing:-.2px">내 조건으로 비교하는 주택 구매.</p>
-    <p style="color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 20px">내 현금으로 가능한 후보와 이번 주 바뀐 사실을 먼저 보여 줍니다. KB 주간지수·국토부 실거래는 그 판단의 근거이고, 시그널 적중률은 가이드에서 확인합니다.</p>
+    <p style="color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 20px">내 현금으로 가능한 후보와 이번 주 바뀐 사실을 먼저 보여 줍니다. KB 주간지수·국토부 실거래는 판단 근거입니다. 과거 자료로 재구성한 시그널 비교는 가이드에서 한계와 함께 볼 수 있습니다.</p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
       <div class="acard" onclick="openScoreboard()">
-        <b>시그널 성적표</b>
-        <span>과거 구간으로 검증한 매수·매도 <b style="color:var(--sig-buy)">적중률</b>. "정말 맞나요?"의 답.</span></div>
+        <b>과거 시그널 비교</b>
+        <span>과거 자료로 다시 계산한 12주 방향 비교입니다. 실제 발행 성과나 미래 상승 확률은 아닙니다.</span></div>
       <div class="acard" onclick="openCycleGuide()">
         <b>경기 국면 가이드</b>
         <span>회복·상승·후퇴·침체와 관망. 지역 가격 흐름 읽는 법.</span></div>
@@ -1235,11 +1235,11 @@
       </div>
     </div>
     <div class="auth-points">
-      <!-- '검증된 시그널'은 가입 전에 실제로 확인할 수 있어야 한다. 약속만 하고 증명을 잠그지 않는다. -->
+      <!-- 연구용 과거 재구성은 가입 전에도 한계와 함께 볼 수 있게 한다. -->
       <span role="button" tabindex="0" onclick="openScoreboard()"
             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openScoreboard()}"
             style="cursor:pointer;text-decoration:underline;text-underline-offset:2px"
-            title="지난 시그널의 적중률과 같은 기간 시장 평균을 확인합니다">검증된 시그널 →</span><span>자본 적합 추천</span><span>관심지역 주간 추적</span>
+            title="과거 재구성의 12주 방향 비교와 한계를 확인합니다">과거 시그널 비교 →</span><span>자본 적합 추천</span><span>관심지역 주간 추적</span>
     </div>
     <div class="auth-field"><label>이메일</label>
       <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="username"></div>
@@ -1526,12 +1526,12 @@
   <div id="imjBody" style="max-height:64vh;overflow:auto"></div>
 </dialog>
 
-<dialog id="scoreDlg" style="width:560px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
+<dialog id="scoreDlg" style="box-sizing:border-box;width:560px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <h3 style="margin:0;font-size:19px">시그널 성적표</h3>
+    <h3 style="margin:0;font-size:19px">과거 시그널 비교</h3>
     <span class="btn" style="padding:2px 11px" onclick="document.getElementById('scoreDlg').close()">✕</span>
   </div>
-  <p class="page-sub" style="margin-bottom:14px">신호 이후 12주 방향이 맞으면 적중 · 같은 기간 시장 평균과 나란히 봅니다</p>
+  <p class="page-sub" style="margin-bottom:14px">과거 자료로 다시 계산한 12주 방향 비교 · 실제 발행 성과가 아닙니다</p>
   <div id="scoreBody"></div>
 </dialog>
 
@@ -2011,7 +2011,7 @@ async function loadDashboard(){
   };
   const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
   const moreLinks=`<div style="display:flex;flex-wrap:wrap;gap:6px 0;padding:2px 0">
-    ${link('signal','시그널')}${link('all','매물')}${link('about','성적표')}
+    ${link('signal','시그널')}${link('all','매물')}${link('about','과거 비교')}
   </div>`;
   // 초보 구매자는 첫 화면에서 행동 하나·예산 후보·주간 변화만 보면 된다.
   // 관심 단지·시장 근거는 같은 데이터를 유지하되 필요할 때만 펼친다.
@@ -5494,14 +5494,14 @@ async function backtestBanner(){
   if(!bt||!bt.by_signal||!bt.by_signal.length) return '';
   const cards=bt.by_signal.map(s=>{
     const c=_btCol(s.signal);
-    return `<div style="flex:1;background:${c}14;border:1px solid ${c}55;border-radius:10px;padding:9px 12px">
+    return `<div style="box-sizing:border-box;flex:1;min-width:min(140px,100%);background:${c}14;border:1px solid ${c}55;border-radius:10px;padding:9px 12px">
     <div style="font-size:12px;color:${c};font-weight:700">${_BT_LAB[s.signal]||s.signal}</div>
     <div style="font-size:23px;font-weight:800;line-height:1.1">${_btPct(s['적중률'])}</div>
-    <div style="font-size:11px;color:var(--dim)">같은 기간 시장 ${_btPct(s['시장평균'])} · 초과 <b style="color:var(--txt)">${_btPp(s['초과'])}</b></div></div>`;
+    <div style="font-size:11px;color:var(--dim)">같은 기간 시장 ${_btPct(s['시장평균'])} · 차이 <b style="color:var(--txt)">${_btPp(s['초과'])}</b></div></div>`;
   }).join('');
   return `<div style="margin-bottom:13px">
-    <div style="font-size:12px;color:var(--dim);margin-bottom:6px" title="${bt['설명']||''}"><b style="color:var(--txt)">전체 지역 시그널 적중률</b> — 적중률만 보지 말고 <b style="color:var(--txt)">초과</b>를 보세요</div>
-    <div style="display:flex;gap:8px">${cards}</div></div>`;
+    <div style="font-size:12px;color:var(--dim);margin-bottom:6px"><b style="color:var(--txt)">과거 재구성 · 12주 방향 비교</b> — 실제 발행 성과나 미래 상승 확률이 아닙니다.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">${cards}</div></div>`;
 }
 // ===== 온보딩 아하 모먼트 — "내 예산이면 지금 여기" =====
 async function renderAha(){
@@ -5553,23 +5553,24 @@ async function openScoreboard(){
     <td class="bt-aux" style="padding:10px 6px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums">${(s['평가수']??0).toLocaleString()}</td>
     <td class="bt-aux" style="padding:10px 6px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums">${s['이후12주평균']>0?'+':''}${s['이후12주평균']??'–'}%</td></tr>`;
   }).join('');
-  // "근거가 증명되는"이 카피인지 기능인지 — 성적표를 실제로 여는 사람이 있는지 잰다.
+  // 과거 재구성의 한계까지 실제로 읽는지 확인하기 위해 열람을 잰다.
   // (로그아웃 상태에선 uid 가 없어 서버가 스킵한다. 그건 의도된 동작이다)
   track(EVENTS.EVIDENCE_OPEN, {surface:'scoreboard'});
-  const notes=(bt['주의']||[]).map(t=>`<li style="margin-bottom:4px">${t}</li>`).join('');
-  body.innerHTML=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+  const notes=(bt['주의']||[]).map(t=>`<li style="margin-bottom:4px">${esc(t)}</li>`).join('');
+  body.innerHTML=`<p style="font-size:13px;line-height:1.6;margin:0 0 12px"><b>과거 자료로 재구성한 연구용 비교</b>입니다. 당시 공표 원본을 재현하지 못했고, 현재 화면의 안전 판정과도 계산 규칙이 다릅니다. 실제 발행 성과나 매물의 미래 상승 확률로 읽지 마세요.</p>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="color:var(--dim);font-size:11px">
       <th style="text-align:left;padding:6px">시그널</th>
       <th style="text-align:right;padding:6px">적중률</th>
       <th style="text-align:right;padding:6px">같은 기간 시장</th>
-      <th style="text-align:right;padding:6px">초과</th>
+      <th style="text-align:right;padding:6px">시장 대비 차이</th>
       <th class="bt-aux" style="text-align:right;padding:6px">평가구간</th>
       <th class="bt-aux" style="text-align:right;padding:6px">이후12주</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <div style="font-size:11px;color:var(--dim);margin-top:12px;line-height:1.6">
-      기준일 ${bt['기준일']||''} · <b>적중률</b>=신호 방향이 이후 12주에 실현된 비율 ·
+      기준일 ${esc(bt['기준일']||'')} · <b>적중률</b>=과거 재구성 규칙의 신호 방향이 이후 12주에 실현된 비율 ·
       <b>같은 기간 시장</b>=동일 날짜에 전체 지역이 같은 기준으로 얻은 값 ·
-      <b>초과</b>=둘의 차이. <b style="color:var(--txt)">초과가 시그널의 실제 기여분입니다.</b>
+      <b>시장 대비 차이</b>=두 비율의 차이. <b style="color:var(--txt)">시그널의 인과적 기여나 향후 수익을 증명하지 않습니다.</b>
       <ul style="margin:9px 0 0;padding-left:17px">${notes}</ul></div>`;
 }
 // ===== 단지 deep-dive =====
@@ -7291,7 +7292,7 @@ function renderAlerts(d){
   let html='';
   const tr=_alertsTrack;
   if(tr && tr.scored){
-    html += `<div style="font-size:11px;color:var(--dim);margin-bottom:10px"><b>알림 성적표</b> · 지난 ${tr.horizon_weeks}주 적중률 <b style="color:var(--txt)">${tr.hit_rate}%</b> (평가 ${tr.scored}건${tr.pending?` · 대기 ${tr.pending}건`:''})</div>`;
+    html += `<div style="font-size:11px;color:var(--dim);margin-bottom:10px"><b>과거 등급 변경 로그의 12주 방향 비교</b> · 일치 ${esc(tr.hit_rate)}% (평가 ${esc(tr.scored)}건${tr.pending?` · 대기 ${esc(tr.pending)}건`:''}). 발행 성과나 미래 예측력은 아닙니다.</div>`;
   }
   const regionEvents=(d.region_events||[]).filter(ev=>ev.subject_type==='region');
   if(regionEvents.length){
@@ -7717,7 +7718,7 @@ async function startApp(needOnboard){
   <b style="color:var(--txt)">Signal APT</b>
   <span style="color:var(--txt)">내 조건으로 비교하는 주택 구매</span>
   <span onclick="switchTab('about')" style="cursor:pointer;color:var(--accent)">시그널 APT란?</span>
-  <span onclick="openScoreboard()" style="cursor:pointer;color:var(--accent)">시그널 성적표</span>
+  <span onclick="openScoreboard()" style="cursor:pointer;color:var(--accent)">과거 시그널 비교</span>
   <a href="/legal/terms" target="_blank" rel="noopener" style="color:var(--accent)">이용약관</a>
   <a href="/legal/privacy" target="_blank" rel="noopener" style="color:var(--accent)">개인정보</a>
   <span style="margin-left:auto">지표는 참고용 · 투자 판단·실거래 확인은 이용자 책임</span>
