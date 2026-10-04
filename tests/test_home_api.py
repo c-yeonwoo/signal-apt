@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from realty_signal import api as app_api
-from realty_signal import auth, db, weekly
+from realty_signal import auth, briefing, buying_power, db, weekly
 from realty_signal.routes import auth as auth_routes
 from realty_signal.routes import home as home_routes
 from realty_signal.services import budget_watch as bw
@@ -83,7 +83,48 @@ def test_weekly_change_failure_is_not_silence(client, monkeypatch):
     monkeypatch.setattr(weekly, "for_user", boom)
     d = client.get("/api/weekly-change").json()
     assert d["ready"] is False
-    assert "캐시 깨짐" in d["blocked_reason"]
+    assert "주간 변화를 계산하지 못했습니다" in d["blocked_reason"]
+    assert "캐시 깨짐" not in str(d)
+
+
+@pytest.mark.parametrize("path,fail_target", [
+    ("/api/budget-watch", "budget"),
+    ("/api/complex-watch", "complex"),
+    ("/api/threshold-watch", "threshold"),
+    ("/api/action-plan", "action"),
+])
+def test_home_failures_hide_internal_exception(client, monkeypatch, path, fail_target):
+    private_detail = "private database path /srv/secrets/app.db"
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(private_detail)
+
+    if fail_target == "budget":
+        monkeypatch.setattr(buying_power, "validated_confirmed_power", fail)
+    elif fail_target == "complex":
+        monkeypatch.setattr(cw, "favorites_of", fail)
+    elif fail_target == "threshold":
+        monkeypatch.setattr(md, "kb", fail)
+    else:
+        monkeypatch.setattr(briefing, "plan", fail)
+
+    result = client.get(path).json()
+    assert result.get("reason") == "error" or result.get("blocked_reason")
+    assert private_detail not in str(result)
+    assert "다시 확인해 주세요" in str(result)
+
+
+def test_comeback_failure_hides_internal_exception(monkeypatch):
+    private_detail = "private database path /srv/secrets/app.db"
+
+    def fail():
+        raise RuntimeError(private_detail)
+
+    monkeypatch.setattr(md, "kb", fail)
+    result = home_routes._comeback_for(1, set(), "2026-07-20")
+    assert result["reason"] == "error"
+    assert private_detail not in str(result)
+    assert "다시 확인해 주세요" in result["detail"]
 
 
 def test_weekly_visit_is_consumed_only_by_seen_ack(client, monkeypatch):

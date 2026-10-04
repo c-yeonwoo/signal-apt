@@ -62,7 +62,7 @@ def weekly_change(request: Request):
     except Exception as e:  # noqa: BLE001
         log.error("주간 변화 계산 실패: %s", e)
         # 실패를 '변화 없음'으로 보이게 하면 고장을 몇 주씩 못 본다
-        return {"ready": False, "blocked_reason": f"주간 변화를 계산하지 못했습니다 ({e})",
+        return {"ready": False, "blocked_reason": "주간 변화를 계산하지 못했습니다. 잠시 후 다시 확인해 주세요.",
                 "signals": [], "movers": [], "mine": [], "rest": [], "my_movers": []}
 
 
@@ -78,7 +78,7 @@ def _comeback_for(uid: int, favs: set[str], as_of: str | None,
         out = comeback.compute(uid, favs, as_of, kb_dates, current_signals=current_signals)
     except Exception as e:  # noqa: BLE001
         log.error("복귀 브리핑 실패 uid=%s: %s", uid, e)
-        return {"ready": False, "reason": "error", "detail": str(e)}
+        return {"ready": False, "reason": "error", "detail": "복귀 브리핑을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."}
     return out
 
 
@@ -126,7 +126,7 @@ def budget_watch(request: Request):
         return bw.compute(uid, rows, float(budget))
     except Exception as e:  # noqa: BLE001
         log.error("예산 변화 계산 실패 uid=%s: %s", uid, e)
-        return {"ready": False, "reason": "error", "detail": str(e)}
+        return {"ready": False, "reason": "error", "detail": "예산 변화를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."}
 
 
 @router.post("/api/budget-watch/seen")
@@ -164,11 +164,11 @@ def complex_watch(request: Request):
     if not uid:
         return JSONResponse({"ready": False, "reason": "login_required"}, status_code=401)
 
-    favs = cw.favorites_of(uid)
-    if not favs:
-        return {"ready": False, "reason": "no_favorites",
-                "message": "관심단지를 ★ 로 등록하면 그 단지의 실거래 변화를 알려드립니다."}
     try:
+        favs = cw.favorites_of(uid)
+        if not favs:
+            return {"ready": False, "reason": "no_favorites",
+                    "message": "관심단지를 ★ 로 등록하면 그 단지의 실거래 변화를 알려드립니다."}
         confirmed = buying_power.validated_confirmed_power(db.profile_get(uid) or {})
         budget = confirmed[0] if confirmed else None
         out = cw.compute(uid, favs, cw.cache_loader(),
@@ -177,7 +177,7 @@ def complex_watch(request: Request):
         return out
     except Exception as e:  # noqa: BLE001
         log.error("관심단지 변화 계산 실패 uid=%s: %s", uid, e)
-        return {"ready": False, "reason": "error", "detail": str(e)}
+        return {"ready": False, "reason": "error", "detail": "관심단지 변화를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."}
 
 
 @router.post("/api/complex-watch/seen")
@@ -231,7 +231,7 @@ def threshold_watch(request: Request):
     except Exception as e:  # noqa: BLE001
         log.error("임계 근접 계산 실패: %s", e)
         return {"as_of": None, "items": [], "mine": [], "count": 0,
-                "blocked_reason": f"임계 근접을 계산하지 못했습니다 ({e})"}
+                "blocked_reason": "임계 근접을 계산하지 못했습니다. 잠시 후 다시 확인해 주세요."}
 
 
 @router.get("/api/action-plan")
@@ -246,7 +246,7 @@ def action_plan(request: Request):
         return {"ok": True, **briefing.plan(uid)}
     except Exception as e:  # noqa: BLE001
         log.error("액션플랜 실패 uid=%s: %s", uid, e)
-        return {"ok": False, "reason": "error", "detail": str(e), "actions": []}
+        return {"ok": False, "reason": "error", "detail": "다음 할 일을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.", "actions": []}
 
 
 @router.get("/api/asks")
