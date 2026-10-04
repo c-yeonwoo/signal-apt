@@ -4,7 +4,7 @@
 않으므로 수집 결과는 개인 계정에만 노출하고 저빈도로 호출한다. 공개 응답이라는 사실만으로
 다른 서비스/사용자에 대한 재사용 권한을 추론하지 않는다.
 
-- 급매: 기본(또는 scope=urgent) — is_urgent 호가. 갭 = (호가−중위시세)/중위시세.
+- 급매: 기본(또는 scope=urgent) — 공급사 is_urgent 표시. 자체 가격 판정이 아니다.
 - 찐매물: scope=all + apt_list.has_certified — 집주인 내집등록·인증 매물(realtor/customer 있음).
 """
 
@@ -19,6 +19,24 @@ import urllib.request
 _URL = "https://baroezip.com/api/apartment/spatialmarket"
 _HDR = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         "Accept": "application/json"}
+
+
+def without_unverified_comparison(row: dict) -> dict:
+    """구 캐시도 동일 면적·거래조건이 증명되지 않은 중위가격과 갭을 공개하지 않는다.
+
+    공급사 표시·실제 호가·면적·원천 ID는 보존한다. 새 가격 비교는 실거래 근거를
+    갖춘 별도 계약으로 제공해야 하며 이 레거시 필드를 다시 할인율로 쓰지 않는다.
+    """
+    return {**row, "급매갭": None, "중위시세": None,
+            "가격비교상태": "비교조건 미확인", "급매판정출처": "공급사 표시"}
+
+
+def safe_market_rows(rows: object) -> list[dict]:
+    """기존 갭순 캐시의 순위도 제거한다. 원본 행이나 캐시 파일은 수정하지 않는다."""
+    if not isinstance(rows, list):
+        return []
+    return sorted((without_unverified_comparison(row) for row in rows if isinstance(row, dict)),
+                  key=lambda row: (str(row.get("단지명") or ""), str(row.get("naver_id") or "")))
 
 
 def fetch_market_with_status(lat1: float, lng1: float, lat2: float, lng2: float,
@@ -53,14 +71,12 @@ def fetch_market_with_status(lat1: float, lng1: float, lat2: float, lng2: float,
         has_cert = bool(al.get("has_certified"))
         for m in grp.get("market_data", []) or []:
             호가 = m.get("deal_amount")
-            중위 = m.get("median_deal_amount")
             if not 호가:
                 continue
-            gap = round((호가 - 중위) / 중위 * 100, 1) if 중위 else None
             urgent = bool(m.get("is_urgent"))
             # 찐매물 = 단지 인증 + (비급매 또는 집주인/중개 연결). 급매 전용 피드는 has_cert=False.
             certified = has_cert and (not urgent or bool(m.get("customer") or m.get("realtor")))
-            out.append({
+            out.append(without_unverified_comparison({
                 "단지명": m.get("complex_name") or al.get("complex_name"),
                 "complex_no": m.get("complex_no") or al.get("complex_no"),  # 네이버 단지번호
                 "평형": m.get("pyeong_name"),
@@ -69,8 +85,6 @@ def fetch_market_with_status(lat1: float, lng1: float, lat2: float, lng2: float,
                 "방향": m.get("direction"),
                 "거래": m.get("trade_type"),                 # trade=매매
                 "호가": 호가,
-                "중위시세": 중위,
-                "급매갭": gap,                                # % (음수=시세 이하)
                 "급매": urgent,
                 "찐매물": certified,
                 "세대수": al.get("total_household_count"),
@@ -78,7 +92,7 @@ def fetch_market_with_status(lat1: float, lng1: float, lat2: float, lng2: float,
                 "lat": al.get("latitude") or m.get("latitude"),
                 "lng": al.get("longitude") or m.get("longitude"),
                 "naver_id": m.get("original"),               # 네이버 매물 id
-            })
+            }))
     return out, None
 
 

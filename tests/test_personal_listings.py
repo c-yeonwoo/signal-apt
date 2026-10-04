@@ -54,7 +54,8 @@ def test_radar_api_and_integrated_listing_do_not_leak_to_other_users(tmp_path, m
     assert api._advisor_tool("get_listings", {"kind": "급매"}, uid=guest_uid)["reason"] == "personal_only"
     owner_tool = api._advisor_tool("get_listings", {"kind": "급매"}, uid=owner_uid)
     assert owner_tool["급매"][0]["단지명"] == "개인 매물"
-    assert "국토부 실거래로 검증한 할인율이 아닙니다" in owner_tool["가격근거주의"]
+    assert "동일 전용면적·거래조건이 확인되지 않은 중위가격과 갭은 제공하지 않습니다" in owner_tool["가격근거주의"]
+    assert owner_tool["급매"][0]["급매갭"] is None
     assert briefing._quicksales({"노원구"}, 60000, uid=guest_uid) == []
     monkeypatch.setattr(briefing, "QUICKSALE_FILE", sale)
     assert briefing._quicksales({"노원구"}, 60000, uid=owner_uid)[0]["단지명"] == "개인 매물"

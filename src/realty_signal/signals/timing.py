@@ -6,9 +6,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isfinite
 
-VERSION = "v4-safe-region-signal"
+VERSION = "v5-no-unverified-price-gap"
 
 _SIG_BONUS = {"STRONG_BUY": 25, "BUY": 15, "WATCH": 5, "NEUTRAL": 0, "SELL_RISK": -20}
 _GRADE_BONUS = {"A": 8, "B": 4, "C": 0, "D": -4}
@@ -55,17 +54,9 @@ def _listing_base(kind: str, raw: dict) -> tuple[int, list[str], float]:
     why: list[str] = []
     conf = 0.72
     if kind in ("급매", "찐매물"):
-        g = raw.get("급매갭")
         base = 0
-        if isinstance(g, bool) or not isinstance(g, (int, float)) or not isfinite(g):
-            why = ["공급사 표시 갭 미확인 · 가격 점수 미반영"]
-            conf = 0.38
-        elif g <= -35:
-            why = [f"공급사 표시 갭 {g}%(⚠️비현실적·확인필요) · 가격 점수 미반영"]
-            conf = 0.3
-        else:
-            why = [f"공급사 표시 갭 {g}% · 실거래 미검증 · 가격 점수 미반영"]
-            conf = 0.42
+        why = ["동일 면적·조건 가격 비교 필요 · 가격 점수 미반영"]
+        conf = 0.38
         if kind == "찐매물":
             why.append("공급사 인증 표시(가격·판매 가능 여부 미검증)")
     elif kind == "일반매물":

@@ -578,9 +578,9 @@ test('radar card never borrows a region badge after source province mismatch', (
 });
 
 test('quicksale empty view names filter and source states separately', () => {
-  const empty = {textContent: ''}, gap = {value: '0'};
+  const empty = {textContent: ''};
   const ctx = vm.createContext({
-    document: {getElementById: id => id === 'qsGap' ? gap : empty},
+    document: {getElementById: () => empty},
     renderMtFilter() {}, inFocus: () => true, _mtPass: () => true, mapSplit() {},
     _mtBuyOnly: false,
     _qsMode: '급매', _qsList: [], _qsCertList: [], _qsData: {급매: {state: 'failed'}},
@@ -593,7 +593,7 @@ test('quicksale empty view names filter and source states separately', () => {
   ctx.renderQuicksale();
   assert.match(empty.textContent, /조회에 성공한 지역/);
   ctx._qsList = [{지역: '노원구', 급매갭: -2}];
-  gap.value = '-5';
+  ctx.inFocus = () => false;
   ctx.renderQuicksale();
   assert.match(empty.textContent, /필터에서 제외됐습니다/);
 });
@@ -609,6 +609,32 @@ test('listing evidence action requires exact area and escapes source attributes'
   assert.match(button, /data-area="84.9"/);
   assert.match(button, /data-floor="11"/);
   assert.match(ctx.qsEvidenceBtn({단지명:'A', 지역:'테스트구', 호가:48000}), /전용면적·호가 확인 필요/);
+});
+
+test('radar cards and map ignore legacy cross-area discounts and show exclusive area', () => {
+  let rendered;
+  const ctx=vm.createContext({
+    document:{getElementById:()=>({textContent:''})}, renderMtFilter(){},
+    inFocus:()=>true, _mtPass:()=>true, _mtBuyOnly:false,
+    _qsMode:'급매', _qsList:[{단지명:'비교단지',전용면적:59,평형:'84',호가:50000,급매갭:-37.5,중위시세:80000}],
+    _qsCertList:[], _qsData:{급매:{state:'ready'}}, _qsViewKey:()=>'',
+    mapSplit:(_list,_map,rows,options)=>{rendered={rows,options};},
+    badge:()=>'', safeRadarSignal:()=> 'HELD', _mtMetric:(label,value)=>label+value,
+    _eok:n=>(n/10000)+'억', txCostsSlot:()=>'', watchBtn:()=>'', reportBtn:()=>'',
+    loanBtn:()=>'', cxBtn:()=>'', cxSigBtn:()=>'', naverBtn:()=>'', esc:String,
+  });
+  vm.runInContext(extract('function qsAreaLabel(m){','// ===== 통합 매물('),ctx);
+  ctx.renderQuicksale();
+  assert.equal(rendered.rows.length,1);
+  const row=rendered.rows[0], card=rendered.options.summary(row);
+  const shown=JSON.stringify(card)+rendered.options.detail(row)+rendered.options.label(row);
+  assert.match(card.right,/호가.*5억/);
+  assert.match(card.sub,/전용 59㎡/);
+  assert.match(shown,/공급사 급매 표시/);
+  assert.doesNotMatch(shown,/-37\.5|8억|84평|중위시세/);
+  assert.equal(rendered.options.color(row),rendered.options.color({...row,급매갭:0}));
+  assert.equal(ctx.qsAreaLabel({평형:84}),'전용면적 확인 필요');
+  assert.doesNotMatch(html,/id="qsGap"|시세 대비 저가 매물/);
 });
 
 function selectionHarness() {
