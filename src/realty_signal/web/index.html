@@ -403,7 +403,8 @@
   .watch-records-body { display:flex; gap:8px; flex-wrap:wrap; padding:6px 0 0; }
   .watch-card { padding:16px; margin-bottom:10px; }
   .watch-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
-  .watch-card-actions { display:flex; justify-content:flex-end; gap:7px; flex-wrap:wrap; }
+  .watch-card-actions { display:flex; justify-content:flex-end; gap:7px; flex-wrap:wrap; min-width:0; max-width:100%; }
+  .watch-card-actions .btn { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
   .watch-card-name { min-width:0; display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; }
   .watch-card-name h3 { margin:0; font-size:16px; line-height:1.4; overflow-wrap:anywhere; }
   .watch-card-region { color:var(--dim); font-size:13px; margin-top:3px; }
