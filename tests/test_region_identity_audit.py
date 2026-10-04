@@ -26,6 +26,8 @@ def test_region_audit_classifies_without_auto_remapping():
     assert audit.classify("서울", kb, district_required=True) == "not_district"
     assert audit.classify("kb:1168000000", _kb(verified=False)) == "unverified"
     assert audit.classify("kb:123", kb) == "unverified"
+    assert audit._decision_snapshot_ref("{broken", kb) == "malformed"
+    assert audit._issued_ref("kb:1168000000", "노원구", kb) == "conflict"
 
 
 def test_read_only_audit_counts_user_surfaces_without_pii():
@@ -41,6 +43,18 @@ def test_read_only_audit_counts_user_surfaces_without_pii():
                        "VALUES('a',1,'region','kb:1168000000','change','r','{}',1)")
     connection.execute("INSERT INTO profile(uid,data) VALUES(1,?)", (json.dumps({
         "매수지역코드": "kb:1168000000", "매수지역": "노원구"}),))
+    connection.execute("INSERT INTO nbhd_snap(uid,region,week,data,ts) "
+                       "VALUES(1,'중구','2026-W40','{}',1)")
+    connection.execute("INSERT INTO imjang_visit(uid,region,cx,visited,checks,memo,ts) "
+                       "VALUES(1,'노원구','private-complex','2026-10-04','{}','private-memo',1)")
+    connection.execute("INSERT INTO decision_snap(uid,entity_id,week,data,ts) VALUES(1,'private-id','2026-W40',?,1)",
+                       (json.dumps({"region": "중구", "name": "private-home"}),))
+    connection.execute("INSERT INTO report_snapshots_v2(uid,report_id,subject_key,kind,data,saved_at) "
+                       "VALUES(1,'private-report','kb:1168000000','지역','{}',1)")
+    connection.execute("INSERT INTO signal_assessments(id,region_id,region,asof,issued_at,data) "
+                       "VALUES('private-assessment','kb:1168000000','강남구','2026-09-28',1,'{}')")
+    connection.execute("INSERT INTO signal_assessments(id,region_id,region,asof,issued_at,data) "
+                       "VALUES('private-mismatch','kb:1168000000','노원구','2026-09-28',1,'{}')")
     connection.commit()
     connection.close()
 
@@ -52,8 +66,14 @@ def test_read_only_audit_counts_user_surfaces_without_pii():
     assert report["surfaces"]["complex_favorites"] == {"not_district": 1}
     assert report["surfaces"]["region_alerts"] == {"verified_code": 1}
     assert report["surfaces"]["buyer_profiles"] == {"conflict": 1}
+    assert report["surfaces"]["neighborhood_snapshots"] == {"needs_reselection": 1}
+    assert report["surfaces"]["imjang_visits"] == {"unique_legacy_name": 1}
+    assert report["surfaces"]["decision_snapshots"] == {"needs_reselection": 1}
+    assert report["surfaces"]["saved_region_reports"] == {"verified_code": 1}
+    assert report["surfaces"]["issued_signal_history"] == {"conflict": 1, "verified_code": 1}
     output = json.dumps(report, ensure_ascii=False)
-    for private_value in ("중구", "노원구", "test-complex", "listing-secret"):
+    for private_value in ("중구", "노원구", "test-complex", "listing-secret",
+                          "private-complex", "private-memo", "private-home", "private-report"):
         assert private_value not in output
 
 
