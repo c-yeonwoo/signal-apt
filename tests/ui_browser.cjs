@@ -99,8 +99,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         const noProfile=finance&&spec.prefer_region_code==='11160';
         const preferred=!!spec.prefer_max_price_manwon||!!spec.prefer_min_area_m2;
         const candidate={listing:{key:next?'일반매물:synthetic-2':'일반매물:synthetic-1',
-          name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000,rooms:3},
-          recommendation_reason:'호가 조건 부합',tradeoff:'자료 확인',verify_next:'판매 여부 확인',
+          name:next?'두번째 후보':'첫번째 후보',region:'테스트구',kind:'일반매물',asking_manwon:50000,
+          exclusive_m2:59,rooms:3},
+          eligibility:finance?'verify':'matched',recommendation_reason:'호가 조건 부합',
+          tradeoff:'자료 확인',verify_next:'판매 여부 확인',
           preference:preferred?{region:'테스트구',matched:true,score:spec.priority==='price'?75:67,coverage:spec.priority==='price'?75:67,
             priority:spec.priority||'balanced',
             satisfied:2,known:2,total:3,details:[
@@ -1308,6 +1310,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('첫번째 후보').waitFor();
     assert.match(await page.locator('#v2DiscoverResults').textContent(),/일부 원천이 실패·제한/);
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),1);
+    assert.match(await page.locator('#v2DiscoverResults [data-v2-card]').first().textContent(),/전용 59㎡ · 방 3개/);
+    assert.match(await page.locator('#v2DiscoverResults [data-v2-card]').first().textContent(),/조건 부합 근거/);
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-listing]').first().evaluate(el=>el.classList.contains('primary')),true);
     const firstWatch=page.locator('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]');
     await firstWatch.click();
     await page.waitForFunction(()=>document.querySelector('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]')?.getAttribute('aria-pressed')==='true');
@@ -1428,10 +1433,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm [name=prefer_max_price_manwon]').fill('50000');
     await page.locator('#v2DiscoverForm [name=prefer_min_area_m2]').fill('84');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
-    await page.getByText(/선호 2\/3개 충족 · 2\/3개 자료 확인/).waitFor();
+    const preferenceDetail=page.locator('#v2DiscoverResults .v2-discovery-more').first();
+    await preferenceDetail.getByText(/선호 기준 2\/3개 · 자료 2\/3개 확인/).waitFor();
+    assert.equal(await preferenceDetail.getAttribute('open'),null);
+    await preferenceDetail.locator('summary').click();
+    assert.match(await preferenceDetail.textContent(),/부합: 선호 지역·선호 호가/);
     await page.locator('#v2DiscoverForm [name=priority]').selectOption('price');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
-    await page.getByText(/호가 우선\(2배\): 적합도 75\/100 · 확인도 75\/100/).waitFor();
+    const priorityDetail=page.locator('#v2DiscoverResults .v2-discovery-more').first();
+    await priorityDetail.locator('summary').click();
+    await page.getByText(/호가 우선\(2배\) · 적합도 75\/100 · 확인도 75\/100/).waitFor();
     assert.equal(discoveryPayloads.at(-1).priority,'price');
     assert.equal(await page.getByText('조건초과 후보').count(),0);
     await page.locator('#v2DiscoverForm [name=include_exceeded]').check();
