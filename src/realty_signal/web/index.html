@@ -2867,7 +2867,9 @@ function _renderImjang(){
   const d=_imj; if(!d) return;
   const head=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px">
     ${d['날짜']} · ${d['출발']} 출발 → ${d['종료']} 종료 <span style="color:var(--txt)">(총 ${Math.floor(d['총소요']/60)}시간 ${d['총소요']%60}분)</span>
-    · 이동 ${d['이동합']}분 · 단지당 ${d['체류']}분${d['집기준']?'':' · <span>거주지를 넣으면 집에서 출발하는 순서로 짭니다</span>'}</div>`;
+    · 이동 ${d['이동합']}분 · 단지당 ${d['체류']}분${d['집기준']?'':d['거주지확인필요']
+      ?' · <span>거주지 위치 미확인: 내 조건에서 주소 검색 결과를 다시 선택해 주세요.</span>'
+      :' · <span>내 조건에서 거주지를 선택하면 집에서 출발하는 순서로 짭니다.</span>'}</div>`;
   const stops=d.stops.map((s,i)=>{
     const move=s['이동']?`<div style="font-size:11px;color:var(--dim);margin:8px 0 8px 8px">↓ 이동 ${s['이동']}분</div>`:'';
     const seen=s['방문일']?`<span style="font-size:11px;color:#16a34a">· ${s['방문일']} 방문함</span>`:'';
@@ -7344,12 +7346,17 @@ async function drawMyMap(){
   const regionFavs=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
   const complexFavs=[...(_favs||[])].filter(k=>k.startsWith('complex:')).map(k=>k.slice(8))
     .filter(k=>!['needs_reselection','unverified'].includes(_favComplexIdentity.get(k)?.status)); // 식별 보류 단지는 추측 좌표로 놓지 않는다.
-  const regionsNeeded=[...new Set([p['거주지'], ...regionFavs].filter(Boolean))];
-  let cen={};
-  if(regionsNeeded.length){ try{ cen=(await (await fetch('/api/region-centroids?regions='+encodeURIComponent(regionsNeeded.join(',')))).json()).centroids||{}; }catch(e){} }
+  const homeRef=p['거주지코드']||p['거주지'];
+  const regionRefs=regionFavs.map(name=>({name,ref:_favRegionKeyByName.get(name)||name}));
+  const regionsNeeded=[...new Set([homeRef, ...regionRefs.map(x=>x.ref)].filter(Boolean))];
+  let cen={}, cenIdentity={};
+  if(regionsNeeded.length){ try{ const loc=await (await fetch('/api/region-centroids?regions='+encodeURIComponent(regionsNeeded.join(',')))).json();
+    cen=loc.centroids||{}; cenIdentity=loc.identities||{}; }catch(e){} }
   const pts=[];
-  if(p['거주지'] && cen[p['거주지']]){ const hs=sm[p['거주지']]||{}; pts.push({kind:'home',name:p['거주지'],region:p['거주지'],lat:cen[p['거주지']][0],lng:cen[p['거주지']][1],color:'#2563eb',sig:safeMarketSignal(p['거주지']),grade:hs['급지']}); }
-  regionFavs.forEach(r=>{ if(cen[r] && r!==p['거주지']){ const s=sm[r]||{}; const safe=safeMarketSignal(r); pts.push({kind:'region',name:r,region:r,lat:cen[r][0],lng:cen[r][1],color:(_SIG_COLOR[safe]||'#5f6875'),sig:safe,grade:s['급지']}); } });
+  const homeVerified=homeRef && cen[homeRef] && cenIdentity[homeRef]?.name===p['거주지'];
+  if(homeVerified){ const r=p['거주지'], hs=sm[r]||{}; pts.push({kind:'home',name:r,region:r,lat:cen[homeRef][0],lng:cen[homeRef][1],color:'#2563eb',sig:safeMarketSignal(r),grade:hs['급지']}); }
+  regionRefs.forEach(({name:r,ref})=>{ if(cen[ref] && cenIdentity[ref]?.name===r && !(homeVerified && cenIdentity[ref]?.region_id===cenIdentity[homeRef]?.region_id)){
+    const s=sm[r]||{}, safe=safeMarketSignal(r); pts.push({kind:'region',name:r,region:r,lat:cen[ref][0],lng:cen[ref][1],color:(_SIG_COLOR[safe]||'#5f6875'),sig:safe,grade:s['급지']}); } });
   if(complexFavs.length){
     const q=complexFavs.map(k=>{const i=k.indexOf('|'), identity=_favComplexIdentity.get(k)||{};
       return `${identity.sido||''} ${identity.name||k.slice(0,i)} ${k.slice(i+1)}`.trim();});
@@ -7369,8 +7376,9 @@ async function drawMyMap(){
     m.on('click',()=>myPinClick(i));
     _myMarkers.push(m);
   });
-  document.getElementById('myMapEmpty').textContent = pts.length ? ''
-    : '표시할 핀이 없습니다. 프로필에 거주지를 입력하거나, 단지 검색·★로 관심지역·관심단지를 추가하세요.';
+  document.getElementById('myMapEmpty').textContent = p['거주지'] && !homeVerified
+    ? '거주지 위치를 확인하지 못했습니다. 내 조건에서 주소 검색 결과를 다시 선택해 주세요.'
+    : pts.length ? '' : '표시할 핀이 없습니다. 내 조건에서 거주지를 선택하거나, 단지 검색·★로 관심지역·관심단지를 추가하세요.';
   document.getElementById('myMapDist').textContent = '핀 두 개를 클릭해 거리를 재보세요.';
   document.getElementById('myMapInfo').innerHTML = '';
   updateCmpChip();

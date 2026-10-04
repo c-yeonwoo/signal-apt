@@ -1349,6 +1349,40 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     });
     assert.deepEqual(homeSelection,{choices:1,name:'중구',code:'kb:1114000000',
       status:'서울 · 중구 확인됨',cleared:true});
+    const homeMap=await page.evaluate(async()=>{
+      const originalFetch=window.fetch;
+      window.fetch=(url,...args)=>String(url).startsWith('/api/region-centroids')
+        ? Promise.resolve(new Response(JSON.stringify({
+            centroids:{'kb:1114000000':[37.56,126.99],중구:[37.56,126.99]},
+            identities:{'kb:1114000000':{name:'중구',sido:'서울',region_id:'kb:1114000000'}}
+          }),{headers:{'Content-Type':'application/json'}})) : originalFetch(url,...args);
+      window.L={divIcon:o=>o,layerGroup:()=>({addTo(){return this;},remove(){}}),
+        marker:()=>({bindTooltip(){return this;},addTo(){return this;},on(){},setIcon(){}}),
+        featureGroup:()=>({getBounds:()=>({pad(){return this;}})})};
+      myMap={invalidateSize(){},fitBounds(){}};
+      _favs=new Set(); _mySearchList=[];
+      _profile={거주지:'중구',거주지코드:'kb:1114000000'};
+      await drawMyMap();
+      const verified=_myPts.filter(p=>p.kind==='home').length;
+      _profile={거주지:'부산 중구',거주지코드:'kb:1114000000'};
+      await drawMyMap();
+      const mismatch=_myPts.filter(p=>p.kind==='home').length;
+      _profile={거주지:'중구'};
+      await drawMyMap();
+      const legacy=_myPts.filter(p=>p.kind==='home').length;
+      const hint=document.getElementById('myMapEmpty').textContent;
+      _profile={}; _favs=new Set(['region:중구']);
+      _favRegionKeyByName=new Map([['중구','kb:1114000000']]);
+      await drawMyMap();
+      const favorite=_myPts.filter(p=>p.kind==='region').length;
+      window.fetch=originalFetch;
+      return {verified,mismatch,legacy,favorite,hint};
+    });
+    assert.equal(homeMap.verified,1);
+    assert.equal(homeMap.mismatch,0);
+    assert.equal(homeMap.legacy,0);
+    assert.equal(homeMap.favorite,1);
+    assert.match(homeMap.hint,/주소 검색 결과를 다시 선택/);
     assert.equal(nickPayloads.length,0);
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');

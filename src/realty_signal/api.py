@@ -1497,14 +1497,15 @@ def imjang_course(request: Request, on: str | None = None, start: str = "10:00",
     if not sl.get("ready"):
         return {"ready": False, "reason": sl.get("reason") or "no_candidates",
                 "message": sl.get("message") or "후보가 있어야 코스를 짤 수 있어요."}
-    profile = db.profile_get(uid) or {} if uid else {}
-    home = None
-    if profile.get("거주지"):     # 집에서 출발하는 순서여야 동선이 되돌지 않는다
-        home = _region_centroid(profile["거주지"], _code_of(profile["거주지"]))
+    profile = (db.profile_get(uid) or {}) if uid else {}
+    home_identity = _verified_home_region(profile)
+    home = (_region_centroid(home_identity["name"], home_identity["code"])
+            if home_identity else None)
     visited = db.imjang_latest(uid) if uid else {}
     out = ij.build_course(sl["candidates"], start=start, stop_min=max(20, min(180, stop_min)),
                           home=home, visited=visited, on=on)
     out["집기준"] = bool(home)
+    out["거주지확인필요"] = bool(profile.get("거주지") and not home_identity)
     return out
 
 
@@ -3068,17 +3069,29 @@ def complex_building(region: str, name: str):
 
 
 def region_centroids(regions: str):
-    """시군구 중심좌표 배치 — 콤마구분 지역명 → {지역:[lat,lng]}. DB 캐시 우선(즉시).
+    """시군구 중심좌표 배치 — 이름 또는 검증된 kb:코드 → 좌표·식별 증명.
 
-    핀 폴백용: 단지 지오코딩 실패 단지를 지역 중심에 표시해 항상 클릭/포커스 가능.
-    청약처럼 lat/lng 없는 매물은 이 좌표로 리스트·지도가 채워진다.
+    핀 폴백용: 청약처럼 lat/lng 없는 매물은 확인 가능한 지역 중심에 표시한다.
+    동명이 시군구의 이름만 있으면 다른 지역 중심으로 추측하지 않는다.
     """
-    out = {}
-    for region in [r for r in regions.split(",") if r][:60]:
-        c = _region_centroid(region, _code_of(region))
+    out, identities = {}, {}
+    for ref in [r for r in regions.split(",") if r][:60]:
+        try:
+            identity = (md.current_region_identity(ref) if ref.startswith("kb:")
+                        else _verified_home_region({"거주지": ref}))
+        except Exception:  # noqa: BLE001 — identity failure must not be promoted to a verified pin.
+            identity = None
+        if not identity and (ref.startswith("kb:") or ref in buying_power.AMBIGUOUS_PROFILE_REGIONS):
+            continue
+        region = identity["name"] if identity else ref
+        code = identity["code"] if identity else _code_of(region)
+        c = _region_centroid(region, code)
         if c:
-            out[region] = [c[0], c[1]]
-    return {"centroids": out}
+            out[ref] = [c[0], c[1]]
+            if identity:
+                identities[ref] = {"name": identity["name"], "sido": identity["sido"],
+                                   "region_id": identity["region_id"]}
+    return {"centroids": out, "identities": identities}
 
 
 
