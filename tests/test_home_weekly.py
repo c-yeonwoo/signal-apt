@@ -91,6 +91,32 @@ def test_for_user_separates_my_regions(monkeypatch):
     assert [m["region"] for m in out["my_movers"]] == ["강남구"]
 
 
+def test_weekly_cache_invalidates_on_same_day_source_revision(tmp_path, monkeypatch):
+    kb = _kb([("2026-07-13", "강남구", "m", 1.0), ("2026-07-20", "강남구", "m", 2.0)])
+    from realty_signal import store
+    source = tmp_path / "long.parquet"
+    supply = tmp_path / "supply.parquet"
+    source.write_bytes(b"source-v1")
+    supply.write_bytes(b"supply-v1")
+    monkeypatch.setattr(store, "CACHE_FILE", source)
+    monkeypatch.setattr(store, "SUPPLY_FILE", supply)
+    monkeypatch.setattr(store, "load", lambda: kb)
+    cached = {}
+    monkeypatch.setattr(db, "kv_get", lambda key: cached.get(key))
+    monkeypatch.setattr(db, "kv_set", lambda key, value: cached.__setitem__(key, value))
+    calls = []
+    monkeypatch.setattr(weekly, "compute", lambda *_args: (calls.append(True) or {
+        "as_of": "2026-07-20", "ready": True, "signals": [], "movers": []}))
+
+    assert weekly.latest()["ready"] is True
+    assert len(calls) == 1
+    assert weekly.latest()["cached"] is True
+    supply.write_bytes(b"supply-v2-longer")
+    weekly.latest()
+    assert len(calls) == 2
+    assert len(cached) == 2
+
+
 def test_action_plan_weekly_changes_require_current_ready_assessment(monkeypatch):
     change = {"region": "노원구", "from": "WATCH", "to": "BUY", "up": True}
     week = {"ready": True, "stale_days": 3, "mine": [change]}
