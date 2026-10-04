@@ -841,7 +841,7 @@
   }
 
   function watchAction(listing) {
-    return listing?.key && listing.name && typeof watchBtn === 'function' ? watchBtn(listing.key) : '';
+    return listing?.key && listing.name && typeof watchBtn === 'function' ? watchBtn(listing.key,listing.listing_aliases) : '';
   }
 
   async function saveComparison() {

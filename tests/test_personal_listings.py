@@ -49,6 +49,10 @@ def test_radar_api_and_integrated_listing_do_not_leak_to_other_users(tmp_path, m
 
     assert guest.get("/api/listings/all?types=급매,찐매물").json()["listings"] == []
     assert len(owner.get("/api/listings/all?types=급매").json()["listings"]) == 1
+    combined = owner.get("/api/listings/all?types=급매,찐매물").json()
+    assert len(combined["listings"]) == 1
+    assert combined["meta"]["duplicate_records_collapsed"] == 1
+    assert set(combined["listings"][0]["listing_aliases"]) == {"급매:personal-1", "찐매물:personal-1"}
     assert "quicksale" not in {s["key"] for s in guest.get("/api/freshness").json()["sources"]}
     assert "quicksale" in {s["key"] for s in owner.get("/api/freshness").json()["sources"]}
     assert api._advisor_tool("get_listings", {"kind": "급매"}, uid=guest_uid)["reason"] == "personal_only"

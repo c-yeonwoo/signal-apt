@@ -352,6 +352,8 @@ def discovery(request: Request, data: dict = Body(...)):
             del source["expected_count"]
             if not source["regions"]:
                 source["regions"] = sorted({row.get("지역") for row in source_rows if row.get("지역")})
+    from realty_signal.services.listing_inventory import collapse
+    rows = collapse(rows)
     scenario = None
     profile = None
     profile_failed = False

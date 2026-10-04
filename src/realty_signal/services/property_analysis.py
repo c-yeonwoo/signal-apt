@@ -23,8 +23,12 @@ def resolve(key: str, *, private_allowed: bool) -> dict:
     if kind in PRIVATE and not private_allowed:
         raise PermissionError("personal_listing")
     from realty_signal import api
-    row = next((r for r in api._build_listings({kind}, include_private=private_allowed)
-                if r.get("key") == key), None)
+    if kind in {"급매", "찐매물"}:
+        from realty_signal.services.listing_inventory import index_by_key
+        row = index_by_key(api._build_listings({"급매", "찐매물"}, include_private=private_allowed)).get(key)
+    else:
+        row = next((r for r in api._build_listings({kind}, include_private=private_allowed)
+                    if r.get("key") == key), None)
     if row is None:
         raise LookupError("listing_not_found")
     return row
@@ -76,6 +80,10 @@ def snapshot(row: dict) -> dict:
         coords = [lat, lng]
     return {
         "key": row.get("key"), "kind": kind, "name": row.get("단지명"),
+        "listing_aliases": row.get("listing_aliases") or [row.get("key")],
+        "source_labels": row.get("source_labels") or [kind],
+        "supplier_flags": row.get("supplier_flags") or [],
+        "source_conflict": bool(row.get("source_conflict")),
         "region": row.get("지역"), "region_sido": row.get("시도"),
         "region_code": row.get("지역코드"), "asking_manwon": price,
         "exclusive_m2": area, "rooms": _rooms(ref.get("방수")), "floor": floor,

@@ -732,3 +732,38 @@ test('listing price filter and budget sort require server-validated buyer fit', 
   assert.match(html, /id="sigMap"/);
   assert.match(html, /onclick="switchTab\('signal'\)"[^>]*>시그널</);
 });
+
+test('sale navigation groups sources while supplier flags filter independently', () => {
+  const ctx=vm.createContext({_SALE_TYPES:['일반매물','급매','찐매물'],
+    document:{getElementById:()=>({value:''})},switchTab:()=>{}});
+  vm.runInContext(extract('function openTypedList(', 'let _listingSub='),ctx);
+  vm.runInContext(extract('function _laSalePass(', 'function _laAsk('),ctx);
+  ctx.openTypedList('일반매물');
+  assert.deepEqual([...ctx._laSel],['일반매물','급매','찐매물']);
+  assert.equal(ctx._laSalePass({유형:'찐매물'}),true);
+  ctx.openTypedList('급매');
+  assert.equal(ctx._laSalePass({유형:'찐매물',supplier_flags:['urgent','certified']}),true);
+  assert.equal(ctx._laSalePass({유형:'일반매물',supplier_flags:[]}),false);
+  ctx.openTypedList('찐매물');
+  assert.equal(ctx._laSalePass({유형:'일반매물',supplier_flags:['certified']}),true);
+  assert.match(ctx._laSourceLabel({유형:'일반매물',source:'hanbang',supplier_flags:['certified']}),/한방.*공급사 인증 표시/);
+  assert.match(html,/const _LA_TYPES=\['매매','청약','경매','재건축'\]/);
+});
+
+test('merged watch button preserves existing aliases and removes only that listing on explicit toggle', async () => {
+  const saved=new Set(['찐매물:123','급매:123','일반매물:999']),calls=[];
+  const button={dataset:{watchKey:'급매:123',watchAliases:'["급매:123","찐매물:123"]'},setAttribute(){}};
+  const ctx=vm.createContext({_watchKeys:saved,_watchPendingKeys:new Set(),esc:String,EVENTS:{LISTING_WATCH_ADD:'watch'},track(){},toast(){},
+    document:{querySelectorAll:()=>[button],getElementById:()=>({style:{display:'none'}})},
+    fetch:async(url,options)=>{calls.push([url,options.method]);return {ok:true};}});
+  vm.runInContext(extract('function _watchAliases(', 'async function saveWatchPriceTarget('),ctx);
+  assert.match(ctx.watchBtn('급매:123',['찐매물:123']),/aria-pressed="true"/);
+  await ctx.toggleListingWatch(button);
+  assert.equal(calls.length,2);
+  assert.ok(calls.every(([url,method])=>method==='DELETE'&&decodeURIComponent(url).endsWith(':123')));
+  assert.deepEqual([...saved],['일반매물:999']);
+  assert.equal(button.textContent,'☆ 찜하기');
+  await ctx.toggleListingWatch(button);
+  assert.equal(calls[2][1],'POST');
+  assert.equal(button.textContent,'★ 찜함');
+});

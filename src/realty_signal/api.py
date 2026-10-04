@@ -3319,13 +3319,16 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             row.update(입찰상태=raw.get("입찰상태"), 확인할것=raw.get("확인할것") or [],
                        검토용상한=raw.get("권장입찰가"))
         row.update(tr.to_dict())
+        if kind in {"일반매물", "급매", "찐매물"}:
+            row["supplier_flags"] = (["urgent"] if raw.get("급매") or raw.get("급매표시") else []) + (
+                ["certified"] if raw.get("찐매물") or raw.get("검증표시") else [])
         if kind in ("급매", "찐매물"):
             import time
             path = QUICKSALE_FILE if kind == "급매" else CERTIFIED_FILE
             fetched = raw.get("fetched_at") or path.stat().st_mtime
             row.update(source="baroezip", fetched_at=fetched,
-                       stale=bool(raw.get("stale") or time.time()-fetched > 86400),
-                       degraded=bool(raw.get("degraded")), price_kind="asking",
+                       stale=bool(raw.get("stale") or radar_failed.get(kind) or time.time()-fetched > 86400),
+                       degraded=bool(raw.get("degraded") or radar_failed.get(kind)), price_kind="asking",
                        published_at=None, spatial_grain="listing")
         if kind == "일반매물":
             import time
@@ -3336,6 +3339,8 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                        spatial_grain="listing")
         out.append(row)
 
+    radar_failed = {kind: _radar_refresh_status(path).get("ok") is False
+                    for kind, path in (("급매", QUICKSALE_FILE), ("찐매물", CERTIFIED_FILE)) if kind in want}
     if "경매" in want:
         try:
             raw_auction_signals = _signal_map()
@@ -3393,10 +3398,13 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     """통합 매물 — 경매·급매·찐매물·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환)."""
     from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
+    from realty_signal.services.listing_inventory import collapse
 
     private_access = _personal_listings_allowed(request=request)
     out = _build_listings(set(t for t in types.split(",") if t),
                           include_private=private_access)
+    source_record_count = len(out)
+    out = collapse(out)
     uid = _uid(request)
     scores = eng_rank.engagement_scores(uid=uid)
     if scores:
@@ -3425,6 +3433,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "data_age_days": round(_data_age_days() or 0, 1),
             "engagement_boost": bool(scores),
             "private_access": private_access,
+            "source_record_count": source_record_count,
+            "duplicate_records_collapsed": source_record_count - len(out),
             "confirmed_budget": bool(confirmed and (profile.get("매수지역코드")
                 or ((profile.get("매수력") or {}).get("가정") or {}).get("지역코드"))),
         },

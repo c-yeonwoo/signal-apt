@@ -584,6 +584,41 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(fieldLinks[1].href.startsWith('https://map.naver.com/p/search/'));
     assert.match(fieldLinks[2].href,/hogangnono/);
     assert.match(fieldLinks[3].href,/asil/);
+    // Unified sale controls and real list DOM; map tiles/network remain stubbed.
+    await page.evaluate(async()=>{
+      mapSplit=(listId,mapId,items,opt)=>{
+        _ms[mapId]={items,opt,listId,listLimit:60,openGroupKeys:new Set(),map:{invalidateSize(){}}};
+        renderMsList(mapId,items.map((_,i)=>i));
+      };
+      openTypedList('매매'); await loadAllListings();
+      _watchKeys=new Set(['찐매물:merged-1']);
+      _mtBuyOnly=false; _focusRegion=null; _mtGradeSet=new Set(['A','B','C','D','E']);
+      const base={지역:'테스트구',시도:'서울',지역코드:'11140',시그널:'HELD',총액:50000,기회도:0,
+        ref:{전용면적:59,층:8},price_kind:'asking',budget_fit:{status:'unknown',reason:'가정 확인'}};
+      _laApplyResponse(_SALE_TYPES.join(','),{asof:'2026-09-28',meta:{private_access:true,duplicate_records_collapsed:1},listings:[
+        {...base,key:'급매:merged-1',유형:'급매',단지명:'통합인증단지',source:'baroezip',
+          listing_aliases:['급매:merged-1','찐매물:merged-1'],supplier_flags:['urgent','certified']},
+        {...base,key:'일반매물:normal-1',유형:'일반매물',단지명:'통합일반단지',source:'hanbang',supplier_flags:[]},
+      ]});
+    });
+    assert.equal(await page.locator('#laList .ms-row').count(),2);
+    assert.match(await page.locator('#laList').textContent(),/전용 59㎡/);
+    assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'매매',exact:true}).getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'찐매물',exact:true}).count(),0);
+    await page.locator('#laMoreBtn').click();
+    await page.locator('#laSaleFilter').selectOption('certified');
+    assert.equal(await page.locator('#laList .ms-row').count(),1);
+    assert.match(await page.locator('#laList').textContent(),/통합인증단지/);
+    await page.locator('#laSaleFilter').selectOption('all');
+    assert.equal(await page.locator('#laList .ms-row').count(),2);
+    for(const width of [180,360,390,1280]){
+      await page.setViewportSize({width,height:800});
+      const layout=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,
+        list:document.getElementById('laList').scrollWidth,available:document.getElementById('laList').clientWidth}));
+      assert(layout.document<=layout.viewport && layout.list<=layout.available,
+        `unified sale list overflow ${width}: ${JSON.stringify(layout)}`);
+    }
+    await page.setViewportSize({width:360,height:800});
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);
     await page.locator('#v2ReportBody').getByText('핵심 판단 빠르게 확인',{exact:true}).click();

@@ -41,7 +41,8 @@ def materialize(uid: int, saved: list[dict], current: list[dict], *,
         return 0
     visible_current = (current if private_allowed else
                        [row for row in current if row.get("유형") not in listing_watch.PRIVATE])
-    current_by_key = {row.get("key"): row for row in visible_current if row.get("key")}
+    from realty_signal.services.listing_inventory import index_by_key
+    current_by_key = index_by_key(visible_current)
     built = listing_watch.build(permitted, visible_current)
     now = int(time.time())
     count = 0
@@ -140,6 +141,8 @@ def scan_cached_sources() -> int:
              for watch in owner["saved"]}
     if not kinds:
         return 0
+    if kinds & {"급매", "찐매물"}:
+        kinds |= {"급매", "찐매물"}
     current = api._build_listings(kinds, include_private=bool(allowed))
     count = 0
     for uid, owner in owners.items():

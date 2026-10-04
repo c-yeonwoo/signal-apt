@@ -11,7 +11,7 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-12"
+VERSION = "discovery-v2-13"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "move_in_by", "max_commute_minutes", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
@@ -246,10 +246,12 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
                 status = "fail"
         checks.append({"field": "region_code", "status": status,
                        "value": region_code, "limit": spec["region_code"]})
+    if listing.get("source_conflict"):
+        checks = [{**check, "status": "unknown"} for check in checks]
     preference = _preference(listing, spec)
     tier = "exceeded" if any(x["status"] == "fail" for x in checks) else (
         "verify" if any(x["status"] == "unknown" for x in checks) or listing["stale"] or
-        listing["collected_at"] is None else "matched" if checks else "explore")
+        listing["collected_at"] is None or listing.get("source_conflict") else "matched" if checks else "explore")
     passed = [x for x in checks if x["status"] == "pass"]
     missing = [x for x in checks if x["status"] == "unknown"]
     failed = [x for x in checks if x["status"] == "fail"]
@@ -285,6 +287,9 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
               "저장된 직장까지의 대중교통 경로를 확인하세요." if missing and missing[0]["field"] == "max_commute_minutes" else
               f"{missing[0]['field']} 자료를 확인하세요." if missing else
               "실제 자금·매물 상태를 확인하세요.")
+    if listing.get("source_conflict"):
+        reason = "같은 원천 ID의 매물 정보가 서로 달라 조건 판정을 보류했습니다."
+        verify = "원천에서 단지·전용면적·층 정보를 먼저 확인하세요."
     return {"listing": listing, "eligibility": tier, "constraints": checks,
             "recommendation_reason": reason, "tradeoff": tradeoff,
             "verify_next": verify, "signal_context": row.get("시그널"),
