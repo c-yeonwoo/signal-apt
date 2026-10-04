@@ -588,6 +588,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#view-watch .watch-btn').getAttribute('aria-pressed'),'true');
     await page.locator('#view-watch').getByRole('button',{name:'매물 확인'}).click();
     await page.locator('#v2ReportDlg').getByText('한방테스트단지',{exact:false}).waitFor();
+    assert.equal(await page.locator('#v2BackToDiscovery').isVisible(),false);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.evaluate(()=>switchTab('watch'));
     assert.equal(await page.locator('.watch-card-more').getAttribute('open'),'');
@@ -1325,11 +1326,22 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await reportWatch.click();
     await page.waitForFunction(()=>document.querySelector('#v2ReportBody [data-watch-key="일반매물:synthetic-1"]')?.getAttribute('aria-pressed')==='false');
     assert.equal(watched.has('일반매물:synthetic-1'),false);
-    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
-    await page.evaluate(()=>SignalV2.openDiscovery());
-    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
-    await page.getByText('첫번째 후보').waitFor();
+    await page.setViewportSize({width:180,height:800});
+    const reportTopWidth=await page.locator('#v2ReportDlg .v2-top').evaluate(el=>({scroll:el.scrollWidth,client:el.clientWidth}));
+    assert(reportTopWidth.scroll<=reportTopWidth.client,`report return header overflows: ${JSON.stringify(reportTopWidth)}`);
+    await page.setViewportSize({width:360,height:800});
+    await page.locator('#v2BackToDiscovery').click();
+    assert.equal(await page.locator('#v2ReportDlg').evaluate(el=>el.open),false);
+    assert.equal(await page.locator('#v2DiscoverDlg').evaluate(el=>el.open),true);
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),1);
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-listing="일반매물:synthetic-1"]')
+      .evaluate(el=>el===document.activeElement),true);
     assert.equal(await page.locator('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]').getAttribute('aria-pressed'),'false');
+    await page.locator('#v2DiscoverResults [data-v2-next]').click();
+    await page.getByText('두번째 후보').waitFor();
+    await page.locator('#v2DiscoverResults [data-v2-listing="일반매물:synthetic-2"]').click();
+    await page.locator('#v2BackToDiscovery').click();
+    assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),2);
     await page.locator('#v2DiscoverExtra > summary').click();
     await page.locator('#v2DiscoverForm [name=min_rooms]').fill('16');
     await page.locator('#v2DiscoverExtra > summary').click();

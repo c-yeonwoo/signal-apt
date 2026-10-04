@@ -522,6 +522,7 @@
   #v2ReportDlg .btn { margin:3px; }
   .v2-top { position:sticky; top:0; display:flex; justify-content:flex-end; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); z-index:1; }
   #v2DiscoverCompare[hidden] { display:none; }
+  #v2BackToDiscovery[hidden] { display:none; }
   #v2DiscoverCompare { margin-right:auto; }
   #v2ReportDlg .v2-top { align-items:center; justify-content:space-between; gap:8px; }
   #v2MapSpace { display:none; }
@@ -557,6 +558,7 @@
   }
   @media(max-width:240px) {
     #v2ReportDlg .v2-top b { display:none; }
+    #v2ReportDlg .v2-top { flex-wrap:wrap; gap:2px; }
     #view-all > div { padding-left:12px !important; padding-right:12px !important; }
     #view-all .mapsplit,#view-all .ms-list { min-width:0; }
     #view-all .ms-map { min-width:0; width:100%; min-height:240px; box-sizing:border-box; }
@@ -8231,7 +8233,7 @@ async function startApp(needOnboard){
 </div>
 <button type="button" id="analysisPickCancel" class="btn" onclick="_analysisStopPick()" style="display:none;position:fixed;top:12px;right:12px;z-index:1450;background:var(--panel)">출입구 지정 취소</button>
 <dialog id="v2ReportDlg" aria-label="매물 분석 리포트">
-  <div class="v2-top"><b>매물 확인 리포트</b><button type="button" class="btn" id="v2MapSpace" aria-pressed="false">지도 크게</button><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
+  <div class="v2-top"><b>매물 확인 리포트</b><button type="button" class="btn" id="v2BackToDiscovery" hidden>후보 목록으로</button><button type="button" class="btn" id="v2MapSpace" aria-pressed="false">지도 크게</button><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
   <div id="v2ReportBody" class="v2-panel" aria-live="polite"></div>
 </dialog>
 <dialog id="v2DiscoverDlg" aria-label="내 조건으로 매물 찾기">
