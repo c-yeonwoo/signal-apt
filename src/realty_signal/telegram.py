@@ -1,4 +1,4 @@
-"""텔레그램 봇 — Nick 데일리 브리핑 발송 채널.
+"""텔레그램 봇 — Signal APT 아침 요약 발송 채널.
 
 웹훅 대신 getUpdates 폴링으로 계정을 연결한다. 배포/로컬에서 웹훅 등록·해제를
 신경 쓸 필요가 없고, 연결 이벤트는 하루 몇 건이라 폴링으로 충분하다.
@@ -142,7 +142,7 @@ def poll_updates(limit: int = 50) -> dict:
         _attach(int(uid), chat_id, msg)
         db.kv_set(f"tg_link:{code}", None)
         stats["linked"] += 1
-        send_message(chat_id, "연결됐습니다. 이제 매일 아침 닉이 후보 변화만 골라 보내드릴게요.\n"
+        send_message(chat_id, "연결됐습니다. 이제 매일 아침 관심 후보의 변화만 요약해 보내드릴게요.\n"
                               "끄려면 /stop 을 보내세요.")
     return stats
 

@@ -1,4 +1,4 @@
-"""Nick 데일리 브리핑 — 확정 매수력 기준 후보 3곳의 '어제 대비 변화'만.
+"""Signal APT 아침 요약 — 확정 매수력 기준 후보 3곳의 '어제 대비 변화'만.
 
 매일 같은 요약을 보내면 읽지 않게 된다. 변화가 없는 날은 보내지 않고,
 월요일 한 번은 변화가 없어도 후보 현황을 확인용으로 보낸다.
@@ -348,7 +348,7 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
             complexes: list[dict] | None = None, asks: list[dict] | None = None) -> str:
     d = today_kst()
     cands = data.get("candidates") or []
-    L = [f"🦊 닉 브리핑 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
+    L = [f"📍 Signal APT 아침 요약 · {d.month}/{d.day}({WEEKDAY_KO[d.weekday()]})", ""]
     L.append(f"예산 {_eok(data.get('budget'))} · {data.get('pyeong')}평 기준")
     L.append("")
 

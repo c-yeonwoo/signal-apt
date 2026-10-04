@@ -10,7 +10,6 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  body.nick-global-disabled #advFab{display:none!important}
   :root {
     /* 표면·텍스트 — 차분한 잉크 톤 */
     /* --dim 은 #6b7280 이었는데 --bg 대비 4.43:1 로 WCAG AA(4.5:1) 미달이었다 → 5.17:1 */
@@ -294,15 +293,9 @@
   .uv-pill { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; }
   .uv-cx { margin-top:12px; padding:11px 13px; background:var(--bg);
     border:1px solid var(--line); border-radius:10px; font-size:12px; }
-  /* 닉 챗봇 — 패널·입력창 크기 조절 핸들 */
-  #advPanel::-webkit-resizer, #advInput::-webkit-resizer {
-    background:linear-gradient(135deg,transparent 55%,var(--line) 55%); }
+  /* 구형 리포트 롤백 패널(채팅 기능 없음) */
   #advPanel.adv-report-mode { width:500px !important; height:calc(100vh - 32px) !important;
     max-height:none !important; max-width:calc(100vw - 24px) !important; resize:none !important; }
-  .adv-tabs { display:flex; gap:6px; padding:9px 14px; border-bottom:1px solid var(--line); }
-  .adv-tabs button { border:1px solid var(--line); background:var(--bg); color:var(--dim);
-    border-radius:999px; padding:6px 13px; font:inherit; font-size:12px; cursor:pointer; }
-  .adv-tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
   .analysis-body { overflow:auto; padding:16px; flex:1 1 auto; font-size:13px; line-height:1.55; }
   .analysis-card { border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:11px; background:var(--bg); }
   .analysis-card h3 { font-size:13px; margin:0 0 8px; }
@@ -647,7 +640,6 @@
         <details class="signal-more"><summary>더 보기</summary><div class="signal-more-menu">
           <button type="button" onclick="this.closest('details').open=false;switchTab('mymap')">관심 지도</button>
           <button type="button" onclick="this.closest('details').open=false;openNbhd(selected)">동네 리포트</button>
-          <button type="button" onclick="this.closest('details').open=false;askNickRegion()">Nick에게 질문</button>
         </div></details>
       </div>
       <div class="signal-mode-tabs" role="tablist" aria-label="시그널 살펴보기" onkeydown="signalModeKey(event)">
@@ -1124,7 +1116,7 @@
         <span class="btn" onclick="adminWarmRedev()">재건축 워밍</span>
         <span class="btn" onclick="adminRunBacktest()">단지 백테스트 재계산</span>
       </div></div>
-    <div><div style="font-size:12px;font-weight:700;margin-bottom:6px">닉 정책 KB <span style="font-weight:400;color:var(--dim)">— 챗봇이 정책·개발계획 질문에 인용</span></div>
+    <div><div style="font-size:12px;font-weight:700;margin-bottom:6px">정책 근거 자료 <span style="font-weight:400;color:var(--dim)">— 관리용 정책·개발계획 기록</span></div>
       <div id="polList" style="max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;margin-bottom:8px;font-size:12px">불러오는 중…</div>
       <details><summary style="cursor:pointer;font-size:12px;color:var(--accent)">+ 정책 추가</summary>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
@@ -1839,7 +1831,7 @@ function switchTab(t, fromHistory=false){
   if(t!=='signal' && document.getElementById('view-signal').classList.contains('picker-open')) closeSignalRegions(false);
   const grp=_groupOf(t);
   if(_LISTING.includes(t)) _listingSub=t;   // 매물 하위탭 기억(포커스 헬퍼 호환)
-  document.body.className='tab-'+t+(window._featureFlags?.nick_global_entry_enabled===false?' nick-global-disabled':'');
+  document.body.className='tab-'+t;
   // 상단 메인탭 — 그룹 기준 활성
   document.querySelectorAll('.tabs .tab').forEach(b=>{
     const active=b.dataset.group===grp;
@@ -2020,7 +2012,6 @@ async function loadDashboard(){
   const link=(t,label)=>`<span onclick="switchTab('${t}')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500;margin-right:14px">${label}</span>`;
   const moreLinks=`<div style="display:flex;flex-wrap:wrap;gap:6px 0;padding:2px 0">
     ${link('signal','시그널')}${link('all','매물')}${link('about','성적표')}
-    <span onclick="askNick('지금 내 관심지역과 예산 기준으로 매수 타이밍을 근거와 함께 알려줘.')" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:500">닉에게</span>
   </div>`;
   // 초보 구매자는 첫 화면에서 행동 하나·예산 후보·주간 변화만 보면 된다.
   // 관심 단지·시장 근거는 같은 데이터를 유지하되 필요할 때만 펼친다.
@@ -3629,7 +3620,7 @@ function renderAllListings(){
       sub:`${x['총액']?`<b>${_eok(x['총액'])}</b>${x['평형']!=null?` <span style="color:var(--dim)">${x['평형']}평</span>`:''} · `:''}${_laBudgetLabel(x)?`<span style="color:var(--dim)">${_laBudgetLabel(x)}</span> · `:''}${x['유형']} · ${x['시도']?x['시도']+' ':''}${x['지역']||''}${x['지역식별상태']!=='held'&&_mtGradeTag(x['지역'])?' · '+_mtGradeTag(x['지역']):''}`}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="openTypedList('청약')">청약 목록 →</span>`
-        : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']) + nickCxBtn(x['단지명'], x['지역']);
+        : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
       const priced=['일반매물','급매','찐매물','경매'].includes(x['유형']) && x['총액'];
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
       return `${_buyerFourHtml(x, _eok)}${x.budget_fit?.status==='unknown'?`<div style="font-size:11px;color:var(--warn);margin-top:6px">예산 비교 보류 · ${esc(x.budget_fit.reason||'확정 매수력과 호가를 다시 확인해 주세요.')}</div>`:''}<div class="kv" style="margin-top:8px"><span>유형 ${x['유형']}</span>${x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}<span>${x['지표라벨']} <b>${x['지표값']??'–'}${x['지표단위']||''}</b></span><span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
@@ -4276,7 +4267,7 @@ function toast(msg){
  *  상수로 두는 이유는 오타 방지가 아니라(그건 서버가 한다) **어떤 이벤트가 있는지 한눈에 보이게** 하기 위함. */
 const EVENTS = {
   SIGNUP:'signup', PROFILE_COMPLETE:'profile_complete', FAV_ADD:'fav_add',
-  REPORT_OPEN:'report_open', NICK_ASK:'nick_ask', NBHD_OPEN:'nbhd_open',
+  REPORT_OPEN:'report_open', NBHD_OPEN:'nbhd_open',
   LISTING_DETAIL_OPEN:'listing_detail_open',
   WEEKLY_OPEN:'weekly_open', BUYING_POWER_CONFIRM:'buying_power_confirm',
   EVIDENCE_OPEN:'evidence_open',
@@ -5586,19 +5577,6 @@ function naverBtn(cno){
   const no=String(cno||'').trim();
   return /^[1-9][0-9]{0,11}$/.test(no) ? ` <a class="btn" href="https://new.land.naver.com/complexes/${no}" target="_blank" rel="noopener noreferrer" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">네이버부동산 ↗</a>` : '';
 }
-// 닉 문맥 진입 — 버튼에서 챗봇을 열고 질문을 미리 채워 전송
-function askNick(q){
-  if(typeof clearListingReportContext==='function') clearListingReportContext();
-  const p=document.getElementById('advPanel'), f=document.getElementById('advFab');
-  if(p){ p.style.display='flex'; } if(f){ f.style.display='none'; }
-  if(typeof advSuggest==='function') advSuggest(q);
-}
-function askNickRegion(){ if(typeof selected==='string'&&selected) askNick(`지금 ${selected} 시장 어때? 시그널·경기국면·백테스트 적중률 근거로 설명해줘.`); }
-function nickCxBtn(name, region){
-  if(!name||!region) return '';
-  const n=(name||'').replace(/['"\\]/g,''), r=(region||'').replace(/['"\\]/g,'');
-  return ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();askNick('${r} ${n} 지금 어때? 실거래·단지시그널·공시대비 근거로 알려줘.')">닉에게 물어보기</span>`;
-}
 function reportBtn(key){
   if(!key || !/^(일반매물|급매|찐매물|경매):/.test(key)) return '';
   return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();SignalV2.openListing(this.dataset.reportKey)">매물분석</button>`;
@@ -5708,7 +5686,6 @@ function renderNbhd(d){
   h+=`<details style="margin:4px 0 14px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg)">
     <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)">더 보기 · 수급·입지·임장체크</summary>
     <div style="margin-top:12px">${more}</div></details>`;
-  h+=`<div style="border-top:1px solid var(--line);padding-top:12px"><span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.region} 동네의 확인된 교통·교육업종·환경 근거와 투자 위험을 구분해 알려줘. 배정 학군 자료가 없으면 학군은 미확인이라고 말해줘.')">이 동네 닉에게 물어보기</span></div>`;
   b.innerHTML=h;
 }
 async function nbSaveCheck(region){
@@ -5743,7 +5720,7 @@ async function nbhdCompare(){
       <tbody>${rows}</tbody></table>
     <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
       <span class="btn" style="padding:5px 12px" onclick="openNbhd('${d.b.region}')">${d.b.region} 리포트 →</span>
-      <span class="btn primary" onclick="document.getElementById('nbhdDlg').close();askNick('${d.a.region}과 ${d.b.region} 비교해줘. 예산·실거주 관점에서 근거로.')">닉에게 비교 물어보기</span></div>`;
+    </div>`;
 }
 function cxSigBtn(name, region){
   if(!name||!region) return '';
@@ -7421,7 +7398,7 @@ async function _loadTelegram(){
       <span class="btn" style="padding:4px 10px;font-size:11px" onclick="tgTest()">지금 한 통 받기</span>
       <span class="btn" style="padding:4px 10px;font-size:11px;margin-left:6px" onclick="tgUnlink()">연결 해제</span>`;
   }else{
-    box.innerHTML=head+`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">후보 단지가 새로 들어오거나 시그널이 바뀐 날, 닉이 아침에 요약해 보냅니다.</div>
+    box.innerHTML=head+`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">후보 단지가 새로 들어오거나 시그널이 바뀐 날, 아침에 요약해 보냅니다.</div>
       <span class="btn" style="padding:4px 10px;font-size:11px" onclick="tgLink()">텔레그램 연결</span>
       <div id="tgHint" style="font-size:11px;color:var(--dim);margin-top:6px"></div>`;
   }
@@ -7690,7 +7667,6 @@ async function toggleFav(kind, key, label){
   return true;
 }
 async function startApp(needOnboard){
-  document.body.classList.toggle('nick-global-disabled', window._featureFlags?.nick_global_entry_enabled===false);
   try{ _mapCfg=await (await fetch('/api/mapconfig')).json(); }catch(e){ _mapCfg=_mapCfg||{}; }   // 지도 타일 설정 선로드
   fetch('/api/regulation').then(r=>r.json()).then(d=>{
     if(d&&d.status==='verified'&&d.map) _REGULATION=d;
@@ -7747,32 +7723,16 @@ async function startApp(needOnboard){
   <span style="margin-left:auto">지표는 참고용 · 투자 판단·실거래 확인은 이용자 책임</span>
 </footer>
 
-<!-- AI 자문 챗봇 (근거기반 tool-use) -->
-<button id="advFab" onclick="advToggle()" title="닉 — 데이터 근거 부동산 자문"
-  style="position:fixed;right:22px;bottom:22px;z-index:1350;background:var(--txt);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-size:13px;font-weight:600;letter-spacing:0.02em;box-shadow:var(--shadow);cursor:pointer">닉</button>
+<!-- 기존 리포트 플래그를 위한 읽기 전용 대체 패널 -->
 <div id="advPanel" style="display:none;position:fixed;right:22px;bottom:22px;z-index:1400;width:390px;min-width:300px;max-width:calc(100vw - 16px);height:600px;min-height:360px;max-height:calc(100vh - 24px);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);flex-direction:column;overflow:auto;resize:both">
   <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex:0 0 auto;cursor:default">
-    <span style="font-weight:600;letter-spacing:-0.01em">닉 <span style="font-weight:400;font-size:12px;color:var(--dim)">부동산 자문</span></span>
+    <span style="font-weight:600;letter-spacing:-0.01em">매물 리포트</span>
     <span id="advListingTitle" style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px"></span>
-    <span id="advAsof" style="font-size:11px;color:var(--dim)"></span>
-    <span id="advUsage" style="font-size:11px;color:var(--dim)"></span>
-    <span onclick="advClearMemory()" title="대화 기억 초기화" style="margin-left:auto;cursor:pointer;color:var(--dim);font-size:11px;padding:2px 6px">기억초기화</span>
-    <span onclick="advToggle()" style="cursor:pointer;color:var(--dim);font-size:18px;line-height:1;margin-left:4px">✕</span>
+    <button type="button" class="btn" onclick="legacyReportClose()" aria-label="매물 리포트 닫기" style="margin-left:auto">닫기 ✕</button>
   </div>
-  <div id="advTabs" class="adv-tabs" style="display:none">
-    <button type="button" id="advReportTab" onclick="advShowTab('report')">매물 리포트</button>
-    <button type="button" id="advChatTab" onclick="advShowTab('chat')">닉과 대화</button>
-  </div>
-  <div id="advReport" class="analysis-body" style="display:none" aria-live="polite"></div>
-  <div id="advBody" style="flex:1 1 auto;min-height:120px;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6"></div>
-  <div id="advComposer" style="padding:8px 12px 10px;border-top:1px solid var(--line);flex:0 0 auto">
-    <div style="display:flex;gap:8px;align-items:flex-end">
-      <textarea id="advInput" rows="2" onkeydown="advKey(event)"
-        style="flex:1;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;min-height:44px;max-height:220px;box-sizing:border-box;background:var(--bg);color:var(--txt)"></textarea>
-      <button id="advSendBtn" onclick="advSend()" class="btn" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 14px">전송</button>
-    </div>
-  </div>
+  <div id="advReport" class="analysis-body" aria-live="polite"></div>
 </div>
+<button type="button" id="analysisPickCancel" class="btn" onclick="_analysisStopPick()" style="display:none;position:fixed;top:12px;right:12px;z-index:1450;background:var(--panel)">출입구 지정 취소</button>
 <dialog id="v2ReportDlg" aria-label="매물 분석 리포트">
   <div class="v2-top"><b>매물 확인 리포트</b><button type="button" class="btn" id="v2MapSpace" aria-pressed="false">지도 크게</button><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
   <div id="v2ReportBody" class="v2-panel" aria-live="polite"></div>
@@ -7828,7 +7788,7 @@ async function startApp(needOnboard){
 </dialog>
 <script defer src="/assets/signal-v2.js"></script>
 <script>
-let _advMsgs=[], _advBusy=false, _advUsage=null, _advListingKey=null, _advComparisonKeys=null, _advAbort=null, _advEpoch=0;
+let _advListingKey=null;
 let _analysisGen=0, _analysisCurrent=null;
 const _analysisCache=new Map();
 let _analysisRouteLayer=null;
@@ -7853,9 +7813,9 @@ function _analysisStopPick(restore=true){
   if(!_analysisPick) return;
   const pick=_analysisPick; _analysisPick=null;
   pick.map.off('click',pick.handler);
+  document.getElementById('analysisPickCancel').style.display='none';
   if(pick.hidden&&restore&&_advListingKey){
     document.getElementById('advPanel').style.display='flex';
-    document.getElementById('advFab').style.display='none';
   }
 }
 function _analysisMergeLocation(report,loc){
@@ -7896,9 +7856,9 @@ function _analysisChooseEntrance(){
   map.once('click',handler);
   map.setView(listing.coordinate,17,{animate:true});
   if(hidden){ document.getElementById('advPanel').style.display='none';
-    document.getElementById('advFab').style.display='block'; }
+    document.getElementById('analysisPickCancel').style.display='block'; }
   document.getElementById(mapId)?.scrollIntoView({block:'center',behavior:'smooth'});
-  toast('지도에서 출입구 후보를 누르세요. 취소하려면 닉 버튼을 누르세요.');
+  toast('지도에서 출입구 후보를 누르세요. 취소하려면 상단 버튼을 누르세요.');
 }
 async function _analysisClearEntrance(){
   const key=_analysisCurrent?.listing?.key, gen=_analysisGen; if(!key) return;
@@ -7918,27 +7878,18 @@ function _analysisShowRoute(which){
   _analysisRouteLayer=L.polyline(path,{color:'#2563eb',weight:4,opacity:.9}).addTo(map);
   map.fitBounds(_analysisRouteLayer.getBounds().pad(.18),{maxZoom:15});
 }
-function advShowTab(tab){
-  const active=_advListingKey && tab==='report';
-  document.getElementById('advReport').style.display=active?'block':'none';
-  document.getElementById('advBody').style.display=active?'none':'flex';
-  document.getElementById('advComposer').style.display=active?'none':'block';
-  document.getElementById('advReportTab').classList.toggle('on',!!active);
-  document.getElementById('advChatTab').classList.toggle('on',!active);
-  if(!active) advRender();
-}
 function clearListingReportContext(){
   if(!_advListingKey) return;
   _analysisStopPick();
-  ++_analysisGen; ++_advEpoch;
-  _advAbort?.abort(); _advAbort=null; _advBusy=false;
-  _advListingKey=null; _advComparisonKeys=null; _analysisCurrent=null; _advMsgs=[];
+  ++_analysisGen;
+  _advListingKey=null; _analysisCurrent=null;
   _analysisRouteLayer?.remove(); _analysisRouteLayer=null;
-  document.getElementById('advSendBtn').disabled=false;
   document.getElementById('advListingTitle').textContent='';
-  document.getElementById('advTabs').style.display='none';
   document.getElementById('advPanel').classList.remove('adv-report-mode');
-  advShowTab('chat');
+}
+function legacyReportClose(){
+  clearListingReportContext();
+  document.getElementById('advPanel').style.display='none';
 }
 function _analysisTradeChart(d){
   const pts=(d.trades||[]).filter(t=>Number.isFinite(+t.price_manwon)&&+t.price_manwon>0);
@@ -8027,7 +7978,6 @@ function _listingCompareKeys(){
 }
 function _listingCompareSave(keys){
   try{ sessionStorage.setItem(_listingCompareStorageKey(),JSON.stringify(keys.slice(0,3))); }catch(e){}
-  _advComparisonKeys=null;
   if(_analysisCurrent?.listing) _analysisRender(_analysisCurrent);
 }
 function listingCompareToggle(){
@@ -8040,15 +7990,6 @@ function listingCompareToggle(){
 function listingCompareRemove(key){
   _listingCompareSave(_listingCompareKeys().filter(k=>k!==key));
   listingCompareOpen();
-}
-function listingCompareAsk(){
-  const keys=_listingCompareKeys(); if(keys.length<2) return;
-  ++_advEpoch; _advAbort?.abort(); _advAbort=null; _advBusy=false; _advMsgs=[];
-  document.getElementById('advSendBtn').disabled=false;
-  _advComparisonKeys=keys;
-  document.getElementById('listingCompareDlg').close();
-  advShowTab('chat');
-  advSend('비교함에 담은 매물들이 내 예산과 조건에 어떻게 다른지, 관측된 가격 근거와 확인할 점을 기준으로 설명해줘. 면적·수집일이 다르면 직접 가격 우열은 보류해줘.');
 }
 async function listingCompareLocations(){
   const keys=_listingCompareActiveKeys.slice(), gen=_listingCompareGen;
@@ -8112,7 +8053,6 @@ async function listingCompareOpen(){
       <div style="margin-top:12px"><button type="button" class="btn" id="listingCompareSave" onclick="SignalV2.saveComparison()">이 비교 리포트 저장</button>
         <button type="button" class="btn" onclick="document.getElementById('listingCompareDlg').close();SignalV2.openSavedReports()">저장본 보기</button>
         <p id="listingCompareSaveStatus" class="analysis-muted" role="status"></p></div>
-      <button type="button" class="btn" style="margin-top:12px;background:var(--accent);color:#fff" onclick="listingCompareAsk()">닉에게 차이 묻기</button>
       <details style="font-size:12px;margin-top:12px"><summary>왜 이렇게 비교하나요?</summary>
         <p>면적이나 층이 다르면 총 호가만으로 유불리를 가를 수 없습니다. 같은 면적의 최근 실거래라도 현재 매물의 동·향·상태와 다르며, 표본이 적으면 판단을 보류합니다.</p>
         <p>예산은 매물 가격과 저장한 계산만 비교합니다. 세금, 은행 대출, 수리는 따로 확인해야 합니다.</p>
@@ -8218,22 +8158,12 @@ async function openListingReport(key){
   if(!key) return;
   track(EVENTS.LISTING_ANALYSIS_START);
   _analysisStopPick();
-  _advComparisonKeys=null;
-  const changed=key!==_advListingKey;
-  if(changed){
-    ++_advEpoch; _advAbort?.abort(); _advAbort=null; _advBusy=false; _advMsgs=[];
-    _advComparisonKeys=null;
-    document.getElementById('advSendBtn').disabled=false;
-  }
   _advListingKey=key; const gen=++_analysisGen;
   _analysisRouteLayer?.remove(); _analysisRouteLayer=null;
   const panel=document.getElementById('advPanel');
   panel.classList.add('adv-report-mode'); panel.style.display='flex';
-  document.getElementById('advFab').style.display='none';
-  document.getElementById('advTabs').style.display='flex';
   document.getElementById('advListingTitle').textContent='매물 확인 중…';
   document.getElementById('advReport').innerHTML='<div class="analysis-muted">선택한 매물을 확인하고 있습니다…</div>';
-  advShowTab('report');
   try{
     const path='/api/listing-analysis?key='+encodeURIComponent(key);
     const br=await fetch(path+'&stage=base');
@@ -8272,130 +8202,6 @@ async function openListingReport(key){
     if(gen!==_analysisGen) return;
     document.getElementById('advReport').innerHTML=`<div class="analysis-card">${esc(e.message||'분석을 불러오지 못했습니다.')}</div>`;
   }
-}
-function _advSetUsage(u){
-  _advUsage=u||null;
-  const el=document.getElementById('advUsage'); if(!el) return;
-  if(!u){ el.textContent=''; return; }
-  if(u.unlimited){ el.textContent='무제한'; return; }
-  el.textContent=`이번 주 ${u.used||0}/${u.limit}회`;
-}
-async function _advLoadUsage(){
-  try{ const d=await (await fetch('/api/usage')).json();
-    if(d.ok && d.nick) _advSetUsage(d.nick);
-  }catch(e){}
-}
-function advToggle(){
-  const p=document.getElementById('advPanel'), f=document.getElementById('advFab');
-  const open=p.style.display==='none'||!p.style.display;
-  p.style.display=open?'flex':'none'; f.style.display=open?'none':'block';
-  if(open){ if(_analysisPick) _analysisStopPick(false);
-    if(!_advMsgs.length) advRender(); _advLoadUsage(); document.getElementById('advInput').focus(); }
-}
-async function advClearMemory(){
-  if(!confirm('닉이 기억한 최근 관심지역·질문을 지울까요?')) return;
-  try{ await fetch('/api/advisor/memory',{method:'DELETE'}); toast('대화 기억을 초기화했습니다.'); }
-  catch(e){ toast('초기화 실패'); }
-}
-function advKey(e){
-  if(e.key!=='Enter') return;
-  // 한글 IME 조합 중 Enter(끝음절 확정)는 전송하지 않는다. keyCode 229 = 조합 중.
-  if(e.isComposing || e.keyCode===229) return;
-  if(e.metaKey||e.ctrlKey||e.shiftKey){                 // ⌘/Ctrl/Shift+Enter → 줄바꿈
-    e.preventDefault();
-    const t=e.target, s=t.selectionStart, en=t.selectionEnd;
-    t.value=t.value.slice(0,s)+'\n'+t.value.slice(en); t.selectionStart=t.selectionEnd=s+1;
-    return;
-  }
-  e.preventDefault(); advSend();                        // Enter → 전송
-}
-function advSuggest(t){ document.getElementById('advInput').value=t; advSend(); }
-function advRender(){
-  const b=document.getElementById('advBody'); if(!b) return;
-  const asof=document.getElementById('advAsof'); if(asof && !asof.textContent && typeof meta!=='undefined' && meta?.last_date) asof.textContent='기준 '+meta.last_date;
-  if(!_advMsgs.length){
-    const p=_profile||{};
-    const bits=[];
-    if(p['가용자본']) bits.push('예산');
-    if(p['거주지']) bits.push(p['거주지']);
-    const hint=bits.length?`프로필(${bits.join('·')})을 참고합니다.`:'예산은 프로필에 넣으면 반영됩니다.';
-    b.innerHTML=`<div style="color:var(--dim);line-height:1.55;margin-bottom:4px"><b style="color:var(--txt)">닉</b> · ${hint}</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-      ${['지금 수도권 시장 국면 어때?','매수 시그널이 강한 지역 알려줘','내 예산으로 볼만한 지역 알려줘','시그널 예측이 얼마나 맞았어?'].map(q=>`<span onclick="advSuggest('${q}')" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">${q}</span>`).join('')}</div>`;
-    return;
-  }
-  const TOOLKR={list_signal_regions:'지역 시그널',get_region_signal:'지역 분석',get_complex:'단지 실거래',get_backtest:'적중률',get_regime:'경기 국면',get_news:'뉴스',get_freshness:'신선도',get_policy:'정책',get_regulation:'규제지역',get_presale:'청약',get_redev:'재건축',get_listings:'매물'};
-  b.innerHTML=_advMsgs.map(m=>{
-    if(m.role==='user') return `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:#fff;border-radius:12px 12px 3px 12px;padding:8px 11px;white-space:pre-wrap">${(m.text||'').replace(/</g,'&lt;')}</div>`;
-    const used=(m.used&&m.used.length)?`<div style="margin-top:6px;font-size:10px;color:var(--dim)">근거: ${m.used.map(u=>TOOLKR[u]||u).join(', ')}${m.asof?' · 기준 '+m.asof:''}</div>`:'';
-    if(m.streaming && !(m.text||'').trim()){
-      const st=m.status?`${TOOLKR[m.status]||m.status} 조회 중…`:'분석 중…';
-      return `<div style="align-self:flex-start;color:var(--dim)">${st}</div>`;
-    }
-    const cursor=m.streaming?'<span style="opacity:.5">▍</span>':'';
-    return `<div style="align-self:flex-start;max-width:92%;background:var(--bg);border:1px solid var(--line);border-radius:12px 12px 12px 3px;padding:9px 12px">${mdLite(m.text||'')}${cursor}${used}</div>`;
-  }).join('');
-  b.scrollTop=b.scrollHeight;
-}
-let _advRenderPending=false;
-function advScheduleRender(){
-  if(_advRenderPending || document.getElementById('advBody').style.display==='none') return;
-  _advRenderPending=true;
-  requestAnimationFrame(()=>{ _advRenderPending=false; advRender(); });
-}
-function _advErr(m, usage){
-  if(m==='limit'){
-    const lim=(usage&&usage.limit)!=null?usage.limit:15;
-    return `이번 주 닉 질문 한도(${lim}회)에 도달했습니다. 관심지역 추적·동네 리포트·시그널은 계속 이용할 수 있습니다.`;
-  }
-  return m==='no_ai'?'AI 자문은 서버에 ANTHROPIC_API_KEY 설정이 필요합니다.':m==='login_required'?'로그인이 필요합니다.':'지금은 답변을 생성하지 못했습니다. 질문을 조금 더 구체적으로(지역·단지) 주시면 도움이 됩니다.';
-}
-function _advClearInput(inp){
-  // 한글 IME: value='' 직후 compositionend 가 끝음절을 다시 넣는 잔상 방지
-  inp.value='';
-  const wipe=()=>{ inp.value=''; };
-  inp.addEventListener('compositionend', wipe, {once:true});
-  requestAnimationFrame(wipe);
-}
-async function advSend(text){
-  if(_advBusy) return;
-  const inp=document.getElementById('advInput');
-  const q=(text||inp.value||'').trim(); if(!q) return;
-  const epoch=_advEpoch, controller=new AbortController(); _advAbort=controller;
-  track('nick_ask',{q:q.slice(0,80)});
-  _advClearInput(inp);
-  _advMsgs.push({role:'user',text:q});
-  const asst={role:'assistant',text:'',used:[],asof:null,status:null,streaming:true};
-  _advMsgs.push(asst); advRender();
-  _advBusy=true; document.getElementById('advSendBtn').disabled=true;
-  try{
-    const hist=_advMsgs.filter(m=>(m.role==='user')||(m.role==='assistant'&&(m.text||'').trim()))
-      .map(m=>({role:m.role,text:m.text}));
-    const resp=await fetch('/api/advisor/stream',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages:hist,listing_key:_advListingKey,comparison_keys:_advComparisonKeys}),signal:controller.signal});
-    if(!resp.ok){ const e=await resp.json().catch(()=>({})); throw new Error(_advErr(e.reason)); }
-    const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
-    while(true){
-      const {value,done}=await reader.read(); if(done) break;
-      if(epoch!==_advEpoch){ await reader.cancel(); return; }
-      buf+=dec.decode(value,{stream:true});
-      let i;
-      while((i=buf.indexOf('\n\n'))>=0){
-        const line=buf.slice(0,i).trim(); buf=buf.slice(i+2);
-        if(!line.startsWith('data:')) continue;
-        let ev; try{ ev=JSON.parse(line.slice(5).trim()); }catch(e){ continue; }
-        if(ev.type==='delta'){ asst.status=null; asst.text+=ev.text; advScheduleRender(); }
-        else if(ev.type==='status'){ asst.status=ev.tool; advScheduleRender(); }
-        else if(ev.type==='done'){ asst.used=ev.used||[]; asst.asof=ev['기준일']; if(ev.usage) _advSetUsage(ev.usage); }
-        else if(ev.type==='error'){ if(!(asst.text||'').trim()) asst.text=_advErr(ev.message, ev.usage); if(ev.usage) _advSetUsage(ev.usage); }
-      }
-    }
-  }catch(e){ if(epoch!==_advEpoch) return;
-    if(!(asst.text||'').trim()) asst.text=e.message||'연결에 문제가 있어 답변하지 못했습니다. 잠시 후 다시 시도해 주세요.'; }
-  if(epoch!==_advEpoch) return;
-  if(_advAbort===controller) _advAbort=null;
-  asst.status=null; asst.streaming=false; _advBusy=false;
-  document.getElementById('advSendBtn').disabled=false; advRender();
 }
 </script>
 </body>

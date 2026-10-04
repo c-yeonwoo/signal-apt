@@ -584,7 +584,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(fieldLinks[3].href,/asil/);
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);
-    await page.locator('#v2ReportBody').getByText('이 리포트에 질문하기',{exact:true}).click();
+    await page.locator('#v2ReportBody').getByText('핵심 판단 빠르게 확인',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'가격이 싼가?'}).click();
     assert.match(await page.locator('#v2QuickAnswer').textContent(),/동일 조건 실거래 3건과 비교/);
     await page.locator('#v2ReportBody').getByRole('button',{name:'내 예산에 맞나?'}).click();
@@ -712,25 +712,21 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     });
     await page.getByRole('button',{name:'지도에서 출입구 후보 지정'}).click();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.style.display),'none');
+    assert.equal(await page.locator('#analysisPickCancel').evaluate(el=>el.style.display),'block');
     page.once('dialog',dlg=>dlg.accept());
     await page.evaluate(()=>window.__pickEntrance({latlng:{lat:37.6505,lng:127.0705}}));
     await page.getByText('내가 지도에서 지정한 출입구 후보 기준입니다.',{exact:false}).waitFor();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.style.display),'flex');
+    assert.equal(await page.locator('#analysisPickCancel').evaluate(el=>el.style.display),'none');
     await page.getByRole('button',{name:'내 지정 지우기'}).click();
     await page.getByRole('button',{name:'지도에서 출입구 후보 지정',exact:true}).waitFor();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.classList.contains('adv-report-mode')),true);
     assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport);
-    await page.getByRole('button',{name:'닉과 대화'}).click();
-    assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport);
-    await page.locator('#advInput').fill('이 매물의 가격 근거를 설명해줘');
-    await page.locator('#advSendBtn').click();
-    await page.getByText('선택 매물의 가격을 확인하세요.',{exact:false}).waitFor();
-    assert.equal(nickPayloads.at(-1).listing_key,'일반매물:synthetic-hb-1');
-    await page.getByRole('button',{name:'매물 리포트'}).click();
+    assert.equal(await page.locator('#advFab,#advChatTab,#advInput,#advSendBtn').count(),0);
     await page.getByRole('button',{name:'＋ 비교함 담기'}).click();
     await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-2'));
     await page.getByText('두번째테스트단지',{exact:true}).last().waitFor();
-    assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport+1);
+    assert.equal(nickPayloads.length,nickCallsBeforeLegacyReport);
     await page.getByRole('button',{name:'＋ 비교함 담기'}).click();
     await page.getByRole('button',{name:'선택 매물 비교 2/3'}).click();
     await page.getByText('같은 면적 국토부 실거래',{exact:false}).waitFor();
@@ -746,10 +742,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#v2ReportBody').textContent(),/현재 호가·판매 여부/);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.evaluate(()=>listingCompareOpen());
-    await page.locator('#listingCompareDlg').getByRole('button',{name:'닉에게 차이 묻기'}).waitFor();
-    const compareRequest=page.waitForRequest(req=>req.url().includes('/api/advisor/stream')&&req.postDataJSON()?.comparison_keys?.length===2);
-    await page.locator('#listingCompareDlg').getByRole('button',{name:'닉에게 차이 묻기'}).click();
-    assert.deepEqual((await compareRequest).postDataJSON().comparison_keys,['일반매물:synthetic-hb-1','일반매물:synthetic-hb-2']);
+    assert.equal(await page.locator('#listingCompareDlg').getByRole('button',{name:/닉에게|Nick/}).count(),0);
+    assert.equal(nickPayloads.length,0);
     assert(eventPayloads.some(x=>x.name==='listing_analysis_ready'));
     assert(eventPayloads.some(x=>x.name==='listing_evidence_open'&&x.props.section==='complex'));
     assert(eventPayloads.some(x=>x.name==='listing_commute_compare'));
@@ -1145,8 +1139,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const rollout = await page.evaluate(async()=>{
       const original=window.openListingReport;
       window._featureFlags={report_v2_enabled:true,discovery_v2_enabled:true,
-        contextual_explanations_enabled:false,nick_global_entry_enabled:false};
-      document.body.classList.add('nick-global-disabled');
+        contextual_explanations_enabled:false};
       await SignalV2.paintRegion('테스트구','kb:1114000000');
       const aiHidden=!document.getElementById('v2RegionExplain');
       window._featureFlags.report_v2_enabled=false;
@@ -1160,16 +1153,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       const result={aiHidden,fallbackKey:window.__fallbackKey,
         discoverClosed:!document.getElementById('v2DiscoverDlg').open,
         reportPaused:document.getElementById('haesolPanel').textContent.includes('일시 중지'),
-        nickHidden:getComputedStyle(document.getElementById('advFab')).display==='none',
-        retainedClass:document.body.classList.contains('nick-global-disabled')};
+        nickAbsent:document.getElementById('advFab')===null};
       window.openListingReport=original;
       window._featureFlags={};
       delete window.__fallbackKey;
       return result;
     });
     assert.deepEqual(rollout,{aiHidden:true,fallbackKey:'일반매물:synthetic-hb-1',
-      discoverClosed:true,reportPaused:true,nickHidden:true,retainedClass:true});
+      discoverClosed:true,reportPaused:true,nickAbsent:true});
+    assert.equal(nickPayloads.length,0);
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
+    console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
