@@ -74,6 +74,26 @@ def _profile_ref(raw: str, kb) -> str:
         return "malformed"
 
 
+def _decision_snapshot_ref(raw: str, kb) -> str:
+    try:
+        payload = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return "malformed"
+    if not isinstance(payload, dict):
+        return "malformed"
+    return classify(payload.get("region"), kb)
+
+
+def _issued_ref(region_id: str, region: str, kb) -> str:
+    status = classify(region_id, kb)
+    if status not in {"verified_code", "unique_legacy_name"}:
+        return status
+    code = region_id[3:] if region_id.startswith("kb:") else (kb.codes or {}).get(region_id)
+    matched = [name for name, value in (kb.codes or {}).items()
+               if str(value) == code and name in set(kb.regions)]
+    return status if matched == [region] else "conflict"
+
+
 _SURFACES = {
     "region_favorites": ("favorites", "SELECT key FROM favorites WHERE kind='region'"),
     "complex_favorites": ("favorites", "SELECT key FROM favorites WHERE kind='complex'"),
@@ -82,6 +102,13 @@ _SURFACES = {
     "region_alerts": ("alert_outbox_v2", "SELECT subject_key FROM alert_outbox_v2 WHERE subject_type='region'"),
     "region_decision_notes": ("decision_notes_v2", "SELECT subject_key FROM decision_notes_v2 WHERE subject_type='region'"),
     "buyer_profiles": ("profile", "SELECT data FROM profile"),
+    # Historical records are inventory-only. A current unique name cannot
+    # prove which district a user meant when the record was written.
+    "neighborhood_snapshots": ("nbhd_snap", "SELECT region FROM nbhd_snap"),
+    "imjang_visits": ("imjang_visit", "SELECT region FROM imjang_visit"),
+    "decision_snapshots": ("decision_snap", "SELECT data FROM decision_snap"),
+    "saved_region_reports": ("report_snapshots_v2", "SELECT subject_key FROM report_snapshots_v2 WHERE kind='지역'"),
+    "issued_signal_history": ("signal_assessments", "SELECT region_id,region FROM signal_assessments"),
 }
 
 
@@ -100,15 +127,20 @@ def audit(db_path: Path, kb) -> dict:
                 surfaces[surface] = {"table_absent": True}
                 continue
             counts = Counter()
-            for (value,) in connection.execute(query):
+            for row in connection.execute(query):
+                value = row[0]
                 if surface == "buyer_profiles":
                     counts[_profile_ref(value, kb)] += 1
+                elif surface == "decision_snapshots":
+                    counts[_decision_snapshot_ref(value, kb)] += 1
+                elif surface == "issued_signal_history":
+                    counts[_issued_ref(value, row[1], kb)] += 1
                 else:
                     ref = value.partition("|")[0] if surface == "complex_favorites" and isinstance(value, str) else value
                     counts[classify(ref, kb, district_required=surface == "complex_favorites")] += 1
             surfaces[surface] = dict(sorted(counts.items()))
         return {"kb_identity_verified": bool(kb.identity_verified),
                 "kb_asof": str(kb.last_date.date()), "surfaces": surfaces,
-                "note": "unique_legacy_name is an audit candidate, never permission to auto-migrate historic user intent"}
+                "note": "unique_legacy_name is an audit candidate, never permission to auto-migrate historic user intent; historical records are inventory-only"}
     finally:
         connection.close()
