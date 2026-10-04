@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from realty_signal import db, llm
 
-PROMPT_VERSION = "report-explanation-v1"
+PROMPT_VERSION = "report-explanation-v2"
 MODEL = "claude-sonnet-4-6"
 MODES = frozenset({"easy", "counterevidence", "question"})
 MAX_JOBS_PER_DAY = 12

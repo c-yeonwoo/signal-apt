@@ -89,6 +89,9 @@ def test_explicit_queue_is_idempotent_private_and_does_not_call_model_on_get(mon
         c.close()
     cached, code = narrative.enqueue(7, report, "easy", "", private_source=True)
     assert code == 200 and cached == complete and len(calls) == 1
+    monkeypatch.setattr(narrative, "PROMPT_VERSION", "report-explanation-next")
+    refreshed, code = narrative.enqueue(7, report, "easy", "", private_source=True)
+    assert code == 202 and refreshed["job_id"] != first["job_id"]
     changed, code = narrative.enqueue(7, _listing("b" * 64), "easy", "", private_source=True)
     assert code == 202 and changed["job_id"] != first["job_id"]
 
