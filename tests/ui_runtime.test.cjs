@@ -140,6 +140,7 @@ test('returning to a long-lived tab checks market and visible listings at most o
   const ctx=vm.createContext({
     Date:{now:()=>now}, window:{_signalAppReady:true},
     document:{visibilityState:'visible'}, location:{hash:'#all'},
+    checkClientVersion(){},
     loadData:async()=>{marketChecks++;}, loadAllListings:async()=>{listingChecks++;},
   });
   vm.runInContext(extract('let _lastVisibleMarketCheck=', 'let _showHist='),ctx);
@@ -431,6 +432,34 @@ test('market snapshot revalidates date and guard revision without refetching sta
   assert.equal(calls.filter(x=>x.startsWith('/api/')).length,15);
   await ctx.loadData(true);
   assert.equal(calls.filter(x=>x.startsWith('/api/')).length,19);
+});
+
+test('long-lived tabs warn about a new UI revision without auto-reloading or losing the current screen', async () => {
+  assert.match(html, /name="signal-apt-client-version" content="__SIGNAL_APT_CLIENT_VERSION__"/);
+  assert.match(html, /id="clientUpdateBanner" role="alert" hidden/);
+  const calls=[], banner={hidden:true};
+  let now=100000, serverVersion='old', reloads=0;
+  const ctx=vm.createContext({
+    Date:{now:()=>now}, window:{_signalAppReady:true},
+    document:{visibilityState:'visible',querySelector:()=>({content:'old'}),getElementById:()=>banner},
+    location:{reload:()=>reloads++},
+    fetch:async url=>{calls.push(url);return {ok:true,json:async()=>({client_version:serverVersion})};},
+  });
+  vm.runInContext(extract('const _CLIENT_VERSION=', 'const _MARKET_CACHE_KEY='),ctx);
+  await ctx.checkClientVersion();
+  assert.equal(banner.hidden,true);
+  assert.deepEqual(calls,['/api/client-version']);
+  serverVersion='new';
+  await ctx.checkClientVersion();
+  assert.equal(calls.length,1); // tab switches in the same minute do not flood the endpoint
+  now+=61000;
+  await ctx.checkClientVersion();
+  assert.equal(banner.hidden,false);
+  assert.equal(reloads,0); // refresh remains a deliberate user action
+  await ctx.checkClientVersion();
+  assert.equal(calls.length,2);
+  assert.match(extract('function switchTab(', 'const _ROUTES='), /checkClientVersion\(\)/);
+  assert.match(extract('async function refreshVisibleMarket(', 'let _showHist='), /checkClientVersion\(\)/);
 });
 
 test('first signal report opens a verified visible favorite before the global top grade', () => {

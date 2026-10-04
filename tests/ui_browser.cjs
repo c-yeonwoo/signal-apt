@@ -16,6 +16,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const watchTargets=new Map();
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
+    let serverClientVersion='synthetic-v1';
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -23,8 +24,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         if(url.pathname.includes('echarts')) return route.fulfill({contentType:'application/javascript',body:'window.echarts={init:()=>({resize(){},on(){},setOption(){},clear(){},getOption(){return {}}})};'});
         return route.fulfill({body:'',contentType:url.pathname.endsWith('.js')?'application/javascript':'text/css'});
       }
-      if(url.pathname==='/') return route.fulfill({body:html,contentType:'text/html'});
+      if(url.pathname==='/') return route.fulfill({body:html.replace('__SIGNAL_APT_CLIENT_VERSION__','synthetic-v1'),contentType:'text/html'});
       if(url.pathname==='/assets/signal-v2.js') return route.fulfill({body:signalV2,contentType:'application/javascript'});
+      if(url.pathname==='/api/client-version') return route.fulfill({json:{client_version:serverClientVersion}});
       calls.push(url.pathname);
       let data={ready:false,items:[],listings:[],regions:[],actions:[],message:'합성 테스트 데이터'};
       if(url.pathname==='/api/auth/me') return route.fulfill({status:401,json:{}});
@@ -1440,6 +1442,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(locationCopy.course,/거주지 시군구 중심 출발/);
     assert.match(locationCopy.course,/실제 집 위치.*달라질 수 있습니다/);
     assert.match(locationCopy.legend,/거주지 시군구 중심/);
+    serverClientVersion='synthetic-v2';
+    await page.evaluate(()=>{window._signalAppReady=true; return checkClientVersion(true);});
+    assert.equal(await page.locator('#clientUpdateBanner').isVisible(),true);
+    assert.equal(await page.getByRole('button',{name:'새 화면으로 갱신'}).isVisible(),true);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
+      'the deployment warning must not overflow a 180px reflow');
     assert.equal(nickPayloads.length,0);
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');
