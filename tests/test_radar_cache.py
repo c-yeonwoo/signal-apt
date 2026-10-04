@@ -47,7 +47,8 @@ def test_failed_quicksale_scan_preserves_previous_cache_and_exposes_reason(tmp_p
     shown = api.quicksale()
 
     assert result["ok"] is False
-    assert shown["listings"] == [{"단지명": "기존 결과"}]
+    assert [row["단지명"] for row in shown["listings"]] == ["기존 결과"]
+    assert shown["listings"][0]["급매갭"] is None
     assert shown["refresh"]["ok"] is False
     assert "기존 급매 결과" in shown["refresh"]["error"]
 

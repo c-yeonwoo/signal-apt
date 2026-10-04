@@ -490,11 +490,10 @@ def myfeed(request: Request):
     qs = [m for m in qs if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드"))]
     for r in regions:
         rq = [m for m in qs if m.get("지역") == r]
-        gap = min([m.get("급매갭") for m in rq if m.get("급매갭") is not None], default=None)
         rp = [d for d in ps if d.get("_signal_region") == r]
         items.append({"type": "region", "region": r, "signal": sig.get(r, ""),
                       "급매": len(rq) if _personal_listings_allowed(request=request) else None,
-                      "급매갭": gap, "personal_only": not _personal_listings_allowed(request=request),
+                      "급매갭": None, "personal_only": not _personal_listings_allowed(request=request),
                       "청약임박": len(rp),
                       "청약단지": (rp[0].get("단지명") if rp else None)})
     for key in complexes:
@@ -880,7 +879,7 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
             return {"reason": "personal_only", "result": "외부 매물은 개인 계정에서만 확인할 수 있습니다."}
         out: dict = {}
         if private_allowed and kind in ("급매", "찐매물", "전체"):
-            out["가격근거주의"] = "급매갭·시세갭은 공급사 중위시세 기준의 표시값이며, 국토부 실거래로 검증한 할인율이 아닙니다."
+            out["가격근거주의"] = "급매는 공급사 표시입니다. 동일 전용면적·거래조건이 확인되지 않은 중위가격과 갭은 제공하지 않습니다."
         safe_signals = _display_signal_map() if private_allowed and kind in ("급매", "찐매물", "전체") else {}
         if kind in ("일반매물", "전체") and private_allowed:
             hb = _hanbang_verified_rows()
@@ -899,9 +898,9 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
                 qs = []
             if region:
                 qs = [m for m in qs if m.get("지역") == region]
-            qs = sorted(qs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
+            qs = qs[:10]
             out["급매"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
-                          "호가": m.get("호가"), "급매갭": m.get("급매갭"),
+                          "호가": m.get("호가"), "급매갭": None,
                           "시그널": safe_signals.get(m.get("지역"), "HELD")
                           if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드")) else "HELD"} for m in qs]
         if kind in ("찐매물", "전체") and private_allowed:
@@ -911,9 +910,9 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
                 cs = []
             if region:
                 cs = [m for m in cs if m.get("지역") == region]
-            cs = sorted(cs, key=lambda m: (m.get("급매갭") if m.get("급매갭") is not None else 0))[:10]
+            cs = cs[:10]
             out["찐매물"] = [{"단지명": m.get("단지명"), "지역": m.get("지역"), "평형": m.get("평형"),
-                            "호가": m.get("호가"), "시세갭": m.get("급매갭"),
+                            "호가": m.get("호가"), "시세갭": None,
                           "시그널": safe_signals.get(m.get("지역"), "HELD")
                           if _listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드")) else "HELD"} for m in cs]
         if kind in ("경매", "전체"):
@@ -1919,6 +1918,9 @@ def _radar_cached_response(path, min_ver: int) -> dict:
             out["state"] = state
             out["last_success_at"] = path.stat().st_mtime
             out["refresh"] = refresh
+            if path in {QUICKSALE_FILE, CERTIFIED_FILE}:
+                from realty_signal.ingest.baroezip import safe_market_rows
+                out["listings"] = safe_market_rows(out.get("listings"))
             return out
         except Exception:  # noqa: BLE001
             pass
@@ -1933,7 +1935,8 @@ def _radar_verified_rows(path, min_ver: int) -> list[dict]:
         if not isinstance(cached, dict) or cached.get("_scan_ver", 0) < min_ver:
             return []
         rows = cached.get("listings")
-        return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        from realty_signal.ingest.baroezip import safe_market_rows
+        return safe_market_rows(rows)
     except (FileNotFoundError, ValueError, TypeError):
         return []
 
@@ -3127,7 +3130,8 @@ def _radar_scan_with_status(regions: list[str], *, kind: str = "급매") -> tupl
             # KB 판정은 이름 키이므로, 출처 시도가 다르거나 불명이면 동명이 구에 결합하지 않는다.
             m["시그널"] = sig.get(actual, "") if _listing_region_matches_kb(actual, source_sido, source_code) else ""
             out.append(m)
-    out.sort(key=lambda m: m["급매갭"] if m["급매갭"] is not None else 0)
+    # 공급사 갭은 면적·조건이 검증되지 않았으므로 순위에 사용하지 않는다.
+    out.sort(key=lambda m: (str(m.get("단지명") or ""), str(m.get("naver_id") or "")))
     # 단일 지역 수동 갱신은 한 번의 성공으로 충분하고, 전체 갱신은 절반 이상 원천 응답을
     # 받아야 기존의 유효 캐시를 불완전한 결과로 바꾸지 않는다.
     required = max(1, (queryable + 1) // 2)
@@ -3344,14 +3348,14 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
     if "급매" in want:
         for m in _radar_verified_rows(QUICKSALE_FILE, _QUICKSALE_SCAN_VER):
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
-                "공급사 기준 갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
+                "가격 비교", None, "", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
                  "전용면적": m.get("전용면적"), "층": m.get("층"), "naver_id": m.get("naver_id")},
                 total=m.get("호가"))
     if "찐매물" in want:
         for m in _radar_verified_rows(CERTIFIED_FILE, _CERTIFIED_SCAN_VER):
             add("찐매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
-                "공급사 기준 갭", m.get("급매갭"), "%", m, m.get("lat"), m.get("lng"),
+                "가격 비교", None, "", m, m.get("lat"), m.get("lng"),
                 {"평형": m.get("평형"), "호가": m.get("호가"), "complex_no": m.get("complex_no"),
                  "전용면적": m.get("전용면적"), "층": m.get("층"), "naver_id": m.get("naver_id"), "찐매물": True},
                 total=m.get("호가"))

@@ -28,7 +28,7 @@ def test_myfeed_counts_only_exact_and_verified_region_rows(monkeypatch, tmp_path
     monkeypatch.setattr(api, "_kb", lambda: SimpleNamespace(last_date=pd.Timestamp("2026-10-04")))
 
     item = api.myfeed(object())["items"][0]
-    assert item["급매"] == 1 and item["급매갭"] == -3
+    assert item["급매"] == 1 and item["급매갭"] is None
     assert item["청약임박"] == 1 and item["청약단지"] == "확인 단지"
 
 

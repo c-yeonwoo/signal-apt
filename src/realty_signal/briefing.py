@@ -57,7 +57,6 @@ def _quicksales(regions: set[str], budget: float, *, uid: int | None = None) -> 
     out = [m for m in rows
            if m.get("지역") in regions and api._listing_region_matches_kb(m.get("지역"), m.get("시도"), m.get("지역코드"))
            and (m.get("호가") or 0) and m["호가"] <= budget]
-    out.sort(key=lambda m: m.get("급매갭") if m.get("급매갭") is not None else 0)
     return out
 
 
@@ -389,11 +388,10 @@ def _render(profile: dict, data: dict, diff: dict, sigs: list[dict],
         L.append("")
 
     if qs and (first or qs_new > 0):
-        head = f"[예산 내 급매] {len(qs)}건" + (f" (신규 {qs_new})" if qs_new > 0 else "")
+        head = f"[예산 내 공급사 급매 표시] {len(qs)}건" + (f" (신규 {qs_new})" if qs_new > 0 else "")
         L.append(head)
         for m in qs[:2]:
-            gap = m.get("급매갭")
-            gap_s = f" (공급사 중위시세 대비 {gap:+.1f}%, 실거래 미검증)" if gap is not None else ""
+            gap_s = " (동일 면적·조건 가격 비교 필요)"
             py = f"{m['평형']}평 " if m.get("평형") else ""
             L.append(f"· {m.get('단지명')} {py}{_eok(m.get('호가'))}{gap_s}")
         L.append("")

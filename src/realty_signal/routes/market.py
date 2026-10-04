@@ -154,7 +154,7 @@ def freshness(request: Request):
         {"key": "trade", "label": "국토부 실거래", "ts": db.kv_max_ts("complex:"),
          "cycle": "조회 시 · 14일 캐시", "note": "단지 조회 시 국토부 실거래를 수집(14일 캐시), 관심단지는 주 1회 자동 프리페치."},
         {"key": "quicksale", "label": "급매 스캔", "ts": _file_mtime(qs),
-         "cycle": "하루 1회 자동", "note": "BUY+·관심지역 시세 이하 호가(baroezip). 캐시 1일."},
+         "cycle": "하루 1회 자동", "note": "BUY+·관심지역의 공급사 급매 표시(baroezip). 가격 우위 미검증. 캐시 1일."},
         {"key": "certified", "label": "찐매물 스캔", "ts": _file_mtime(cert),
          "cycle": "하루 1회 자동", "note": "바로이집 내집등록·인증 매물(scope=all). 캐시 1일."},
         {"key": "hanbang", "label": "일반 아파트 매매", "ts": _file_mtime(hanbang),

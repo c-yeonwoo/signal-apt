@@ -77,9 +77,9 @@ def test_fetch_market_marks_urgent_and_certified():
     urgent = next(r for r in rows if r["단지명"] == "급매단지")
     cert = next(r for r in rows if r["단지명"] == "인증단지")
     assert urgent["급매"] is True and urgent["찐매물"] is False
-    assert urgent["급매갭"] == -10.0
+    assert urgent["급매갭"] is None and urgent["중위시세"] is None
     assert cert["급매"] is False and cert["찐매물"] is True
-    assert cert["급매갭"] == -5.0
+    assert cert["급매갭"] is None and cert["중위시세"] is None
 
 
 def test_fetch_market_passes_scope_query():
@@ -107,5 +107,5 @@ def test_listing_timing_certified_status_is_not_price_bonus():
     from realty_signal.signals.timing import listing_timing
     r = listing_timing("찐매물", {"급매갭": -10}, "BUY", "B", asof="2026-07-14")
     assert "인증 표시" in r.reasons_text
-    assert "공급사 표시 갭" in r.reasons_text
+    assert "동일 면적·조건 가격 비교 필요" in r.reasons_text
     assert r.confidence <= 0.5
