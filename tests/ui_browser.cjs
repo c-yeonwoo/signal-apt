@@ -146,6 +146,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
             exceeded:spec.include_exceeded&&commuteFail?[candidate]:[]};
           data.next_cursor=null;
         }
+        if(spec.max_price_manwon===61000){
+          const stale={...candidate,listing:{...candidate.listing,key:'일반매물:synthetic-stale',
+            name:'지난 호가 후보',asking_manwon:120000,stale:true},eligibility:'verify',
+            recommendation_reason:'지난 수집 호가는 설정한 상한보다 높았습니다. 현재 가격은 확인되지 않아 예산 적합성을 보류했습니다.',
+            tradeoff:'지난 호가 기준으로는 예산을 넘었습니다.',verify_next:'최신 호가를 확인하세요.'};
+          data.counts={matched:0,verify:1,explore:0,exceeded:0};
+          data.groups={matched:[],verify:[stale],explore:[],exceeded:[]};
+          data.next_cursor=null;
+        }
       }
       if(url.pathname==='/api/v2/discovery/occupancy') {
         occupancyChecked=true;
@@ -1342,6 +1351,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverResults [data-v2-listing="일반매물:synthetic-2"]').click();
     await page.locator('#v2BackToDiscovery').click();
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),2);
+    await maxPriceInput.fill('61000');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    const staleCard=page.locator('#v2DiscoverResults [data-v2-group="verify"] [data-v2-card]');
+    await staleCard.waitFor();
+    assert.match(await staleCard.textContent(),/지난 수집 호가 12\.00억 · 현재 호가 미확인/);
+    assert.match(await staleCard.textContent(),/판정 보류 이유: 지난 수집 호가는 설정한 상한보다 높았습니다/);
+    assert.match(await page.locator('#v2DiscoverResults').textContent(),/지난 호가가 예산을 넘는 확인 필요 후보는 뒤로/);
+    await maxPriceInput.fill('');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.getByText('첫번째 후보').waitFor();
     await page.locator('#v2DiscoverExtra > summary').click();
     await page.locator('#v2DiscoverForm [name=min_rooms]').fill('16');
     await page.locator('#v2DiscoverExtra > summary').click();

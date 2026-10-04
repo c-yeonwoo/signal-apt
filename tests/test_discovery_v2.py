@@ -58,6 +58,36 @@ def test_stale_price_never_passes_and_invalid_input_is_rejected():
             raise AssertionError("invalid conditions were accepted")
 
 
+def test_stale_quote_above_budget_is_explicitly_unverified_and_ranked_last():
+    stale = _row("old-12eok", price=120_000, stale=True, region="노원구")
+    current = _row("unknown-current-price", price=None, region="강남구")
+    result = discovery.discover([stale, current], {
+        "max_price_manwon": 60_000, "prefer_region": "노원구", "limit": 1,
+    })
+    assert result["counts"]["verify"] == 2
+    assert result["counts"]["exceeded"] == 0  # Old price cannot prove today's excess.
+    assert result["groups"]["verify"][0]["listing"]["name"] == "unknown-current-price"
+    next_page = discovery.discover([current, stale], {
+        "max_price_manwon": 60_000, "prefer_region": "노원구", "limit": 1,
+        "cursor": result["next_cursor"],
+    })
+    old = next_page["groups"]["verify"][0]
+    assert old["listing"]["name"] == "old-12eok"
+    assert old["constraints"][0]["status"] == "unknown"
+    assert "지난 수집 호가는 설정한 상한보다 높았습니다" in old["recommendation_reason"]
+    assert "현재 가격은 확인되지" in old["recommendation_reason"]
+    assert "최신 호가" in old["verify_next"]
+    stale["ref"]["전용면적"] = 40
+    exceeded = discovery.discover([stale], {
+        "max_price_manwon": 60_000, "min_area_m2": 60, "include_exceeded": True,
+    })["groups"]["exceeded"][0]
+    assert exceeded["tradeoff"] == "전용면적이 원하는 최소 면적보다 작습니다."
+    stale["source_conflict"] = True
+    conflict = discovery.discover([stale], {"max_price_manwon": 60_000})["groups"]["verify"][0]
+    assert "원천 ID" in conflict["recommendation_reason"]
+    assert "원천에서 단지" in conflict["verify_next"]
+
+
 def test_discovery_route_explains_invalid_input_without_exposing_error_codes(monkeypatch):
     monkeypatch.setattr(reports_v2, "_require_feature", lambda _name: None)
     with pytest.raises(HTTPException) as error:
