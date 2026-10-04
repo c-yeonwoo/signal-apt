@@ -750,6 +750,7 @@
           <option value="opp">시장 참고점수순</option>
           <option value="signal">시그널 강한순</option>
           <option value="trade_low">같은 면적 실거래보다 낮은순</option>
+          <option value="asking_low">같은 공급사 호가 표본보다 낮은순</option>
           <option value="reduction">수집 호가 인하 확인순</option>
           <option value="price_asc">가격 낮은순</option>
           <option value="price_desc">가격 높은순</option>
@@ -3653,6 +3654,14 @@ function listingPriceLine(price){
   const diff=gap===0?'차이 없음':`${Math.abs(gap)}% ${gap<0?'낮음':'높음'}`;
   return `${condition} 실거래 중앙값 대비 ${diff} · ${price['표본수']}건 (할인율 아님)`;
 }
+function listingAskingLine(evidence){
+  if(evidence?.['상태']!=='관측비교'||typeof evidence['호가차이율']!=='number'
+      ||!Number.isFinite(evidence['호가차이율'])||typeof evidence['표본수']!=='number') return '';
+  const source=evidence['공급사']==='hanbang'?'한방':'바로이집';
+  const gap=evidence['호가차이율'];
+  const diff=gap===0?'중앙값과 같음':`${Math.abs(gap)}% ${gap<0?'낮음':'높음'}`;
+  return `${source} 같은 단지·전용면적 다른 매물 ${evidence['표본수']}건의 호가 중앙값보다 ${diff} · 수집 표본이며 시장 전체 시세가 아님`;
+}
 function _laAsk(x){
   const v=x&&x['총액'];
   return (v!=null&&+v>0)?+v:null;
@@ -3731,6 +3740,19 @@ function _laComparePriceReduction(a,b){
   return left.diff-right.diff||right.observedAt-left.observedAt||
     (b['기회도']??-1)-(a['기회도']??-1);
 }
+function _laAskingEvidence(row){
+  const e=row?.asking_comparison;
+  return e?.['상태']==='관측비교'&&typeof e['호가차이율']==='number'&&Number.isFinite(e['호가차이율'])
+    &&typeof e['표본수']==='number'&&e['표본수']>=3?e:null;
+}
+function _laCompareAsking(a,b){
+  const left=_laAskingEvidence(a),right=_laAskingEvidence(b);
+  if(left&&!right)return -1;
+  if(!left&&right)return 1;
+  if(!left&&!right)return (b['기회도']??-1)-(a['기회도']??-1);
+  return left['호가차이율']-right['호가차이율']||right['표본수']-left['표본수']||
+    (b['기회도']??-1)-(a['기회도']??-1);
+}
 function listingReductionLine(evidence){
   if(evidence?.['상태']!=='수집호가인하관측'||!Number.isFinite(evidence['이전호가'])
       ||!Number.isFinite(evidence['현재호가'])||!Number.isFinite(evidence['차이율'])) return '';
@@ -3748,6 +3770,7 @@ function renderAllListings(){
   rows=rows.slice().sort((a,b)=>{
     if(_laSort==='signal') return sr(a)-sr(b) || opp(b)-opp(a);
     if(_laSort==='trade_low') return _laCompareTradePrice(a,b);
+    if(_laSort==='asking_low') return _laCompareAsking(a,b);
     if(_laSort==='reduction') return _laComparePriceReduction(a,b);
     if(_laSort==='price_asc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pa-pb; }
     if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
@@ -3784,6 +3807,7 @@ function renderAllListings(){
         fit==='above'?'<div class="la-detail-line">확정 매수력 상한 초과</div>':
         _SALE_TYPES.includes(x['유형'])?'<div class="la-detail-line">내 매수력을 입력하면 호가와 비교할 수 있어요. <button type="button" class="btn" onclick="event.stopPropagation();openBuyingPower()">매수력 입력</button></div>':''}
         ${x.price_comparison?.['상태']==='관측비교'?`<div class="la-detail-line">${esc(listingPriceLine(x.price_comparison))}</div>`:''}
+        ${listingAskingLine(x.asking_comparison)?`<div class="la-detail-line">${esc(listingAskingLine(x.asking_comparison))}</div>`:''}
         ${listingReductionLine(x.price_reduction)?`<div class="la-detail-line">${esc(listingReductionLine(x.price_reduction))}</div>`:''}
         ${x.price_comparison?.['상태']==='보류'?'<div class="la-detail-line">실거래 비교 근거는 매물 리포트에서 확인할 수 있어요.</div>':''}
         ${_SALE_TYPES.includes(x['유형'])&&(!x['동']||x['동출처']==='직접 입력')&&x['지역식별상태']==='matched'

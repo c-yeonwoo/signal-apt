@@ -102,7 +102,11 @@ def test_list_report_and_discovery_endpoints_share_cached_evidence(monkeypatch):
     client = TestClient(api.app)
     client.cookies.set(auth.COOKIE, token)
     rows = [row(기회도=0), row(84, 72000, 기회도=0)]
-    monkeypatch.setattr(api, "_build_listings", lambda kinds, **kw: rows if kw.get("include_private") and "일반매물" in kinds else [])
+    build_calls = []
+    def build(kinds, **kw):
+        build_calls.append((set(kinds), kw.get("include_private")))
+        return rows if kw.get("include_private") and "일반매물" in kinds else []
+    monkeypatch.setattr(api, "_build_listings", build)
     monkeypatch.setattr(api, "_attach_card_lines", lambda items, uid: items)
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
     monkeypatch.setattr(api, "_display_signal_map", lambda: {})
@@ -114,6 +118,7 @@ def test_list_report_and_discovery_endpoints_share_cached_evidence(monkeypatch):
     db.kv_set("complex:11350:비교단지", detail())
     listed = client.get("/api/listings/all", params={"types": "일반매물"})
     assert listed.status_code == 200
+    assert build_calls[:2] == [({"일반매물"}, True), ({"일반매물", "급매", "찐매물"}, True)]
     prices = {r["key"]: r["price_comparison"] for r in listed.json()["listings"]}
     assert [prices[r["key"]]["호가차이율"] for r in rows] == [0, -10]
     for r in rows:
@@ -149,3 +154,49 @@ def test_cache_failure_keeps_all_source_rows(monkeypatch):
     monkeypatch.setattr(db, "kv_get_many", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("cache down")))
     rows = listing_prices.attach([row(), row(84, 80000)])
     assert len(rows) == 2 and all(r["price_comparison"]["상태"] == "보류" for r in rows)
+
+
+def asking_row(source_id, price, *, source="hanbang", area=59, complex_id="c-1", **kw):
+    provider_id = "hanbang_id" if source == "hanbang" else "naver_id"
+    complex_field = "hanbang_complex_id" if source == "hanbang" else "complex_no"
+    return {"key": f"{source}:{source_id}", "유형": "일반매물" if source == "hanbang" else "급매",
+            "단지명": "비교단지", "지역코드": "11350", "지역식별상태": "matched",
+            "source": source, "price_kind": "asking", "총액": price,
+            "ref": {provider_id: source_id, complex_field: complex_id, "전용면적": area}, **kw}
+
+
+def test_current_asking_comparison_is_same_provider_verified_complex_and_exact_area_only():
+    target = asking_row("target", 48000)
+    peers = [asking_row(str(i), price) for i, price in enumerate([50000, 52000, 55000, 60000])]
+    peers += [asking_row("other-area", 30000, area=84),
+              asking_row("other-complex", 10000, complex_id="c-2"),
+              asking_row("other-source", 10000, source="baroezip")]
+    result = listing_prices._attach_asking_comparison([target], [target, *peers])[0]["asking_comparison"]
+    assert result["상태"] == "관측비교"
+    assert result["표본수"] == 4
+    assert result["중앙값"] == 53500
+    assert result["호가차이율"] == -10.3
+    assert result["공급사"] == "hanbang"
+    assert result["price_kind"] == "source_asking_sample"
+
+
+@pytest.mark.parametrize("target_update", [
+    {"지역식별상태": "held"}, {"source_conflict": True}, {"stale": True},
+    {"degraded": True}, {"지역코드": ""}, {"price_kind": "unknown"},
+])
+def test_unverified_or_stale_listing_is_not_compared_to_asking_sample(target_update):
+    target = asking_row("target", 48000, **target_update)
+    peers = [asking_row(str(i), price) for i, price in enumerate([50000, 52000, 55000])]
+    evidence = listing_prices._attach_asking_comparison([target], [target, *peers])[0]["asking_comparison"]
+    assert evidence["상태"] == "보류" and evidence["중앙값"] is None
+
+
+def test_asking_comparison_requires_three_distinct_other_listings_and_valid_identity():
+    target = asking_row("target", 48000)
+    peers = [asking_row("peer", 50000), asking_row("peer", 51000), asking_row("second", 52000),
+             asking_row("stale", 10000, stale=True)]
+    evidence = listing_prices._attach_asking_comparison([target], [target, *peers])[0]["asking_comparison"]
+    assert evidence["상태"] == "보류" and evidence["표본수"] == 0
+    missing_id = asking_row("", 50000)
+    evidence = listing_prices._attach_asking_comparison([target], [target, missing_id])[0]["asking_comparison"]
+    assert evidence["상태"] == "보류"
