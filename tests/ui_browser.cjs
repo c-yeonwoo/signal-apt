@@ -986,6 +986,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(desktopCard.width>800);
     assert.equal(desktopColumns,2);
     await page.setViewportSize({width:360,height:800});
+    await page.setViewportSize({width:180,height:800});
+    const zoomCard=await page.locator('.signal-assessment').evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth}));
+    const zoomPanel=await page.locator('#haesolPanel').evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth}));
+    assert(zoomCard.scrollWidth<=zoomCard.width,`200% reflow summary card overflows: ${JSON.stringify(zoomCard)}`);
+    assert(zoomPanel.scrollWidth<=zoomPanel.width,`200% reflow signal summary panel overflows: ${JSON.stringify(zoomPanel)}`);
+    await page.setViewportSize({width:360,height:800});
     await page.locator('.signal-evidence-details > summary').click();
     assert.match(await page.locator('#haesolPanel').textContent(),/이전 발행 66/);
     const explanationCallsBeforeRegion=explanationPayloads.length;
