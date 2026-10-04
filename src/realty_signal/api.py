@@ -2253,16 +2253,22 @@ def _address_region_identity(address: str) -> dict | None:
     """Resolve a Kakao address only when both province and district match current KB."""
     matches = []
     address_parts = address.split()
+    if len(address_parts) < 2:
+        return None
     for name, code in (_kb().codes or {}).items():
+        code = str(code)
+        sido = md.SIDO_LABELS.get(code[:2])
+        if not sido or not address_parts[0].startswith(sido):
+            continue
+        district = name.removeprefix(sido + " ")
+        district_parts = district.split()
+        if address_parts[1:1 + len(district_parts)] != district_parts:
+            continue
         try:
             identity = md.current_region_identity(f"kb:{code}")
         except Exception:  # noqa: BLE001 — unverified source stays unselected.
             return None
-        if not identity or identity["name"] != name or not address_parts or not address_parts[0].startswith(identity["sido"]):
-            continue
-        district = name.removeprefix(identity["sido"] + " ")
-        district_parts = district.split()
-        if address_parts[1:1 + len(district_parts)] == district_parts:
+        if identity and identity["name"] == name and identity["sido"] == sido:
             matches.append(identity)
     # The source can contain province-level and district-level rows; select the
     # most specific district only, and never guess across an equally specific tie.
