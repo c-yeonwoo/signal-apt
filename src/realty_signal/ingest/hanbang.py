@@ -51,6 +51,18 @@ def _rooms(value) -> int | None:
     return count if not isinstance(value, bool) and str(value).strip() == str(count) and 1 <= count <= 15 else None
 
 
+def _locality(raw_name: str, district: str) -> tuple[str | None, str | None]:
+    """Keep only a district-matched neighborhood from the source's second line."""
+    for line in raw_name.replace("\\n", "\n").splitlines()[1:]:
+        city, match, after = line.partition(district)
+        if not match or not after.strip():
+            continue
+        locality = after.strip()
+        if re.fullmatch(r"[가-힣][가-힣0-9]{0,11}(?:동|읍|면|리)", locality):
+            return locality, city.strip() or None
+    return None, None
+
+
 def normalize(row: dict) -> dict | None:
     """매매 아파트만 보존한다. 원문·연락처·이미지·상세주소는 절대 저장하지 않는다."""
     if row.get("atlfslKndCd") != "01" or row.get("dlngSeCd") != "A1":
@@ -61,7 +73,8 @@ def normalize(row: dict) -> dict | None:
     price = _positive(row.get("trdeAmt"))
     if not source_id or price is None:
         return None
-    name = str(row.get("hsmpNm") or "").replace("\\n", "\n").splitlines()[0].strip()
+    raw_name = str(row.get("hsmpNm") or "")
+    name = raw_name.replace("\\n", "\n").splitlines()[0].strip()
     name = re.sub(r"\s+\d+(?:동|호)$", "", name)
     if not name:
         return None
@@ -74,9 +87,11 @@ def normalize(row: dict) -> dict | None:
     lat, lng = _positive(row.get("atlfslLat")), _positive(row.get("atlfslLot"))
     if not (lat and 33 <= lat <= 39 and lng and 124 <= lng <= 132):
         lat = lng = None
+    locality, locality_city = _locality(raw_name, str(row.get("sggNm") or "").strip())
     return {
         "hanbang_id": str(source_id), "hanbang_complex_id": str(row.get("hsmpInfoPk") or "") or None,
         "단지명": name, "지역": str(row.get("sggNm") or "").strip(),
+        "동": locality, "_동표기시도": locality_city,
         "호가": round(price), "전용면적": area, "평형": round(area / 3.3058, 1) if area else None,
         "층": floor, "방수": _rooms(row.get("roomCnt")), "lat": lat, "lng": lng,
         "등록일": row.get("atlfslTrsmDt"),

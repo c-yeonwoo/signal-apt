@@ -90,6 +90,58 @@ def test_watch_rows_are_user_scoped():
     assert len(db.listing_watch_list(1)) == 1
 
 
+def test_listing_watch_owns_only_the_complex_interest_it_created():
+    complex_key = "kb:1135000000|A"
+    first, second = _row("일반매물:one", kind="일반매물"), _row("일반매물:two", kind="일반매물")
+    db.listing_watch_add(7, first, complex_key=complex_key)
+    db.listing_watch_add(7, second, complex_key=complex_key)
+    assert [f["key"] for f in db.fav_list(7)] == [complex_key]
+    db.listing_watch_remove(7, first["key"])
+    assert [f["key"] for f in db.fav_list(7)] == [complex_key]
+
+    db.listing_watch_remove(7, second["key"])
+    assert db.fav_list(7) == []
+
+    db.listing_watch_add(7, first, complex_key=complex_key)
+    db.fav_add(7, "complex", complex_key, "A")
+    db.listing_watch_remove(7, first["key"])
+    assert [f["key"] for f in db.fav_list(7)] == [complex_key]
+
+    db.fav_add(7, "complex", complex_key, "A")
+    db.listing_watch_add(7, first, complex_key=complex_key)
+    db.listing_watch_remove(7, first["key"])
+    assert [f["key"] for f in db.fav_list(7)] == [complex_key]
+
+
+def test_watching_verified_sale_adds_complex_interest_without_cross_account_access(monkeypatch):
+    monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
+    item = {**_row("일반매물:one", kind="일반매물"), "지역코드": "11350",
+            "지역식별상태": "matched", "source": "hanbang"}
+    monkeypatch.setattr(api, "_build_listings", lambda kinds, include_private=False:
+                        [item] if include_private and "일반매물" in kinds else [])
+    owner, guest = _client("owner@example.com"), _client("guest@example.com")
+    assert owner.post("/api/listing-watch", json={"key": item["key"]}).status_code == 200
+    assert [f["key"] for f in db.fav_list(auth.current_user(owner.cookies.get(auth.COOKIE))["id"])] == [
+        "kb:1135000000|A"]
+    assert guest.get("/api/listing-watch").json()["items"] == []
+    assert owner.delete("/api/listing-watch", params={"key": item["key"]}).status_code == 200
+    assert db.fav_list(auth.current_user(owner.cookies.get(auth.COOKIE))["id"]) == []
+
+
+def test_watching_sale_reuses_unambiguous_legacy_complex_interest(monkeypatch):
+    monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "owner@example.com")
+    item = {**_row("일반매물:one", kind="일반매물"), "지역코드": "11350",
+            "지역식별상태": "matched"}
+    monkeypatch.setattr(api, "_build_listings", lambda kinds, include_private=False: [item])
+    owner = _client("owner@example.com")
+    uid = auth.current_user(owner.cookies.get(auth.COOKIE))["id"]
+    db.fav_add(uid, "complex", "노원구|A", "A")
+    assert owner.post("/api/listing-watch", json={"key": item["key"]}).status_code == 200
+    assert [f["key"] for f in db.fav_list(uid)] == ["노원구|A"]
+    assert owner.delete("/api/listing-watch", params={"key": item["key"]}).status_code == 200
+    assert [f["key"] for f in db.fav_list(uid)] == ["노원구|A"]
+
+
 def test_price_target_api_requires_owner_and_sale_asking_kind(monkeypatch):
     from realty_signal.routes import market
 

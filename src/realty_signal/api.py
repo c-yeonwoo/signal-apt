@@ -3307,6 +3307,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                            "matched" if raw.get("시도") else "name_only")
         tr = listing_timing(kind, raw, safe_signal, safe_grade, asof=_timing_asof())
         row = {"유형": kind, "단지명": name, "지역": region, "시도": raw.get("시도"),
+               "동": raw.get("동") if identity_ok and kind == "일반매물" else None,
                "지역코드": source_code, "시그널": safe_signal,
                "원시시그널": signal or "", "판정상태": (assessment.get("assessment_status") or "held") if identity_ok else "held",
                "지역식별상태": identity_status,
@@ -3408,6 +3409,16 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     source_record_count = len(out)
     out = attach_prices(collapse(out))
     uid = _uid(request)
+    if uid and private_access:
+        locality = db.listing_localities(uid, [key for row in out if row.get("유형") in {"일반매물", "급매", "찐매물"}
+                                           for key in row.get("listing_aliases", [row.get("key")]) if key])
+        for row in out:
+            if row.get("유형") in {"일반매물", "급매", "찐매물"} and not row.get("동") and row.get("지역식별상태") == "matched":
+                value = next((locality[key] for key in row.get("listing_aliases", [row.get("key")])
+                              if key in locality), None)
+                if value:
+                    row["동"] = value
+                    row["동출처"] = "직접 입력"
     scores = eng_rank.engagement_scores(uid=uid)
     if scores:
         out = eng_rank.apply_engagement_bonus(out, scores)
@@ -3569,6 +3580,9 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
             if item["hanbang_id"] in seen:
                 continue
             seen.add(item["hanbang_id"])
+            locality_sido = item.pop("_동표기시도", None)
+            if locality_sido and not source_sido.startswith(locality_sido):
+                item["동"] = None
             item["지역"] = region
             item["시도"] = expected_sido
             item["시그널"] = signals.get(region, "")

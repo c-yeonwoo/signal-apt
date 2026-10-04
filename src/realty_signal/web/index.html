@@ -313,6 +313,24 @@
   .ms-row .r1 { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
   .ms-row .nm { font-weight:600; font-size:14px; letter-spacing:-0.01em; }
   .ms-row .sub { color:var(--dim); font-size:12px; margin-top:4px; line-height:1.45; }
+  #laList .ms-row .r1 { align-items:flex-start; flex-wrap:wrap; gap:4px 10px; }
+  #laList .ms-row .nm { min-width:0; flex:1 1 155px; }
+  #laList .ms-row .sub { margin-top:6px; font-size:13px; line-height:1.4; }
+  #laList .r1 > span:last-child { min-width:0; max-width:100%; }
+  #laList .la-price { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:3px 6px; font-size:13px; overflow-wrap:anywhere; }
+  #laList .la-price b { font-size:15px; }
+  #laList .la-address { overflow-wrap:anywhere; }
+  #laList .la-watch { display:block; margin-top:8px; }
+  #laList .la-watch .btn { min-height:32px; font-size:12px; }
+  #laList .ms-caret { align-self:center; }
+  #laList .ms-detail { font-size:13px; line-height:1.5; }
+  #laList .la-detail-line { margin:8px 0; }
+  #laList .la-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+  #laList .la-detail-actions .btn { min-height:36px; font-size:13px; }
+  #laList .la-detail-line .btn { min-height:36px; font-size:13px; padding:5px 10px; }
+  #laList .la-dong-form { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+  #laList .la-dong-form input { width:120px; min-height:36px; border:1px solid var(--line); border-radius:7px; padding:5px 8px; font-size:14px; }
+  #laList .tx-costs .tx-note { font-size:12px; }
   .ms-caret { color:var(--dim); font-size:13px; transition:transform .15s; }
   .ms-row.sel .ms-caret { transform:rotate(180deg); }
   .ms-detail { padding:12px 16px 14px; background:#fafafa; border-bottom:1px solid var(--line); font-size:12.5px; line-height:1.65; }
@@ -2679,6 +2697,7 @@ async function bpConfirm(){
   _profile['연소득']=p.income||0;
   document.getElementById('bpDlg').close();
   toast('매수력을 확정했습니다');
+  if(document.getElementById('view-all')?.style.display!=='none') loadAllListings();
   // V1(타이밍) → V2(매물) 파이프가 실제로 이어지는지 재는 유일한 지점
   track(EVENTS.BUYING_POWER_CONFIRM, {capital:p.capital, budget:d['매수력']||null});
   _loadBuyingPower(); _loadAsks(); _loadPlan(); _loadLevers(); _loadDashBudget();
@@ -3417,7 +3436,7 @@ function renderQuicksale(){
       <span>연식 ${m['연식']||'–'}</span>${_qsMode==='찐매물'?'<span style="color:#0f766e;font-weight:700">공급사 인증 표시</span>':''}</div>
       <div style="font-size:12px;color:var(--dim);margin-top:6px">공급사 표시는 가격 우위를 뜻하지 않습니다. 리포트에서 같은 전용면적의 비교 근거를 확인하고, 판매 여부·입주 조건은 원천에서 확인하세요.${m['stale']||source.stale?' 이 항목은 지난 수집 결과입니다.':''}</div>
       ${txCostsSlot(m['호가'], m['지역'], m['평형'], m['전용면적'])}
-      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${reportBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${qsEvidenceBtn(m)}${loanBtn(m['호가'],m['단지명'])}${cxBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
+      <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${reportBtn(m['naver_id']?`${_qsMode}:${m['naver_id']}`:null)}${qsEvidenceBtn(m)}${loanBtn(m['호가'],m['단지명'])}${cxDetailBtn(m['단지명'],m['지역'])}${cxSigBtn(m['단지명'],m['지역'])}${naverBtn(m['complex_no'])}</div>`,
     coord:m=>(m['lat']&&m['lng'])?[m['lat'],m['lng']]:null,
     geoq:m=> (m['lat']&&m['lng']) ? null : `${m['지역']||''} ${m['단지명']||''}`,
     regionOf:m=>m['지역'],
@@ -3597,6 +3616,17 @@ function _laSourceLabel(x){
     certified?'공급사 인증 표시':'',urgent?'공급사 급매 표시':'',
     x.source_conflict?'원천 정보 불일치':''].filter(Boolean).join(' · ');
 }
+function _laAddress(x){
+  const parts=[x['시도'],x['지역'],x['동']].filter(v=>typeof v==='string'&&v.trim());
+  return (parts.join(' ')||'주소 확인 필요')+(x['동출처']==='직접 입력'?' (직접 입력)':'');
+}
+function _laArea(x){
+  const area=Number(x.ref?.['전용면적']??x['전용면적']);
+  if(!Number.isFinite(area)||area<=0) return '전용면적 확인 필요';
+  const py=Number(x['평형']);
+  const size=area.toLocaleString('ko-KR',{maximumFractionDigits:2});
+  return `전용 ${size}㎡${Number.isFinite(py)&&py>0?` · ${py}평`:''}`;
+}
 function listingPriceLine(price){
   if(price?.['상태']!=='관측비교'||typeof price['호가차이율']!=='number'||!Number.isFinite(price['호가차이율'])) return '';
   const gap=price['호가차이율'];
@@ -3626,6 +3656,30 @@ function _laPricePass(x){
   const cap = _laPrice.max>=_laPrice.hi ? Infinity : _laPrice.max;  // 상한 끝 = 그 이상 전부 포함
   return v>=_laPrice.min && v<=cap;
 }
+async function saveListingDong(btn){
+  const input=btn.parentElement.querySelector('input');
+  const dong=input?.value.trim()||'';
+  if(!/^[가-힣][가-힣0-9]{0,11}(?:동|읍|면|리)$/.test(dong)){
+    toast('동·읍·면·리 이름을 확인해 주세요.'); return;
+  }
+  btn.disabled=true;
+  try{
+    const key=btn.dataset.listingKey;
+    const response=await fetch('/api/listing-locality',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({key,dong})});
+    if(!response.ok) throw new Error('동 이름을 저장하지 못했습니다.');
+    const row=_laData.find(x=>x.key===key);
+    if(row){
+      row['동']=dong; row['동출처']='직접 입력';
+      const address=btn.closest('.ms-detail')?.previousElementSibling?.querySelector('.la-address');
+      if(address) address.textContent=_laAddress(row);
+    }
+    _laInvalidateCache();
+    btn.disabled=false;
+    btn.textContent='수정 저장';
+    toast('동 이름을 내 계정에 저장했습니다.');
+  }catch(e){ btn.disabled=false; toast(e.message||'동 이름을 저장하지 못했습니다.'); }
+}
 function renderAllListings(){
   _laRenderedKey=_laViewKey(_laCurrentTypes);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역']) &&
@@ -3649,23 +3703,31 @@ function renderAllListings(){
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
     '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
-  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'<span class="pill">매매</span>':typeBadge(x['유형'])} ${badge(x['시그널']||'HELD')}`;
+  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${badge(x['시그널']||'HELD')}`;
   mapSplit('laList','laMap',rows,{
-    summary:x=>({nm:`${x['단지명']||'–'} ${rowBadge(x)}`,
-      right:_SALE_TYPES.includes(x['유형'])?_mtMetric('호가',`<b>${_eok(x['총액'])}</b>`):_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`${_SALE_TYPES.includes(x['유형'])?qsAreaLabel(x.ref||{}):x['평형']!=null?x['평형']+'평':''} · ${esc(_laSourceLabel(x))} · ${x['시도']?x['시도']+' ':''}${x['지역']||''}${_laBudgetLabel(x)?' · '+_laBudgetLabel(x):''}${listingPriceLine(x.price_comparison)?'<br>'+esc(listingPriceLine(x.price_comparison)):''}`}),
+    summary:x=>({nm:`${esc(x['단지명']||'–')} ${rowBadge(x)}`,
+      right:_SALE_TYPES.includes(x['유형'])
+        ?`<span class="la-price"><b>호가 ${_eok(x['총액'])}</b><span>${esc(_laArea(x))}</span></span>`
+        :_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
+      sub:`<span class="la-address">${esc(_laAddress(x))}</span>${listingPriceLine(x.price_comparison)?'<br>'+esc(listingPriceLine(x.price_comparison)):''}`,
+      action:watchBtn(x['key'],x.listing_aliases)}),
     detail:x=>{ const acts = (x['유형']==='청약'
         ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="openTypedList('청약')">청약 목록 →</span>`
-        : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'') + cxBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역'])) + naverBtn(x['ref'] && x['ref']['complex_no']);
+        : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'')
+          + cxDetailBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역']))
+          + naverBtn(x['ref'] && x['ref']['complex_no']);
       const priced=['일반매물','급매','찐매물','경매'].includes(x['유형']) && x['총액'];
       const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
-      return `${_buyerFourHtml(x, _eok)}${x.budget_fit?.status==='unknown'?`<div style="font-size:11px;color:var(--warn);margin-top:6px">예산 비교 보류 · ${esc(x.budget_fit.reason||'확정 매수력과 호가를 다시 확인해 주세요.')}</div>`:''}<div class="kv" style="margin-top:8px"><span>${esc(_laSourceLabel(x))}</span>${_SALE_TYPES.includes(x['유형'])?`<span>${qsAreaLabel(x.ref||{})}</span>`:x['평형']!=null?`<span>평형 <b>${x['평형']}평</b></span>`:''}${x['총액']?`<span>가격 <b>${_eok(x['총액'])}</b></span>`:''}${x['지표값']!=null?`<span>${x['지표라벨']} <b>${x['지표값']}${x['지표단위']||''}</b></span>`:''}<span>시장 참고점수 <b>${x['기회도']??'–'}</b></span></div>
-        ${x['기회도근거']?`<div style="font-size:11px;color:var(--dim);margin-top:5px">${x['기회도근거']}</div>`:''}
-        ${x.price_comparison?`<div style="font-size:12px;margin-top:6px">${esc(listingPriceLine(x.price_comparison)||'가격 비교: '+(x.price_comparison['이유']||'리포트에서 같은 면적의 거래 자료를 확인하세요.'))}${x.price_comparison['비교기준일']?' · 기준 '+esc(x.price_comparison['비교기준일']):''}</div>`:''}
-        ${x['유형']==='일반매물'?`<div style="font-size:11px;color:var(--dim);margin-top:5px">한방 매물번호 ${esc(x['ref']?.['hanbang_id']||'–')} · 최신 표본, 현재 판매 여부 미확인</div>`:''}
-        ${x.confidence!=null&&x.confidence<0.55?`<div style="font-size:11px;color:var(--warn);margin-top:4px">자료 확인 필요 · 규칙 기반 참고 점수</div>`:''}
+      const fit=x.budget_fit?.status;
+      return `${fit==='within'?'<div class="la-detail-line">확정 매수력 상한 이내 · 대출 승인은 별도 확인</div>':
+        fit==='above'?'<div class="la-detail-line">확정 매수력 상한 초과</div>':
+        _SALE_TYPES.includes(x['유형'])?'<div class="la-detail-line">내 매수력을 입력하면 호가와 비교할 수 있어요. <button type="button" class="btn" onclick="event.stopPropagation();openBuyingPower()">매수력 입력</button></div>':''}
+        ${x.price_comparison?.['상태']==='관측비교'?`<div class="la-detail-line">${esc(listingPriceLine(x.price_comparison))}</div>`:''}
+        ${x.price_comparison?.['상태']==='보류'?'<div class="la-detail-line">실거래 비교 근거는 매물 리포트에서 확인할 수 있어요.</div>':''}
+        ${_SALE_TYPES.includes(x['유형'])&&(!x['동']||x['동출처']==='직접 입력')&&x['지역식별상태']==='matched'
+          ?`<div class="la-detail-line la-dong-form"><label>동 정보 <input aria-label="동 이름" placeholder="예: 상계동" value="${esc(x['동']||'')}" autocomplete="off"></label><button type="button" class="btn" data-listing-key="${esc(x['key'])}" onclick="event.stopPropagation();saveListingDong(this)">${x['동']?'수정 저장':'직접 저장'}</button></div>`:''}
         ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
-        <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${watchBtn(x['key'],x.listing_aliases)}${reportBtn(x['key'])}${acts}</div>`; },
+        <div class="la-detail-actions">${reportBtn(x['key'])}${acts}</div>`; },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
@@ -3725,10 +3787,10 @@ function renderMsList(mapId, indices){
     const it=items[i], s=opt.summary(it,i);
     const row=document.createElement('div'); row.className='ms-row'; row.dataset.i=i;
     row.setAttribute('role','button'); row.tabIndex=0; row.setAttribute('aria-expanded','false');
-    row.innerHTML=`<div class="r1"><span class="nm">${s.nm}</span><span>${s.right||''} <span class="ms-caret" aria-hidden="true">⌄</span></span></div>${s.sub?`<div class="sub">${s.sub}</div>`:''}`;
+    row.innerHTML=`<div class="r1"><span class="nm">${s.nm}</span><span>${s.right||''} <span class="ms-caret" aria-hidden="true">⌄</span></span></div>${s.sub?`<div class="sub">${s.sub}</div>`:''}${s.action?`<div class="la-watch">${s.action}</div>`:''}`;
     const det=document.createElement('div'); det.className='ms-detail'; det.style.display='none';
     row.onclick=()=>selectMsRow(mapId, i);
-    row.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); selectMsRow(mapId, i); } };
+    row.onkeydown=e=>{ if(e.target===row&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); selectMsRow(mapId, i); } };
     det.onkeydown=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); selectMsRow(mapId,i); } };
     parent.appendChild(row); parent.appendChild(det);
   };
@@ -4186,13 +4248,15 @@ const loanBtn=(price,label)=>`<span class="btn" style="padding:3px 11px;margin-t
 function txCostsSlot(price, region, pyeong, area){
   if(!price || price<=0) return '';
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-  return `<div class="tx-costs" data-tx-costs data-price="${Math.round(price)}" data-region="${esc(region||'')}" data-pyeong="${pyeong!=null&&pyeong!==''?esc(pyeong):''}" data-area="${area!=null&&area!==''?esc(area):''}"><div style="color:var(--dim);font-size:12px">실제비용 계산 중…</div></div>`;
+  return `<details class="tx-costs" data-tx-costs data-price="${Math.round(price)}" data-region="${esc(region||'')}" data-pyeong="${pyeong!=null&&pyeong!==''?esc(pyeong):''}" data-area="${area!=null&&area!==''?esc(area):''}"><summary>실제비용 계산하기</summary><div class="tx-costs-body"></div></details>`;
 }
 let _txTimers=new WeakMap();
 async function mountTxCosts(el, override){
   if(!el) return;
+  const body=el.querySelector('.tx-costs-body');
+  if(!body) return;
   const price=+(override?.price ?? (el.dataset.price || 0));
-  if(!price){ el.innerHTML=''; return; }
+  if(!price){ body.textContent='가격 정보가 없습니다.'; return; }
   const region=(override?.region ?? el.dataset.region) || '';
   const pyeong=override?.pyeong ?? el.dataset.pyeong;
   const area=override?.area ?? el.dataset.area;
@@ -4204,9 +4268,10 @@ async function mountTxCosts(el, override){
   if(area!==''&&area!=null) q.set('area', String(area));
   if(moving!=null) q.set('moving', String(moving));
   if(interior!=null) q.set('interior', String(interior));
+  body.textContent='실제비용 계산 중…';
   let d; try{ d=await (await fetch('/api/listing-costs?'+q)).json(); }
-  catch(e){ el.innerHTML='<div style="color:#b45309;font-size:12px">실제비용 조회 실패</div>'; return; }
-  if(d.error){ el.innerHTML=`<div style="color:#b45309;font-size:12px">${d.error}</div>`; return; }
+  catch(e){ body.textContent='실제비용 조회 실패. 다시 펼쳐서 확인해 주세요.'; delete el.dataset.txLoaded; return; }
+  if(d.error){ body.textContent=d.error; delete el.dataset.txLoaded; return; }
   const c=d['부대비용']||{};
   const assum=d['가정']||{};
   const eok=n=> (n==null||n<=0)?'–':(n/10000).toFixed(2)+'억';
@@ -4217,8 +4282,8 @@ async function mountTxCosts(el, override){
     .filter(Boolean).join(' · ');
   const interVal = interior!=null ? interior : (c['인테리어']??0);
   const moveVal = moving!=null ? moving : (c['이사비']??200);
-  el.innerHTML=`<details open>
-    <summary>실제비용 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b></summary>
+  el.querySelector('summary').innerHTML=`실제비용 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b>`;
+  body.innerHTML=`
     <div style="margin-top:8px">${rows}
       <div class="tx-row total"><span>부대 합계</span><span>${won(c['합계'])}</span></div>
       <div class="tx-row total"><span>총매입가 (매수 ${_eok(d['매수가'])}+부대)</span><span>${won(d['총매입가'])}</span></div>
@@ -4228,20 +4293,27 @@ async function mountTxCosts(el, override){
       <label class="tx-edit">인테리어 <input type="number" min="0" step="100" value="${interVal}" data-tx-inter>만</label>
     </div>
     <div class="tx-note">${hyp?hyp+' · ':''}${(d.notes||[]).slice(0,2).join(' · ')}</div>
-  </details>`;
+  `;
   const re=()=>{
     const mv=+el.querySelector('[data-tx-move]')?.value;
     const iv=+el.querySelector('[data-tx-inter]')?.value;
     clearTimeout(_txTimers.get(el));
     _txTimers.set(el, setTimeout(()=>mountTxCosts(el,{price,region,pyeong,area,moving:mv,interior:iv}), 350));
   };
-  el.querySelectorAll('[data-tx-move],[data-tx-inter]').forEach(inp=>{
+  body.querySelectorAll('[data-tx-move],[data-tx-inter]').forEach(inp=>{
     inp.addEventListener('change', re);
     inp.addEventListener('input', re);
   });
 }
 function hydrateTxCosts(root){
-  (root||document).querySelectorAll('[data-tx-costs]').forEach(el=>mountTxCosts(el));
+  (root||document).querySelectorAll('[data-tx-costs]').forEach(el=>{
+    if(el.dataset.txBound) return;
+    el.dataset.txBound='1';
+    el.addEventListener('toggle',()=>{
+      if(el.open && !el.dataset.txLoaded){ el.dataset.txLoaded='1'; mountTxCosts(el); }
+    });
+    if(el.open && !el.dataset.txLoaded){ el.dataset.txLoaded='1'; mountTxCosts(el); }
+  });
 }
 // 프로필 + 종합 데이터 → 개인화 내러티브 리포트
 function renderAiReport(d, eok){
@@ -5779,6 +5851,10 @@ function cxBtn(name, region){
   const on=(_favs||new Set()).has('complex:'+cxFavKey(r,n));
   return ` <span class="btn favcx" data-n="${n}" data-r="${r}" style="padding:3px 10px${on?';background:var(--accent);color:#fff':''}" onclick="event.stopPropagation();favCxToggle(this)">${on?'★':'☆'} 관심단지</span>`
     + ` <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openComplex('${n}','${r}')">단지</span>`;
+}
+function cxDetailBtn(name, region){
+  if(!name||!region) return '';
+  return ` <button type="button" class="btn" data-complex-name="${esc(name)}" data-complex-region="${esc(region)}" onclick="event.stopPropagation();openComplex(this.dataset.complexName,this.dataset.complexRegion)">단지 보기</button>`;
 }
 function favCxToggle(el){ const n=el.dataset.n, r=el.dataset.r;
   toggleComplexFav(r,n).then((changed)=>{ if(!changed) return; const on=_favs.has('complex:'+cxFavKey(r,n));
@@ -7626,6 +7702,8 @@ async function toggleListingWatch(btn){
     }));
     _syncWatchButtons();
     if(results.some(r=>r.status==='rejected')){await loadWatchKeys();throw new Error('일부 찜 변경에 실패했습니다. 현재 상태를 확인해 주세요.');}
+    await loadFavs();
+    refreshComplexFavoriteButtons();
     if(!on) track(EVENTS.LISTING_WATCH_ADD,{kind:key.split(':',1)[0]});
     if(document.getElementById('view-watch').style.display!=='none') loadListingWatch();
   }catch(e){ toast(e.message||'매물 찜에 실패했습니다.'); }
