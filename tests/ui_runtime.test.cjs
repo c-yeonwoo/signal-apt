@@ -780,6 +780,22 @@ test('trade-evidence sort puts supported lower quotes first and unverified rows 
   assert.match(html,/할인율 아님/);
 });
 
+test('observed source-price drops sort separately and are not rendered as transaction prices', () => {
+  const ctx=vm.createContext({_eok:value=>`${value}만원`});
+  vm.runInContext(extract('function _laTradePriceEvidence(', 'function renderAllListings(){'),ctx);
+  const older={기회도:5,price_reduction:{상태:'수집호가인하관측',차이율:-3,관측횟수:2,확인시각:100}};
+  const larger={기회도:90,price_reduction:{상태:'수집호가인하관측',차이율:-8,관측횟수:2,확인시각:90}};
+  const newer={기회도:5,price_reduction:{상태:'수집호가인하관측',차이율:-3,관측횟수:2,확인시각:200}};
+  const unknown={기회도:100,price_reduction:null};
+  assert.ok(ctx._laComparePriceReduction(larger,older)<0);
+  assert.ok(ctx._laComparePriceReduction(newer,older)<0);
+  assert.ok(ctx._laComparePriceReduction(older,unknown)<0);
+  assert.match(ctx.listingReductionLine({...older.price_reduction,이전호가:50000,현재호가:48000}),/같은 매물 호가 .* → .* 낮음.*실제 거래가 아님/);
+  assert.equal(ctx.listingReductionLine(null),'');
+  assert.match(html,/수집 호가 인하 확인순/);
+  assert.match(html,/listingReductionLine\(x\.price_reduction\)/);
+});
+
 test('merged watch button preserves existing aliases and removes only that listing on explicit toggle', async () => {
   const saved=new Set(['찐매물:123','급매:123','일반매물:999']),calls=[];
   const button={dataset:{watchKey:'급매:123',watchAliases:'["급매:123","찐매물:123"]'},setAttribute(){}};
