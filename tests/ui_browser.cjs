@@ -152,10 +152,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(/^\/api\/v2\/reports\/[^/]+\/explanations$/.test(url.pathname)) {
         const payload=route.request().postDataJSON(); explanationPayloads.push(payload);
         const region=payload.type==='region';
-        return route.fulfill({status:200,json:{job_id:'test-job',status:'succeeded',result:{
-          report_id:decodeURIComponent(url.pathname.split('/')[4]),mode:payload.mode,source:'model_validated',
-          summary:'현재 리포트의 가격 근거를 확인하세요.',
-          claims:[region?{text:'전세수급 자료와 반대 근거를 함께 확인해야 합니다.',evidence_ids:['jeonse_pressure']}:
+        const fallback=region&&payload.mode==='counterevidence';
+        return route.fulfill({status:200,json:{job_id:'test-job',status:fallback?'failed':'succeeded',result:{
+          report_id:decodeURIComponent(url.pathname.split('/')[4]),mode:payload.mode,
+          source:fallback?'deterministic_fallback':'model_validated',
+          summary:fallback?'현재 판정에 반대되는 근거와 한계를 먼저 확인하세요.':'현재 리포트의 가격 근거를 확인하세요.',
+          claims:fallback?[]:[region?{text:'전세수급 자료와 반대 근거를 함께 확인해야 합니다.',evidence_ids:['jeonse_pressure']}:
             {text:'거래 표본의 한계를 먼저 확인해야 합니다.',evidence_ids:['trades']}],
           cautions:['현재 판매 여부는 별도 확인이 필요합니다.'],limit:'현장 확인 전에는 결론을 보류하세요.'}}});
       }
@@ -849,7 +851,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(regionEvidence,/이전 발행 66/);
     const explanationCallsBeforeRegion=explanationPayloads.length;
     await page.locator('#v2RegionCounter').click();
-    await page.locator('#v2RegionExplanation').getByText(/전세수급 자료와 반대 근거/).waitFor();
+    await page.locator('#v2RegionExplanation').getByText(/현재 판정에 반대되는 근거/).waitFor();
+    assert.match(await page.locator('#v2RegionExplanation').textContent(),/검증된 추가 설명 대신 현재 리포트의 근거만 정리/);
     assert.equal(explanationPayloads.length,explanationCallsBeforeRegion+1);
     assert.deepEqual(explanationPayloads.at(-1),{type:'region',key:'kb:1114000000',mode:'counterevidence'});
     await page.locator('#haesolPanel details').last().locator('summary').click();
