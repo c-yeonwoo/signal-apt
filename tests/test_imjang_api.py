@@ -57,6 +57,32 @@ def test_course_returns_timed_stops(client):
     assert len(d["checks"]) == len(ij.CHECKS)
 
 
+def test_course_uses_only_verified_home_and_explains_reselection(client, monkeypatch):
+    identity = {"name": "노원구", "sido": "서울", "code": "1135000000",
+                "region_id": "kb:1135000000"}
+    monkeypatch.setattr(app_api.md, "current_region_identity", lambda ref: identity if ref == identity["region_id"] else None)
+    seen = []
+    monkeypatch.setattr(app_api, "_region_centroid", lambda name, code: seen.append((name, code)) or (37.65, 127.06))
+    profile = db.profile_get(client.uid)
+    profile.update({"거주지": "노원구", "거주지코드": identity["region_id"]})
+    db.profile_set(client.uid, profile)
+
+    verified = client.get("/api/imjang/course").json()
+    assert verified["ready"] and verified["집기준"]
+    assert verified["거주지확인필요"] is False
+    assert seen == [("노원구", "1135000000")]
+
+    profile["거주지"] = "중구"  # Same code, changed name: never reuse old home.
+    db.profile_set(client.uid, profile)
+    mismatch = client.get("/api/imjang/course").json()
+    assert mismatch["집기준"] is False and mismatch["거주지확인필요"] is True
+    profile.pop("거주지코드")  # Ambiguous legacy name cannot be guessed either.
+    db.profile_set(client.uid, profile)
+    legacy = client.get("/api/imjang/course").json()
+    assert legacy["집기준"] is False and legacy["거주지확인필요"] is True
+    assert seen == [("노원구", "1135000000")]
+
+
 def test_visit_save_scores_and_lists(client):
     r = client.post("/api/imjang/visit", json={
         "region": "노원구", "단지": "상계주공7", "방문일": "2026-08-01",
