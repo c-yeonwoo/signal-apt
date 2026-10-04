@@ -4771,7 +4771,7 @@ function toggleFilters(){ _filtersOpen=!_filtersOpen;
 function updateFilterToggleLabel(){
   const btn=document.getElementById('filterToggle'); if(!btn) return;
   const off = SIGNALS.length - active.size + (5 - (typeof activeGrade!=='undefined'?activeGrade.size:5));
-  const cnt = off>0 ? ` <span style="color:var(--accent)">· ${off}개 골라 둠</span>` : '';
+  const cnt = off>0 ? ` <span style="color:var(--accent)">· 제외 ${off}개</span>` : '';
   btn.innerHTML = `신호·급지${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
 }
 function renderFilters(){
