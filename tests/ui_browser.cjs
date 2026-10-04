@@ -685,18 +685,31 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#laList .ms-row .badge').first().getAttribute('title'),/매물의 호가 평가나 매수 권고가 아닙니다/);
     const scopedSignals=await page.evaluate(()=>{
       const original=mapSplit, originalSignal=safeMarketSignal, oldPresale=_presaleList;
+      const oldBuyOnly=_mtBuyOnly, oldGrades=_mtGradeSet;
       const seen={};
       try{
-        mapSplit=(listId,_mapId,rows,opt)=>{seen[listId]=opt.summary(rows[0]).nm;};
+        mapSplit=(listId,_mapId,rows,opt)=>{seen[listId]={count:rows.length,html:rows[0]?opt.summary(rows[0]).nm:''};};
         safeMarketSignal=()=> 'STRONG_BUY'; // 동명 지역 조회는 매수여도, 서버가 검증한 보류를 표시해야 한다.
         _presaleList=[{단지명:'동명이인 청약',지역:'강서구',시그널:'HELD',상태:'접수예정'}];
         renderPresale();
         renderAuction([{단지명:'동명이인 경매',region:'강서구',지역시그널:'HELD',입찰상태:'no_bid'}]);
+        seen.default={presale:seen.psList,auction:seen.auctionList};
+        _mtBuyOnly=true;
+        renderPresale();
+        renderAuction([{단지명:'동명이인 경매',region:'강서구',지역시그널:'HELD',입찰상태:'no_bid'}]);
+        seen.buyOnly={presale:seen.psList.count,auction:seen.auctionList.count};
+        _mtBuyOnly=false;_mtGradeSet=new Set(['A']);
+        renderPresale();
+        renderAuction([{단지명:'동명이인 경매',region:'강서구',지역시그널:'HELD',입찰상태:'no_bid'}]);
+        seen.gradeOnly={presale:seen.psList.count,auction:seen.auctionList.count};
         return seen;
-      }finally{mapSplit=original;safeMarketSignal=originalSignal;_presaleList=oldPresale;}
+      }finally{mapSplit=original;safeMarketSignal=originalSignal;_presaleList=oldPresale;
+        _mtBuyOnly=oldBuyOnly;_mtGradeSet=oldGrades;}
     });
-    assert.match(scopedSignals.psList,/지역 신호 · 판단 보류/);
-    assert.match(scopedSignals.auctionList,/지역 신호 · 판단 보류/);
+    assert.match(scopedSignals.default.presale.html,/지역 신호 · 판단 보류/);
+    assert.match(scopedSignals.default.auction.html,/지역 신호 · 판단 보류/);
+    assert.deepEqual(scopedSignals.buyOnly,{presale:0,auction:0});
+    assert.deepEqual(scopedSignals.gradeOnly,{presale:0,auction:0});
     assert.match(await page.locator('#laList').textContent(),/전용 59㎡/);
     assert.match(await page.locator('#laList').textContent(),/호가 5.0억.*전용 59㎡/);
     assert.match(await page.locator('#laList').textContent(),/서울 테스트구 상계동/);
