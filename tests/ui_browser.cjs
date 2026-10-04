@@ -495,12 +495,32 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#view-general .watch-btn').count(),1);
     await page.evaluate(()=>switchTab('watch'));
     await page.getByText('찜 당시보다 하락 1.0억').waitFor();
-    assert.match(await page.locator('#watchList').textContent(),/같은 단지의 다른 매물/);
+    assert.equal(await page.locator('.watch-records').getAttribute('open'),null);
+    assert.equal(await page.locator('.watch-card-more').getAttribute('open'),null);
+    assert.equal(await page.locator('.watch-alternatives').isVisible(),false);
+    await page.locator('.watch-card-more > summary').click();
+    assert.match(await page.locator('.watch-alternatives').textContent(),/같은 단지의 다른 매물/);
+    for(const width of [180,360,390,1280]){
+      await page.setViewportSize({width,height:800});
+      const watchWidth=await page.evaluate(()=>{const card=document.querySelector('.watch-card'),edge=card.getBoundingClientRect().right;
+        return {page:document.documentElement.scrollWidth,card:card.scrollWidth,available:card.clientWidth,
+          overflow:[...card.querySelectorAll('*')].filter(el=>el.getBoundingClientRect().right>edge+1)
+            .slice(0,5).map(el=>`${el.tagName}.${el.className}: ${el.textContent.trim().slice(0,25)}`)};});
+      assert(watchWidth.page<=width && watchWidth.card<=watchWidth.available,
+        `watch page overflows at ${width}px: ${JSON.stringify(watchWidth)}`);
+    }
+    await page.setViewportSize({width:360,height:800});
     assert.equal(await page.locator('#view-watch .watch-btn').getAttribute('aria-pressed'),'true');
+    await page.locator('#view-watch').getByRole('button',{name:'매물 확인'}).click();
+    await page.locator('#v2ReportDlg').getByText('한방테스트단지',{exact:false}).waitFor();
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>switchTab('watch'));
+    assert.equal(await page.locator('.watch-card-more').getAttribute('open'),'');
     await page.locator('#view-watch input[type="number"]').fill('47000');
     await Promise.all([page.waitForResponse(r=>r.url().includes('/api/listing-watch/price-target') && r.request().method()==='PUT'),
       page.locator('#view-watch').getByRole('button',{name:'목표 저장·해제'}).click()]);
     assert.deepEqual(targetPayloads,[{key:'급매:synthetic-1',target_manwon:47000}]);
+    assert.equal(await page.locator('.watch-card-more').getAttribute('open'),'');
     await page.locator('#view-watch input[type="number"]').fill('');
     await Promise.all([page.waitForResponse(r=>r.url().includes('/api/listing-watch/price-target') && r.request().method()==='DELETE'),
       page.locator('#view-watch').getByRole('button',{name:'목표 저장·해제'}).click()]);
