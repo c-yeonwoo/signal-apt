@@ -1,8 +1,13 @@
 import json
+import importlib.util
+from pathlib import Path
 
 import pytest
 
-from scripts import benchmark_release as benchmark
+_SPEC = importlib.util.spec_from_file_location(
+    "benchmark_release", Path(__file__).resolve().parents[1] / "scripts" / "benchmark_release.py")
+benchmark = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(benchmark)
 
 
 def test_percentile_uses_nearest_rank_and_rejects_empty_samples():
