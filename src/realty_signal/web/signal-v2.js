@@ -235,22 +235,26 @@
           ? `이전 ${esc(a.change.previous_grade || '판정')}에서 ${changedLabels.map(esc).join(' · ')} 근거가 달라졌습니다.${changed === 'source_revision' ? ' 같은 기준일의 원천 수정입니다.' : ''}` :
           '이전 발행 판정에서 확인된 근거 변화가 없습니다.';
       const cautionLead = report.cautions?.[0];
+      const held = a.assessment_status === 'held';
+      const heldReasons = report.unknowns.length
+        ? report.unknowns.slice(0,2).map(riskLabel).join(' · ') +
+          (report.unknowns.length > 2 ? ` · 그 밖의 사유 ${report.unknowns.length - 2}건` : '')
+        : '자료와 지역 기준을 확인하기 전까지 판정을 보류합니다.';
       target.innerHTML = `<section class="signal-assessment" aria-label="지역 시그널 요약과 근거">
         <div class="signal-assessment-heading">
           <p class="v2-report-lead">${esc(a.summary)}</p>
           <p class="v2-muted">KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
         </div>
         <div class="signal-assessment-highlights">
-          <section class="signal-assessment-highlight"><h3>판정 이유</h3>
-            ${report.positive.length ? report.positive.slice(0,2).map(item => briefReason(item)).join('') : '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
+          <section class="signal-assessment-highlight"><h3>${held ? '판단 보류 이유' : '판정 이유'}</h3>
+            ${held ? `<p>${esc(heldReasons)}</p>` : report.positive.length ? report.positive.slice(0,2).map(item => briefReason(item)).join('') : '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
           </section>
-          <section class="signal-assessment-highlight signal-assessment-caution"><h3>함께 확인할 점</h3>
+          <section class="signal-assessment-highlight signal-assessment-caution"><h3>${held ? '추가로 확인할 지표' : '함께 확인할 점'}</h3>
             ${cautionLead ? briefReason(cautionLead, true) : '<p>연결된 지표에서 별도 반대 근거를 찾지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
-            ${report.unknowns.length ? `<p class="signal-assessment-unknown">판단 보류 사유 ${report.unknowns.length}건 · 자세한 항목은 근거에서 확인</p>` : ''}
           </section>
         </div>
         <details class="signal-evidence-details"><summary>판정 근거와 한계 보기</summary>
-          <h3>이번 판정의 근거</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
+          <h3>${held ? '기본 규칙의 충족 조건 · 현재 판정 아님' : '이번 판정의 근거'}</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
             '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
           <h3>반대 근거와 한계</h3>${report.cautions.length ? report.cautions.map(reason).join('') :
             '<p>현재 연결된 지표에서 별도 반대 근거를 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
