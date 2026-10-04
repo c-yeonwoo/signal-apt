@@ -39,10 +39,15 @@
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
   .page-head { font-size:20px; font-weight:600; letter-spacing:-0.02em; margin:0 0 6px; color:var(--txt); }
   .page-sub { color:var(--dim); font-size:16px; margin:0 0 18px; line-height:1.55; max-width:40em; }
-  .dash-layout { display:grid; grid-template-columns:1fr 1fr; gap:20px 28px; align-items:start; }
+  .dash-layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr); grid-template-areas:"complex market" "actions actions"; gap:18px 22px; align-items:start; }
+  .dash-col-me { grid-area:complex; }
+  .dash-col-market { grid-area:market; }
+  .dash-actions { grid-area:actions; }
   .dash-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
   .dash-col-label { font-size:17px; font-weight:700; color:var(--txt); letter-spacing:-0.02em;
     margin:2px 0 4px; }
+  .dash-complex-link { border:0; padding:0; background:none; color:var(--accent); font:inherit; font-size:14px;
+    font-weight:700; text-align:left; cursor:pointer; }
   .dash-more { margin-top:10px; }
   .dash-more > summary { cursor:pointer; font-size:16px; font-weight:700; color:var(--accent);
     list-style:none; user-select:none; min-height:48px; display:flex; align-items:center; }
@@ -408,7 +413,7 @@
     .ms-list { width:100% !important; min-width:0; max-width:none; max-height:48vh; }
     .ms-map { min-height:380px; margin-left:0; }
     .ms-gutter { display:none; }
-    .dash-layout { grid-template-columns:1fr; gap:16px; }
+    .dash-layout { grid-template-columns:minmax(0,1fr); grid-template-areas:"market" "complex" "actions"; gap:14px; }
     /* 저평가: 좁은 화면에서는 지도 위 · 그래프 아래 */
     .uvsplit { flex-direction:column; height:auto; }
     .uvsplit > .uv-col { flex:0 0 auto; height:340px; }
@@ -530,6 +535,17 @@
                              background:transparent; color:var(--dim); font:inherit; font-size:15px;
                              font-weight:700; cursor:pointer; white-space:nowrap; }
   .signal-mode-tabs button[aria-selected="true"] { background:var(--accent-weak); color:var(--accent); }
+  #sideOpenToggle:not([hidden]) { display:inline-flex; align-items:center; min-height:44px; }
+  #sideOpenToggle[hidden] { display:none !important; }
+  .signal-assessment { margin:12px 16px 4px; padding:14px 17px; max-width:none; border:1px solid var(--line);
+    border-left:4px solid var(--accent); border-radius:12px; background:var(--panel); }
+  .signal-assessment .v2-report-lead { margin:0; color:var(--txt); font-size:16px; line-height:1.6; font-weight:650; }
+  .signal-assessment .v2-muted { margin:6px 0 0; font-size:12px; }
+  .signal-assessment-caution { margin:8px 0 0; padding:8px 10px; border-radius:8px; background:#fff7ed;
+    color:#9a3412; font-size:13px; line-height:1.5; }
+  .signal-evidence-details { margin-top:10px; border-top:1px solid var(--line); padding-top:8px; }
+  .signal-evidence-details > summary { cursor:pointer; min-height:40px; display:flex; align-items:center;
+    color:var(--accent); font-size:14px; font-weight:700; }
   .signal-pane { flex:1; min-height:0; overflow:auto; background:var(--bg); }
   .signal-pane[hidden] { display:none !important; }
   #haesolPanel { max-height:none; overflow:visible; padding:8px 18px 28px; max-width:820px; margin:0 auto; }
@@ -568,6 +584,7 @@
     .signal-side-heading { display:flex; flex:0 0 auto; align-items:center; justify-content:space-between;
                            padding:10px 14px; border-bottom:1px solid var(--line); }
     .signal-side-heading .btn { min-height:44px; }
+    #sideOpenToggle:not([hidden]) { display:inline-flex; align-items:center; }
     .signal-hero { padding:10px 12px; gap:8px; }
     .signal-hero-title { order:-1; flex:1 1 100%; }
     .signal-hero-title h2 { font-size:19px; }
@@ -636,7 +653,7 @@
   <div class="wrap">
     <div id="signalSideBackdrop" onclick="closeSignalRegions()" aria-hidden="true"></div>
     <div class="side" id="signalSide" aria-label="지역 목록">
-      <div class="signal-side-heading"><b>지역 찾기</b><button type="button" class="btn" onclick="closeSignalRegions()" aria-label="지역 목록 닫기">닫기 ✕</button></div>
+      <div class="signal-side-heading"><b>지역 찾기</b><button id="sideToggle" type="button" class="btn" onclick="toggleSide()" title="지역 목록 접기" aria-controls="signalSide" aria-expanded="true">지역 목록 접기</button></div>
       <div id="regimeBox" title="" style="display:none;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:help;flex:0 0 auto"></div>
       <div class="sfilters">
         <input id="search" type="text" placeholder="지역 이름 검색" aria-label="지역 이름 검색" />
@@ -656,7 +673,7 @@
     </div>
     <div class="main">
       <div class="signal-hero">
-        <button id="sideToggle" onclick="toggleSide()" title="지역 목록 열기" type="button" aria-controls="signalSide" aria-expanded="true">지역 찾기</button>
+        <button id="sideOpenToggle" onclick="toggleSide()" title="지역 목록 열기" type="button" aria-controls="signalSide" aria-expanded="false">지역 찾기</button>
         <div class="signal-hero-title"><h2 id="sigbadge" tabindex="-1"></h2><p id="sigsub"></p></div>
         <button class="chip signal-listings-link" id="toListingsBtn" onclick="focusListings(selected)" title="이 지역 매물 보기">이 지역 매물 ›</button>
         <details class="signal-more"><summary>더 보기</summary><div class="signal-more-menu">
@@ -665,14 +682,11 @@
         </div></details>
       </div>
       <div class="signal-mode-tabs" role="tablist" aria-label="시그널 살펴보기" onkeydown="signalModeKey(event)">
-        <button type="button" id="signalModeReasons" role="tab" aria-controls="signalPanelReasons" aria-selected="true" onclick="setSignalView('reasons')">판정 근거</button>
-        <button type="button" id="signalModeTrend" role="tab" aria-controls="signalPanelTrend" aria-selected="false" tabindex="-1" onclick="setSignalView('trend')">가격·수급 추세</button>
-        <button type="button" id="signalModeMap" role="tab" aria-controls="signalPanelMap" aria-selected="false" tabindex="-1" onclick="setSignalView('map')">지역 지도</button>
+        <button type="button" id="signalModeTrend" role="tab" aria-controls="signalPanelTrend" aria-selected="true" onclick="setSignalView('trend')">가격·수급 추세</button>
+        <button type="button" id="signalModeMap" role="tab" aria-controls="signalPanelMap" aria-selected="false" tabindex="-1" onclick="setSignalView('map')">급지 지도</button>
       </div>
-      <section id="signalPanelReasons" class="signal-pane" role="tabpanel" aria-labelledby="signalModeReasons" tabindex="0">
-        <div id="haesolPanel" aria-live="polite"></div>
-      </section>
       <section id="signalPanelTrend" class="signal-pane" role="tabpanel" aria-labelledby="signalModeTrend" tabindex="0" hidden>
+        <div id="haesolPanel" aria-live="polite"></div>
         <div id="signalTrendStatus" role="status" class="signal-trend-status"></div>
         <div class="chartbar"><span class="signal-section-label">상세 지표</span>
         <div style="margin-left:auto;position:relative">
@@ -703,7 +717,7 @@
       <section id="signalPanelMap" class="signal-pane" role="tabpanel" aria-labelledby="signalModeMap" tabindex="0" hidden>
         <div id="sigMapWrap">
           <div id="sigMap" role="img" aria-label="이번 주 시군구 시그널 지도"></div>
-          <div id="sigMapLegend">이번 주 시그널을 구 색깔로 보여 줍니다.</div>
+          <div id="sigMapLegend">지역별 가격 급지를 색으로 보여 줍니다. 색이 없는 지역은 급지 자료가 없습니다.</div>
         </div>
       </section>
     </div>
@@ -1789,13 +1803,15 @@ function renderMtFilter(hostId, rerender){
 const _GROUPS={
   home:     ['dashboard'],
   criteria: ['mypage'],
-  market:   ['signal'],
+  market:   ['signal','undervalued'],
   browse:   ['all'],
   find:     ['watch'],
 };
-const _BROWSE_TOOLS=['auction','redev','general','quicksale','presale','tradeup','report','undervalued'];
-const _GROUP_LABEL={browse:'매물 찾기', find:'내 후보', criteria:'내 조건'};
+const _BROWSE_TOOLS=['auction','redev','general','quicksale','presale','tradeup','report'];
+const _GROUP_LABEL={market:'시장',browse:'매물 찾기', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
+  signal:{l:'가격·수급',d:'지역별 추세'},
+  undervalued:{l:'지역 가격 비교',d:'모형과 실거래'},
   all:{l:'매물',d:'내 예산 순'},
   watch:{l:'찜한 매물',d:'가격·일정'},
 };
@@ -1868,7 +1884,7 @@ function switchTab(t, fromHistory=false){
   });
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   // 오래된 세부 화면에서만 매물 목록으로 돌아가는 작은 경로를 둔다.
-  const showSub=grp==='browse' && t!=='all';
+  const showSub=(grp==='browse' && t!=='all') || grp==='market';
   const sn=document.getElementById('groupSubnav'); if(sn) sn.style.display=showSub?'flex':'none';
   if(showSub) renderGroupSubnav(grp, t);
   if(t==='all') renderListingFocus();
@@ -1883,7 +1899,7 @@ function switchTab(t, fromHistory=false){
 }
 const _ROUTES=[..._ALLVIEWS, 'market','listings','find','home'];
 // 없앤 탭의 옛 링크는 지금 하는 일로 보낸다.
-const _GONE={news:'dashboard', report:'dashboard', undervalued:'signal'};
+const _GONE={news:'dashboard', report:'dashboard'};
 const _TYPE_HASH={general:'일반매물', quicksale:'급매', presale:'청약'};
 function routeFromHash(){
   let h; try{ h=decodeURIComponent(location.hash.slice(1)); }catch(e){ return false; }
@@ -1994,18 +2010,18 @@ async function loadDashboard(){
   const nm=(_userEmail||'').split('@')[0]||'회원';
   document.getElementById('dashHello').textContent=`${nm}님, 이번 주`;
   const sub=document.getElementById('dashSub');
-  if(sub) sub.textContent='지금 할 일부터 보고, 필요할 때 후보와 근거를 펼쳐보세요.';
+  if(sub) sub.textContent='관심단지와 지역의 이번 주 변화를 모아 봅니다.';
   const favR=[...(_favs||[])].filter(k=>k.startsWith('region:')).map(k=>k.slice(7));
-  const favRows=favR.map(r=>(allSignals||[]).find(s=>s.region===r)).filter(Boolean);
+  const favRows=favR.map(r=>(allSignals||[]).find(s=>s.region===r)||{region:r,_missing:true});
   let favH=_dashH('관심 동네');
   if(favRows.length){
     const top=favRows.slice(0,5), rest=favRows.slice(5);
-    favH+=top.map(r=>`<div onclick="openNbhd('${r.region}')" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer">
-      <b style="font-weight:600;min-width:72px">${r.region}</b>${badge(displaySignal(r))}</div>`).join('');
+    favH+=top.map(r=>`<div onclick="openNbhd(decodeURIComponent('${encodeURIComponent(r.region)}'))" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer">
+      <b style="font-weight:600;min-width:72px">${esc(r.region)}</b>${r._missing?'<span class="pill">자료 확인 필요</span>':badge(displaySignal(r))}</div>`).join('');
     if(rest.length){
       favH+=`<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">나머지 ${rest.length}곳</summary>
-        <div>${rest.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openNbhd('${r.region}')">
-          <b style="min-width:72px;font-weight:600">${r.region}</b>${badge(displaySignal(r))}</div>`).join('')}</div></details>`;
+        <div>${rest.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openNbhd(decodeURIComponent('${encodeURIComponent(r.region)}'))">
+          <b style="min-width:72px;font-weight:600">${esc(r.region)}</b>${r._missing?'<span class="pill">자료 확인 필요</span>':badge(displaySignal(r))}</div>`).join('')}</div></details>`;
     }
   } else {
     favH+=`<div style="color:var(--dim);font-size:13px;padding:4px 0">아직 없어요. <span style="color:var(--accent);cursor:pointer" onclick="switchTab('signal')">시그널 지도에서 추가</span></div>`;
@@ -2041,28 +2057,15 @@ async function loadDashboard(){
   const moreLinks=`<div style="display:flex;flex-wrap:wrap;gap:6px 0;padding:2px 0">
     ${link('signal','시그널')}${link('all','매물')}${link('about','과거 비교')}
   </div>`;
-  // 초보 구매자는 첫 화면에서 행동 하나·예산 후보·주간 변화만 보면 된다.
-  // 관심 단지·시장 근거는 같은 데이터를 유지하되 필요할 때만 펼친다.
+  // 내 관심 대상과 검증된 주간 변화를 홈의 첫 화면에 둔다.
   body.innerHTML=`<div id="dashComeback"></div><div id="dashNotify"></div><div class="dash-layout">
     <div class="dash-col dash-col-me">
-      <div class="dash-col-label">지금 할 일</div>
-      <div id="dashPlanWrap"></div>
-      <div id="dashPowerWrap"></div>
-      <div id="dashShortlistWrap"></div>
-      <div id="dashLeversWrap"></div>
-      <div id="dashBudgetNewWrap"></div>
-      <details class="dash-more" id="dashExtra">
-        <summary>관심 동네·후보 더 보기</summary>
-        <div class="dash-more-body">
-          <div id="dashCxWrap"></div>
-          ${_dashCard(favH)}
-          ${_dashCard(_dashH('가격대별 동네 참고')+'<div id="dashBudget" style="color:var(--dim);font-size:13px">…</div>')}
-          <div id="dashFeedWrap"></div>
-        </div>
-      </details>
+      <div class="dash-col-label">관심단지</div>
+      <div id="dashCxWrap"></div>
     </div>
     <div class="dash-col dash-col-market">
-      <div class="dash-col-label">주간 동향</div>
+      <div class="dash-col-label">관심 지역과 주간 변화</div>
+      <div id="dashFavRegionWrap">${_dashCard(favH)}</div>
       <div id="dashWeeklyWrap"></div>
       <details class="dash-more" id="dashMarketExtra">
         <summary>시장 근거·이슈 더 보기</summary>
@@ -2074,14 +2077,15 @@ async function loadDashboard(){
         </div>
       </details>
     </div>
+    <div class="dash-actions">
+      <div class="dash-col-label">지금 확인할 일</div>
+      <div id="dashPlanWrap"></div>
+    </div>
   </div>`;
-  _loadBuyingPower();
-  _loadBudgetWatch();
   _loadPlan();
-  _loadAsks(); _loadLevers();
+  _loadComplexWatch();
   _loadWeekly();
   _loadNotifyStatus();
-  _onFirstExpand('dashExtra', ()=>{ _loadComplexWatch(); _loadDashBudget(); _loadDashFeed(); });
   _onFirstExpand('dashMarketExtra', ()=>{ _loadNear(); loadRegime(); _loadIssues(); });
 }
 // ===== 이번 주 변화 — 지난주 KB 대비 =====
@@ -2335,11 +2339,10 @@ async function _loadWeekly(){
       +(mine.length?`<div style="font-size:13px;color:var(--dim);margin-top:6px">★ 관심 ${mine.length}곳 포함</div>`:'')
       +`</div>`;
   }
-  let detail=_myWeeklyBlock(mine, d.my_movers||[], allMine.length>mine.length);
-  if(rest.length){
-    detail+=`<div style="font-size:12px;color:var(--dim);margin:8px 0 4px">전체 변화</div>`
-      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${rest.map(s=>_sigMoveRow(s,false)).join('')}</div>`;
-  }
+  const currentDetail = _myWeeklyBlock(mine, d.my_movers||[], allMine.length>mine.length)
+    + (rest.length?`<div style="font-size:12px;color:var(--dim);margin:8px 0 4px">다른 지역 변화</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${rest.map(s=>_sigMoveRow(s,false)).join('')}</div>`:'');
+  let detail='';
   if(movers.length){
     detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">KB 지표 변화 · 현재 판정과 별개</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${movers.slice(0,10).map(_moverRow).join('')}</div>`;
@@ -2355,41 +2358,52 @@ async function _loadWeekly(){
     return;
   }
   _renderComeback(d);
-  wrap.innerHTML=_dashCard(_dashH(head)+stale+conclusion+_holdBlock(d.holds)+_dashMore('상세 보기', detail));
+  wrap.innerHTML=_dashCard(_dashH(head)+stale+conclusion+currentDetail+_holdBlock(d.holds)
+    +(detail?_dashMore('추가 지표와 과거 기록',detail):''));
   if(d.as_of) _ackWhenVisible(wrap,'/api/weekly-change/seen',{as_of:d.as_of});
 }
 // ===== 다음 할 일 — 텔레그램 브리핑과 같은 판단(briefing.actions) =====
-function _planGo(key, tab){
+function _planGo(key, tab, region){
   if(key==='confirm_power'){ openBuyingPower(); return; }
   if(key==='imjang'||key==='imjang_compare'){ openImjang(); return; }
   if(key==='no_budget'||key==='no_job'){ acctGo('profile'); return; }
-  if(key==='asks'){ document.getElementById('dashShortlistWrap')?.scrollIntoView({behavior:'smooth',block:'start'}); return; }
-  if(key==='levers'){ document.getElementById('dashLeversWrap')?.scrollIntoView({behavior:'smooth',block:'start'}); return; }
+  if(key==='asks'){ if(region) focusListings(region); else switchTab('all'); return; }
+  if(key==='levers'){ switchTab('all'); return; }
+  if(key==='new_candidate'){ if(region) focusListings(region); else switchTab('all'); return; }
+  if(key==='signal_up'||key==='signal_down'){
+    switchTab('signal'); if(region) selectRegion(region); return;
+  }
   switchTab(tab||'dashboard');
 }
 async function _loadPlan(){
   const wrap=document.getElementById('dashPlanWrap'); if(!wrap) return;
   let d; try{ d=await (await fetch('/api/action-plan')).json(); }catch(e){ wrap.innerHTML=''; return; }
-  const acts=(d.actions||[]).slice(0,3);
+  const acts=(d.actions||[]).slice(0,2);
   if(!acts.length){ wrap.innerHTML=''; return; }
   const top=acts[0];
+  const homeTitle=a=>a.key==='levers'?'예산 조건을 넓혀 매물 다시 찾기':a.title;
+  const homeCta=a=>a.key==='levers'?'조건 바꾸기':a.cta;
+  const homeRegion=a=>a.region&&!a.title.includes(a.region)?`<div style="font-size:13px;color:var(--dim);margin-top:3px">${esc(a.region)}</div>`:'';
   const conclusion=`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <div style="flex:1;min-width:0">
-      <div style="font-size:16px;font-weight:700;line-height:1.4">${top.title}
+      <div style="font-size:16px;font-weight:700;line-height:1.4">${esc(homeTitle(top))}
         ${top.urgent?'<span style="margin-left:6px;font-size:11px;font-weight:800;color:#dc2626">지금</span>':''}</div>
+      ${homeRegion(top)}
       ${acts.length>1?`<div style="font-size:13px;color:var(--dim);margin-top:6px">외 ${acts.length-1}건</div>`:''}
     </div>
-    <button class="btn primary" style="padding:7px 14px;white-space:nowrap" onclick="_planGo('${top.key}','${top.tab}')">${esc(top.cta)}</button>
+    <button class="btn primary" style="padding:7px 14px;white-space:nowrap" data-action-key="${esc(top.key)}" data-action-tab="${esc(top.tab)}" data-action-region="${esc(top.region||'')}">${esc(homeCta(top))}</button>
   </div>`;
-  const detail=acts.map((a,i)=>`<div style="display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-top:${i?'1px solid var(--line)':'none'}">
+  const detail=acts.slice(1).map((a,i)=>`<div style="display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-top:${i?'1px solid var(--line)':'none'}">
     <span style="flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
       font-size:11px;font-weight:800;background:${a.urgent?'#dc2626':'var(--accent)'};color:#fff">${i+1}</span>
     <div style="flex:1;min-width:0">
-      <div style="font-size:14px;font-weight:700;line-height:1.4">${a.title}</div>
-      <div style="font-size:13px;color:var(--dim);margin-top:4px;line-height:1.5">${a.why||''}</div></div>
-    <span class="btn" style="padding:5px 12px;white-space:nowrap;align-self:center"
-      onclick="_planGo('${a.key}','${a.tab}')">${a.cta}</span></div>`).join('');
-  wrap.innerHTML=_dashCard(_dashH('다음 할 일')+conclusion+_dashMore('할 일 전체', detail));
+      <div style="font-size:14px;font-weight:700;line-height:1.4">${esc(homeTitle(a))}</div>
+      ${homeRegion(a)}
+      <div style="font-size:13px;color:var(--dim);margin-top:4px;line-height:1.5">${esc(a.why||'')}</div></div>
+    <button type="button" class="btn" style="padding:7px 12px;white-space:nowrap;align-self:center" data-action-key="${esc(a.key)}" data-action-tab="${esc(a.tab)}" data-action-region="${esc(a.region||'')}">${esc(homeCta(a))}</button></div>`).join('');
+  wrap.innerHTML=_dashCard(_dashH('다음 할 일')+conclusion+(acts.length>1?_dashMore('다른 할 일 보기',detail):''));
+  wrap.querySelectorAll('[data-action-key]').forEach(button=>button.addEventListener('click',()=>
+    _planGo(button.dataset.actionKey,button.dataset.actionTab,button.dataset.actionRegion)));
 }
 // ===== 이번 주 부동산 이슈 =====
 // 뉴스 탭을 없앤 이유가 그대로 규칙: 창을 7일로 고정하고 항목마다 언제 기사인지 붙인다.
@@ -2447,16 +2461,16 @@ async function _loadComplexWatch(){
   const wrap=document.getElementById('dashCxWrap'); if(!wrap) return;
   let d; try{
     const r=await fetch('/api/complex-watch');
-    if(!r.ok){ wrap.innerHTML=''; return; }
+    if(!r.ok){ wrap.innerHTML=_dashCard(_dashH('관심단지')+`<p role="status" style="color:var(--dim)">관심단지 자료를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.</p><button type="button" class="btn" id="retryComplexWatch">다시 불러오기</button>`); wrap.querySelector('#retryComplexWatch').onclick=_loadComplexWatch; return; }
     d=await r.json();
-  }catch(e){ wrap.innerHTML=''; return; }
+  }catch(e){ wrap.innerHTML=_dashCard(_dashH('관심단지')+'<p role="status" style="color:var(--dim)">관심단지 자료를 불러오지 못했습니다.</p><button type="button" class="btn" id="retryComplexWatch">다시 불러오기</button>'); wrap.querySelector('#retryComplexWatch').onclick=_loadComplexWatch; return; }
   const head=_dashH('관심단지 변화');
 
   if(!d.ready){
     if(d.reason==='no_favorites'){
       wrap.innerHTML=_dashCard(head
         +`<div style="font-size:13.5px;color:var(--dim);line-height:1.55">${d.message||''}</div>`);
-    } else { wrap.innerHTML=''; }
+    } else { wrap.innerHTML=_dashCard(_dashH('관심단지')+`<p role="status" style="color:var(--dim)">${esc(d.message||'관심단지 상태를 확인할 수 없습니다.')}</p>`); }
     return;
   }
 
@@ -2468,39 +2482,41 @@ async function _loadComplexWatch(){
       :(c.kind==='gap'? (up?'var(--sig-sell)':'var(--sig-buy)') : (up?'var(--sig-sell)':'var(--sig-buy)'));
     return `<span class="pill" style="font-size:10.5px;color:${col};
       background:color-mix(in srgb,${col} 10%,transparent);
-      border-color:color-mix(in srgb,${col} 22%,transparent)">${c['말']}</span>`;
+      border-color:color-mix(in srgb,${col} 22%,transparent)">${esc(c['말'])}</span>`;
   };
-  const row = it => `<div style="padding:9px 0;border-bottom:1px solid var(--line)">
+  const row = (it,index) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <b style="font-size:13px;cursor:pointer;color:var(--accent)"
-         onclick="openComplex('${(it['단지명']||'').replace(/'/g,"")}','${(it['지역']||'').replace(/'/g,"")}')">${it['단지명']}</b>
-      <span style="font-size:11px;color:var(--dim)">${it['지역']||''}</span>
-      ${it['평형']?`<span style="font-size:11px;color:var(--dim)">주력 ${it['평형']}평</span>`:''}
+      <button type="button" class="dash-complex-link" data-complex-index="${index}">${esc(it['단지명']||'단지명 확인 필요')}</button>
+      <span style="font-size:13px;color:var(--dim)">${esc(it['지역']||'지역 확인 필요')}</span>
+      ${it['평형']?`<span style="font-size:12px;color:var(--dim)">주력 ${esc(it['평형'])}평</span>`:''}
       ${it['거래가']?`<span style="margin-left:auto;font-size:12.5px;font-variant-numeric:tabular-nums"><b>${_eok(it['거래가'])}</b></span>`:''}
     </div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(it.changes||[]).map(chip).join('')}</div>
-    ${it.data_days!=null?`<div style="font-size:10.5px;color:var(--dim);margin-top:5px">실거래 데이터 ${it.data_days}일 전 수집</div>`:''}
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(it.changes||[]).length?(it.changes||[]).map(chip).join(''):`<span style="font-size:13px;color:var(--dim)">${it['말']?esc(it['말']):it.first_run?'첫 비교 기록입니다':'이번 주 새 변화가 없습니다'}</span>`}</div>
+    ${it.data_days!=null?`<div style="font-size:12px;color:var(--dim);margin-top:5px">실거래 수집 ${esc(it.data_days)}일 전</div>`:''}
   </div>`;
 
   const dead = (d.unavailable||[]).length
-    ? _dashMore(`조회 안 되는 단지 ${d.unavailable.length}곳`,
-        d.unavailable.map(u=>`<div style="padding:7px 0;border-bottom:1px solid var(--line)">
-          <b style="font-size:12.5px">${u['단지명']}</b>
-          <div style="font-size:11.5px;color:var(--dim);margin-top:2px">${u.reason||''}</div></div>`).join(''))
+    ? `<div class="dash-unavailable"><div style="font-size:13px;font-weight:700;margin:8px 0 3px">확인이 필요한 관심단지 ${d.unavailable.length}곳</div>`
+        + d.unavailable.map(u=>`<div style="padding:7px 0;border-bottom:1px solid var(--line)">
+          <b style="font-size:13px">${esc(u['단지명'])}</b> <span style="font-size:12px;color:var(--dim)">${esc(u['지역'])}</span>
+          <div style="font-size:12px;color:var(--dim);margin-top:2px">${esc(u.reason||'자료를 확인할 수 없습니다.')}</div></div>`).join('')+'</div>'
     : '';
 
   if(d.quiet){
     wrap.innerHTML=_dashCard(head
-      +`<div style="font-size:13.5px;line-height:1.55">관심단지 <b>${d.total||0}곳</b> · ${d.quiet_reason||'변화 없음'}</div>`
+      +`<div style="font-size:13.5px;line-height:1.55;margin-bottom:4px">${esc(d.quiet_reason||'관심단지의 최근 변화가 없습니다.')}</div>`
+      +(d.items||[]).map(row).join('')
       + dead);
+    wrap.querySelectorAll('[data-complex-index]').forEach(button=>button.onclick=()=>{const it=d.items[Number(button.dataset.complexIndex)]; if(it) openComplex(it['단지명'],it['지역']);});
     _ackWhenVisible(wrap,'/api/complex-watch/seen');
     return;
   }
   wrap.innerHTML=_dashCard(head
     + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">관심단지 ${d.total}곳 중 ${d.moved_total}곳이 움직였습니다</div>`
-    + d.moved.map(row).join('')
+    + (d.items||[]).map(row).join('')
     + `<div style="font-size:10.5px;color:var(--dim);margin-top:7px;line-height:1.5">${d.lag_note||''}</div>`
     + dead);
+  wrap.querySelectorAll('[data-complex-index]').forEach(button=>button.onclick=()=>{const it=d.items[Number(button.dataset.complexIndex)]; if(it) openComplex(it['단지명'],it['지역']);});
   _ackWhenVisible(wrap,'/api/complex-watch/seen');
 }
 
@@ -4940,8 +4956,8 @@ function drawUvScatter(rows){
 }
 
 /* ---------- 시그널 탭 ---------- */
-const _SIGNAL_VIEWS=['reasons','trend','map'];
-let _signalMode='reasons', _signalTrendGen=0, _signalTrendRegion=null;
+const _SIGNAL_VIEWS=['trend','map'];
+let _signalMode='trend', _signalTrendGen=0, _signalTrendRegion=null;
 const _signalMobile=()=>window.matchMedia('(max-width:760px)').matches;
 function closeSignalRegions(restoreFocus=true){
   const root=document.getElementById('view-signal'), side=document.getElementById('signalSide');
@@ -4950,9 +4966,14 @@ function closeSignalRegions(restoreFocus=true){
   side.removeAttribute('role'); side.removeAttribute('aria-modal');
   side.inert=_signalMobile();
   const toggle=document.getElementById('sideToggle');
-  toggle.setAttribute('aria-expanded',_signalMobile()?'false':String(!side.classList.contains('collapsed')));
-  toggle.textContent=_signalMobile()?'지역 찾기':side.classList.contains('collapsed')?'지역 목록 열기':'지역 목록 접기';
-  if(wasOpen && restoreFocus) document.getElementById('sideToggle').focus();
+  const collapsed=side.classList.contains('collapsed');
+  toggle.setAttribute('aria-expanded',String(!collapsed));
+  toggle.textContent=collapsed?'지역 목록 열기':'지역 목록 접기';
+  const opener=document.getElementById('sideOpenToggle');
+  opener.setAttribute('aria-expanded',String(root.classList.contains('picker-open')||!collapsed));
+  opener.textContent=_signalMobile()?'지역 찾기':collapsed?'지역 목록 열기':'';
+  opener.hidden=_signalMobile()?root.classList.contains('picker-open'):!collapsed;
+  if(wasOpen && restoreFocus) document.getElementById(_signalMobile()?'sideOpenToggle':'sideToggle').focus();
 }
 function signalModeKey(event){
   const index=_SIGNAL_VIEWS.findIndex(mode=>event.target.id==='signalMode'+mode[0].toUpperCase()+mode.slice(1));
@@ -5165,12 +5186,19 @@ function toggleSide(){
     root.classList.add('picker-open'); s.inert=false;
     s.setAttribute('role','dialog'); s.setAttribute('aria-modal','true');
     document.getElementById('sideToggle').setAttribute('aria-expanded','true');
+    document.getElementById('sideOpenToggle').hidden=true;
+    document.getElementById('sideOpenToggle').setAttribute('aria-expanded','true');
     document.getElementById('search').focus();
     return;
   }
   const collapsed = s.classList.toggle('collapsed');
   document.getElementById('sideToggle').textContent = collapsed ? '지역 목록 열기' : '지역 목록 접기';
   document.getElementById('sideToggle').setAttribute('aria-expanded',String(!collapsed));
+  const opener=document.getElementById('sideOpenToggle');
+  opener.hidden=!collapsed;
+  opener.textContent=collapsed?'지역 목록 열기':'';
+  opener.setAttribute('aria-expanded',String(!collapsed));
+  (collapsed?opener:document.getElementById('sideToggle')).focus();
   setTimeout(()=>{ chart && chart.resize(); sigMap && sigMap.invalidateSize(); }, 180);
 }
 function toggleHaesol(){
@@ -5218,12 +5246,12 @@ async function selectRegion(region){
     document.getElementById('sigbadge').focus({preventScroll:true});
   }
   if(_signalTrendRegion!==region){ _signalTrendRegion=null; _lastM=null; }
-  setSignalView('reasons');
+  setSignalView('trend');
   document.getElementById('sigbadge').innerHTML = `${region} ${badge(displaySignal(r))}`;
   const ss=document.getElementById('sigsub');
   if(ss) ss.textContent = `KB ${meta?.last_date||'기준일 미확인'} 기준 · 지역 시장 신호, 개별 매물 판정 아님`;
   document.getElementById('haesolPanel').textContent = '판정 근거를 확인하고 있습니다…';
-  document.getElementById('signalPanelReasons').scrollTop=0;
+  document.getElementById('signalPanelTrend').scrollTop=0;
   window.SignalV2?.paintRegion(region, r.region_id);
 }
 let sigMap=null;
@@ -5248,21 +5276,20 @@ async function drawSigMap(){
     sigMap=L.map(el,{attributionControl:true, scrollWheelZoom:true, zoomControl:true}).setView([37.55,127.02],9);
     _mapTile().addTo(sigMap);
   }
-  await setOverlay(sigMap, 'signal', name=>{
+  await setOverlay(sigMap, 'grade', name=>{
     const row=(allSignals||[]).find(s=>_onorm(s.region)===_onorm(name));
     if(row && row.region!==selected) selectRegion(row.region);
   });
   const lg=document.getElementById('sigMapLegend');
   if(lg){
-    const order=['STRONG_BUY','BUY','WATCH','NEUTRAL','SELL_RISK','HELD'];
+    const order=['A','B','C','D','E'];
     const seoul=(allSignals||[]).filter(s=>s.group==='서울' && /구$/.test(s.region) && !s.region.endsWith('개구'));
     const cnt={};
-    seoul.forEach(s=>{ const code=displaySignal(s); cnt[code]=(cnt[code]||0)+1; });
-    const chips=order.map(s=>`<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${_SIG_COLOR[s]};display:inline-block"></span>${SIG_KO[s]}${cnt[s]?` ${cnt[s]}`:''}</span>`).join('');
-    const head=seoul.length?`서울 자치구 ${seoul.length}곳 · 이번 주`:'이번 주 색깔';
-    const momBar=(meta&&meta.zones&&meta.zones.momentum_up!=null)?Number(meta.zones.momentum_up).toFixed(2):'0.20';
+    seoul.forEach(s=>{ if(s['급지']) cnt[s['급지']]=(cnt[s['급지']]||0)+1; });
+    const chips=order.map(g=>{const info=_REGION_GRADE[g];return `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${info.col};display:inline-block"></span>${info.label}${cnt[g]?` ${cnt[g]}`:''}</span>`;}).join('');
+    const head=seoul.length?`서울 자치구 ${seoul.length}곳 · 평단가 기준 급지`:'시군구 평단가 기준 급지';
     lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">${head}</div><div>${chips}</div>
-      <div style="color:var(--dim);margin-top:2px">같은 색이 이어지면 전세수급·매수우위가 강남 11곳 또는 강북 14곳이 같은 숫자입니다. 구마다 다른 건 최근 4주 매매가 ${momBar}%를 넘는가입니다.</div>`;
+      <div style="color:var(--dim);margin-top:2px">가격 분위에 따른 지역 분류입니다. 종합 입지 평가나 매수 추천을 뜻하지 않습니다. 회색은 급지 자료가 없습니다.</div>`;
   }
   setTimeout(()=>{ try{sigMap.invalidateSize();}catch(e){} if(typeof chart!=='undefined' && chart) chart.resize(); }, 80);
 }
@@ -5290,20 +5317,21 @@ function reasonGraphic(region, sig){
   ]}];
 }
 function drawChart(region, m, sig){
+  const signalMeta=meta||{zones:{},last_date:new Date().toISOString().slice(0,10)};
   const colors = {jeonse_supply:"#0284c7", buyer_superiority:"#7c3aed", buyer_demand:"#db2777",
                   sale_change:"#d97706", jeonse_change:"#059669", price_index:"#2563eb"};
   const series = [];
   const mk = (k, axis, extra={}) => { if(!m[k]) return;
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
       lineStyle:{width:1.5}, itemStyle:{color:colors[k]}, data:m[k].dates.map((dt,i)=>[dt, m[k].values[i]]), ...extra }); };
-  const zones = meta.zones.jeonse_supply || [];
+  const zones = signalMeta.zones.jeonse_supply || [];
   const bandArea = (_showZones && m.jeonse_supply) ? { silent:true, data: zones.map(z=>(
       [{yAxis:z.from, itemStyle:{color:z.color, opacity:0.16}}, {yAxis:z.to}])) } : undefined;
   mk("jeonse_supply", 0, bandArea ? { markArea: bandArea } : {});
   mk("buyer_superiority", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#7c3aed'}}]}});
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:signalMeta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#7c3aed'}}]}});
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수세 참고선', lineStyle:{color:'#16a34a'}}]}});
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:signalMeta.zones.buyer_demand_buy, name:'매수세 참고선', lineStyle:{color:'#16a34a'}}]}});
   mk("price_index", 0, { lineStyle:{width:2.4, color:'#2563eb'}, z:3 });  // 누적 매매가격지수 — 브랜드 컬러
   const mc = window._macro;
 
@@ -5342,7 +5370,7 @@ function drawChart(region, m, sig){
         {xAxis:b.end}]) }});
   }
 
-  const last = meta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
+  const last = signalMeta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
   // 차트 리드로우 시 기본 표시기간은 항상 최근 3년(오버레이는 전체기간 렌더되나 뷰는 3년, 줌아웃 시 확장)
   const z0 = start.toISOString().slice(0,10);
   chart.setOption({ tooltip:{trigger:'axis'},

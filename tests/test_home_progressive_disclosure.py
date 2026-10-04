@@ -8,24 +8,27 @@ HTML = (Path(__file__).resolve().parents[1] / "src/realty_signal/web/index.html"
 
 def _dashboard_markup() -> str:
     start = HTML.index('body.innerHTML=`<div id="dashComeback"')
-    return HTML[start:HTML.index('  _loadBuyingPower();', start)]
+    return HTML[start:HTML.index('// ===== 이번 주 변화', start)]
 
 
-def test_dashboard_keeps_primary_actions_before_optional_cards():
+def test_dashboard_prioritizes_favorites_and_market_changes():
     markup = _dashboard_markup()
+    complex_watch = markup.index('id="dashCxWrap"')
+    favorite_regions = markup.index('id="dashFavRegionWrap"')
+    weekly = markup.index('id="dashWeeklyWrap"')
     plan = markup.index('id="dashPlanWrap"')
-    power = markup.index('id="dashPowerWrap"')
-    budget = markup.index('id="dashBudgetNewWrap"')
-    extra = markup.index('id="dashExtra"')
-    shortlist = markup.index('id="dashShortlistWrap"')
-    assert plan < power < shortlist < budget < extra
-    levers = markup.index('id="dashLeversWrap"')
-    assert shortlist < levers < budget
+    assert favorite_regions < weekly < plan
+    assert '관심단지' in markup
+    assert '관심 지역과 주간 변화' in markup
+    assert '지금 확인할 일' in markup
+    assert 'id="dashExtra"' not in markup
+    assert 'id="dashShortlistWrap"' not in markup
+    assert 'id="dashLeversWrap"' not in markup
+    assert 'id="dashBudgetNewWrap"' not in markup
     assert 'id="dashEstimateWrap"' not in markup
     assert '가격을 짐작한 단지' not in markup
-    assert '관심 동네·후보 더 보기' in markup
-    assert "fetch('/api/asks')" in HTML
-    assert "지금 예산 안에" not in HTML
+    assert markup.index('_loadPlan();') > complex_watch
+    assert markup.index('_loadComplexWatch();') > complex_watch
 
 
 def test_dashboard_hides_market_evidence_behind_progressive_disclosure():
