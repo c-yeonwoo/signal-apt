@@ -621,7 +621,7 @@ test('radar cards and map ignore legacy cross-area discounts and show exclusive 
     mapSplit:(_list,_map,rows,options)=>{rendered={rows,options};},
     badge:()=>'', safeRadarSignal:()=> 'HELD', _mtMetric:(label,value)=>label+value,
     _eok:n=>(n/10000)+'억', txCostsSlot:()=>'', watchBtn:()=>'', reportBtn:()=>'',
-    loanBtn:()=>'', cxBtn:()=>'', cxSigBtn:()=>'', naverBtn:()=>'', esc:String,
+    loanBtn:()=>'', cxDetailBtn:()=>'', cxSigBtn:()=>'', naverBtn:()=>'', esc:String,
   });
   vm.runInContext(extract('function qsAreaLabel(m){','// ===== 통합 매물('),ctx);
   ctx.renderQuicksale();

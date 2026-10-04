@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import isfinite
+import re
 import sqlite3
 
 from fastapi import APIRouter, Body, HTTPException, Request
@@ -562,6 +563,32 @@ def listing_watch_get(request: Request):
     return {"items": watch.build(saved, current)}
 
 
+@router.post("/api/listing-locality")
+def listing_locality_save(request: Request, data: dict = Body(...)):
+    """Save an owner-supplied neighborhood for a currently collected sale listing."""
+    from realty_signal.services import property_analysis as analysis
+
+    uid = deps.uid(request)
+    if not uid:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    if not deps.personal_listings_allowed(request):
+        raise HTTPException(403, "개인용 매물 접근권이 필요합니다.")
+    key, dong = data.get("key"), data.get("dong")
+    if (not isinstance(key, str) or not 1 <= len(key) <= 180
+            or key.split(":", 1)[0] not in analysis.PRIVATE
+            or not isinstance(dong, str) or not re.fullmatch(r"[가-힣][가-힣0-9]{0,11}(?:동|읍|면|리)", dong.strip())):
+        raise HTTPException(422, "매물과 동 이름을 확인해 주세요.")
+    try:
+        row = analysis.resolve(key, private_allowed=True)
+    except (ValueError, LookupError) as exc:
+        raise HTTPException(404, "현재 수집 매물을 찾지 못했습니다.") from exc
+    if row.get("지역식별상태") != "matched" or not row.get("시도") or not row.get("지역"):
+        raise HTTPException(422, "매물의 시·군·구 식별을 먼저 확인해야 합니다.")
+    db.listing_locality_set(uid, key, dong.strip())
+    return JSONResponse({"ok": True, "dong": dong.strip(), "source": "user_entered"},
+                        headers={"Cache-Control": "private, no-store"})
+
+
 @router.post("/api/listing-watch")
 def listing_watch_add(request: Request, data: dict = Body(...)):
     from realty_signal import api as app_api
@@ -584,7 +611,17 @@ def listing_watch_add(request: Request, data: dict = Body(...)):
         raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.")
     if not row.get("단지명"):
         raise HTTPException(422, "단지명이 없는 매물은 찜할 수 없습니다.")
-    db.listing_watch_add(uid, row)
+    complex_key = None
+    code = row.get("지역코드")
+    if (kind in watch.PRIVATE and row.get("지역식별상태") == "matched"
+            and isinstance(code, str) and len(code) == 5 and code.isdigit()
+            and row.get("단지명") and "|" not in row["단지명"]):
+        complex_key = f"kb:{code}00000|{row['단지명']}"
+        legacy_key = f"{row['지역']}|{row['단지명']}"
+        if row.get("지역") not in db.AMBIGUOUS_LEGACY_REGION_KEYS and any(
+                f["kind"] == "complex" and f["key"] == legacy_key for f in db.fav_list(uid)):
+            complex_key = legacy_key
+    db.listing_watch_add(uid, row, complex_key=complex_key)
     return {"ok": True}
 
 

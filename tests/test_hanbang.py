@@ -31,6 +31,7 @@ def test_normalize_apartment_sale_only_and_whitelists_private_fields():
     row = hanbang.normalize(_raw())
     assert row["단지명"] == "상계주공" and row["호가"] == 53_000
     assert row["hanbang_id"] == "1" and row["평형"] == 25.6
+    assert row["동"] == "상계동"
     assert row["방수"] == 3
     assert all(word not in json.dumps(row, ensure_ascii=False)
                for word in ("010-0000-0000", "010-1111-1111", "원문 설명"))
@@ -41,6 +42,8 @@ def test_normalize_apartment_sale_only_and_whitelists_private_fields():
     assert hanbang.normalize(_raw(roomCnt=0))["방수"] is None
     assert hanbang.normalize(_raw(roomCnt="three"))["방수"] is None
     assert hanbang.normalize(_raw(roomCnt=2.5))["방수"] is None
+    assert hanbang.normalize(_raw(hsmpNm="상계주공\\n서울 강남구 역삼동"))["동"] is None
+    assert hanbang.normalize(_raw(hsmpNm="상계주공\\n서울 노원구 102동"))["동"] is None
 
 
 def test_pagination_marks_complete_only_after_short_page(monkeypatch):
@@ -84,6 +87,18 @@ def test_scan_rejects_cross_province_same_named_district(monkeypatch):
     assert status["successful_regions"] == []
 
 
+def test_scan_drops_neighborhood_when_embedded_city_disagrees(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1]})
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(api, "_signal_map", lambda: {})
+    monkeypatch.setattr(hanbang, "fetch_region_with_status", lambda *_: (
+        [hanbang.normalize(_raw(hsmpNm="상계주공\\n인천 노원구 상계동"))],
+        {"ok": True, "source_sgg": "노원구", "source_ctpv": "서울특별시", "complete": True}))
+    rows, _ = api._hanbang_scan_with_status(["노원구"])
+    assert len(rows) == 1 and rows[0]["동"] is None
+    assert "_동표기시도" not in rows[0]
+
+
 def test_scan_rejects_mixed_source_district_without_claiming_empty_success(monkeypatch):
     monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.56, 126.99]})
     monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
@@ -116,6 +131,19 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     assert guest.get("/api/general-listings").json()["listings"] == []
     public = guest.get("/api/listings/all?types=일반매물").json()
     assert public["listings"] == [] and public["meta"]["private_access"] is False
+    current = owner.get("/api/listings/all?types=일반매물").json()["listings"][0]
+    assert current["동"] == "상계동"
+    assert guest.post("/api/listing-locality", json={"key": current["key"], "dong": "상계동"}).status_code == 403
+    assert owner.post("/api/listing-locality", json={"key": current["key"], "dong": "102동"}).status_code == 422
+    assert owner.post("/api/listing-locality", json={"key": current["key"], "dong": "하계동"}).status_code == 200
+    # A source-provided neighborhood takes precedence over a manual note.
+    assert owner.get("/api/listings/all?types=일반매물").json()["listings"][0]["동"] == "상계동"
+    source = json.loads(cache.read_text(encoding="utf-8"))
+    source["listings"][0]["동"] = None
+    cache.write_text(json.dumps(source, ensure_ascii=False), encoding="utf-8")
+    manual = owner.get("/api/listings/all?types=일반매물").json()["listings"][0]
+    assert manual["동"] == "하계동" and manual["동출처"] == "직접 입력"
+    assert guest.get("/api/listings/all?types=일반매물").json()["listings"] == []
     private = owner.get("/api/listings/all?types=일반매물").json()
     assert private["meta"]["private_access"] is True
     listing = private["listings"][0]

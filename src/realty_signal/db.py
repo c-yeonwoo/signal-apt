@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS favorites(uid INTEGER, kind TEXT, key TEXT, label TEX
 CREATE TABLE IF NOT EXISTS listing_watch(uid INTEGER NOT NULL, key TEXT NOT NULL,
     kind TEXT NOT NULL, name TEXT NOT NULL, region TEXT, saved_price REAL,
     created_at INTEGER NOT NULL, PRIMARY KEY(uid, key));
+CREATE TABLE IF NOT EXISTS listing_watch_complex_link(
+    uid INTEGER NOT NULL, listing_key TEXT NOT NULL, complex_key TEXT NOT NULL,
+    owns_favorite INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(uid, listing_key));
+CREATE INDEX IF NOT EXISTS ix_listing_watch_complex_link ON listing_watch_complex_link(uid, complex_key);
+CREATE TABLE IF NOT EXISTS listing_locality(
+    uid INTEGER NOT NULL, listing_key TEXT NOT NULL, dong TEXT NOT NULL,
+    updated_at INTEGER NOT NULL, PRIMARY KEY(uid, listing_key));
 CREATE TABLE IF NOT EXISTS listing_entrance(uid INTEGER NOT NULL, listing_key TEXT NOT NULL,
     lat REAL NOT NULL, lng REAL NOT NULL, ts INTEGER NOT NULL,
     PRIMARY KEY(uid, listing_key));
@@ -381,6 +388,9 @@ def fav_add(uid: int, kind: str, key: str, label: str) -> None:
     c = conn()
     c.execute("INSERT OR REPLACE INTO favorites(uid,kind,key,label,ts) VALUES(?,?,?,?,?)",
               (uid, kind, key, label, int(time.time())))
+    if kind == "complex":
+        c.execute("UPDATE listing_watch_complex_link SET owns_favorite=0 "
+                  "WHERE uid=? AND complex_key=?", (uid, key))
     c.commit()
     c.close()
 
@@ -388,6 +398,9 @@ def fav_add(uid: int, kind: str, key: str, label: str) -> None:
 def fav_remove(uid: int, kind: str, key: str) -> None:
     c = conn()
     c.execute("DELETE FROM favorites WHERE uid=? AND kind=? AND key=?", (uid, kind, key))
+    if kind == "complex":
+        c.execute("UPDATE listing_watch_complex_link SET owns_favorite=0 "
+                  "WHERE uid=? AND complex_key=?", (uid, key))
     if kind == "region":
         c.execute("DELETE FROM region_watch_state_v2 WHERE uid=? AND favorite_key=?", (uid, key))
         c.execute("DELETE FROM alert_outbox_v2 WHERE uid=? AND subject_type='region' AND subject_key=?",
@@ -405,7 +418,34 @@ def listing_watch_list(uid: int) -> list[dict]:
             for row in rows]
 
 
-def listing_watch_add(uid: int, listing: dict) -> None:
+def listing_localities(uid: int, keys: list[str]) -> dict[str, str]:
+    if not keys:
+        return {}
+    c = conn()
+    try:
+        out = {}
+        for start in range(0, len(keys), 400):
+            batch = keys[start:start + 400]
+            marks = ",".join("?" for _ in batch)
+            out.update(c.execute("SELECT listing_key,dong FROM listing_locality "
+                                 f"WHERE uid=? AND listing_key IN ({marks})", [uid, *batch]).fetchall())
+        return out
+    finally:
+        c.close()
+
+
+def listing_locality_set(uid: int, key: str, dong: str) -> None:
+    c = conn()
+    try:
+        c.execute("INSERT INTO listing_locality VALUES(?,?,?,?) "
+                  "ON CONFLICT(uid,listing_key) DO UPDATE SET dong=excluded.dong, "
+                  "updated_at=excluded.updated_at", (uid, key, dong, int(time.time())))
+        c.commit()
+    finally:
+        c.close()
+
+
+def listing_watch_add(uid: int, listing: dict, *, complex_key: str | None = None) -> None:
     c = conn()
     inserted = c.execute("INSERT OR IGNORE INTO listing_watch VALUES(?,?,?,?,?,?,?)",
                          (uid, listing["key"], listing["유형"], listing["단지명"], listing.get("지역"),
@@ -415,12 +455,31 @@ def listing_watch_add(uid: int, listing: dict) -> None:
         c.execute("DELETE FROM listing_watch_state_v2 WHERE uid=? AND key=?", (uid, listing["key"]))
         c.execute("DELETE FROM alert_outbox_v2 WHERE uid=? AND subject_type='listing' AND subject_key=?",
                   (uid, listing["key"]))
+        if complex_key:
+            existing = c.execute("SELECT 1 FROM favorites WHERE uid=? AND kind='complex' AND key=?",
+                                 (uid, complex_key)).fetchone()
+            if not existing:
+                c.execute("INSERT INTO favorites(uid,kind,key,label,ts) VALUES(?,'complex',?,?,?)",
+                          (uid, complex_key, listing["단지명"], int(time.time())))
+            c.execute("INSERT INTO listing_watch_complex_link VALUES(?,?,?,?)",
+                      (uid, listing["key"], complex_key, int(not bool(existing))))
     c.commit()
     c.close()
 
 
 def listing_watch_remove(uid: int, key: str) -> None:
     c = conn()
+    link = c.execute("SELECT complex_key,owns_favorite FROM listing_watch_complex_link "
+                     "WHERE uid=? AND listing_key=?", (uid, key)).fetchone()
+    c.execute("DELETE FROM listing_watch_complex_link WHERE uid=? AND listing_key=?", (uid, key))
+    if link and link[1]:
+        successor = c.execute("SELECT listing_key FROM listing_watch_complex_link "
+                              "WHERE uid=? AND complex_key=? LIMIT 1", (uid, link[0])).fetchone()
+        if successor:
+            c.execute("UPDATE listing_watch_complex_link SET owns_favorite=1 "
+                      "WHERE uid=? AND listing_key=?", (uid, successor[0]))
+        else:
+            c.execute("DELETE FROM favorites WHERE uid=? AND kind='complex' AND key=?", (uid, link[0]))
     c.execute("DELETE FROM listing_watch WHERE uid=? AND key=?", (uid, key))
     c.execute("DELETE FROM listing_watch_state_v2 WHERE uid=? AND key=?", (uid, key))
     c.execute("DELETE FROM listing_watch_price_targets_v2 WHERE uid=? AND key=?", (uid, key))

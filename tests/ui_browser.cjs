@@ -354,7 +354,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         asof:'2026-09-28',meta:{confirmed_budget:false,private_access:true}});
       const held={note:document.getElementById('laBudgetNote').textContent,
         sort:document.querySelector('#laSort option[value="budget"]').textContent,
-        label:window.__budgetOpt.summary(window.__budgetItems[0]).sub,
+        label:window.__budgetOpt.detail(window.__budgetItems[0]),
         cash:_buyerFour(window.__budgetItems[0],_eok).cash};
       _laApplyResponse('일반매물',{listings:[
         {...row,key:'above',총액:60000,budget_fit:{status:'above'}},
@@ -362,17 +362,17 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         {...row,key:'unknown',총액:30000,budget_fit:{status:'unknown',reason:'지역 확인 필요'}}],
         asof:'2026-09-28',meta:{confirmed_budget:true,private_access:true}});
       return {held,order:window.__budgetItems.map(x=>x.key),
-        within:window.__budgetOpt.summary(window.__budgetItems[0]).sub,
-        above:window.__budgetOpt.summary(window.__budgetItems[2]).sub,
+        within:window.__budgetOpt.detail(window.__budgetItems[0]),
+        above:window.__budgetOpt.detail(window.__budgetItems[2]),
         cash:_buyerFour(window.__budgetItems[2],_eok).cash};
     });
     assert.match(budgetUi.held.note,/매수력 확정 가정·지역이 없거나 바뀌었습니다/);
     assert.match(budgetUi.held.sort,/예산 미확정/);
-    assert.match(budgetUi.held.label,/예산 비교 보류/);
+    assert.match(budgetUi.held.label,/매수력을 입력하면 호가와 비교/);
     assert.doesNotMatch(budgetUi.held.cash,/계산상 됩니다/);
     assert.deepEqual(budgetUi.order,['within','unknown','above']);
-    assert.match(budgetUi.within,/호가·확정상한 이내/);
-    assert.match(budgetUi.above,/호가·확정상한 초과/);
+    assert.match(budgetUi.within,/확정 매수력 상한 이내/);
+    assert.match(budgetUi.above,/확정 매수력 상한 초과/);
     assert.match(budgetUi.cash,/상한보다 높습니다/);
     const priceUi=await page.evaluate(()=>{
       const base={유형:'일반매물',단지명:'가격테스트',지역:'테스트구',시도:'서울',기회도:10};
@@ -587,23 +587,26 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     // Unified sale controls and real list DOM; map tiles/network remain stubbed.
     await page.evaluate(async()=>{
       mapSplit=(listId,mapId,items,opt)=>{
-        _ms[mapId]={items,opt,listId,listLimit:60,openGroupKeys:new Set(),map:{invalidateSize(){}}};
+        _ms[mapId]={items,opt,listId,listLimit:60,openGroupKeys:new Set(),markers:{},coords:{},map:{invalidateSize(){}}};
         renderMsList(mapId,items.map((_,i)=>i));
       };
       openTypedList('매매'); await loadAllListings();
       _watchKeys=new Set(['찐매물:merged-1']);
       _mtBuyOnly=false; _focusRegion=null; _mtGradeSet=new Set(['A','B','C','D','E']);
-      const base={지역:'테스트구',시도:'서울',지역코드:'11140',시그널:'HELD',총액:50000,기회도:0,
+      const base={지역:'테스트구',시도:'서울',지역코드:'11140',지역식별상태:'matched',시그널:'HELD',총액:50000,기회도:0,
         price_comparison:{상태:'관측비교',호가차이율:0,표본수:3,입력층:8},
         ref:{전용면적:59,층:8},price_kind:'asking',budget_fit:{status:'unknown',reason:'가정 확인'}};
       _laApplyResponse(_SALE_TYPES.join(','),{asof:'2026-09-28',meta:{private_access:true,duplicate_records_collapsed:1},listings:[
         {...base,key:'급매:merged-1',유형:'급매',단지명:'통합인증단지',source:'baroezip',
           listing_aliases:['급매:merged-1','찐매물:merged-1'],supplier_flags:['urgent','certified']},
-        {...base,key:'일반매물:normal-1',유형:'일반매물',단지명:'통합일반단지',source:'hanbang',supplier_flags:[]},
+        {...base,key:'일반매물:normal-1',유형:'일반매물',단지명:'통합일반단지',동:'상계동',source:'hanbang',supplier_flags:[]},
       ]});
     });
     assert.equal(await page.locator('#laList .ms-row').count(),2);
     assert.match(await page.locator('#laList').textContent(),/전용 59㎡/);
+    assert.match(await page.locator('#laList').textContent(),/호가 5.0억.*전용 59㎡/);
+    assert.match(await page.locator('#laList').textContent(),/서울 테스트구 상계동/);
+    assert.doesNotMatch(await page.locator('#laList').textContent(),/바로이집|공급사 인증 표시/);
     assert.match(await page.locator('#laList').textContent(),/같은 전용면적·인근 층 실거래 중앙값 대비 차이 없음/);
     assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'매매',exact:true}).getAttribute('aria-pressed'),'true');
     assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'찐매물',exact:true}).count(),0);
@@ -613,6 +616,36 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#laList').textContent(),/통합인증단지/);
     await page.locator('#laSaleFilter').selectOption('all');
     assert.equal(await page.locator('#laList .ms-row').count(),2);
+    await page.evaluate(()=>{
+      window.__uiWatchClicks=0;
+      window.__watchToggleOriginal=toggleListingWatch;
+      window.__focusPinOriginal=_focusPinOnly;
+      toggleListingWatch=()=>{window.__uiWatchClicks++};
+      _focusPinOnly=async()=>{};
+    });
+    const firstSale=page.locator('#laList .ms-row').first();
+    await firstSale.locator('.watch-btn').click();
+    assert.equal(await page.evaluate(()=>window.__uiWatchClicks),1);
+    assert.equal(await firstSale.getAttribute('aria-expanded'),'false');
+    await firstSale.locator('.nm').click();
+    assert.equal(await firstSale.getAttribute('aria-expanded'),'true');
+    assert.equal(await page.locator('#laList .ms-detail .la-detail-line').count(),3);
+    assert.equal(await page.locator('#laList .ms-detail .tx-costs').evaluate(el=>el.open),false);
+    assert.equal(calls.filter(x=>x==='/api/listing-costs').length,0);
+    await page.locator('#laList .ms-detail .tx-costs summary').click();
+    await page.waitForFunction(()=>document.querySelector('#laList .tx-costs .tx-costs-body')?.textContent?.length>0);
+    assert.equal(calls.filter(x=>x==='/api/listing-costs').length,1);
+    await page.locator('#laList .ms-detail [aria-label="동 이름"]').fill('용두동');
+    await page.locator('#laList .ms-detail').getByRole('button',{name:'직접 저장'}).click();
+    await page.waitForFunction(()=>document.querySelector('#laList .ms-row .la-address')?.textContent?.includes('용두동'));
+    assert.match(await firstSale.textContent(),/서울 테스트구 용두동 \(직접 입력\)/);
+    assert(calls.includes('/api/listing-locality'));
+    await page.locator('#laList .ms-detail [aria-label="동 이름"]').fill('상계동');
+    await page.locator('#laList .ms-detail').getByRole('button',{name:'수정 저장'}).click();
+    await page.waitForFunction(()=>document.querySelector('#laList .ms-row .la-address')?.textContent?.includes('상계동'));
+    await firstSale.locator('.nm').click();
+    assert.equal(await firstSale.getAttribute('aria-expanded'),'false');
+    await page.evaluate(()=>{ toggleListingWatch=window.__watchToggleOriginal; _focusPinOnly=window.__focusPinOriginal; });
     for(const width of [180,360,390,1280]){
       await page.setViewportSize({width,height:800});
       const layout=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,
