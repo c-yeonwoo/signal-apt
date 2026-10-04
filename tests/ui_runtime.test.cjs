@@ -796,6 +796,23 @@ test('trade-evidence sort puts supported lower quotes first and unverified rows 
   assert.match(html,/if\(_laSort==='asking_low'\) return _laCompareAsking\(a,b\)/);
 });
 
+test('multiple observed price evidence is a discovery aid, not a blended deal score', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('function _laTradePriceEvidence(', 'function renderAllListings(){'),ctx);
+  const overlap={기회도:1,
+    price_comparison:{상태:'관측비교',호가차이율:-5,표본수:4},
+    asking_comparison:{상태:'관측비교',호가차이율:-8,표본수:3},
+    price_reduction:{상태:'수집호가인하관측',차이율:-2,관측횟수:2,확인시각:100}};
+  const one={기회도:99,price_comparison:{상태:'관측비교',호가차이율:-10,표본수:5}};
+  const none={기회도:50,price_comparison:{상태:'관측비교',호가차이율:4,표본수:5}};
+  assert.deepEqual(Array.from(ctx._laPriceEvidenceTypes(overlap)),['같은 면적 실거래','현재 수집 호가 표본','같은 매물 호가 인하']);
+  assert.ok(ctx._laCompareEvidenceOverlap(overlap,one)<0);
+  assert.ok(ctx._laCompareEvidenceOverlap(one,none)<0);
+  assert.match(html,/여러 가격 근거 확인순/);
+  assert.match(html,/추가 확인용이며 매수 권고가 아닙니다/);
+  assert.match(html,/if\(_laSort==='evidence_overlap'\) return _laCompareEvidenceOverlap\(a,b\)/);
+});
+
 test('observed source-price drops sort separately and are not rendered as transaction prices', () => {
   const ctx=vm.createContext({_eok:value=>`${value}만원`});
   vm.runInContext(extract('function _laTradePriceEvidence(', 'function renderAllListings(){'),ctx);

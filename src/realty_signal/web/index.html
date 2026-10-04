@@ -751,6 +751,7 @@
           <option value="signal">시그널 강한순</option>
           <option value="trade_low">같은 면적 실거래보다 낮은순</option>
           <option value="asking_low">같은 공급사 호가 표본보다 낮은순</option>
+          <option value="evidence_overlap">여러 가격 근거 확인순</option>
           <option value="reduction">수집 호가 인하 확인순</option>
           <option value="price_asc">가격 낮은순</option>
           <option value="price_desc">가격 높은순</option>
@@ -3753,6 +3754,22 @@ function _laCompareAsking(a,b){
   return left['호가차이율']-right['호가차이율']||right['표본수']-left['표본수']||
     (b['기회도']??-1)-(a['기회도']??-1);
 }
+function _laPriceEvidenceTypes(row){
+  const found=[];
+  const trade=_laTradePriceEvidence(row);
+  if(trade&&trade.diff<0) found.push('같은 면적 실거래');
+  const asking=_laAskingEvidence(row);
+  if(asking&&asking['호가차이율']<0) found.push('현재 수집 호가 표본');
+  if(_laPriceReductionEvidence(row)) found.push('같은 매물 호가 인하');
+  return found;
+}
+function _laCompareEvidenceOverlap(a,b){
+  const left=_laPriceEvidenceTypes(a),right=_laPriceEvidenceTypes(b);
+  const leftMulti=left.length>=2,rightMulti=right.length>=2;
+  if(leftMulti!==rightMulti)return leftMulti?-1:1;
+  if(leftMulti&&left.length!==right.length)return right.length-left.length;
+  return (b['기회도']??-1)-(a['기회도']??-1);
+}
 function listingReductionLine(evidence){
   if(evidence?.['상태']!=='수집호가인하관측'||!Number.isFinite(evidence['이전호가'])
       ||!Number.isFinite(evidence['현재호가'])||!Number.isFinite(evidence['차이율'])) return '';
@@ -3771,6 +3788,7 @@ function renderAllListings(){
     if(_laSort==='signal') return sr(a)-sr(b) || opp(b)-opp(a);
     if(_laSort==='trade_low') return _laCompareTradePrice(a,b);
     if(_laSort==='asking_low') return _laCompareAsking(a,b);
+    if(_laSort==='evidence_overlap') return _laCompareEvidenceOverlap(a,b);
     if(_laSort==='reduction') return _laComparePriceReduction(a,b);
     if(_laSort==='price_asc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pa-pb; }
     if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
@@ -3809,6 +3827,7 @@ function renderAllListings(){
         ${x.price_comparison?.['상태']==='관측비교'?`<div class="la-detail-line">${esc(listingPriceLine(x.price_comparison))}</div>`:''}
         ${listingAskingLine(x.asking_comparison)?`<div class="la-detail-line">${esc(listingAskingLine(x.asking_comparison))}</div>`:''}
         ${listingReductionLine(x.price_reduction)?`<div class="la-detail-line">${esc(listingReductionLine(x.price_reduction))}</div>`:''}
+        ${_laPriceEvidenceTypes(x).length>=2?`<div class="la-detail-line">여러 가격 근거 관측: ${esc(_laPriceEvidenceTypes(x).join(' · '))} · 추가 확인용이며 매수 권고가 아닙니다.</div>`:''}
         ${x.price_comparison?.['상태']==='보류'?'<div class="la-detail-line">실거래 비교 근거는 매물 리포트에서 확인할 수 있어요.</div>':''}
         ${_SALE_TYPES.includes(x['유형'])&&(!x['동']||x['동출처']==='직접 입력')&&x['지역식별상태']==='matched'
           ?`<div class="la-detail-line la-dong-form"><label>동 정보 <input aria-label="동 이름" placeholder="예: 상계동" value="${esc(x['동']||'')}" autocomplete="off"></label><button type="button" class="btn" data-listing-key="${esc(x['key'])}" onclick="event.stopPropagation();saveListingDong(this)">${x['동']?'수정 저장':'직접 저장'}</button></div>`:''}
