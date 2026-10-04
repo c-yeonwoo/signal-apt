@@ -32,6 +32,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         eventPayloads.push(route.request().postDataJSON());
         return route.fulfill({json:{ok:true}});
       }
+      if(url.pathname==='/api/addr-search') return route.fulfill({json:{results:[
+        {name:'중구청',address:'서울특별시 중구 다동',sigungu:'중구',sido:'서울',region_id:'kb:1114000000'},
+        {name:'미확인 주소',address:'시군구 미확인',sigungu:'',sido:'',region_id:null}
+      ]}});
       const decoded=decodeURIComponent(url.pathname);
       if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) data={type:'region',report_id:'b'.repeat(64),
         subject:{region:'테스트구',region_id:'kb:1114000000'},asof:'2026-09-28',
@@ -1330,6 +1334,21 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     });
     assert.deepEqual(rollout,{aiHidden:true,fallbackKey:'일반매물:synthetic-hb-1',
       discoverClosed:true,reportPaused:true,nickAbsent:true});
+    const homeSelection=await page.evaluate(async()=>{
+      document.getElementById('mp_region').value='중구';
+      await _mpRegionDo();
+      const choices=document.querySelectorAll('#mpRegionRes [data-region-index]').length;
+      document.querySelector('#mpRegionRes [data-region-index]').click();
+      const selected={choices,name:document.getElementById('mp_region').value,code:_mpRegionCode,
+        status:document.getElementById('mpRegionStatus').textContent};
+      document.getElementById('mp_region').value='다른 지역';
+      mpRegionSearch();
+      selected.cleared=_mpRegionCode===null;
+      clearTimeout(_mpRegionT);
+      return selected;
+    });
+    assert.deepEqual(homeSelection,{choices:1,name:'중구',code:'kb:1114000000',
+      status:'서울 · 중구 확인됨',cleared:true});
     assert.equal(nickPayloads.length,0);
     assert.deepEqual(errors,[]);
     console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');
