@@ -115,7 +115,11 @@ def test_bad_model_output_falls_back_and_never_exposes_unsupported_claim(monkeyp
     result = narrative.get(7, queued["job_id"], private_allowed=False)
     assert result["status"] == "failed"
     assert result["result"]["source"] == "deterministic_fallback"
+    assert result["result"]["failure_code"] == "model_output_rejected"
     assert "prompt injection" not in json.dumps(result)
+    summary = narrative.operations_summary()
+    assert summary["by_failure_code"]["model_output_rejected"] == 1
+    assert "prompt injection" not in json.dumps(summary)
 
 
 def test_expired_lease_fails_closed_without_second_paid_attempt(monkeypatch):
@@ -135,6 +139,7 @@ def test_expired_lease_fails_closed_without_second_paid_attempt(monkeypatch):
     result = narrative.get(7, row[0], private_allowed=False)
     assert result["status"] == "failed"
     assert result["result"]["source"] == "deterministic_fallback"
+    assert result["result"]["failure_code"] == "lease_expired"
 
 
 def test_private_permission_revoked_before_worker_skips_paid_call(monkeypatch):
@@ -147,6 +152,27 @@ def test_private_permission_revoked_before_worker_skips_paid_call(monkeypatch):
     result = narrative.get(7, queued["job_id"], private_allowed=True)
     assert result["status"] == "failed"
     assert result["result"]["source"] == "deterministic_fallback"
+    assert result["result"]["failure_code"] == "source_access_revoked"
+
+
+def test_no_evidence_is_failed_fallback_without_paid_call(monkeypatch):
+    report = _listing()
+    report["positive"] = []
+    report["cautions"] = []
+    report["evidence"] = []
+    monkeypatch.setattr(narrative.llm, "client", lambda *_args: (_ for _ in ()).throw(
+        AssertionError("no facts must not call model")))
+    queued, _ = narrative.enqueue(7, report, "easy", "", private_source=False)
+    assert narrative.run_once()
+    result = narrative.get(7, queued["job_id"], private_allowed=False)
+    assert result["status"] == "failed"
+    assert result["result"]["failure_code"] == "insufficient_evidence"
+
+
+def test_failure_categories_are_bounded_and_do_not_include_provider_text():
+    assert narrative._failure_code(narrative.llm.BudgetExceeded("private budget message")) == "budget_or_capacity"
+    assert narrative._failure_code(ValueError("untrusted model output")) == "model_output_rejected"
+    assert narrative._failure_code(RuntimeError("private provider message")) == "unexpected_error"
 
 
 def test_generation_uses_metered_boundary_and_rejects_fake_evidence(monkeypatch):

@@ -57,3 +57,5 @@ def test_operations_backup_status_is_admin_only(monkeypatch):
     response = client.get("/api/operations")
     assert response.status_code == 200
     assert response.json()["backup"] == {"configured": False, "upload_job": None}
+    assert response.json()["report_explanations"] == {"window_days": 7, "jobs": 0,
+                                                        "by_status": {}, "by_failure_code": {}}
