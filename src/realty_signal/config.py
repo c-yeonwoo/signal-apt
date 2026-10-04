@@ -39,7 +39,7 @@ def rollout_flags() -> dict[str, bool]:
     separate server checks. False accepts 0/false/no/off, case-insensitively.
     """
     names = ("REPORT_V2_ENABLED", "DISCOVERY_V2_ENABLED",
-             "CONTEXTUAL_EXPLANATIONS_ENABLED", "NICK_GLOBAL_ENTRY_ENABLED")
+             "CONTEXTUAL_EXPLANATIONS_ENABLED")
     return {name.lower(): (os.environ.get(name, "1").strip().lower()
                             not in {"0", "false", "no", "off"}) for name in names}
 
@@ -160,14 +160,6 @@ def youtube_key() -> str | None:
 
 def naver_search() -> tuple[str | None, str | None]:
     return os.environ.get("NAVER_CLIENT_ID"), os.environ.get("NAVER_CLIENT_SECRET")
-
-
-def nick_weekly_limit() -> int:
-    """무료 티어 Nick 주간 질문 한도. Opus/관리자는 서버에서 우회."""
-    try:
-        return max(0, int(os.environ.get("NICK_WEEKLY_LIMIT", "15")))
-    except ValueError:
-        return 15
 
 
 def report_weekly_limit() -> int:

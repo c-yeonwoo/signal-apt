@@ -49,7 +49,7 @@ def usage_status(uid_: int, kind: str, *, unlimited: bool) -> dict:
     used = db.usage_get(uid_, kind)
     if unlimited:
         return {"kind": kind, "used": used, "limit": None, "remaining": None, "unlimited": True}
-    limit = config.nick_weekly_limit() if kind == "nick" else config.report_weekly_limit()
+    limit = config.report_weekly_limit()
     return {
         "kind": kind, "used": used, "limit": limit,
         "remaining": max(0, limit - used), "unlimited": False,
@@ -64,6 +64,6 @@ def usage_allow(uid_: int, kind: str, *, unlimited: bool) -> tuple[bool, dict]:
 
 
 def usage_reserve(uid_: int, kind: str, *, unlimited: bool) -> tuple[bool, dict]:
-    limit = None if unlimited else config.nick_weekly_limit() if kind == "nick" else config.report_weekly_limit()
+    limit = None if unlimited else config.report_weekly_limit()
     ok, _ = db.usage_reserve(uid_, kind, limit)
     return ok, usage_status(uid_, kind, unlimited=unlimited)

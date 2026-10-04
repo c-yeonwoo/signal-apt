@@ -27,4 +27,7 @@ def test_old_chat_urls_return_gone_without_model_or_usage(tmp_path, monkeypatch)
         response = client.post(path, json={"messages": [{"role": "user", "text": "서울 시세?"}]})
         assert response.status_code == 410
         assert response.json()["reason"] == "retired"
+    usage = client.get("/api/usage")
+    assert usage.status_code == 200
+    assert set(usage.json()) == {"ok", "report"}
     assert client.get("/api/advisor/memory").status_code == 200

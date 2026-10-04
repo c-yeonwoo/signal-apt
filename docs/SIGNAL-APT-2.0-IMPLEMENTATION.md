@@ -44,7 +44,7 @@ FastAPI·Python·SQLite·Leaflet·ECharts를 유지한다. 새 프런트엔드 �
 
 ## 4 출시와 되돌리기
 
-제안 flag는 서버가 내려주는 `report_v2_enabled`, `discovery_v2_enabled`, `contextual_explanations_enabled`, `nick_global_entry_enabled`다. 권한 플래그가 아니며 개인용 원천 접근은 별도 인증으로 검사한다.
+현재 서버가 내려주는 flag는 `report_v2_enabled`, `discovery_v2_enabled`, `contextual_explanations_enabled`다. Nick 진입점 flag는 제거했다. 권한 플래그가 아니며 개인용 원천 접근은 별도 인증으로 검사한다.
 
 1. 새 판정 저장과 추천을 비공개 shadow 실행한다. 운영 결과와 비교하되 알림·화면을 바꾸지 않는다. 추가 원천 조회나 LLM 자동 호출을 유발하지 않는다.
 2. 데이터 정합·권한·설명 테스트 통과 후 지정 사용자에게 독립 리포트를 켠다. 기존 흐름은 유지한다.

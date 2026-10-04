@@ -13,10 +13,10 @@ def test_rollout_defaults_preserve_live_paths_and_parse_false(monkeypatch):
     monkeypatch.setenv("REPORT_V2_ENABLED", "off")
     monkeypatch.setenv("DISCOVERY_V2_ENABLED", "FALSE")
     monkeypatch.setenv("CONTEXTUAL_EXPLANATIONS_ENABLED", "0")
-    monkeypatch.setenv("NICK_GLOBAL_ENTRY_ENABLED", "no")
+    monkeypatch.setenv("NICK_GLOBAL_ENTRY_ENABLED", "1")
     assert config.rollout_flags() == {
         "report_v2_enabled": False, "discovery_v2_enabled": False,
-        "contextual_explanations_enabled": False, "nick_global_entry_enabled": False}
+        "contextual_explanations_enabled": False}
 
 
 def test_disabled_report_and_discovery_stop_before_source_access(monkeypatch):
@@ -42,8 +42,7 @@ def test_disabled_contextual_explanation_stops_before_paid_job(monkeypatch):
 def test_authenticated_bootstrap_exposes_only_rollout_booleans(monkeypatch):
     monkeypatch.setattr(auth_routes.auth, "current_user", lambda token: {"id": 7, "email": "x@example.com"})
     monkeypatch.setattr(auth_routes.db, "profile_get", lambda uid: {})
-    monkeypatch.setenv("NICK_GLOBAL_ENTRY_ENABLED", "0")
     request = type("Request", (), {"cookies": {}})()
     result = auth_routes.auth_me(request)
-    assert result["features"]["nick_global_entry_enabled"] is False
+    assert "nick_global_entry_enabled" not in result["features"]
     assert result["features"]["report_v2_enabled"] is True

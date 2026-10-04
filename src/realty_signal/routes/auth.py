@@ -155,7 +155,6 @@ def usage_get(request: Request):
     unlimited = deps.is_opus_user(request) or deps.is_admin(request)
     return {
         "ok": True,
-        "nick": deps.usage_status(uid, "nick", unlimited=unlimited),
         "report": deps.usage_status(uid, "report", unlimited=unlimited),
     }
 
