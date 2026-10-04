@@ -415,7 +415,7 @@ test('signal filter button says which conditions are excluded, not selected', ()
 
 test('stale weekly observations do not appear as this week signal changes', async () => {
   const wrap = {innerHTML:''}, events = [];
-  let payload = {ready:true, as_of:'2026-09-21', stale_days:12,
+  let payload = {ready:true, current_check_ready:true, as_of:'2026-09-21', stale_days:12,
     mine:[], rest:[], movers:[], totals:{regions:20,up:1,down:4}, holds:[]};
   const ctx = vm.createContext({
     document:{getElementById:()=>wrap},
@@ -437,6 +437,26 @@ test('stale weekly observations do not appear as this week signal changes', asyn
   await ctx._loadWeekly();
   assert.match(wrap.innerHTML,/등급 변화 없음/);
   assert.deepEqual(events,['comeback','seen']);
+});
+
+test('raw weekly BUY is historical when current safety assessment is held', async () => {
+  const wrap={innerHTML:''};
+  const change={region:'노원구',from:'WATCH',to:'BUY',from_ko:'관망',to_ko:'매수',up:true,current_verified:false};
+  const ctx=vm.createContext({
+    document:{getElementById:()=>wrap},
+    fetch:async()=>({ok:true,json:async()=>({ready:true,current_check_ready:true,as_of:'2026-09-28',stale_days:5,
+      mine:[change],rest:[],movers:[],totals:{regions:1,up:1,down:0},holds:[]})}),
+    _dashCard:x=>x,_dashH:x=>x,_dashMore:(label,x)=>label+x,
+    _weeklyQuiet:x=>x,_myWeeklyBlock:()=>'',_holdBlock:()=>'',_renderComeback:()=>{},
+    _ackWhenVisible:()=>{},esc:x=>String(x),
+    _sigMoveRow:()=>'<div>과거 계산 비교 · 현재 판정 확인 필요</div>',
+  });
+  vm.runInContext(extract('function _staleBanner(d){','function _moverRow(m){'),ctx);
+  vm.runInContext(extract('async function _loadWeekly(){','// ===== 다음 할 일'),ctx);
+  await ctx._loadWeekly();
+  assert.match(wrap.innerHTML,/현재 등급 변화 확인 필요/);
+  assert.match(wrap.innerHTML,/과거 계산 비교/);
+  assert.doesNotMatch(wrap.innerHTML,/현재 판정으로 확인된 등급 변화 <b>1곳/);
 });
 
 test('opening quicksale reaches both APIs and renders', async () => {
