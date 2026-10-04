@@ -5,6 +5,8 @@
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const money = value => Number.isFinite(Number(value)) && Number(value) > 0
     ? `${(Number(value) / 10000).toFixed(2)}억` : '가격 미확인';
+  const gapMoney = value => Number(value) === 0 ? '0원' :
+    Number(value) < 10000 ? `${Math.round(Number(value)).toLocaleString('ko-KR')}만 원` : money(value);
   const enabled = name => window._featureFlags?.[name] !== false;
   const risks = {
     sale_weeks_incomplete:'최근 주간 가격 4주가 이어지지 않습니다',
@@ -64,6 +66,78 @@
       limit:'아래 주의할 점과 다음 확인 항목을 함께 살펴보세요.',
     };
     return null;
+  }
+
+  function listingFieldLinks(item) {
+    const query = [item.region, item.name].filter(Boolean).join(' ').trim();
+    const search = terms => `https://search.naver.com/search.naver?query=${encodeURIComponent(terms)}`;
+    const naverNo = /^[1-9][0-9]{0,11}$/.test(String(item.naver_complex_no || ''))
+      ? String(item.naver_complex_no) : null;
+    const naver = naverNo ? `https://new.land.naver.com/complexes/${naverNo}` :
+      search(`${query} 아파트 매매 네이버 부동산`);
+    const link = (href, label, note) => `<a class="v2-field-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><b>${esc(label)} ↗</b><small>${esc(note)}</small></a>`;
+    return `<section class="v2-field-check" aria-label="사진 거리뷰 후기 현장 확인">
+      <h3>실제 모습과 거주 경험 보기</h3>
+      <div class="v2-field-grid">
+        ${link(naver, naverNo ? '네이버 부동산 · 매물·사진' : '네이버에서 매물·사진 찾기', naverNo ? '단지 페이지 · 같은 매물인지 다시 확인' : '단지명 검색 · 정확한 매물 연결은 미확인')}
+        ${query ? link(`https://map.naver.com/p/search/${encodeURIComponent(query)}`, '네이버 지도 · 거리뷰', '검색 결과에서 거리뷰를 선택 · 출입구 확인') : ''}
+        ${query ? link(search(`site:hogangnono.com ${query} 후기`), '호갱노노 · 거주 후기', '후기 검색 · 작성 시점과 단지를 확인') : ''}
+        ${query ? link(search(`site:asil.kr ${query} 단지톡`), '아실 · 단지톡', '후기 검색 · 작성 시점과 단지를 확인') : ''}
+      </div>
+      <p class="v2-muted">외부 사이트에서 단지·동·호수가 같은지 확인하세요. 후기와 사진은 분석 점수에 넣지 않습니다.</p>
+    </section>`;
+  }
+
+  function listingPriceSummary(price, failures, stale) {
+    if (stale) return '<b>현재 호가인지 먼저 확인하세요</b><p class="v2-muted">지난 수집분의 비교 결과는 아래 상세 근거에 남겨두었어요.</p>';
+    const diff = Number(price?.['호가차이율']);
+    const count = Number(price?.['표본수']);
+    if (price?.['상태'] === '관측비교' && price['호가차이율'] != null && Number.isFinite(diff) && Number.isFinite(count) && count > 0) {
+      const verdict = diff < 0 ? `비슷한 조건의 최근 거래보다 ${Math.abs(diff).toLocaleString('ko-KR',{maximumFractionDigits:1})}% 낮아요` :
+        diff > 0 ? `비슷한 조건의 최근 거래보다 ${diff.toLocaleString('ko-KR',{maximumFractionDigits:1})}% 높아요` : '비슷한 조건의 최근 거래와 비슷해요';
+      return `<b>${esc(verdict)}</b><p class="v2-muted">같은 단지·전용면적 거래 ${esc(count)}건 기준${price['비교기준일'] ? ` · ${esc(price['비교기준일'])}` : ''}. 층 조건과 실제 계약가는 상세 근거에서 확인하세요.</p>`;
+    }
+    return `<b>아직 싼 매물인지 판단할 수 없어요</b><p class="v2-muted">이 매물에 맞는 가격 비교 결과가 없습니다. 이유는 아래 상세 근거에서 볼 수 있어요.</p>
+      ${(failures || []).includes('trade_cache_unavailable') ? '<button type="button" class="btn" id="v2RefreshTrades">실거래 다시 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}`;
+  }
+
+  function listingBudgetSummary(fit, failures) {
+    if ((failures || []).includes('buyer_profile_unavailable'))
+      return '<b>내 예산 정보를 지금 불러오지 못했어요</b><p class="v2-muted">잠시 후 다시 열어 주세요. 가격 비교는 위에서 따로 확인할 수 있어요.</p>';
+    const gap = Number(fit?.gap_manwon);
+    if (fit?.status === 'within' && fit.gap_manwon != null && Number.isFinite(gap) && gap >= 0)
+      return `<b>저장한 매수력 상한 안이에요</b><p class="v2-muted">상한까지 ${esc(gapMoney(gap))} 남습니다. 취득세·수리비·대출 승인은 별도 확인이 필요해요.</p>`;
+    if (fit?.status === 'above' && fit.gap_manwon != null && Number.isFinite(gap) && gap < 0)
+      return `<b>저장한 매수력 상한을 넘어요</b><p class="v2-muted">상한보다 ${esc(gapMoney(Math.abs(gap)))} 높습니다. 자금 계획을 다시 확인하세요.</p>`;
+    return '<b>내 예산과는 아직 비교하지 않았어요</b><p class="v2-muted">자금 조건을 확정하면 호가와 비교할 수 있습니다.</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>';
+  }
+
+  function showReportDrawer() {
+    const legacyPanel = document.getElementById('advPanel');
+    if (legacyPanel?.style.display === 'flex') {
+      if (typeof window.clearListingReportContext === 'function') window.clearListingReportContext();
+      legacyPanel.style.display = 'none';
+      const fab = document.getElementById('advFab');
+      if (fab) fab.style.display = 'block';
+    }
+    const dialog = document.getElementById('v2ReportDlg');
+    if (!dialog.open) dialog.show();
+    return dialog;
+  }
+
+  function revealCurrentListingMap(item) {
+    let tab = document.body.className.match(/(?:^|\s)tab-(all|general|quicksale|auction)(?:\s|$)/)?.[1];
+    if (!tab && item && typeof window.switchTab === 'function') {
+      tab = {일반매물:'general',급매:'quicksale',찐매물:'quicksale',경매:'auction'}[item.kind] || 'all';
+      window.switchTab(tab);
+    }
+    if (!window.matchMedia('(max-width:600px)').matches) return;
+    const mapId = {all:'laMap',general:'hbMap',quicksale:'qsMap',auction:'auctionMap'}[tab];
+    const map = mapId && document.getElementById(mapId);
+    if (map?.getClientRects().length) {
+      document.body.classList.add('v2-report-map');
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    }
   }
 
   function explanationHtml(result, report) {
@@ -203,9 +277,9 @@
       return;
     }
     const generation = ++listingGeneration;
-    const dialog = document.getElementById('v2ReportDlg');
+    const dialog = showReportDrawer();
     const body = document.getElementById('v2ReportBody');
-    if (!dialog.open) dialog.showModal();
+    body.scrollTop = 0;
     body.textContent = '매물 근거를 확인하고 있습니다…';
     try {
       const report = await json(`/api/v2/listings/report?key=${encodeURIComponent(key)}`);
@@ -217,8 +291,34 @@
       const cautions = (report.cautions || []).map(x => `<div class="v2-row v2-caution">${esc(x.text)}</div>`).join('');
       const evidence = (report.evidence || []).map(x =>
         `${esc(x.label)} · ${esc(x.asof || '기준일 미확인')} · ${esc(x.status)}`).join('<br>');
-      body.innerHTML = `<h2>${esc(item.name || '매물')} · ${money(item.asking_manwon)}</h2>
-        <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)} · 수집 ${esc(item.collected_at || '시각 미확인')}${item.stale ? ' · 지난 수집 결과' : ''}</p>
+      body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">매물 확인 · 현장 검증 전</p>
+        <h2>${esc(item.name || '매물')}</h2><p class="v2-report-price">${money(item.asking_manwon)}</p>
+        <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
+        <p class="v2-muted">매물 정보 ${esc(item.collected_at || '수집 시각 미확인')}${item.stale ? ' · 오래된 정보' : ''}</p></header>
+        ${listingFieldLinks(item)}
+        <section class="v2-report-section" aria-label="궁금한 것에 대한 답"><h3>가격은 괜찮나요?</h3>
+          <div class="v2-answer">${listingPriceSummary(price, report.partial_failures, item.stale)}</div>
+          <h3>내 예산에 맞나요?</h3><div class="v2-answer">${listingBudgetSummary(fit, report.partial_failures)}</div></section>
+        <section class="v2-report-section"><h3>현장에서 딱 두 가지 확인</h3>
+          <p>① 이 매물이 아직 판매 중이고 호가가 같은지 중개사에게 묻기</p>
+          <p>② 실내 사진·향·수리 상태가 실제 이 동·호수의 것인지 확인하기</p></section>
+        <details class="v2-report-more"><summary>가격 근거와 판단의 한계 자세히</summary>
+        <h3>가격 근거</h3><div class="v2-row">${esc(price['이유'] ||
+          (price['상태'] === '관측비교' ? `동일 조건 실거래 ${price['표본수']}건과 비교했습니다.` :
+            '비교 가능한 실거래가 부족합니다.'))}</div>
+        ${pros ? `<h3>유리한 근거</h3>${pros}` : ''}
+        ${cautions ? `<h3>주의할 근거</h3>${cautions}` : ''}
+        ${(report.lines || {}).price ? `<p class="v2-muted">${esc(report.lines.price)}</p>` : ''}
+        ${(report.lines || {}).cash ? `<p class="v2-muted">${esc(report.lines.cash)}</p>` : ''}
+        <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details></details>
+        <details class="v2-report-more"><summary>교통·학교·생활권 확인</summary>
+        <h3>교통·학교·생활권</h3>
+        <p class="v2-muted">표시 좌표 기준 참고 자료입니다. 출입구·통학 배정·실제 출퇴근 시간은 확인이 필요합니다.</p>
+        <button type="button" class="btn" id="v2ListingLocation">입지 근거 확인</button>
+        <div id="v2LocationResult" aria-live="polite"></div></details>
+        <details class="v2-report-more"><summary>중개사에게 더 물어볼 것</summary>
+          ${(report.next_actions || []).map(x => `<p>• ${esc(x)}</p>`).join('') || '<p>현재 판매 여부와 수리 상태를 확인하세요.</p>'}</details>
+        <details class="v2-report-more"><summary>이 리포트에 질문하기</summary>
         <div class="v2-row" aria-label="이 리포트에 물어보기"><b>먼저 궁금한 것부터 보세요</b>
           <p class="v2-muted">현재 리포트 근거를 쉽게 다시 보여 줍니다. 새 분석이나 Nick 호출은 하지 않습니다.</p>
           <button type="button" class="btn" data-v2-quick-question="price">가격이 싼가?</button>
@@ -230,24 +330,8 @@
           <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
           <label class="v2-muted">추가 질문 <input id="v2ExplainQuestion" maxlength="300" placeholder="이 근거에서 무엇을 확인할까요?"></label>
           <button type="button" class="btn" id="v2ExplainQuestionSend">이 근거에 질문</button>
-          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}
-        <p>${esc((report.lines || {}).cash || '자금 계산은 확인이 필요합니다.')}</p>
-        ${(report.partial_failures || []).includes('buyer_profile_unavailable') ? '<p class="v2-row v2-caution">내 자금 프로필을 불러오지 못해 예산 적합성은 보류했습니다. 가격 근거는 별도로 확인할 수 있습니다.</p>' : ''}
-        <p>${esc((report.lines || {}).price || '현재 판매 여부와 실제 호가를 확인하세요.')}</p>
-        <h3>가격 근거</h3><div class="v2-row">${esc(price['이유'] ||
-          (price['상태'] === '관측비교' ? `동일 조건 실거래 ${price['표본수']}건과 비교했습니다.` :
-            '비교 가능한 실거래가 부족합니다.'))}</div>
-        ${(report.partial_failures || []).includes('trade_cache_unavailable') ? '<p class="v2-muted">저장된 실거래 근거가 없거나 오래됐습니다. 요청할 때만 국토부 자료를 다시 확인합니다.</p><button type="button" class="btn" id="v2RefreshTrades">실거래 근거 새로 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}
-        <h3>장점</h3>${pros || '<p>확인된 장점이 없습니다. 비교 자료를 더 살펴보세요.</p>'}
-        <h3>주의할 점</h3>${cautions || '<p>현재 확인된 자료에서 별도 주의 항목이 없습니다. 현장 상태는 확인이 필요합니다.</p>'}
-        <h3>다음 확인</h3>${(report.next_actions || []).map(x => `<p>• ${esc(x)}</p>`).join('')}
-        <h3>교통·학교·생활권</h3>
-        <p class="v2-muted">표시 좌표 기준 참고 자료입니다. 출입구·통학 배정·실제 출퇴근 시간은 확인이 필요합니다.</p>
-        <button type="button" class="btn" id="v2ListingLocation">입지 근거 확인</button>
-        <div id="v2LocationResult" aria-live="polite"></div>
-        <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details>
-        <p class="v2-muted">${fit.status === 'within' ? '호가가 저장된 가격 상한 안입니다. 대출 승인은 별도입니다.' :
-          fit.status === 'above' ? '저장된 가격 상한을 넘습니다.' : '예산 적합성은 아직 확인되지 않았습니다.'}</p>
+          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}</details>
+        <details class="v2-report-more"><summary>관심 기록·비교·리포트 저장</summary>
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
         <button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
         <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>
@@ -261,8 +345,14 @@
         <div class="v2-row"><b>이 리포트로 다음 확인 행동을 정할 수 있었나요?</b><p class="v2-muted">선택만 기록합니다. 매물명·가격·내 조건은 보내지 않습니다.</p>
           <button type="button" class="btn" data-v2-report-feedback="yes">네, 충분했어요</button>
           <button type="button" class="btn" data-v2-report-feedback="no">아니요, 더 필요해요</button>
-          <p id="v2ReportFeedbackStatus" class="v2-muted" role="status"></p></div>`;
+          <p id="v2ReportFeedbackStatus" class="v2-muted" role="status"></p></div></details>`;
+      revealCurrentListingMap(item);
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
+      const budgetSetup = body.querySelector('#v2BudgetSetup');
+      if (budgetSetup) budgetSetup.onclick = () => {
+        dialog.close();
+        if (typeof window.switchTab === 'function') window.switchTab('mypage');
+      };
       const explanationTarget = body.querySelector('#v2ListingExplanation');
       const currentExplanation = () => generation === listingGeneration && dialog.open;
       body.querySelectorAll('[data-v2-explain]').forEach(button => button.onclick = () =>
@@ -344,9 +434,8 @@
 
   async function openSavedReports(key = '', cursor = null) {
     const generation = ++listingGeneration;
-    const dialog = document.getElementById('v2ReportDlg');
+    const dialog = showReportDrawer();
     const body = document.getElementById('v2ReportBody');
-    if (!dialog.open) dialog.showModal();
     body.textContent = '저장한 리포트를 불러오고 있습니다…';
     try {
       const params = new URLSearchParams();
@@ -513,10 +602,28 @@
   }
 
   document.getElementById('v2ReportDlg')?.addEventListener('close', () => {
+    const dialog = document.getElementById('v2ReportDlg');
+    dialog.classList.remove('v2-map-expanded');
+    document.body.classList.remove('v2-report-map');
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    const toggle = document.getElementById('v2MapSpace');
+    if (toggle) { toggle.setAttribute('aria-pressed', 'false'); toggle.textContent = '지도 크게'; }
     const url = new URL(location.href);
     if (!url.searchParams.has('listing')) return;
     url.searchParams.delete('listing');
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  });
+  document.getElementById('v2MapSpace')?.addEventListener('click', event => {
+    const expanded = document.getElementById('v2ReportDlg').classList.toggle('v2-map-expanded');
+    event.currentTarget.setAttribute('aria-pressed', String(expanded));
+    event.currentTarget.textContent = expanded ? '리포트 크게' : '지도 크게';
+    if (expanded) revealCurrentListingMap();
+  });
+  document.addEventListener('keydown', event => {
+    const report = document.getElementById('v2ReportDlg');
+    if (event.key !== 'Escape' || !report?.open ||
+        [...document.querySelectorAll('dialog[open]')].some(other => other !== report)) return;
+    report.close();
   });
   document.getElementById('onbDlg')?.addEventListener('close', openInitialLink);
 

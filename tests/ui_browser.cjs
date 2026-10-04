@@ -133,10 +133,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       }
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
         return route.fulfill({status:403,json:{detail:'forbidden'}});
+      const naverMatched=url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='급매:naver-match';
       if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
         subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
-          kind:'일반매물',asking_manwon:50000,collected_at:'2026-09-29'},
-        price:{'상태':'관측비교','표본수':3},buyer_fit:{status:'unknown'},
+          kind:'일반매물',asking_manwon:50000,collected_at:'2026-09-29',
+          naver_complex_no:naverMatched?'12345':null},
+        price:naverMatched?{'상태':'관측비교','표본수':3,'호가차이율':-5.2,'비교기준일':'2026-09-29'}:
+          {'상태':'관측비교','표본수':3},
+        buyer_fit:naverMatched?{status:'within',gap_manwon:3000}:{status:'unknown'},
         positive:[{text:'동일 조건 실거래가 있습니다.'}],
         cautions:[{text:'현재 판매 여부는 확인되지 않았습니다.'}],
         next_actions:['실제 호가 확인'],evidence:[{id:'trades',label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
@@ -553,8 +557,34 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       '<div id="analysisFixture">'+reportBtn('일반매물:synthetic-hb-1')+'</div>'));
     await page.locator('#analysisFixture button').click();
     await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
+    await page.waitForFunction(()=>document.body.classList.contains('v2-report-map'));
+    const behindMap=await page.locator('#hbMap').evaluate(el=>({top:el.getBoundingClientRect().top,
+      width:el.getBoundingClientRect().width}));
+    assert.equal(behindMap.top,0);
+    assert.equal(behindMap.width,360);
+    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/가격은 괜찮나요[\s\S]*아직 싼 매물인지 판단할 수 없어요[\s\S]*내 예산에 맞나요/);
+    assert.equal(await page.locator('#v2ReportBody .v2-report-more[open]').count(),0);
+    assert.doesNotMatch(await page.locator('#v2ReportBody .v2-report-section').allTextContents().then(rows=>rows.join(' ')),/출입구가 검증되지|통학구역 자료를 연결하지/);
+    const reportLayout=await page.evaluate(()=>({modal:document.getElementById('v2ReportDlg').matches(':modal'),
+      width:document.getElementById('v2ReportDlg').getBoundingClientRect().width,
+      top:document.getElementById('v2ReportDlg').getBoundingClientRect().top,viewport:innerHeight}));
+    assert.equal(reportLayout.modal,false);
+    assert(reportLayout.top>0 && reportLayout.width<=360 && reportLayout.top<reportLayout.viewport/2);
+    await page.locator('#v2MapSpace').click();
+    assert.equal(await page.locator('#v2MapSpace').getAttribute('aria-pressed'),'true');
+    assert((await page.locator('#v2ReportDlg').evaluate(el=>el.getBoundingClientRect().height))<reportLayout.viewport/2);
+    await page.locator('#v2MapSpace').click();
+    const fieldLinks=await page.locator('#v2ReportBody .v2-field-link').evaluateAll(links=>links.map(link=>({
+      text:link.textContent,href:link.href,target:link.target,rel:link.rel,referrer:link.referrerPolicy})));
+    assert.equal(fieldLinks.length,4);
+    assert(fieldLinks.every(link=>link.target==='_blank' && link.rel.includes('noopener') && link.referrer==='no-referrer'));
+    assert(fieldLinks[0].href.startsWith('https://search.naver.com/search.naver?query='));
+    assert(fieldLinks[1].href.startsWith('https://map.naver.com/p/search/'));
+    assert.match(fieldLinks[2].href,/hogangnono/);
+    assert.match(fieldLinks[3].href,/asil/);
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);
+    await page.locator('#v2ReportBody').getByText('이 리포트에 질문하기',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'가격이 싼가?'}).click();
     assert.match(await page.locator('#v2QuickAnswer').textContent(),/동일 조건 실거래 3건과 비교/);
     await page.locator('#v2ReportBody').getByRole('button',{name:'내 예산에 맞나?'}).click();
@@ -569,12 +599,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(explanationPayloads.at(-1),{type:'listing',key:'일반매물:synthetic-hb-1',mode:'easy'});
     assert.equal(nickPayloads.length,0);
     const locationCalls=calls.filter(path=>path==='/api/listing-location').length;
+    await page.locator('#v2ReportBody').getByText('교통·학교·생활권 확인',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
     await page.locator('#v2LocationResult').getByText(/테스트역 · 약 8분/).waitFor();
     assert.match(await page.locator('#v2LocationResult').textContent(),/통학구역 후보 · 테스트초/);
     assert.match(await page.locator('#v2LocationResult').textContent(),/직선 550m/);
     assert.equal(calls.filter(path=>path==='/api/listing-location').length,locationCalls+1);
     assert.equal(nickPayloads.length,0);
+    await page.locator('#v2ReportBody').getByText('관심 기록·비교·리포트 저장',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'이 리포트 저장'}).click();
     await page.locator('#v2SaveReportStatus').getByText(/저장했습니다/).waitFor();
     await page.locator('#v2ReportBody').getByRole('button',{name:'네, 충분했어요'}).click();
@@ -597,6 +629,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2ReportBody').getByText('저장한 리포트가 없습니다.').waitFor();
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
+    await page.locator('#v2ReportBody').getByText('관심 기록·비교·리포트 저장',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'내 계정에서 열기 링크 복사'}).waitFor();
     await page.evaluate(()=>{
       Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__copiedReportLink=value;}}});
@@ -624,28 +657,39 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.waitForFunction(()=>!new URLSearchParams(location.search).has('listing'));
     await page.evaluate(()=>SignalV2.openListing('일반매물:location-fail'));
+    await page.locator('#v2ReportBody').getByText('교통·학교·생활권 확인',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
     await page.locator('#v2LocationResult').getByText(/자료를 불러오지 못했습니다/).waitFor();
     assert.match(await page.locator('#v2ReportBody').textContent(),/가격 근거/);
     await page.evaluate(()=>SignalV2.openListing('일반매물:profile-fail'));
-    await page.locator('#v2ReportBody').getByText(/내 자금 프로필을 불러오지 못해/).waitFor();
+    await page.locator('#v2ReportBody').getByText(/내 예산 정보를 지금 불러오지 못했어요/).waitFor();
     assert.match(await page.locator('#v2ReportBody').textContent(),/가격 근거/);
     await page.evaluate(()=>SignalV2.openListing('일반매물:trade-missing'));
-    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 근거 새로 확인'}).waitFor();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 다시 확인'}).waitFor();
     assert.equal(calls.filter(path=>path==='/api/v2/listings/report-enrich').length,0);
-    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 근거 새로 확인'}).click();
-    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 근거 새로 확인'}).waitFor({state:'hidden'});
+    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 다시 확인'}).click();
+    await page.locator('#v2ReportBody').getByRole('button',{name:'실거래 다시 확인'}).waitFor({state:'hidden'});
     assert.equal(calls.filter(path=>path==='/api/v2/listings/report-enrich').length,1);
     await page.evaluate(()=>SignalV2.openListing('일반매물:location-slow'));
+    await page.locator('#v2ReportBody').getByText('교통·학교·생활권 확인',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).click();
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-2'));
+    await page.locator('#v2ReportBody').getByText('교통·학교·생활권 확인',{exact:true}).click();
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 근거 확인'}).waitFor();
     await page.waitForTimeout(220);
     assert.equal(await page.locator('#v2LocationResult').textContent(),'');
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>SignalV2.openListing('급매:naver-match'));
+    await page.locator('#v2ReportBody .v2-field-link').first().waitFor();
+    assert.equal(await page.locator('#v2ReportBody .v2-field-link').first().getAttribute('href'),
+      'https://new.land.naver.com/complexes/12345');
+    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/5.2% 낮아요/);
+    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/3,000만 원 남습니다/);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#v2ReportDlg').evaluate(el=>el.open),false);
     const nickCallsBeforeLegacyReport=nickPayloads.length;
     await page.evaluate(()=>openListingReport('일반매물:synthetic-hb-1'));
-    await page.getByText('한방테스트단지',{exact:true}).last().waitFor();
+    await page.locator('#advReport').getByText('한방테스트단지',{exact:true}).waitFor();
     await page.getByText('동일 면적 거래 3건',{exact:false}).waitFor();
     await page.getByText('살 수 있는 가격보다 비쌈',{exact:false}).waitFor();
     assert.equal(calls.includes('/api/listing-kapt'),false);
@@ -664,7 +708,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('테스트초',{exact:false}).waitFor();
     await page.getByText('테스트역 ·',{exact:false}).first().waitFor();
     await page.evaluate(()=>{
-      _ms.hbMap={map:{once(_event,fn){window.__pickEntrance=fn;},off(){},setView(){}}};
+      _ms.hbMap={map:{once(_event,fn){window.__pickEntrance=fn;},off(){},setView(){},invalidateSize(){}}};
     });
     await page.getByRole('button',{name:'지도에서 출입구 후보 지정'}).click();
     assert.equal(await page.locator('#advPanel').evaluate(el=>el.style.display),'none');
@@ -855,6 +899,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.setViewportSize({width:1280,height:800});
     assert.equal(await page.locator('#signalSide').isVisible(),true);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
+    await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
+    await page.locator('#v2ReportBody .v2-field-link').first().waitFor();
+    const desktopReport=await page.locator('#v2ReportDlg').evaluate(el=>({left:el.getBoundingClientRect().left,
+      right:el.getBoundingClientRect().right,modal:el.matches(':modal')}));
+    assert.equal(desktopReport.modal,false);
+    assert.equal(desktopReport.left,0);
+    assert(desktopReport.right<640,`map side should remain visible: ${JSON.stringify(desktopReport)}`);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.setViewportSize({width:390,height:800});
     await page.waitForFunction(()=>document.getElementById('signalSide').inert);
     assert((await page.evaluate(()=>document.documentElement.scrollWidth))<=390);
@@ -881,6 +933,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-card]').count(),2);
     assert.equal(await page.locator('#v2DiscoverResults [data-v2-next]').count(),0);
     await page.locator('#v2DiscoverResults [data-v2-listing="일반매물:synthetic-1"]').click();
+    await page.locator('#v2ReportBody').getByText('관심 기록·비교·리포트 저장',{exact:true}).click();
     const reportWatch=page.locator('#v2ReportBody [data-watch-key="일반매물:synthetic-1"]');
     await reportWatch.waitFor();
     assert.equal(await reportWatch.getAttribute('aria-pressed'),'true');
@@ -1077,7 +1130,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(zoomLayout.results<=zoomLayout.available,`200% reflow results overflow: ${JSON.stringify(zoomLayout)}`);
     await page.evaluate(()=>document.getElementById('v2DiscoverDlg').close());
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
-    await page.locator('#v2ReportBody').getByText('가격 근거',{exact:true}).waitFor();
+    await page.locator('#v2ReportBody').getByText('가격 근거와 판단의 한계 자세히',{exact:true}).waitFor();
     const zoomReport=await page.evaluate(()=>({viewport:innerWidth,
       dialog:document.getElementById('v2ReportDlg').getBoundingClientRect().width,
       body:document.getElementById('v2ReportBody').scrollWidth,

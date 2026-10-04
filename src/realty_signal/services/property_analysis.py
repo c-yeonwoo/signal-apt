@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from math import isfinite
+import re
 
 from realty_signal.services import quote_check
 
@@ -61,6 +62,10 @@ def _rooms(value: object) -> int | None:
 def snapshot(row: dict) -> dict:
     """LLM/브라우저에 전달할 검증된 최소 매물 정보."""
     ref = row.get("ref") or {}
+    # 한방 hsmpInfoPk는 네이버 단지번호가 아니다. 바로이집이 제공한 번호만 연결한다.
+    naver_no = str(ref.get("complex_no") or "").strip()
+    if not re.fullmatch(r"[1-9][0-9]{0,11}", naver_no):
+        naver_no = None
     kind = row.get("유형")
     price = _number(row.get("총액"))
     area = _number(ref.get("전용면적"))
@@ -80,6 +85,7 @@ def snapshot(row: dict) -> dict:
         "coordinate": coords,
         "location_quality": "listing_point_unverified_entrance" if coords else "unknown",
         "complex_source_id": ref.get("hanbang_complex_id") or ref.get("complex_no"),
+        "naver_complex_no": naver_no,
     }
 
 
