@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="signal-apt-client-version" content="__SIGNAL_APT_CLIENT_VERSION__" />
 <title>Signal APT</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'%3E%3Crect width='72' height='72' rx='18' fill='%231d4ed8'/%3E%3Crect x='16' y='42' width='11' height='18' rx='2' fill='white'/%3E%3Crect x='30' y='30' width='11' height='30' rx='2' fill='white'/%3E%3Crect x='44' y='20' width='11' height='40' rx='2' fill='white'/%3E%3Cpolyline points='11,46 30,36 46,26 60,14' fill='none' stroke='%2316a34a' stroke-width='4'/%3E%3Ccircle cx='60' cy='14' r='6' fill='%2316a34a'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
@@ -133,6 +134,14 @@
   header { padding:14px 28px; border-bottom:1px solid var(--line); display:flex;
            align-items:center; gap:16px; flex-wrap:wrap; min-height:60px; box-sizing:border-box;
            background:var(--panel); position:relative; z-index:600; }
+  #clientUpdateBanner { position:fixed; top:var(--hh,70px); left:0; right:0; z-index:2100;
+    display:flex; align-items:center; justify-content:center; gap:12px; padding:10px 16px;
+    background:#fff7ed; color:var(--txt); border-bottom:2px solid var(--warn);
+    box-shadow:0 4px 16px rgba(17,24,39,.15); font-size:14px; line-height:1.45; }
+  #clientUpdateBanner[hidden] { display:none; }
+  #clientUpdateBanner button { min-height:40px; padding:7px 14px; border:0; border-radius:8px;
+    background:var(--accent); color:#fff; font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; }
+  @media(max-width:600px) { #clientUpdateBanner { align-items:stretch; flex-direction:column; } }
   header h1 { font-size:17px; margin:0; white-space:nowrap; font-weight:600; letter-spacing:-0.02em; }
   .tabs { display:flex; gap:2px; }
   .tab { padding:10px 16px; min-height:44px; border:none; border-radius:10px; background:transparent;
@@ -686,6 +695,10 @@
     </div>
   </div>
 </header>
+<div id="clientUpdateBanner" role="alert" hidden>
+  <span><b>새 화면이 배포됐습니다.</b> 이 탭의 시그널 설명이 이전 방식일 수 있어요.</span>
+  <button type="button" onclick="location.reload()">새 화면으로 갱신</button>
+</div>
 
 <div id="groupSubnav" class="subnav" style="display:none">
   <span id="groupSubLabel" style="font-size:13px;color:var(--dim);font-weight:600;white-space:nowrap">매물 발견</span>
@@ -1958,6 +1971,7 @@ function switchTab(t, fromHistory=false){
   if(typeof updateCmpFab==='function') updateCmpFab();
   // URL 해시 동기화 — 새로고침 시 현재 탭 유지
   if(location.hash.slice(1)!==t) history[fromHistory?'replaceState':'pushState'](null, '', '#'+t);
+  if(window._signalAppReady) checkClientVersion();
 }
 const _ROUTES=[..._ALLVIEWS, 'market','listings','find','home'];
 // 없앤 탭의 옛 링크는 지금 하는 일로 보낸다.
@@ -5623,6 +5637,25 @@ async function doRefresh(){
     btn.textContent = `✓ ${r.last_date}`; } catch(e){ btn.textContent = '갱신 실패'; }
   setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
 }
+const _CLIENT_VERSION=document.querySelector?.('meta[name="signal-apt-client-version"]')?.content||'';
+let _clientVersionCheckAt=0, _clientVersionChecking=false, _clientVersionOutdated=false;
+async function checkClientVersion(force=false){
+  if(!window._signalAppReady || document.visibilityState!=='visible' || !_CLIENT_VERSION ||
+     _CLIENT_VERSION.startsWith('__') || _clientVersionChecking || _clientVersionOutdated ||
+     (!force && _clientVersionCheckAt && Date.now()-_clientVersionCheckAt<60000)) return;
+  _clientVersionCheckAt=Date.now();
+  _clientVersionChecking=true;
+  try{
+    const response=await fetch('/api/client-version',{cache:'no-store'});
+    if(!response.ok) return;
+    const current=await response.json();
+    if(current.client_version && current.client_version!==_CLIENT_VERSION){
+      _clientVersionOutdated=true;
+      document.getElementById('clientUpdateBanner').hidden=false;
+    }
+  }catch(e){ /* 네트워크 장애는 다음 진입·포커스에서 재시도 */ }
+  finally{ _clientVersionChecking=false; }
+}
 const _MARKET_CACHE_KEY='signal-apt-market-v3', _DAY_MS=86400000;
 let _marketRevalidation=null, _marketGeneration=0;
 function _marketCached(){
@@ -5712,6 +5745,7 @@ async function loadData(force=false){
 }
 let _lastVisibleMarketCheck=0, _visibleMarketChecking=false;
 async function refreshVisibleMarket(){
+  if(window._signalAppReady && document.visibilityState==='visible') checkClientVersion();
   if(!window._signalAppReady || document.visibilityState!=='visible' || _visibleMarketChecking ||
      Date.now()-_lastVisibleMarketCheck<900000) return;
   _lastVisibleMarketCheck=Date.now();
@@ -8052,6 +8086,7 @@ async function startApp(needOnboard){
   _lastVisibleMarketCheck=Date.now();
   document.addEventListener('visibilitychange', refreshVisibleMarket);
   window.addEventListener('focus', refreshVisibleMarket);
+  window.addEventListener('online', ()=>checkClientVersion(true));
   setInterval(refreshVisibleMarket, 900000);
   if(window.SignalV2 && !document.getElementById('onbDlg').open) SignalV2.openInitialLink();
   setupAuctionBookmarklet();

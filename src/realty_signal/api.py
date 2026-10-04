@@ -24,9 +24,8 @@ log = logging.getLogger("realty_signal")
 
 # 인증 게이트: /api/* 는 세션 필수(아래 prefix·정확경로만 예외). 그 외(/, 정적)는 허용.
 _OPEN_PREFIXES = ("/api/auth/",)
-# 가입 전에 보여줘도 되는 것 — **집계 수치만.** 지역별·개인별 데이터는 절대 여기 넣지 않는다.
-# 과거 재구성 비교는 연구용·집계 결과임을 명시해 가입 전에도 확인할 수 있게 한다.
-_OPEN_PATHS = ("/api/backtest",)
+# 가입 전 공개 경로는 연구용 집계와 UI 버전뿐이다. 지역별·개인별 데이터는 절대 여기 넣지 않는다.
+_OPEN_PATHS = ("/api/backtest", "/api/client-version")
 
 
 from realty_signal.routes import deps
@@ -520,6 +519,23 @@ def myfeed(request: Request):
 
 
 WEB_DIR = Path(__file__).parent / "web"
+_CLIENT_VERSION_MARKER = "__SIGNAL_APT_CLIENT_VERSION__"
+
+
+def _client_version_for(web_dir: Path) -> str:
+    digest = hashlib.sha256()
+    for name in ("index.html", "signal-v2.js"):
+        data = (web_dir / name).read_bytes()
+        digest.update(name.encode("ascii"))
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()[:20]
+
+
+@lru_cache(maxsize=1)
+def _client_version() -> str:
+    """Immutable UI revision, computed once per deployment process."""
+    return _client_version_for(WEB_DIR)
 
 
 def _kb():
@@ -546,21 +562,23 @@ def _signals_df():
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    """단일 HTML(약 460KB). 재방문마다 통째로 다시 내려보내지 않는다.
-
-    파일 mtime+길이를 ETag 로 쓰고 `If-None-Match` 가 같으면 **304** 로 끝낸다.
-    `no-cache, must-revalidate` 라 배포 직후에도 낡은 화면이 남지 않는다 —
-    항상 물어보되 같으면 본문만 생략한다(460KB → 헤더 몇 줄).
-    """
+    """Revalidate the HTML by content and expose its matching JS revision."""
     from fastapi.responses import Response
 
-    p = WEB_DIR / "index.html"
-    body = p.read_text(encoding="utf-8")
-    etag = f'W/"{int(p.stat().st_mtime)}-{len(body)}"'
+    version = _client_version()
+    etag = f'W/"{version}"'
     headers = {"ETag": etag, "Cache-Control": "no-cache, must-revalidate"}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
-    return HTMLResponse(body, headers=headers)
+    body = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(body.replace(_CLIENT_VERSION_MARKER, version), headers=headers)
+
+
+@app.get("/api/client-version")
+def client_version():
+    """Lightweight public check for tabs that were open across a deployment."""
+    return JSONResponse({"client_version": _client_version()},
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/assets/signal-v2.js")
