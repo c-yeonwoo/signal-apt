@@ -399,6 +399,22 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(priceUi.filtered,['low']);
     assert.deepEqual(priceUi.restored,priceUi.all);
     assert.match(priceUi.note,/가격 미상 1건 제외/);
+    const priceEvidenceUi=await page.evaluate(()=>{
+      const base={유형:'일반매물',지역:'테스트구',시도:'서울',총액:50000,기회도:10,지역식별상태:'matched',
+        ref:{전용면적:59,hanbang_id:'sample',hanbang_complex_id:'complex'},source:'hanbang'};
+      _laApplyResponse('일반매물',{listings:[
+        {...base,key:'single',단지명:'단일근거',price_comparison:{상태:'관측비교',호가차이율:-12,표본수:4}},
+        {...base,key:'overlap',단지명:'근거중첩',price_comparison:{상태:'관측비교',호가차이율:-5,표본수:4},
+          asking_comparison:{상태:'관측비교',호가차이율:-7,표본수:3,공급사:'hanbang'},
+          price_reduction:{상태:'수집호가인하관측',차이율:-2,관측횟수:2,확인시각:100}},
+        {...base,key:'positive',단지명:'양의비교',price_comparison:{상태:'관측비교',호가차이율:3,표본수:5}}
+      ],asof:'2026-09-28',meta:{confirmed_budget:false,private_access:true}});
+      document.getElementById('laSort').value='evidence_overlap'; onLaSort();
+      return {order:window.__budgetItems.map(x=>x.key),detail:window.__budgetOpt.detail(window.__budgetItems[0])};
+    });
+    assert.equal(priceEvidenceUi.order[0],'overlap');
+    assert.match(priceEvidenceUi.detail,/여러 가격 근거 관측: 같은 면적 실거래 · 현재 수집 호가 표본 · 같은 매물 호가 인하/);
+    assert.match(priceEvidenceUi.detail,/추가 확인용이며 매수 권고가 아닙니다/);
     const ambiguousFavorite=await page.evaluate(async()=>{
       const originalFetch=window.fetch, oldFavorites=_favs, oldIdentity=_favComplexIdentity;
       _favs=new Set(['complex:중구|옛 관심단지']);
