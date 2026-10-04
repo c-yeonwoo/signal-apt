@@ -24,6 +24,7 @@
   const riskLabel = code => Object.hasOwn(risks, code) ? risks[code] : '확인되지 않은 보류 사유가 있습니다';
   const historicalGradeLabel = code => Object.hasOwn(historicalGrades, code) ? historicalGrades[code] : '표시 불가';
   let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0, discoveryRegionGeneration = 0;
+  let discoveryReturn = null;
   let noteSubject = null, editingNote = null, notesCache = [];
   let noteList = {generation:0, next_cursor:null, loading:false};
   let savedReportList = {key:null, items:[], next_cursor:null, policy:null};
@@ -310,8 +311,10 @@
     }
   }
 
-  async function openListing(key) {
+  async function openListing(key, fromDiscovery = false) {
     if (!key) return;
+    discoveryReturn = fromDiscovery ? {tab:location.hash.slice(1), key} : null;
+    document.getElementById('v2BackToDiscovery').hidden = !discoveryReturn;
     if (!enabled('report_v2_enabled')) {
       if (typeof window.openListingReport === 'function') window.openListingReport(key);
       return;
@@ -634,6 +637,8 @@
   }
 
   document.getElementById('v2ReportDlg')?.addEventListener('close', () => {
+    discoveryReturn = null;
+    document.getElementById('v2BackToDiscovery').hidden = true;
     const dialog = document.getElementById('v2ReportDlg');
     dialog.classList.remove('v2-map-expanded');
     document.body.classList.remove('v2-report-map');
@@ -650,6 +655,18 @@
     event.currentTarget.setAttribute('aria-pressed', String(expanded));
     event.currentTarget.textContent = expanded ? '리포트 크게' : '지도 크게';
     if (expanded) revealCurrentListingMap();
+  });
+  document.getElementById('v2BackToDiscovery')?.addEventListener('click', () => {
+    const context = discoveryReturn;
+    if (!context) return;
+    document.getElementById('v2ReportDlg').close();
+    if (context.tab && typeof window.switchTab === 'function') window.switchTab(context.tab);
+    const dialog = document.getElementById('v2DiscoverDlg');
+    if (!dialog.open) dialog.showModal();
+    syncDiscoveryCompareAction();
+    const previous = [...document.querySelectorAll('#v2DiscoverResults [data-v2-listing]')]
+      .find(button => button.dataset.v2Listing === context.key);
+    (previous || document.getElementById('v2DiscoverForm').elements.max_price_manwon).focus();
   });
   document.addEventListener('keydown', event => {
     const report = document.getElementById('v2ReportDlg');
@@ -1060,7 +1077,7 @@
       }
       result.querySelectorAll('[data-v2-listing]').forEach(button => button.onclick = () => {
         document.getElementById('v2DiscoverDlg').close();
-        openListing(button.dataset.v2Listing);
+        openListing(button.dataset.v2Listing, true);
       });
       result.querySelectorAll('[data-v2-occupancy]').forEach(button => button.onclick = async () => {
         const name = button.closest('[data-v2-card]')?.querySelector('b')?.textContent || '선택한 매물';
