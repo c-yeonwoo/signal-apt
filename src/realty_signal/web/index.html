@@ -745,10 +745,11 @@
     <div id="laMoreFilters" class="la-more">
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
-        <select id="laSort" class="ctrl" onchange="onLaSort()" style="font-size:12px;padding:3px 6px">
+        <select id="laSort" class="ctrl" onchange="onLaSort()" title="확인된 같은 면적 실거래 비교가 있는 매물을 먼저 정렬합니다. 근거가 부족한 매물은 뒤에 표시합니다." style="font-size:12px;padding:3px 6px">
           <option value="budget" selected>내 예산 순</option>
           <option value="opp">시장 참고점수순</option>
           <option value="signal">시그널 강한순</option>
+          <option value="trade_low">같은 면적 실거래보다 낮은순</option>
           <option value="price_asc">가격 낮은순</option>
           <option value="price_desc">가격 높은순</option>
         </select></span>
@@ -3697,6 +3698,22 @@ async function saveListingDong(btn){
     toast('동 이름을 내 계정에 저장했습니다.');
   }catch(e){ btn.disabled=false; toast(e.message||'동 이름을 저장하지 못했습니다.'); }
 }
+function _laTradePriceEvidence(row){
+  const price=row?.price_comparison;
+  const diff=price?.['호가차이율'];
+  const count=price?.['표본수'];
+  if(price?.['상태']!=='관측비교'||typeof diff!=='number'||!Number.isFinite(diff)
+      ||typeof count!=='number'||!Number.isFinite(count)||count<3) return null;
+  return {diff,count};
+}
+function _laCompareTradePrice(a,b){
+  const left=_laTradePriceEvidence(a),right=_laTradePriceEvidence(b);
+  if(left&&!right) return -1;
+  if(!left&&right) return 1;
+  if(!left&&!right) return (b['기회도']??-1)-(a['기회도']??-1);
+  return left.diff-right.diff||right.count-left.count||
+    (b['기회도']??-1)-(a['기회도']??-1);
+}
 function renderAllListings(){
   _laRenderedKey=_laViewKey(_laCurrentTypes);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['지역']) &&
@@ -3705,6 +3722,7 @@ function renderAllListings(){
   const sr=x=>_SIGRANK[x['시그널']]??9;
   rows=rows.slice().sort((a,b)=>{
     if(_laSort==='signal') return sr(a)-sr(b) || opp(b)-opp(a);
+    if(_laSort==='trade_low') return _laCompareTradePrice(a,b);
     if(_laSort==='price_asc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pa-pb; }
     if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
     if(_laSort==='opp') return opp(b)-opp(a);
