@@ -1501,12 +1501,12 @@
 
 <!-- 내 시그널 맵 (별도 페이지) -->
 <div id="view-mymap" style="display:none">
- <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
+ <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px;min-width:0">
   <h2 class="page-head">내 시그널 맵</h2>
-  <p class="page-sub">관심지역·단지 · 핀 두 개로 거리</p>
+  <p class="page-sub">관심지역·단지 · 핀 두 개로 표시 좌표 간 거리 확인</p>
   <div id="mmSummary" style="display:none;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-    <div style="position:relative;flex:1;min-width:220px;max-width:360px">
+    <div style="position:relative;flex:1 1 220px;min-width:0;max-width:360px">
       <input id="mmSearch" class="bigsearch" placeholder="단지 검색 — 지도 표시·비교 추가" oninput="mmSearchDeb()" onkeydown="if(event.key==='Enter')mmDoSearch()" style="width:100%">
       <div id="mmSearchRes" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);max-height:300px;overflow:auto;z-index:800"></div>
     </div>
@@ -1514,13 +1514,13 @@
     <button class="chip" onclick="mmClearSearch()" title="검색 핀·측정선 지우기">초기화</button>
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
-    <div id="myMap" style="flex:1;min-width:340px;height:560px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
-    <aside style="width:290px;flex:0 0 auto">
-      <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px">핀 두 개를 클릭해 거리를 재보세요.</div>
+    <div id="myMap" style="flex:1 1 540px;min-width:0;width:100%;height:560px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
+    <aside style="width:290px;flex:1 1 280px;min-width:0;max-width:100%">
+      <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px;overflow-wrap:anywhere">핀 두 개를 클릭해 표시 좌표 간 거리를 확인하세요.</div>
       <div id="myMapInfo" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;min-height:60px"></div>
       <div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.8">
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#2563eb;display:inline-block"></span> 현재 거주지</span><br>
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#16a34a;display:inline-block"></span> 관심지역</span><br>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#2563eb;display:inline-block"></span> 거주지 시군구 중심</span><br>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#16a34a;display:inline-block"></span> 관심지역 중심</span><br>
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#ea580c;display:inline-block"></span> 관심단지</span></div>
       <div id="myMapEmpty" style="font-size:12px;color:var(--dim);margin-top:10px"></div>
     </aside>
@@ -2867,9 +2867,10 @@ function _renderImjang(){
   const d=_imj; if(!d) return;
   const head=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px">
     ${d['날짜']} · ${d['출발']} 출발 → ${d['종료']} 종료 <span style="color:var(--txt)">(총 ${Math.floor(d['총소요']/60)}시간 ${d['총소요']%60}분)</span>
-    · 이동 ${d['이동합']}분 · 단지당 ${d['체류']}분${d['집기준']?'':d['거주지확인필요']
+    · 이동 ${d['이동합']}분 · 단지당 ${d['체류']}분${d['집기준']?' · 거주지 시군구 중심 출발':d['거주지확인필요']
       ?' · <span>거주지 위치 미확인: 내 조건에서 주소 검색 결과를 다시 선택해 주세요.</span>'
-      :' · <span>내 조건에서 거주지를 선택하면 집에서 출발하는 순서로 짭니다.</span>'}</div>`;
+      :' · <span>내 조건에서 거주지를 선택하면 시군구 중심 기준으로 순서를 짭니다.</span>'}</div>
+    <div style="font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:10px">방문 순서와 시각은 표시 좌표·대중교통 조회 또는 직선거리 추정으로 만든 참고안입니다. 실제 집 위치·단지 출입구·출발 시간대에 따라 달라질 수 있습니다.</div>`;
   const stops=d.stops.map((s,i)=>{
     const move=s['이동']?`<div style="font-size:11px;color:var(--dim);margin:8px 0 8px 8px">↓ 이동 ${s['이동']}분</div>`:'';
     const seen=s['방문일']?`<span style="font-size:11px;color:#16a34a">· ${s['방문일']} 방문함</span>`:'';
@@ -7371,7 +7372,7 @@ async function drawMyMap(){
   _myLayer=L.layerGroup().addTo(myMap); _myMarkers=[];
   pts.forEach((pt,i)=>{
     const m=L.marker([pt.lat,pt.lng],{icon:_pinIcon(pt.color,false)})
-      .bindTooltip(`${_MMICON[pt.kind]} ${pt.name}`,{direction:'top'})
+      .bindTooltip(`${_MMICON[pt.kind]} ${esc(pt.name)}${['home','region'].includes(pt.kind)?' · 시군구 중심':''}`,{direction:'top'})
       .addTo(_myLayer);
     m.on('click',()=>myPinClick(i));
     _myMarkers.push(m);
@@ -7379,7 +7380,7 @@ async function drawMyMap(){
   document.getElementById('myMapEmpty').textContent = p['거주지'] && !homeVerified
     ? '거주지 위치를 확인하지 못했습니다. 내 조건에서 주소 검색 결과를 다시 선택해 주세요.'
     : pts.length ? '' : '표시할 핀이 없습니다. 내 조건에서 거주지를 선택하거나, 단지 검색·★로 관심지역·관심단지를 추가하세요.';
-  document.getElementById('myMapDist').textContent = '핀 두 개를 클릭해 거리를 재보세요.';
+  document.getElementById('myMapDist').textContent = '핀 두 개를 클릭해 표시 좌표 간 거리를 확인하세요.';
   document.getElementById('myMapInfo').innerHTML = '';
   updateCmpChip();
   renderCompareTable();
@@ -7458,7 +7459,8 @@ function myPinClick(i){
   const uv=(window._uv||{})[pt.region];
   const badgeH = pt.sig?badge(pt.sig):'';
   const gd=(typeof _REGION_GRADE!=='undefined'&&pt.grade)?_REGION_GRADE[pt.grade]:null;
-  let info=`<b style="font-size:14px">${_MMICON[pt.kind]} ${pt.name}</b> ${badgeH}`;
+  let info=`<b style="font-size:14px">${_MMICON[pt.kind]} ${esc(pt.name)}</b> ${badgeH}`;
+  if(['home','region'].includes(pt.kind)) info+='<div style="font-size:11px;color:var(--dim);margin-top:4px">시군구 중심 표시점 · 실제 주소가 아닙니다.</div>';
   if(gd) info+=` <span style="color:${gd.col};font-weight:700;font-size:12px">${gd.label}</span>`;
   if(uv) info+=`<div style="margin-top:6px;font-size:12px;color:var(--dim);line-height:1.7">평단 ${won(uv.price)}/평 · 입지 ${uv['입지점수']??'–'}<br>업무지구 ${uv['transit_min']??'–'}분${uv['최단업무지구']?'('+uv['최단업무지구']+')':''} · 학원 ${uv['school']??'–'} · 공원 ${uv['공원']??'–'}</div>`;
   const nm=pt.name.replace(/'/g,'');
@@ -7482,7 +7484,7 @@ function myPinClick(i){
       <span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널 보기 →</span></div>`;
   const wp=_profile||{};
   const commute = (pt.kind!=='work' && wp['직장lat'] && wp['직장lng']);
-  if(commute) info+=`<div style="margin-top:7px;font-size:12px;color:var(--dim)">💼 ${wp['직장']||'직장'}까지 <span id="mmCommute">계산 중…</span></div>`;
+  if(commute) info+=`<div style="margin-top:7px;font-size:12px;color:var(--dim)">💼 ${esc(wp['직장']||'직장')}까지 표시 좌표 기준 <span id="mmCommute">계산 중…</span></div>`;
   document.getElementById('myMapInfo').innerHTML = info;
   if(commute){ (async()=>{
     try{ const r=await (await fetch(`/api/transit?sx=${pt.lng}&sy=${pt.lat}&ex=${wp['직장lng']}&ey=${wp['직장lat']}`)).json();
@@ -7495,7 +7497,9 @@ async function myMeasure(){
   const a=_myPts[_mySel[0]], b=_myPts[_mySel[1]];
   const km=_haversineKm([a.lat,a.lng],[b.lat,b.lng]);
   const box=document.getElementById('myMapDist');
-  box.innerHTML=`<b>${a.name}</b> ↔ <b>${b.name}</b><br>직선거리 <b style="color:var(--accent)">${km.toFixed(1)}km</b> · 대중교통 <span id="myTransit">계산 중…</span>`;
+  box.innerHTML=`<b>${esc(a.name)}</b> ↔ <b>${esc(b.name)}</b><br>표시 좌표 간 직선거리 <b style="color:var(--accent)">${km.toFixed(1)}km</b> · 대중교통 <span id="myTransit">계산 중…</span>`
+    + (['home','region'].includes(a.kind)||['home','region'].includes(b.kind)
+      ? '<div style="font-size:11px;margin-top:5px">시군구 중심점 포함 · 실제 집/단지 출입구 기준은 아닙니다.</div>' : '');
   // 지도 위에 두 지점 연결선 표시
   if(_myLine) _myLine.remove();
   _myLine=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#2563eb',weight:3,dashArray:'6 5',opacity:.85}).addTo(myMap);
