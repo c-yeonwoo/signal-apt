@@ -1,15 +1,21 @@
 """Korean calendar boundaries must not depend on the deployment host timezone."""
 
+import json
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from realty_signal import api, auction, store, time_kst, weekly
 from realty_signal.ingest import complex as complex_ingest, volume
 from realty_signal.services import discovery_occupancy
 from realty_signal.services import market_data as md
+from realty_signal.services import signal_assessment as sa
+from realty_signal.routes import reports_v2
+from realty_signal.signals.engine import SignalConfig
 from realty_signal.time_kst import previous_months, today_kst
+from test_signal_assessment_v2 import _kb, _row
 
 
 def test_today_kst_crosses_day_before_utc_midnight():
@@ -60,3 +66,19 @@ def test_display_signal_assessment_receives_korean_date(monkeypatch):
         "노원구": {"display_signal": "BUY", "assessment_status": "ready"}})
     assert api._display_signal_map() == {"노원구": "BUY"}
     assert seen == ["2026-10-05"]
+
+
+def test_region_report_and_issued_assessment_use_korean_day_at_stale_boundary(monkeypatch):
+    kb = _kb()
+    monkeypatch.setattr(sa, "today_kst", lambda: date(2026, 10, 7))
+    direct = sa.build(kb, _row(), SignalConfig(), asof=date(2026, 9, 28))
+    assert direct["assessment_status"] == "held"
+    assert "source_stale" in direct["risk_flags"]
+
+    monkeypatch.setattr(md, "kb", lambda: kb)
+    monkeypatch.setattr(md, "signals_df", lambda: pd.DataFrame([_row()]))
+    monkeypatch.setattr(md, "signal_config", SignalConfig)
+    monkeypatch.setattr(md, "region_for_ref", lambda ref: "중구")
+    report = json.loads(reports_v2.region_report("중구").body)
+    assert report["status"] == "held"
+    assert report["assessment"]["display_grade"] == "판단 보류"
