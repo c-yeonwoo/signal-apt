@@ -1047,6 +1047,40 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       assert(layout.results<=layout.available,`discovery results overflow at ${width}px: ${JSON.stringify(layout)}`);
       await page.evaluate(()=>document.getElementById('v2DiscoverDlg').close());
     }
+    // 360 CSS px 화면을 200% 확대했을 때의 리플로우 폭을 근사한다.
+    // OS/브라우저 실제 확대·스크린리더 실사용 검증을 대신하지는 않는다.
+    await page.setViewportSize({width:180,height:400});
+    await page.evaluate(()=>SignalV2.openDiscovery());
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    await page.locator('#v2DiscoverResults [data-v2-card]').first().waitFor();
+    const zoomLayout=await page.evaluate(()=>({viewport:innerWidth,
+      page:document.documentElement.scrollWidth,
+      dialog:document.getElementById('v2DiscoverDlg').getBoundingClientRect().width,
+      form:document.getElementById('v2DiscoverForm').scrollWidth,
+      formAvailable:document.getElementById('v2DiscoverForm').clientWidth,
+      results:document.getElementById('v2DiscoverResults').scrollWidth,
+      available:document.getElementById('v2DiscoverResults').clientWidth,
+      overflowing:[...document.querySelectorAll('#v2DiscoverResults *')]
+        .filter(el=>el.getBoundingClientRect().right>document.getElementById('v2DiscoverResults').getBoundingClientRect().right+1)
+        .slice(0,5).map(el=>({tag:el.tagName,className:el.className,text:el.textContent.slice(0,35)}))}));
+    assert(zoomLayout.page<=zoomLayout.viewport,`200% reflow page overflows: ${JSON.stringify(zoomLayout)}`);
+    assert(zoomLayout.dialog<=zoomLayout.viewport,`200% reflow dialog overflows: ${JSON.stringify(zoomLayout)}`);
+    assert(zoomLayout.form<=zoomLayout.formAvailable,`200% reflow form overflows: ${JSON.stringify(zoomLayout)}`);
+    assert(zoomLayout.results<=zoomLayout.available,`200% reflow results overflow: ${JSON.stringify(zoomLayout)}`);
+    await page.evaluate(()=>document.getElementById('v2DiscoverDlg').close());
+    await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
+    await page.locator('#v2ReportBody').getByText('가격 근거',{exact:true}).waitFor();
+    const zoomReport=await page.evaluate(()=>({viewport:innerWidth,
+      dialog:document.getElementById('v2ReportDlg').getBoundingClientRect().width,
+      body:document.getElementById('v2ReportBody').scrollWidth,
+      available:document.getElementById('v2ReportBody').clientWidth,
+      overflowing:[...document.querySelectorAll('#v2ReportBody *')]
+        .filter(el=>el.getBoundingClientRect().right>document.getElementById('v2ReportBody').getBoundingClientRect().right-18)
+        .slice(0,5).map(el=>({tag:el.tagName,className:el.className,text:el.textContent.slice(0,35)}))}));
+    assert(zoomReport.dialog<=zoomReport.viewport,`200% reflow report dialog overflows: ${JSON.stringify(zoomReport)}`);
+    assert(zoomReport.body<=zoomReport.available,`200% reflow report body overflows: ${JSON.stringify(zoomReport)}`);
+    await page.evaluate(()=>document.getElementById('v2ReportDlg').close());
+    await page.setViewportSize({width:360,height:800});
     const rollout = await page.evaluate(async()=>{
       const original=window.openListingReport;
       window._featureFlags={report_v2_enabled:true,discovery_v2_enabled:true,
@@ -1075,6 +1109,6 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(rollout,{aiHidden:true,fallbackKey:'일반매물:synthetic-hb-1',
       discoverClosed:true,reportPaused:true,nickHidden:true,retainedClass:true});
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360/390/1280px, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
+    console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing report and Nick context');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
