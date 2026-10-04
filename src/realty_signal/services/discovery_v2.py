@@ -264,10 +264,27 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
                   "max_monthly_manwon": "입력 가정의 월 부담 상한 안입니다.",
                   "region": "선택한 지역입니다.", "region_code": "선택한 지역입니다."}[passed[0]["field"]]
     else:
-        reason = "조건을 입력하면 적합성을 비교합니다." if not checks else "조건 충족을 확인하지 못했습니다."
-    if preference["matched"]:
-        reason = "선호 지역과 " + reason if passed else "선호 지역입니다."
-    elif not passed and preference["satisfied"]:
+        unknown_reason = {
+            "max_price_manwon": ("호가가 없어 예산 부합을 판단하지 않았습니다." if price is None else
+                                 "지난 수집 호가라 현재 예산 부합을 판단하지 않았습니다."),
+            "min_area_m2": "전용면적이 없어 원하는 면적 충족 여부를 판단하지 않았습니다.",
+            "min_rooms": "방 개수가 없어 원하는 조건 충족 여부를 판단하지 않았습니다.",
+            "move_in_by": "입주 가능일이 확인되지 않아 필요한 시점인지 판단하지 않았습니다.",
+            "max_commute_minutes": "대중교통 안내시간이 확인되지 않아 통근 조건을 판단하지 않았습니다.",
+            "max_monthly_manwon": "자금·정책 가정이 확인되지 않아 월 부담 조건을 판단하지 않았습니다.",
+            "region_code": "매물의 시군구 코드가 없어 선택한 지역인지 확인되지 않았습니다.",
+        }
+        if failed:
+            reason = "확인된 필수 조건을 넘습니다."
+        elif missing:
+            reason = unknown_reason.get(missing[0]["field"], "확인되지 않은 조건이 있습니다.")
+        else:
+            reason = "조건을 입력하면 적합성을 비교합니다."
+    if preference["matched"] and passed:
+        reason = "선호 지역과 " + reason
+    elif not checks and preference["matched"]:
+        reason = "선호 지역입니다."
+    elif not checks and preference["satisfied"]:
         reason = "입력한 선호 조건 일부에 부합합니다."
     failed_reason = {"max_price_manwon": "호가가 설정한 상한보다 높습니다.",
                      "min_area_m2": "전용면적이 원하는 최소 면적보다 작습니다.",
@@ -279,13 +296,16 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
                      "region_code": "선택한 필수 지역 밖의 매물입니다."}
     tradeoff = (" ".join(failed_reason[x["field"]] for x in failed) if failed else
                 "현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다.")
-    verify = ("매물 판매 여부와 실제 호가를 확인하세요." if listing["stale"] else
-              finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
+    verify = (finance.get("reason") if missing and missing[0]["field"] == "max_monthly_manwon" and finance else
+              "매물의 현재 호가와 판매 여부를 확인하세요." if missing and missing[0]["field"] == "max_price_manwon" else
+              "매물의 전용면적을 확인하세요." if missing and missing[0]["field"] == "min_area_m2" else
               "매물의 시군구 코드를 확인하세요." if missing and missing[0]["field"] == "region_code" else
               "매물의 방 개수를 확인하세요." if missing and missing[0]["field"] == "min_rooms" else
               "입주 가능일이 시기 표현이거나 미확인입니다. 중개사에게 실제 입주일을 확인하세요." if missing and missing[0]["field"] == "move_in_by" else
               "저장된 직장까지의 대중교통 경로를 확인하세요." if missing and missing[0]["field"] == "max_commute_minutes" else
-              f"{missing[0]['field']} 자료를 확인하세요." if missing else
+              "확정 자금과 월 부담 가정을 확인하세요." if missing and missing[0]["field"] == "max_monthly_manwon" else
+              "확인되지 않은 조건의 원천 자료를 확인하세요." if missing else
+              "매물 판매 여부와 실제 호가를 확인하세요." if listing["stale"] else
               "실제 자금·매물 상태를 확인하세요.")
     stale_over_budget = (listing["stale"] and price is not None
                          and "max_price_manwon" in spec and price > spec["max_price_manwon"])

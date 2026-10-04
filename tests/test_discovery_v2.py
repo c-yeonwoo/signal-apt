@@ -49,6 +49,8 @@ def test_stale_price_never_passes_and_invalid_input_is_rejected():
                             {"max_price_manwon": 50000})
     assert not out["groups"]["matched"]
     assert out["groups"]["verify"][0]["constraints"][0]["status"] == "unknown"
+    assert out["groups"]["verify"][0]["recommendation_reason"] == (
+        "지난 수집 호가라 현재 예산 부합을 판단하지 않았습니다.")
     for spec in ({"max_price_manwon": -1}, {"limit": 51}, {"invented": 1}):
         try:
             discovery.validate(spec)
@@ -56,6 +58,38 @@ def test_stale_price_never_passes_and_invalid_input_is_rejected():
             pass
         else:
             raise AssertionError("invalid conditions were accepted")
+
+
+def test_unknown_required_facts_name_the_missing_field_without_internal_codes():
+    cases = [
+        ({"max_price_manwon": 60_000}, _row("price", price=None), "호가가 없어", "현재 호가"),
+        ({"min_area_m2": 59}, _row("area", area=None), "전용면적이 없어", "전용면적"),
+        ({"min_rooms": 3}, _row("rooms"), "방 개수가 없어", "방 개수"),
+        ({"move_in_by": "2026-12-31"}, _row("move"), "입주 가능일이 확인되지 않아", "실제 입주일"),
+        ({"max_commute_minutes": 60}, _row("commute"), "대중교통 안내시간이 확인되지 않아", "대중교통 경로"),
+        ({"max_monthly_manwon": 200}, _row("finance"), "자금·정책 가정이 확인되지 않아", "월 부담"),
+        ({"region_code": "11350"}, _row("region"), "시군구 코드가 없어", "시군구 코드"),
+    ]
+    for conditions, row, why, next_step in cases:
+        candidate = discovery.discover([row], conditions)["groups"]["verify"][0]
+        assert why in candidate["recommendation_reason"]
+        assert next_step in candidate["verify_next"]
+        assert not any(field in candidate["verify_next"] for field in (
+            "max_price_manwon", "min_area_m2", "max_monthly_manwon"))
+    preferred_unknown = discovery.discover([_row("price", price=None)], {
+        "max_price_manwon": 60_000, "prefer_region": "노원구",
+    })["groups"]["verify"][0]
+    assert "호가가 없어" in preferred_unknown["recommendation_reason"]
+    old_missing_area = discovery.discover([_row("old-area", price=50_000, stale=True)], {
+        "min_area_m2": 59,
+    })["groups"]["verify"][0]
+    assert "전용면적이 없어" in old_missing_area["recommendation_reason"]
+    assert old_missing_area["verify_next"] == "매물의 전용면적을 확인하세요."
+    fail_and_unknown = discovery.discover([_row("small-no-price", price=None, area=40)], {
+        "max_price_manwon": 60_000, "min_area_m2": 59, "include_exceeded": True,
+    })["groups"]["exceeded"][0]
+    assert fail_and_unknown["recommendation_reason"] == "확인된 필수 조건을 넘습니다."
+    assert "전용면적이 원하는 최소" in fail_and_unknown["tradeoff"]
 
 
 def test_stale_quote_above_budget_is_explicitly_unverified_and_ranked_last():

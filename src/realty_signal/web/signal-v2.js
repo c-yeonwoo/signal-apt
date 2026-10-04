@@ -910,21 +910,28 @@
     const uncertainAboveLimit = uncertainQuote && x.eligibility === 'verify' && spec.max_price_manwon
       && Number(x.listing.asking_manwon) > Number(spec.max_price_manwon);
     const hasTradeoff = x.tradeoff && x.tradeoff !== '현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다.';
-    return `<div class="v2-row${x.eligibility === 'exceeded' || x.listing.source_conflict ? ' v2-caution' : ''}" data-v2-card><b>${esc(x.listing.name || '이름 미확인')}</b> · ${quoteLabel}${money(x.listing.asking_manwon)}${uncertainQuote ? ' · 현재 호가 미확인' : ''}
-      <p>${esc(x.listing.region)} · ${esc(x.listing.kind)}${x.listing.rooms != null ? ` · 방 ${esc(x.listing.rooms)}개` : ''}</p>
+    const confirmed = (x.constraints || []).some(check => check.status === 'pass');
+    const reasonLabel = x.eligibility === 'matched' ? '조건 부합 근거' :
+      x.eligibility === 'explore' ? '탐색 단서' :
+      x.eligibility === 'exceeded' && !confirmed ? '조건 초과 이유' :
+      x.eligibility === 'verify' && !confirmed ? '확인 필요 이유' : '확인된 정보';
+    const area = x.listing.exclusive_m2 != null ? ` · 전용 ${esc(x.listing.exclusive_m2)}㎡` : ' · 면적 미확인';
+    return `<div class="v2-row${x.eligibility === 'exceeded' || x.listing.source_conflict ? ' v2-caution' : ''}" data-v2-card>
+      <div class="v2-discovery-card-top"><b>${esc(x.listing.name || '이름 미확인')}</b><strong>${quoteLabel}${money(x.listing.asking_manwon)}${uncertainQuote ? ' · 현재 호가 미확인' : ''}</strong></div>
+      <p class="v2-discovery-meta">${esc(x.listing.region || '지역 미확인')} · ${esc(x.listing.kind)}${area}${x.listing.rooms != null ? ` · 방 ${esc(x.listing.rooms)}개` : ''}</p>
       ${moveText ? `<p>${moveText}${moveCheck?.status === 'fail' ? ' · 요청한 입주일보다 늦음' : ''}</p>` : ''}
       ${spec.max_commute_minutes ? `<p>${commute?.status === 'observed' ? `저장된 직장까지 대중교통 안내 ${esc(commute.minutes)}분${commuteCheck?.status === 'fail' ? ' · 설정한 상한 초과' : ''}` : commute?.status === 'unavailable' ? '경로 조회 실패 · 잠시 후 다시 검색해 확인하세요' : x.listing.coordinate ? '직장까지 통근 안내시간 미확인' : '매물 표시 좌표가 없어 통근 미확인'} · 실제 출입구·시간대와 다를 수 있습니다.</p>` : ''}
       ${x.eligibility === 'exceeded' ? '<p>설정한 필수 조건을 넘는 비교용 후보입니다. 구매 가능 추천이 아닙니다.</p>' : ''}
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
-      <p>${uncertainAboveLimit || x.listing.source_conflict ? '판정 보류 이유' : x.eligibility === 'verify' || x.eligibility === 'exceeded' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
+      <p>${uncertainAboveLimit || x.listing.source_conflict ? '판정 보류 이유' : reasonLabel}: ${esc(x.recommendation_reason)}</p>
       ${typeof listingPriceLine==='function'&&listingPriceLine(x.listing.price_comparison)?`<p>${esc(listingPriceLine(x.listing.price_comparison))}</p>`:''}
-      ${preference.total ? `<p>선호 ${preference.satisfied}/${preference.total}개 충족 · ${preference.known}/${preference.total}개 자료 확인${priorityLabel ? ` · ${priorityLabel} 우선(2배): 적합도 ${esc(preference.score)}/100 · 확인도 ${esc(preference.coverage)}/100` : ''}${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p>` : ''}
+      ${preference.total ? `<details class="v2-discovery-more"><summary>선호 기준 ${esc(preference.satisfied)}/${esc(preference.total)}개 · 자료 ${esc(preference.known)}/${esc(preference.total)}개 확인</summary><p>${priorityLabel ? `${priorityLabel} 우선(2배) · 적합도 ${esc(preference.score)}/100 · 확인도 ${esc(preference.coverage)}/100` : '선호 조건은 필수 조건을 대체하지 않습니다.'}${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p></details>` : ''}
       ${hasTradeoff ? `<p>양보할 점: ${esc(x.tradeoff)}</p>` : ''}<p>확인할 점: ${esc(commuteContext?.status === 'missing_work' && x.verify_next === '저장된 직장까지의 대중교통 경로를 확인하세요.' ? '내 정보에서 직장 위치를 먼저 저장하세요.' : x.verify_next)}</p>
-      <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
+      <div class="v2-discovery-actions"><button type="button" class="btn primary" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>
       ${spec.move_in_by && x.listing.kind === '일반매물' && !move ? `<button type="button" class="btn" data-v2-occupancy="${esc(x.listing.key)}">입주일 확인</button>` : ''}
       ${spec.max_commute_minutes && commuteContext?.status === 'ready' && x.listing.coordinate && !commute ? `<button type="button" class="btn" data-v2-commute="${esc(x.listing.key)}">직장 경로 확인</button>` : ''}
       <button type="button" class="btn" data-v2-compare="${esc(x.listing.key)}">비교함 담기</button>
-      ${watchAction(x.listing)}</div>`;
+      ${watchAction(x.listing)}</div></div>`;
   }
 
   function watchAction(listing) {
