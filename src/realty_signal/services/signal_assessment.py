@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from copy import deepcopy
-from datetime import date, datetime, timezone
+from datetime import date
 from hashlib import sha256
 import json
 import math
@@ -15,6 +15,7 @@ import pandas as pd
 from realty_signal import db
 from realty_signal.ingest.kb_weekly import KBWeekly
 from realty_signal.signals.engine import SignalConfig
+from realty_signal.time_kst import today_kst
 
 VERSION = "signal-assessment-v1"
 GUARD_VERSION = "source-and-price-v3"
@@ -77,7 +78,7 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
           asof: date | None = None, today: date | None = None) -> dict:
     """Create a deterministic assessment without reading or writing issuance history."""
     asof = asof or kb.last_date.date()
-    today = today or datetime.now(timezone.utc).date()
+    today = today or today_kst()
     region = str(row["region"])
     code = str((kb.codes or {}).get(region) or "")
     boundary_obsolete = today >= date(2026, 7, 1) and code[:5] in INCHEON_RETIRED_CODES
