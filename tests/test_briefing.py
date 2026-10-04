@@ -36,9 +36,12 @@ def uid(tmp_path, monkeypatch):
     return u
 
 
-def test_no_budget_is_skipped(uid):
+def test_no_budget_gets_honest_market_briefing(uid):
     db.profile_set(uid, {})
-    assert briefing.build(uid) == {"send": False, "reason": "no_budget"}
+    result = briefing.build(uid)
+    assert result["send"] and "매수력 미설정" in result["text"]
+    assert "매수력을 입력하면" in result["text"]
+    assert "예산 안에 드는 후보가 없어요" not in result["text"]
 
 
 def test_first_briefing_lists_candidates(uid):
@@ -195,6 +198,19 @@ def test_run_sends_and_moves_snapshot(uid, monkeypatch):
     stats = briefing.run(send=True, quiet=True)
     assert stats["sent"] == 1 and sent[0][0] == 55
     assert briefing.run(send=True, quiet=True)["skipped"] == 1   # 두 번째는 변화 없음
+
+
+def test_monday_retry_does_not_repeat_successful_briefing(uid, monkeypatch):
+    from datetime import date
+    from realty_signal import telegram
+
+    monkeypatch.setattr(briefing, "today_kst", lambda: date(2026, 7, 27))
+    db.profile_set(uid, {**db.profile_get(uid), "telegram": {"chat_id": 55}})
+    sent = []
+    monkeypatch.setattr(telegram, "send_message", lambda cid, txt: sent.append(txt) or True)
+    assert briefing.run(send=True, quiet=True)["sent"] == 1
+    assert briefing.run(send=True, quiet=True)["skipped"] == 1
+    assert len(sent) == 1
 
 
 def test_run_failure_keeps_snapshot_for_retry(uid, monkeypatch):

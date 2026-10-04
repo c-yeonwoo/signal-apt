@@ -197,21 +197,21 @@ def test_loader_never_calls_network(monkeypatch, tmp_path):
     cw.cache_loader()("강남구", "은마아파트")
 
 
-def test_briefing_keeps_its_own_baseline():
-    """브리핑과 홈이 스냅샷을 공유하면 브리핑이 나갈 때마다 홈의 변화가 사라진다."""
+def test_telegram_complex_updates_keep_their_own_baseline():
+    """텔레그램 변화와 홈 카드가 같은 스냅샷을 공유하지 않는다."""
     import inspect
 
-    from realty_signal import briefing
-    src = inspect.getsource(briefing.build)
-    assert 'prev.get("complexes")' in src          # 브리핑 자기 스냅샷을 기준점으로
-    assert "cw.compute(" not in src                # 홈 전용 kv 를 건드리지 않는다
-    assert '"complexes": cx_snaps' in src          # 자기 스냅샷에만 저장
+    from realty_signal.services import telegram_updates
+    src = inspect.getsource(telegram_updates._complexes)
+    assert telegram_updates.SNAP_PREFIX != cw.KV_PREFIX
+    assert "complex_watch.scan(" in src
+    assert "complex_watch.compute(" not in src
 
 
-def test_briefing_renders_complex_section_with_lag_caveat():
+def test_telegram_complex_template_keeps_reporting_lag_caveat():
     import inspect
 
-    from realty_signal import briefing
-    src = inspect.getsource(briefing._render)
-    assert "[관심단지]" in src
-    assert "30일 내 신고" in src
+    from realty_signal.services import telegram_templates
+    src = inspect.getsource(telegram_templates.render_updates)
+    assert "관심단지 변화" in src
+    assert "_LAG_NOTE" in src

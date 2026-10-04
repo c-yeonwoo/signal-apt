@@ -152,7 +152,6 @@ def _snapshot_signals(asof: str) -> list[dict]:
     return changes
 
 
-_DIGEST_EVERY_DAYS = 7  # 관심지역 주간 이메일 — 서버 루프에서 주 1회
 _BRIEFING_TICK = 900    # 텔레그램 폴링·발송 점검 주기(초)
 
 
@@ -173,17 +172,21 @@ async def _briefing_loop():
     import asyncio
 
     from realty_signal import briefing as br
+    from realty_signal import jobs
     from realty_signal import telegram as tg
     while True:
         try:
             if tg.available():
                 await asyncio.to_thread(tg.poll_updates)
                 today = br.today_kst().isoformat()
-                if br.now_kst().hour >= _briefing_hour() \
-                        and db.kv_get(f"briefing_run:{today}") is None:
-                    stats = await asyncio.to_thread(lambda: br.run(send=True, quiet=True))
-                    db.kv_set(f"briefing_run:{today}", stats)
-                    log.warning("데일리 브리핑: %s", stats)
+                if br.now_kst().hour >= _briefing_hour():
+                    def send_today():
+                        stats = br.run(send=True, quiet=True)
+                        db.kv_set(f"briefing_run:{today}", stats)
+                        log.warning("데일리 브리핑: %s", stats)
+                        return {"ok": stats["errors"] == 0}
+                    await asyncio.to_thread(lambda: jobs.run(
+                        f"telegram_briefing:{today}", send_today, interval=86400, retry=900))
         except Exception as e:  # noqa: BLE001
             log.error("브리핑 루프 실패: %s", e)
         await asyncio.sleep(_BRIEFING_TICK)
@@ -200,7 +203,7 @@ def _scheduled_backup():
 
 async def _auto_refresh_loop():
     """Independent due times: a failing source never delays other source jobs."""
-    from realty_signal import jobs, digest as dig
+    from realty_signal import jobs
     import asyncio
     import time
 
@@ -217,16 +220,6 @@ async def _auto_refresh_loop():
             db.kv_set(_KB_LAST_ERROR, {"ts": time.time(), "message": type(exc).__name__,
                                       "consecutive": int(prev.get("consecutive") or 0)+1})
             raise
-
-    def digest_job():
-        from realty_signal.services import notify_status as ns
-        last = db.kv_get("last_digest_run") or 0
-        if time.time()-last < _DIGEST_EVERY_DAYS*86400:
-            return
-        send = dig.smtp_configured()
-        stats = dig.run_digest(send=send, quiet=True)
-        db.kv_set("last_digest_run", time.time())
-        ns.record_digest_run(stats, sent=send)
 
     def locality_job():
         if (config.public_data_key() and config.odsay_analysis_approved()
@@ -249,6 +242,10 @@ async def _auto_refresh_loop():
         from realty_signal.services import presale_alerts_v2
         return presale_alerts_v2.scan_fresh_announcements()
 
+    def telegram_update_job():
+        from realty_signal.services import telegram_updates
+        return telegram_updates.run()
+
     specs = [
         ("kb", kb_job, 6*3600),
         ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
@@ -257,11 +254,11 @@ async def _auto_refresh_loop():
          if config.personal_listing_email() and _hanbang_stale() else None, 3600),
         ("localities", locality_job, 86400),
         ("school_zones", school_zone_job, 7*86400),
-        ("digest", digest_job, 6*3600),
         ("backup", _scheduled_backup, 86400),
         ("watch_alerts", watch_alert_job, 900),
         ("region_alerts", region_alert_job, 900),
         ("presale_alerts", presale_alert_job, 6*3600),
+        ("telegram_updates", telegram_update_job, 900),
     ]
     # Each loop owns a renewable lease and its own retry/due clock.
     async def serve(name, fn, interval):
@@ -1534,7 +1531,7 @@ def telegram_status(request: Request):
     uid = _uid(request)
     profile = db.profile_get(uid) or {} if uid else {}
     link = (profile.get("telegram") or {})
-    return {"available": tg.available(), "linked": bool(link.get("chat_id")),
+    return {"available": tg.available(), "linked": bool(tg.chat_id_of(profile)),
             "username": link.get("username"),
             "hour": _briefing_hour()}
 
@@ -1560,7 +1557,7 @@ def telegram_check(request: Request):
         return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
     tg.poll_updates()
     link = (db.profile_get(uid) or {}).get("telegram") or {}
-    return {"ok": True, "linked": bool(link.get("chat_id")), "username": link.get("username")}
+    return {"ok": True, "linked": bool(tg.chat_id_of(db.profile_get(uid))), "username": link.get("username")}
 
 
 def telegram_unlink(request: Request):
