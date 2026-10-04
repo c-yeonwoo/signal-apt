@@ -59,3 +59,32 @@ def test_operations_backup_status_is_admin_only(monkeypatch):
     assert response.json()["backup"] == {"configured": False, "upload_job": None}
     assert response.json()["report_explanations"] == {"window_days": 7, "jobs": 0,
                                                         "by_status": {}, "by_failure_code": {}}
+
+
+def test_public_pipeline_health_hides_personal_quicksale_cache(monkeypatch):
+    monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "listing-owner@example.com")
+    calls = []
+    def health(*, include_private):
+        calls.append(include_private)
+        sources = {"kb_long": {"status": "ok"}}
+        if include_private:
+            sources["quicksale"] = {"status": "ok", "path": "/private/quicksale.json"}
+        return {"sources": sources}
+    monkeypatch.setattr(pipeline, "cache_health", health)
+
+    guest_token, error = auth.signup("guest@example.com", "secret1", accept_tos=True)
+    assert error is None
+    guest = TestClient(api.app)
+    guest.cookies.set(auth.COOKIE, guest_token)
+    public = guest.get("/api/pipeline/health")
+    assert public.status_code == 200
+    assert "quicksale" not in public.json()["sources"]
+
+    token, error = auth.signup("listing-owner@example.com", "secret1", accept_tos=True)
+    assert error is None
+    owner = TestClient(api.app)
+    owner.cookies.set(auth.COOKIE, token)
+    private = owner.get("/api/pipeline/health")
+    assert private.status_code == 200
+    assert private.json()["sources"]["quicksale"]["path"] == "/private/quicksale.json"
+    assert calls == [False, True]
