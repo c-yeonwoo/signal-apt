@@ -84,6 +84,8 @@ def snapshot(row: dict) -> dict:
         "source_labels": row.get("source_labels") or [kind],
         "supplier_flags": row.get("supplier_flags") or [],
         "source_conflict": bool(row.get("source_conflict")),
+        "region_identity_status": row.get("지역식별상태"),
+        "price_comparison": row.get("price_comparison"),
         "region": row.get("지역"), "region_sido": row.get("시도"),
         "region_code": row.get("지역코드"), "asking_manwon": price,
         "exclusive_m2": area, "rooms": _rooms(ref.get("방수")), "floor": floor,
@@ -129,15 +131,7 @@ def buyer_fit(listing: dict, profile: dict | None = None, *, confirmed_power=_UN
 
 
 def _price(detail: dict, listing: dict) -> dict:
-    asking, area = listing["asking_manwon"], listing["exclusive_m2"]
-    if not asking or not area:
-        return {"상태": "보류", "이유": "호가 또는 전용면적이 없어 실거래와 비교할 수 없습니다.",
-                "표본수": 0, "중앙값": None, "호가차이율": None}
-    try:
-        floor = quote_check.validate_floor(listing.get("floor"))
-    except ValueError:
-        floor = None
-    return quote_check.assess(detail, asking=asking, exclusive_m2=area, floor=floor)
+    return quote_check.assess_listing(detail, listing)
 
 
 def _complex_token(name: str | None) -> str:
@@ -191,9 +185,11 @@ def build(row: dict, detail: dict | None, building: dict | None = None,
     detail = detail or {}
     building = building or {}
     price = _price(detail, listing)
-    exact_area = next((p for p in detail.get("평형별") or []
-                       if listing["exclusive_m2"] and _number(p.get("전용㎡"))
-                       and round(float(p["전용㎡"]), 1) == round(listing["exclusive_m2"], 1)), None)
+    exact_area = None
+    if price.get("상태") == "관측비교":
+        exact_area = next((p for p in detail.get("평형별") or []
+                           if listing["exclusive_m2"] and _number(p.get("전용㎡"))
+                           and round(float(p["전용㎡"]), 1) == round(listing["exclusive_m2"], 1)), None)
     observed = (exact_area or {}).get("비교거래") or {}
     floor = price.get("입력층")
     trades = [

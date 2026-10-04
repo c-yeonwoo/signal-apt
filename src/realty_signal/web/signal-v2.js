@@ -388,6 +388,7 @@
         try {
           const updated = await json('/api/v2/listings/report-enrich', {method:'POST',
             headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
+          if (typeof _laInvalidateCache === 'function') _laInvalidateCache();
           if (generation === listingGeneration && dialog.open) {
             if ((updated.partial_failures || []).some(x => x.startsWith('trade_'))) {
               status.textContent = '실거래 원천을 확인했지만 새 근거를 얻지 못했습니다. 가격 비교는 보류합니다.';
@@ -831,6 +832,7 @@
       ${x.eligibility === 'exceeded' ? '<p>설정한 필수 조건을 넘는 비교용 후보입니다. 구매 가능 추천이 아닙니다.</p>' : ''}
       ${finance ? `<p>자금 참고 계산: 총 월 상환 약 ${monthly} · 필요현금 약 ${cash}</p><p>${esc(finance.reason)}</p>` : ''}
       <p>${x.eligibility === 'verify' || x.eligibility === 'exceeded' ? '확인된 점' : x.eligibility === 'explore' ? '탐색 단서' : '추천 이유'}: ${esc(x.recommendation_reason)}</p>
+      ${typeof listingPriceLine==='function'&&listingPriceLine(x.listing.price_comparison)?`<p>${esc(listingPriceLine(x.listing.price_comparison))}</p>`:''}
       ${preference.total ? `<p>선호 ${preference.satisfied}/${preference.total}개 충족 · ${preference.known}/${preference.total}개 자료 확인${priorityLabel ? ` · ${priorityLabel} 우선(2배): 적합도 ${esc(preference.score)}/100 · 확인도 ${esc(preference.coverage)}/100` : ''}${preferred.length ? ` · 부합: ${preferred.join('·')}` : ''}${unknownPreference.length ? ` · 미확인: ${unknownPreference.join('·')}` : ''}</p>` : ''}
       <p>양보할 점: ${esc(x.tradeoff)}</p><p>확인할 점: ${esc(commuteContext?.status === 'missing_work' && x.verify_next === '저장된 직장까지의 대중교통 경로를 확인하세요.' ? '내 정보에서 직장 위치를 먼저 저장하세요.' : x.verify_next)}</p>
       <button type="button" class="btn" data-v2-listing="${esc(x.listing.key)}">리포트 보기</button>

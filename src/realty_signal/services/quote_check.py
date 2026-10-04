@@ -12,6 +12,9 @@ from statistics import median as median_of
 
 from realty_signal.time_kst import today_kst
 
+VERSION = "same-area-observed-v1"
+MAX_SOURCE_AGE_DAYS = 7
+
 
 def validate_input(asking: float, exclusive_m2: float) -> tuple[float, float]:
     """원천 조회 전에 잘못된 입력을 거른다."""
@@ -53,7 +56,7 @@ def assess(detail: dict, *, asking: float, exclusive_m2: float, floor: int | Non
         return {**base, "상태": "보류", "이유": reason, "중앙값": None,
                 "호가차액": None, "호가차이율": None, "표본수": 0}
 
-    if detail.get("status") in {"failed", "ambiguous", "stale"} or detail.get("degraded"):
+    if detail.get("status") in {"failed", "ambiguous", "stale", "unavailable"} or detail.get("degraded"):
         return hold("단지 실거래 원천이 지연되거나 식별이 불명확합니다.")
     if detail.get("identity_status") != "single_observed":
         return hold("단지 주소·식별자를 확인하기 전에는 가격을 연결하지 않습니다.")
@@ -69,7 +72,7 @@ def assess(detail: dict, *, asking: float, exclusive_m2: float, floor: int | Non
         asof = date.fromisoformat(comp["기준일"])
     except (KeyError, TypeError, ValueError):
         return hold("비교거래의 산정 기준일을 확인할 수 없습니다.")
-    if not 0 <= (today_kst() - asof).days <= 7:
+    if not 0 <= (today_kst() - asof).days <= MAX_SOURCE_AGE_DAYS:
         return hold("비교거래 근거가 갱신되지 않았습니다.")
     observed = comp
     if floor is not None:
@@ -92,3 +95,35 @@ def assess(detail: dict, *, asking: float, exclusive_m2: float, floor: int | Non
             "호가차액": round(diff), "호가차이율": round(diff / median * 100, 1),
             "층미통제": True, "거래유형미상건수": comp.get("거래유형미상건수") or 0,
             "비교기준일": comp["기준일"]}
+
+
+def assess_listing(detail: dict, listing: dict) -> dict:
+    """Shared listing/report contract; never treat a collected asking price as user input."""
+    meta = {"comparison_version": VERSION, "price_kind": "source_asking",
+            "source_id": "molit_aggregate", "안내": [
+                "수집 호가는 공공 실거래 표본에 섞지 않습니다.",
+                "거래가격 차이는 할인율·적정가·매수 권고가 아닙니다."]}
+    def held(reason):
+        return {**meta, "상태": "보류", "이유": reason, "표본수": 0,
+                "중앙값": None, "호가차액": None, "호가차이율": None}
+
+    if listing.get("kind") not in {"일반매물", "급매", "찐매물"}:
+        return {**held("매매 호가가 아닌 가격은 같은 방식으로 비교하지 않습니다."),
+                "price_kind": "non_sale_price"}
+    if listing.get("source_conflict") or listing.get("region_identity_status") == "held":
+        return held("매물의 단지·지역·면적 식별을 먼저 확인해야 합니다.")
+    if listing.get("stale"):
+        return held("지난 수집 호가입니다. 현재 호가를 확인한 뒤 비교하세요.")
+    try:
+        asking, area = validate_input(listing.get("asking_manwon"), listing.get("exclusive_m2"))
+    except ValueError:
+        return held("호가 또는 전용면적이 없어 실거래와 비교할 수 없습니다.")
+    try:
+        floor = validate_floor(listing.get("floor"))
+    except ValueError:
+        floor = None
+    try:
+        result = assess(detail, asking=asking, exclusive_m2=area, floor=floor)
+    except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+        return held("비교거래 자료의 형식을 확인할 수 없습니다. 리포트에서 자료를 다시 확인하세요.")
+    return {**result, **meta}

@@ -31,6 +31,7 @@ _OPEN_PATHS = ("/api/backtest",)
 
 from realty_signal.routes import deps
 from realty_signal.services import market_data as md
+from realty_signal.services.quote_check import MAX_SOURCE_AGE_DAYS
 
 _uid = deps.uid
 _is_opus_user = deps.is_opus_user
@@ -2259,7 +2260,7 @@ def addr_search(q: str):
 
 
 
-_COMPLEX_TTL = 7 * 86400   # 실거래 신고지연 감안, 1주면 신선도·호출비용 균형
+_COMPLEX_TTL = MAX_SOURCE_AGE_DAYS * 86400   # 목록·리포트가 같은 캐시 유효기간을 사용한다.
 
 
 def _uv_map():
@@ -3399,12 +3400,13 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
     from realty_signal.services.listing_inventory import collapse
+    from realty_signal.services.listing_prices import attach as attach_prices
 
     private_access = _personal_listings_allowed(request=request)
     out = _build_listings(set(t for t in types.split(",") if t),
                           include_private=private_access)
     source_record_count = len(out)
-    out = collapse(out)
+    out = attach_prices(collapse(out))
     uid = _uid(request)
     scores = eng_rank.engagement_scores(uid=uid)
     if scores:

@@ -750,6 +750,18 @@ test('sale navigation groups sources while supplier flags filter independently',
   assert.match(html,/const _LA_TYPES=\['매매','청약','경매','재건축'\]/);
 });
 
+test('listing price line shows comparable conditions but never turns missing data into a discount', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('function listingPriceLine(', 'function _laAsk('),ctx);
+  const price={상태:'관측비교',호가차이율:-10,표본수:3,입력층:8};
+  assert.match(ctx.listingPriceLine(price),/같은 전용면적·인근 층.*10% 낮음.*3건.*할인율 아님/);
+  assert.match(ctx.listingPriceLine({...price,호가차이율:0}),/차이 없음/);
+  assert.equal(ctx.listingPriceLine({...price,상태:'보류'}),'');
+  assert.equal(ctx.listingPriceLine({...price,호가차이율:null}),'');
+  assert.equal(ctx.listingPriceLine(undefined),'');
+  assert.match(signalV2,/listingPriceLine\(x\.listing\.price_comparison\)/);
+});
+
 test('merged watch button preserves existing aliases and removes only that listing on explicit toggle', async () => {
   const saved=new Set(['찐매물:123','급매:123','일반매물:999']),calls=[];
   const button={dataset:{watchKey:'급매:123',watchAliases:'["급매:123","찐매물:123"]'},setAttribute(){}};

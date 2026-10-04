@@ -353,7 +353,8 @@ def discovery(request: Request, data: dict = Body(...)):
             if not source["regions"]:
                 source["regions"] = sorted({row.get("지역") for row in source_rows if row.get("지역")})
     from realty_signal.services.listing_inventory import collapse
-    rows = collapse(rows)
+    from realty_signal.services.listing_prices import attach as attach_prices
+    rows = attach_prices(collapse(rows))
     scenario = None
     profile = None
     profile_failed = False

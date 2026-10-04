@@ -836,6 +836,33 @@ def kv_set(k: str, v) -> None:
     c.close()
 
 
+def kv_get_many(keys: list[str], *, max_age: int) -> dict:
+    """Bounded batch reads; absent, expired or malformed cache entries are omitted."""
+    keys = list(dict.fromkeys(keys))
+    if not keys:
+        return {}
+    out, now = {}, time.time()
+    c = conn()
+    try:
+        for start in range(0, len(keys), 400):
+            batch = keys[start:start + 400]
+            marks = ",".join("?" for _ in batch)
+            for key, value, ts in c.execute(f"SELECT k,v,ts FROM kv WHERE k IN ({marks})", batch):
+                try:
+                    age = now - float(ts)
+                except (ValueError, TypeError, OverflowError):
+                    continue
+                if not 0 <= age <= max_age:
+                    continue
+                try:
+                    out[key] = json.loads(value)
+                except (ValueError, TypeError):
+                    continue
+    finally:
+        c.close()
+    return out
+
+
 def kv_keys(prefix: str) -> list[str]:
     c = conn()
     rows = c.execute("SELECT k FROM kv WHERE k LIKE ?", (prefix + "%",)).fetchall()
