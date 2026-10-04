@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from realty_signal import db, llm
 
-PROMPT_VERSION = "report-explanation-v1"
+PROMPT_VERSION = "report-explanation-v2"
 MODEL = "claude-sonnet-4-6"
 MODES = frozenset({"easy", "counterevidence", "question"})
 MAX_JOBS_PER_DAY = 12
@@ -86,18 +86,45 @@ def _facts(report: dict) -> list[dict]:
 
 
 def _fallback(report: dict, mode: str) -> dict:
+    claims: list[dict] = []
     if report.get("type") == "region":
-        summary = (report.get("assessment") or {}).get("summary") or "현재 판정 근거를 확인하세요."
+        assessment = report.get("assessment") or {}
+        summary = (assessment.get("summary") or "현재 판정 근거를 확인하세요.") if mode != "counterevidence" else (
+            "현재 판정에 반대되는 근거와 한계를 먼저 확인하세요.")
         cautions = [x.get("label") or x.get("reason_id") for x in report.get("cautions") or []]
+        if mode == "easy" and report.get("status") == "ready":
+            for reason in (report.get("positive") or [])[:2]:
+                reason_id = reason.get("reason_id")
+                if not reason_id or not reason.get("passing"):
+                    continue
+                plain = {
+                    "jeonse_pressure": "전세수급 지표가 앱의 강세 관찰선을 넘었습니다. 개별 단지의 전세 사정은 따로 확인해야 합니다.",
+                    "buyer_interest": "매수 관심을 보는 앱의 관찰 기준을 충족했습니다.",
+                    "sale_momentum": "최근 매매가격 흐름이 앱의 강세 관찰 기준을 충족했습니다.",
+                }.get(reason_id, f"{reason.get('label') or '이 지표'}가 앱의 관찰 기준을 충족했습니다.")
+                if reason.get("inherited"):
+                    plain += " 이 수치는 해당 지역만이 아닌 권역 공통 자료입니다."
+                claims.append({"text": plain, "evidence_ids": [reason_id]})
+        limit = "지역 시장 지표는 개별 매물 가격이나 미래 수익을 보장하지 않습니다. 자금·현장 조건은 따로 확인하세요."
     elif report.get("type") == "listing":
-        summary = (report.get("lines") or {}).get("price") or (report.get("price") or {}).get("이유") or "가격 근거를 확인하세요."
+        summary = ("이 매물의 반대 근거와 확인할 조건을 먼저 살펴보세요." if mode == "counterevidence"
+                   else (report.get("lines") or {}).get("price") or (report.get("price") or {}).get("이유")
+                   or "가격 근거를 확인하세요.")
         cautions = [x.get("text") for x in report.get("cautions") or []]
+        if mode == "easy":
+            evidence_ids = {x.get("id") for x in report.get("evidence") or [] if isinstance(x, dict)}
+            for item in (report.get("positive") or [])[:2]:
+                if isinstance(item, dict) and item.get("evidence") in evidence_ids and item.get("text"):
+                    claims.append({"text": str(item["text"]), "evidence_ids": [item["evidence"]]})
+        limit = "이 설명은 기존 리포트의 근거만 다룹니다. 현장 상태와 현재 판매 여부는 별도 확인이 필요합니다."
     else:
-        summary = report.get("basis") or "비교 기준을 확인하세요."
+        summary = ("매물 사이의 비교 한계와 확인할 조건을 먼저 살펴보세요." if mode == "counterevidence"
+                   else report.get("basis") or "비교 기준을 확인하세요.")
         cautions = report.get("cautions") or []
+        limit = "면적·상태·수집 시점이 다르면 호가만으로 가격 우열을 확정할 수 없습니다."
     return {"report_id": report["report_id"], "mode": mode, "source": "deterministic_fallback",
-            "summary": summary, "claims": [], "cautions": [str(x) for x in cautions if x][:4],
-            "limit": "이 설명은 기존 리포트의 근거만 다룹니다. 현장 상태와 현재 판매 여부는 별도 확인이 필요합니다."}
+            "summary": summary, "claims": claims, "cautions": [str(x) for x in cautions if x][:4],
+            "limit": limit}
 
 
 def _validate_generated(raw: object, report: dict, mode: str,

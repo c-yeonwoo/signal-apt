@@ -145,6 +145,7 @@
         ? (report.evidence || []).map(item => [item.id, item.label || item.id])
         : (report.items || []).map((item, index) => [`item_${index}`, item.listing?.name || '비교 매물']));
     return `<div class="v2-row"><b>${result.source === 'model_validated' ? '근거를 쉽게 풀어봤어요' : '기본 근거 설명'}</b>
+      ${result.source === 'model_validated' ? '' : '<p class="v2-muted">검증된 추가 설명 대신 현재 리포트의 근거만 정리했습니다.</p>'}
       <p>${esc(result.summary || '')}</p>
       ${(result.claims || []).map(claim => `<p>${esc(claim.text)} <small class="v2-muted">근거: ${claim.evidence_ids.map(id => esc(labels.get(id) || id)).join(' · ')}</small></p>`).join('')}
       ${(result.cautions || []).map(item => `<p class="v2-caution">확인: ${esc(item)}</p>`).join('')}

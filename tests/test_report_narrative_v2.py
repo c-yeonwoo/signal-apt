@@ -23,6 +23,42 @@ def _listing(report_id="a" * 64):
                          {"id": "trades", "label": "국토부 실거래", "status": "보류"}]}
 
 
+def test_deterministic_explanation_is_useful_without_model_and_respects_held_signal():
+    report = {"report_id": "r" * 64, "type": "region", "status": "ready",
+              "assessment": {"summary": "지역 시장 신호는 강력매수입니다."},
+              "positive": [
+                  {"reason_id": "jeonse_pressure", "label": "전세수급 압력", "passing": True,
+                   "inherited": True},
+                  {"reason_id": "sale_momentum", "label": "매매변동률", "passing": True}],
+              "cautions": [{"reason_id": "supply_pressure", "label": "입주물량 부담"}]}
+    easy = narrative._fallback(report, "easy")
+    assert [claim["evidence_ids"] for claim in easy["claims"]] == [
+        ["jeonse_pressure"], ["sale_momentum"]]
+    assert "권역 공통 자료" in easy["claims"][0]["text"]
+    assert "개별 매물 가격" in easy["limit"]
+
+    counter = narrative._fallback(report, "counterevidence")
+    assert counter["claims"] == []
+    assert counter["cautions"] == ["입주물량 부담"]
+    assert "반대되는 근거" in counter["summary"]
+
+    report["status"] = "held"
+    report["assessment"]["summary"] = "자료가 오래돼 현재 지역 판정을 보류합니다."
+    held = narrative._fallback(report, "easy")
+    assert held["claims"] == []
+    assert "강력매수" not in held["summary"]
+
+
+def test_listing_fallback_reuses_only_cited_positive_evidence():
+    report = _listing()
+    report["positive"] = [{"text": "수집 매물 표기에 포함된 내용입니다.", "evidence": "listing"},
+                          {"text": "근거 없는 주장", "evidence": "unknown"}]
+    easy = narrative._fallback(report, "easy")
+    assert easy["claims"] == [{"text": "수집 매물 표기에 포함된 내용입니다.",
+                               "evidence_ids": ["listing"]}]
+    assert narrative._fallback(report, "counterevidence")["claims"] == []
+
+
 def test_explicit_queue_is_idempotent_private_and_does_not_call_model_on_get(monkeypatch):
     report = _listing()
     calls = []
@@ -53,6 +89,9 @@ def test_explicit_queue_is_idempotent_private_and_does_not_call_model_on_get(mon
         c.close()
     cached, code = narrative.enqueue(7, report, "easy", "", private_source=True)
     assert code == 200 and cached == complete and len(calls) == 1
+    monkeypatch.setattr(narrative, "PROMPT_VERSION", "report-explanation-next")
+    refreshed, code = narrative.enqueue(7, report, "easy", "", private_source=True)
+    assert code == 202 and refreshed["job_id"] != first["job_id"]
     changed, code = narrative.enqueue(7, _listing("b" * 64), "easy", "", private_source=True)
     assert code == 202 and changed["job_id"] != first["job_id"]
 
