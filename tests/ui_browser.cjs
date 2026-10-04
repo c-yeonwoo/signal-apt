@@ -594,6 +594,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       _watchKeys=new Set(['찐매물:merged-1']);
       _mtBuyOnly=false; _focusRegion=null; _mtGradeSet=new Set(['A','B','C','D','E']);
       const base={지역:'테스트구',시도:'서울',지역코드:'11140',시그널:'HELD',총액:50000,기회도:0,
+        price_comparison:{상태:'관측비교',호가차이율:0,표본수:3,입력층:8},
         ref:{전용면적:59,층:8},price_kind:'asking',budget_fit:{status:'unknown',reason:'가정 확인'}};
       _laApplyResponse(_SALE_TYPES.join(','),{asof:'2026-09-28',meta:{private_access:true,duplicate_records_collapsed:1},listings:[
         {...base,key:'급매:merged-1',유형:'급매',단지명:'통합인증단지',source:'baroezip',
@@ -603,6 +604,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     });
     assert.equal(await page.locator('#laList .ms-row').count(),2);
     assert.match(await page.locator('#laList').textContent(),/전용 59㎡/);
+    assert.match(await page.locator('#laList').textContent(),/같은 전용면적·인근 층 실거래 중앙값 대비 차이 없음/);
     assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'매매',exact:true}).getAttribute('aria-pressed'),'true');
     assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'찐매물',exact:true}).count(),0);
     await page.locator('#laMoreBtn').click();
