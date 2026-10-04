@@ -1140,6 +1140,31 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2RegionRetry').focus();
     await page.keyboard.press('Enter');
     await page.locator('.signal-assessment').waitFor();
+    await page.evaluate(async()=>{
+      const original=window.fetch;
+      const held={type:'region',asof:'2026-09-28',subject:{region:'테스트구',region_id:'kb:1114000000'},
+        assessment:{assessment_status:'held',raw_grade:'BUY',
+          summary:'행정구역 개편 전 자료라 현재 판정을 보류합니다.',scope_note:'인천 권역 자료',
+          change:{type:'method_change',changed_reasons:[]},reasons:[]},
+        positive:[],cautions:[],unknowns:['sale_weeks_incomplete','region_boundary_obsolete','__proto__']};
+      window.fetch=(input,...args)=>String(input).startsWith('/api/v2/regions/')
+        ? Promise.resolve(new Response(JSON.stringify(held),{status:200,headers:{'Content-Type':'application/json'}}))
+        : original(input,...args);
+      try{await SignalV2.paintRegion('테스트구','kb:1114000000');}
+      finally{window.fetch=original;}
+    });
+    assert.match(await page.locator('.signal-assessment-highlights').textContent(),/판단 보류 사유 3건/);
+    assert.doesNotMatch(await page.locator('.signal-assessment-highlights').textContent(),/미확인 자료 3건/);
+    await page.locator('.signal-evidence-details > summary').click();
+    const heldReason=await page.locator('.signal-evidence-details').textContent();
+    assert.match(heldReason,/행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다/);
+    assert.match(heldReason,/확인되지 않은 보류 사유가 있습니다/);
+    assert.doesNotMatch(heldReason,/region_boundary_obsolete|__proto__|\[object Object\]/);
+    await page.locator('.signal-evidence-details').getByText('기존 규칙 산출값').click();
+    assert.match(await page.locator('.signal-evidence-details').textContent(),/매수 · 검증되지 않아 현재 판정으로 쓰지 않습니다/);
+    assert.doesNotMatch(await page.locator('.signal-evidence-details').textContent(),/\bBUY\b/);
+    await page.evaluate(()=>SignalV2.paintRegion('테스트구','kb:1114000000'));
+    await page.locator('.signal-assessment').waitFor();
     seriesFailures=1;
     await page.evaluate(()=>{_signalTrendRegion=null;_lastM=null;loadSignalTrend('테스트구');});
     await page.getByRole('button',{name:'추세 다시 확인'}).waitFor();
