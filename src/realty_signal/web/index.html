@@ -529,11 +529,19 @@
   .v2-form label { display:grid; gap:4px; font-size:13px; }
   .v2-form input { min-height:44px; width:145px; border:1px solid var(--line); border-radius:8px; padding:0 10px; background:var(--bg); color:var(--txt); }
   .v2-form select { min-height:44px; border:1px solid var(--line); border-radius:8px; padding:0 10px; background:var(--bg); color:var(--txt); }
+  .v2-discover-primary { width:100%; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; align-items:start; }
+  .v2-discover-primary input,.v2-discover-primary select { width:100%; box-sizing:border-box; }
+  #v2DiscoverRegionStatus { margin:3px 0 0; font-size:12px; }
+  .v2-discover-extra { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+  .v2-discover-extra > summary { cursor:pointer; min-height:44px; display:flex; align-items:center; font-weight:700; }
+  .v2-discover-extra-fields { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0; }
+  .v2-discover-extra .v2-muted { width:100%; }
   .v2-preferences { width:100%; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
   .v2-preferences summary { cursor:pointer; min-height:44px; display:flex; align-items:center; }
   .v2-preference-fields { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
   @media(max-width:600px) {
     #v2DiscoverDlg { width:100vw; height:100dvh; max-width:none; max-height:none; border-radius:0; }
+    .v2-discover-primary { grid-template-columns:minmax(0,1fr); }
     #v2ReportDlg { inset:auto 0 0; width:100vw; max-width:none; height:76dvh; max-height:76dvh; border-radius:16px 16px 0 0;
       border-bottom:none; box-shadow:0 -12px 28px rgba(15,23,42,.22); }
     #v2ReportDlg.v2-map-expanded { height:48dvh; max-height:48dvh; }
@@ -8231,31 +8239,39 @@ async function startApp(needOnboard){
   <div class="v2-top"><button type="button" class="btn primary" id="v2DiscoverCompare" hidden>선택 매물 비교하기</button><button type="button" class="btn" onclick="document.getElementById('v2DiscoverDlg').close()" aria-label="매물 찾기 닫기">닫기 ✕</button></div>
   <div class="v2-panel">
     <h2>내 조건으로 빠르게 찾기</h2>
-    <p class="v2-muted">확인된 조건에 맞는 매물과 정보가 부족한 매물을 나눠 보여줍니다.</p>
+    <p class="v2-muted">호가와 지역으로 먼저 찾고, 필요하면 조건을 더하세요. 현재 수집분이며 실제 자금·판매 상태는 별도 확인이 필요합니다.</p>
     <form id="v2DiscoverForm" class="v2-form">
-      <label>호가 상한 · 만원<input name="max_price_manwon" type="number" min="1" step="1" placeholder="예: 60000"></label>
-      <label>최소 전용면적 · ㎡<input name="min_area_m2" type="number" min="1" step="1" placeholder="예: 59"></label>
-      <label>최소 방 개수<input name="min_rooms" type="number" min="1" max="15" step="1" placeholder="예: 3"></label>
-      <label>입주 필요일 이내<input name="move_in_by" type="date"></label>
-      <label>직장까지 대중교통 · 분 이내<input name="max_commute_minutes" type="number" min="1" max="240" step="1" placeholder="예: 60"></label>
-      <label>총 월 상환 상한 · 만원<input name="max_monthly_manwon" type="number" min="1" step="1" placeholder="예: 200"></label>
-      <p class="v2-muted">방 개수가 없는 원천 매물은 조건 부합으로 단정하지 않고 ‘확인 필요’로 분리합니다.</p>
-      <p class="v2-muted">입주 가능일은 한방 상세에서 후보별로 확인합니다. 초·중·하순 등 시기 표현이나 다른 원천 매물은 충족으로 단정하지 않습니다.</p>
-      <p class="v2-muted">통근은 저장된 직장 위치가 있을 때 후보별로 조회합니다. 매물 표시 좌표 기준 안내시간이며 실제 출입구·출퇴근 시간대는 확인되지 않았습니다.</p>
-      <p class="v2-muted">월 상환 비교는 저장된 매수력 가정으로만 계산합니다. 규제·세율 최신성 미검증이면 ‘확인 필요’로 분류합니다.</p>
-      <label>지역<select name="region_code" aria-describedby="v2DiscoverRegionStatus"><option value="">전체 지역 · 선택 안 함</option></select></label>
-      <p class="v2-muted" id="v2DiscoverRegionStatus" role="status">지역 목록을 확인합니다.</p>
-      <label>지역 조건<select name="region_mode"><option value="prefer">선호 · 다른 지역도 보기</option><option value="must">필수 · 이 지역만</option></select></label>
-      <details class="v2-preferences"><summary>선호 조건 더하기 · 후보를 제외하지 않음</summary>
-        <div class="v2-preference-fields">
-          <label>선호 호가 · 만원 이하<input name="prefer_max_price_manwon" type="number" min="1" step="1" placeholder="예: 50000"></label>
-          <label>선호 전용면적 · ㎡ 이상<input name="prefer_min_area_m2" type="number" min="1" step="1" placeholder="예: 84"></label>
-          <label>가장 중요한 선호<select name="priority"><option value="balanced">모두 비슷하게</option><option value="region">지역</option><option value="price">호가</option><option value="area">전용면적</option></select></label>
+      <div class="v2-discover-primary">
+        <label>호가 상한 · 만원<input name="max_price_manwon" type="number" min="1" step="1" placeholder="예: 60000"></label>
+        <div><label>지역<select name="region_code" aria-describedby="v2DiscoverRegionStatus"><option value="">전체 지역 · 선택 안 함</option></select></label>
+          <p class="v2-muted" id="v2DiscoverRegionStatus" role="status">지역 목록을 확인합니다.</p></div>
+        <label>지역 조건<select name="region_mode"><option value="prefer">선호 · 다른 지역도 보기</option><option value="must">필수 · 이 지역만</option></select></label>
+      </div>
+      <details class="v2-discover-extra" id="v2DiscoverExtra"><summary id="v2DiscoverExtraSummary">조건 더하기 · 면적·입주·통근 등</summary>
+        <div class="v2-discover-extra-fields">
+          <label>최소 전용면적 · ㎡<input name="min_area_m2" type="number" min="1" step="1" placeholder="예: 59"></label>
+          <label>최소 방 개수<input name="min_rooms" type="number" min="1" max="15" step="1" placeholder="예: 3"></label>
+          <label>입주 필요일 이내<input name="move_in_by" type="date"></label>
+          <label>직장까지 대중교통 · 분 이내<input name="max_commute_minutes" type="number" min="1" max="240" step="1" placeholder="예: 60"></label>
+          <label>총 월 상환 상한 · 만원<input name="max_monthly_manwon" type="number" min="1" step="1" placeholder="예: 200"></label>
         </div>
-        <p class="v2-muted">선택한 중요 조건은 정렬에서 2배로 셉니다. 입력하지 않은 조건은 우선순위에 영향을 주지 않습니다. 자료가 없으면 충족으로 세지 않습니다.</p>
+        <details class="v2-preferences"><summary>선호 조건 더하기 · 후보를 제외하지 않음</summary>
+          <div class="v2-preference-fields">
+            <label>선호 호가 · 만원 이하<input name="prefer_max_price_manwon" type="number" min="1" step="1" placeholder="예: 50000"></label>
+            <label>선호 전용면적 · ㎡ 이상<input name="prefer_min_area_m2" type="number" min="1" step="1" placeholder="예: 84"></label>
+            <label>가장 중요한 선호<select name="priority"><option value="balanced">모두 비슷하게</option><option value="region">지역</option><option value="price">호가</option><option value="area">전용면적</option></select></label>
+          </div>
+          <p class="v2-muted">선택한 중요 조건은 정렬에서 2배로 셉니다. 입력하지 않은 조건은 우선순위에 영향을 주지 않습니다. 자료가 없으면 충족으로 세지 않습니다.</p>
+        </details>
+        <label style="width:100%;display:flex;align-items:center;gap:8px"><input name="include_exceeded" type="checkbox" style="width:20px;min-height:20px">조건 초과 후보도 비교용으로 보기</label>
+        <p class="v2-muted">조건 초과 후보는 매수 가능 추천이 아닙니다. 기본 검색에서는 숨깁니다.</p>
+        <details class="v2-preferences"><summary>추가 조건의 판단 한계</summary>
+          <p class="v2-muted">방 개수가 없는 원천 매물은 조건 부합으로 단정하지 않고 ‘확인 필요’로 분리합니다.</p>
+          <p class="v2-muted">입주 가능일은 한방 상세에서 후보별로 확인합니다. 초·중·하순 등 시기 표현이나 다른 원천 매물은 충족으로 단정하지 않습니다.</p>
+          <p class="v2-muted">통근은 저장된 직장 위치가 있을 때 후보별로 조회합니다. 매물 표시 좌표 기준 안내시간이며 실제 출입구·출퇴근 시간대는 확인되지 않았습니다.</p>
+          <p class="v2-muted">월 상환 비교는 저장된 매수력 가정으로만 계산합니다. 규제·세율 최신성 미검증이면 ‘확인 필요’로 분류합니다.</p>
+        </details>
       </details>
-      <label style="width:100%;display:flex;align-items:center;gap:8px"><input name="include_exceeded" type="checkbox" style="width:20px;min-height:20px">조건 초과 후보도 비교용으로 보기</label>
-      <p class="v2-muted">조건 초과 후보는 매수 가능 추천이 아닙니다. 기본 검색에서는 숨깁니다.</p>
       <button class="btn primary" type="submit">후보 찾기</button>
     </form>
     <div id="v2DiscoverResults" aria-live="polite"></div>

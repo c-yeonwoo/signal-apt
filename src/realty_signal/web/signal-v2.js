@@ -704,6 +704,7 @@
     const form = document.getElementById('v2DiscoverForm');
     if (!dialog.open) dialog.showModal();
     syncDiscoveryCompareAction();
+    updateDiscoveryExtraSummary();
     loadDiscoveryRegions(region);
     document.getElementById('v2DiscoverResults').textContent = '조건을 입력하면 현재 수집된 매물을 비교합니다.';
     form.elements.max_price_manwon.focus();
@@ -725,6 +726,17 @@
     const count = typeof _listingCompareKeys === 'function' ? _listingCompareKeys().length : 0;
     button.hidden = count < 2;
     button.textContent = `선택 매물 ${count}개 비교하기`;
+  }
+
+  function updateDiscoveryExtraSummary() {
+    const form = document.getElementById('v2DiscoverForm');
+    const summary = document.getElementById('v2DiscoverExtraSummary');
+    if (!form || !summary) return;
+    const fields = ['min_area_m2', 'min_rooms', 'move_in_by', 'max_commute_minutes',
+      'max_monthly_manwon', 'prefer_max_price_manwon', 'prefer_min_area_m2'];
+    const active = fields.filter(name => form.elements[name].value.trim()).length +
+      Number(form.elements.priority.value !== 'balanced') + Number(form.elements.include_exceeded.checked);
+    summary.textContent = active ? `추가 조건 ${active}개 적용 · 수정하기` : '조건 더하기 · 면적·입주·통근 등';
   }
 
   function openNote(type, key, reportId) {
@@ -980,6 +992,7 @@
       if (workSetup) workSetup.onclick = () => {
         document.getElementById('v2DiscoverDlg').close();
         switchTab('mypage');
+        document.getElementById('mpExtra').open = true;
         document.getElementById('mp_work')?.focus();
       };
       const sections = [['matched','조건 부합'],['verify','확인 필요'],['explore','탐색 후보'],
@@ -1010,6 +1023,7 @@
           groupHost.prepend(tip);
           tip.querySelectorAll('[data-v2-relax]').forEach(button => button.onclick = () => {
             const input = form.elements[button.dataset.v2Relax];
+            if (input?.closest('#v2DiscoverExtra')) document.getElementById('v2DiscoverExtra').open = true;
             input?.focus();
           });
         }
@@ -1093,6 +1107,14 @@
   }
 
   document.getElementById('v2DiscoverForm')?.addEventListener('submit', event => {event.preventDefault();runDiscovery();});
+  document.getElementById('v2DiscoverForm')?.addEventListener('invalid', event => {
+    for (const detail of [...(event.target.closest('#v2DiscoverExtra')?.querySelectorAll('details') || [])]) {
+      if (detail.contains(event.target)) detail.open = true;
+    }
+    if (event.target.closest('#v2DiscoverExtra')) document.getElementById('v2DiscoverExtra').open = true;
+  }, true);
+  document.getElementById('v2DiscoverForm')?.addEventListener('input', updateDiscoveryExtraSummary);
+  document.getElementById('v2DiscoverForm')?.addEventListener('change', updateDiscoveryExtraSummary);
   document.getElementById('v2DiscoverCompare')?.addEventListener('click', () => {
     document.getElementById('v2DiscoverDlg').close();
     listingCompareOpen();
