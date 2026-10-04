@@ -64,6 +64,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
           비교거래:{상태:'관측',건수:4,중앙값:50000,최저:45000,최고:55000,거래월범위:'2026-08~2026-09'}}],
         매매추이:[{ym:'2026-08',평단가:2000,건수:4}],최근평단가:2000,총거래:4,기간:'2026-08',추세pct:0};
+      if(decoded==='/api/complex/테스트구/테스트단지/building') data={ok:true,building:{세대수:123,건축년도:2005}};
       if(decoded==='/api/complex/테스트구/테스트단지/quote-check') {
         quotePayloads.push(route.request().postDataJSON());
         data={상태:'관측비교',입력호가:48000,입력층:11,
@@ -695,9 +696,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await groupHead.click();
     assert.equal(await page.evaluate(()=>_ms.test.sel),null);
     await page.evaluate(async()=>{
-      loadComplexAgents=()=>{}; loadCxBuilding=()=>{}; loadCxLoanScen=()=>{}; loadCxTxCosts=()=>{};
+      loadComplexAgents=()=>{}; loadCxTxCosts=()=>{};
       await openComplex('테스트단지','테스트구');
     });
+    const buildingPath='/api/complex/테스트구/테스트단지/building';
+    assert.equal(calls.filter(path=>decodeURIComponent(path)===buildingPath).length,0,'closed building details do not fetch');
+    assert.equal(calls.includes('/api/loan-scenarios'),false,'complex view no longer loads legacy LTV scenarios');
+    assert.equal(await page.locator('#cxLoanScen').count(),0);
+    await page.locator('#cxMoreDetails > summary').click();
+    await page.getByText('세대 123',{exact:true}).waitFor();
+    assert.equal(calls.filter(path=>decodeURIComponent(path)===buildingPath).length,1);
+    await page.locator('#cxMoreDetails > summary').click();
+    await page.locator('#cxMoreDetails > summary').click();
+    assert.equal(calls.filter(path=>decodeURIComponent(path)===buildingPath).length,1,'reopening does not refetch the same details');
     await page.getByText('내가 확인한 호가와 비교하기',{exact:true}).click();
     await page.locator('#cxQuoteFloor').fill('11');
     await page.locator('#cxQuoteAmount').fill('48000');

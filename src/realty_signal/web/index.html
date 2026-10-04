@@ -6609,10 +6609,9 @@ async function openComplex(name, region, quote=null){
     </details>
     <div style="font-size:11px;color:var(--dim);margin-top:10px">국토부 실거래 집계 · 전용면적 반올림 일치, 거래월 차이 3개월 이내만 전세가율·차액 비교. 층·상태 미통제. 갭은 필요현금·실투자금이 아닙니다${d['cached']?' · 캐시(7일)':''}</div>
     <div id="cxTxCosts" style="margin-top:12px"></div>
-    <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">
-      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)">더 보기 · 건축물대장 · 대출 시나리오</summary>
+    <details id="cxMoreDetails" style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)">건축물대장 확인</summary>
       <div id="cxBuilding" style="margin-top:10px;font-size:12px;color:var(--dim)">건축물대장 불러오는 중…</div>
-      <div id="cxLoanScen" style="margin-top:12px"></div>
     </details>
     <div id="cxImjang" style="margin-top:6px;padding-top:12px;border-top:1px solid var(--line)">
       <div style="font-size:13px;font-weight:700;margin-bottom:8px">🚶 임장 리포트</div>
@@ -6660,9 +6659,14 @@ async function openComplex(name, region, quote=null){
       body.querySelector('#cxQuoteBtn').click();
     }
   }
+  let buildingRequested=false;
+  const more=body.querySelector('#cxMoreDetails');
+  more.addEventListener('toggle',()=>{
+    if(!more.open||buildingRequested)return;
+    buildingRequested=true;
+    loadCxBuilding(name,region);
+  });
   loadComplexAgents(name, region);
-  loadCxBuilding(name, region);
-  loadCxLoanScen(d);
   loadCxTxCosts(d, region);
 }
 function loadCxTxCosts(cx, region){
@@ -6691,48 +6695,6 @@ async function loadCxBuilding(name, region){
       <span class="pill">층 ${b['최고층']??'–'}</span>
       <span class="pill">${age}</span>
     </div>`;
-}
-async function loadCxLoanScen(cx){
-  const el=document.getElementById('cxLoanScen'); if(!el) return;
-  const plist=cx['평형별']||[];
-  const main=plist.length?plist.reduce((a,b)=>(a['매매건수']||0)>=(b['매매건수']||0)?a:b):{};
-  const price=main['최근매매']||null;
-  const py=main['평형'];
-  let q='/api/loan-scenarios';
-  if(price) q+=`?price=${price}`;
-  let d; try{ d=await (await fetch(q)).json(); }
-  catch(e){ el.innerHTML=''; return; }
-  if(!d.ok){ el.innerHTML=`<div style="font-size:12px;color:var(--dim)">대출 시나리오: 프로필에 가용자본을 넣으면 LTV 60/70/80을 비교합니다.</div>`; return; }
-  const target=price?`이 단지 주력 ${py??'–'}평(${_eok(price)})`:'이 단지';
-  const best=(d.목표대비||[]).find(x=>x['가능']);
-  const verdict=price
-    ? (best
-      ? `<span style="color:#15803d;font-weight:700">LTV ${best.ltv}%면 ${target}을 살 수 있습니다.</span>`
-      : `<span style="color:#b45309;font-weight:700">${target}은 아래 LTV로는 부족합니다. (매수가능가 &lt; 단지 가격)</span>`)
-    : '';
-  const rows=(d.scenarios||[]).map(r=>{
-    const ok=d.목표대비?d.목표대비.find(x=>x.ltv===r.ltv):null;
-    const cell=ok
-      ? (ok['가능']
-        ? `<span style="color:#15803d;font-weight:700">살 수 있음</span><div style="font-size:10px;color:var(--dim)">${_eok(ok['여유'])} 여유</div>`
-        : `<span style="color:#b45309;font-weight:700">부족</span><div style="font-size:10px;color:var(--dim)">${_eok(Math.abs(ok['여유']))} 더 필요</div>`)
-      : '–';
-    return `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 6px">${r.ltv}% <span style="color:var(--dim);font-size:11px">${r['라벨']||''}</span></td>
-      <td style="padding:7px 6px;text-align:right"><b>${_eok(r['매수가능가'])}</b><div style="font-size:10px;color:var(--dim)">내 자본+대출 한도</div></td>
-      <td style="padding:7px 6px;text-align:right;color:var(--dim)">${_eok(r['대출'])}<div style="font-size:10px">그중 은행 대출</div></td>
-      <td style="padding:7px 6px;text-align:right">${cell}</td></tr>`;
-  }).join('');
-  el.innerHTML=`<div style="font-size:12px;font-weight:700;margin-bottom:4px">내 LTV 시나리오${price?` · ${target}`:''}</div>
-    ${verdict?`<div style="font-size:12px;margin-bottom:8px;line-height:1.45">${verdict}</div>`:''}
-    <div style="font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.45">
-      <b>최대매수가</b>=프로필 가용자본으로 그 LTV에서 살 수 있는 집값 상한 ·
-      <b>대출</b>=그중 은행에서 빌리는 금액 ·
-      <b>판정</b>=이 단지 주력 평형 최근매매가와 비교(살 수 있음/부족)
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="color:var(--dim)"><th style="text-align:left;padding:4px">LTV</th><th style="text-align:right;padding:4px">최대매수가</th><th style="text-align:right;padding:4px">대출</th><th style="text-align:right;padding:4px">이 단지</th></tr></thead>
-      <tbody>${rows}</tbody></table>
-    <div style="font-size:10px;color:var(--dim);margin-top:6px">금리 ${(d.rate*100).toFixed(2)}% · 내 자본 ${_eok(d.capital)}${d.income?` · 소득 ${_eok(d.income)}`:''} · 주력 평형=거래 건수 최다 타입</div>`;
 }
 async function loadImjang(name, region){
   const el=document.getElementById('cxImjang'); if(!el) return;
