@@ -7,7 +7,7 @@
   100~140 보통
   140~170 타이트       : 전세 매물 마름
   170~190 전세난        : "어쩔 수 없이 매매로 넘어온다"
-  >190  매매전이        : 전세난이 매매 상승 압력으로 전이
+  >190  매매전이        : 앱의 전세 압력 최상위 구간명. 실제 매매 전환은 별도 관측 필요
 
 매수우위지수 (0~200, 100=중립)
   KB 표준 해석: >100 매수자 우위, <100 매도자 우위.
@@ -51,7 +51,7 @@ class SignalConfig:
     demand_l1: float = 5.0   # 약함
     demand_l2: float = 10.0  # 보통
     demand_l3: float = 15.0  # 강함
-    demand_buy: float = 20.0  # 매수신호 ("빨리 사야한다")
+    demand_buy: float = 20.0  # 매수세우위 참고 상위선 (등급 판정에는 미사용)
     # 모멘텀 산정 주(week) 수, 증감률 임계(%).
     # 0.05%는 연 2.6%라 강북이 상승 표를 거의 놓치지 않았다. 0.20%는 연 약 10%.
     momentum_weeks: int = 4
@@ -77,7 +77,7 @@ def _jeonse_state(v: float, c: SignalConfig) -> str:
 def _demand_state(v: float, c: SignalConfig) -> str:
     """매수세우위(raw) 사다리 라벨."""
     if v >= c.demand_buy:
-        return "매수신호"
+        return "매수세 강함(참고)"
     if v >= c.demand_l3:
         return "강함"
     if v >= c.demand_l2:
@@ -120,7 +120,7 @@ def _classify(
     # --- 차트 기준 (우선) ---
     crunch = jeonse_state in ("전세난", "매매전이")
     if jeonse_state == "매매전이":
-        reasons.append(f"전세난→매매전이(전세수급 {js:.0f})")
+        reasons.append(f"전세수급 최상위 구간({js:.0f}, 매매 전환 미확인)")
     elif jeonse_state == "전세난":
         reasons.append(f"전세난(전세수급 {js:.0f})")
     elif jeonse_state == "타이트":
@@ -183,13 +183,13 @@ def interpret(signal: str, jeonse_state: str, bs: float, demand_state: str,
 
     # 1) 전세 수급 국면 (전세→매매 전이 메커니즘)
     if jeonse_state == "매매전이":
-        parts.append("전세난이 심화돼 전세 수요가 매매로 강하게 전이되는 국면으로, 매매가 상승 압력이 큽니다")
+        parts.append("전세수급지수가 앱의 최상위 구간이지만 실제 매매 전환·향후 가격 상승은 이 지표만으로 확인되지 않았습니다")
     elif jeonse_state == "전세난":
-        parts.append("전세 매물 부족(전세난)으로 전세가가 오르며 매매 전환 수요가 유입되는 구간입니다")
+        parts.append("전세수급지수가 높은 구간이지만 매매 수요 전환 여부는 별도 거래 자료로 확인해야 합니다")
     elif jeonse_state == "타이트":
-        parts.append("전세 수급이 타이트해지는 관찰 구간으로, 전세난으로 번지면 매매 상승으로 이어질 수 있습니다")
+        parts.append("전세수급지수가 높아지는 관찰 구간이며 이후 매매가격 흐름은 별도 지표로 확인해야 합니다")
     elif jeonse_state == "공급우위":
-        parts.append("전세 공급이 충분해 전세가 안정세이며 매매 상방 압력은 약합니다")
+        parts.append("전세수급지수는 공급 우위 구간이며 전세·매매가격의 실제 흐름은 별도 확인해야 합니다")
 
     # 2) 매수심리 + 가격 모멘텀
     if idx_strong and sale_mom == "상승":
@@ -560,18 +560,18 @@ def evaluate(
         if inherited_from:
             reasons.append(f"※수급·심리는 {inherited_from} 광역 기준")
             해설 = f"({inherited_from} 광역 수급 + {region} 매매흐름) " + 해설
-        # 전세 선행성(참고 강화 · 등급 영향 X) — 전세가 오르며 매매로 전이 = 실수요 기반 바닥 다지기
+        # 전세 선행성 참고(등급 영향 X). 매매 수요 전환은 관측되지 않았다.
         if jeonse_mom == "상승" and jeonse_state in ("매매전이", "전세난") and signal in ("STRONG_BUY", "BUY", "WATCH"):
-            reasons.append("전세 선행 상승→매매 전이(실수요 바닥)")
+            reasons.append("전세가격 상승·전세수급 높음(매매 전환 미확인)")
             if pd.notna(sp) and sp <= c.supply_dry:
-                해설 += " 전세가가 먼저 오르며 매매로 전이되는데 입주물량도 적어, 실수요 기반의 바닥 다지기 신호로 볼 수 있습니다."
+                해설 += " 전세가격도 오르고 입주물량은 적지만, 매매 수요 전환이나 가격 바닥은 확인되지 않았습니다."
             else:
-                해설 += " 전세가가 먼저 오르며 매매로 전이되는 실수요 기반 흐름입니다."
+                해설 += " 전세가격도 오르지만, 매매 수요로의 전환은 확인되지 않았습니다."
         vr = (volumes or {}).get(region, {}).get("거래량비")
         if vr is not None:
             if vr >= 1.2:
                 reasons.append(f"거래량 급증({vr}배)")
-                해설 += f" 최근 거래량이 평소의 {vr}배로 매수세가 유입되고 있습니다."
+                해설 += f" 최근 거래량은 평소의 {vr}배입니다. 거래량만으로 매수 주체나 향후 가격 방향은 알 수 없습니다."
             elif vr <= 0.8:
                 reasons.append(f"거래량 위축({vr}배)")
 
@@ -580,10 +580,10 @@ def evaluate(
         급지 = rg["급지"] if rg else None
         if rg and rg.get("막차"):
             reasons.append("막차경고(D·E급 급등)")
-            해설 += " 최하급지(D·E)인데 최근 급등해 수도권 유동성 끝물의 막차 위험이 있습니다. 지역 BUY와 겹치면 특히 주의하세요."
+            해설 += " 하위 급지가 최근 급등해 변동 위험을 살펴야 합니다. 유동성 국면의 종료를 확정하는 지표는 아닙니다."
         elif rg and (regime or {}).get("endgame"):
             reasons.append("권역 끝물(급지계단)")
-            해설 += " 수도권 A→E 상승 계단이 포착된 유동성 끝물 국면입니다. 지역 매수 시그널과는 별개 축이에요."
+            해설 += " 수도권 급지별 상승 순서에 따른 후기 국면 추정입니다. 실제 유동성 종료나 개별 지역 하락을 뜻하지 않습니다."
 
         # 매도(끝물) 보정 — 등급을 바꾼 항목을 구조화해 리포트에서 역추적한다.
         bear_factors = []
@@ -622,7 +622,8 @@ def evaluate(
                 "signal": signal,
                 "해설": 해설,
                 "전세수급": round(js, 1) if pd.notna(js) else None,
-                "전세상태": jeonse_state,
+                "전세상태": {"매매전이": "전세수급 매우 높음", "전세난": "전세수급 높음"}.get(
+                    jeonse_state, jeonse_state),
                 "매수세우위": round(bd, 1) if pd.notna(bd) else None,
                 "매수상태": demand_state,
                 "매수우위지수": round(bs, 1) if pd.notna(bs) else None,

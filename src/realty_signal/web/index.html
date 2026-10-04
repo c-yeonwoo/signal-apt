@@ -5193,7 +5193,7 @@ function drawChart(region, m, sig){
   mk("buyer_superiority", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
       lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_idx_strong, name:'매수우위 강세', lineStyle:{color:'#7c3aed'}}]}});
   mk("buyer_demand", 0, { markLine:{ symbol:'none', label:{position:'insideEndTop',fontSize:10},
-      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수신호', lineStyle:{color:'#16a34a'}}]}});
+      lineStyle:{type:'dashed',opacity:.4}, data:[{yAxis:meta.zones.buyer_demand_buy, name:'매수세 참고선', lineStyle:{color:'#16a34a'}}]}});
   mk("price_index", 0, { lineStyle:{width:2.4, color:'#2563eb'}, z:3 });  // 누적 매매가격지수 — 브랜드 컬러
   const mc = window._macro;
 

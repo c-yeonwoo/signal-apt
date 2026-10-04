@@ -46,7 +46,7 @@ def test_demand_state_ladder():
     assert _demand_state(7, c) == "약함"
     assert _demand_state(12, c) == "보통"
     assert _demand_state(17, c) == "강함"
-    assert _demand_state(25, c) == "매수신호"
+    assert _demand_state(25, c) == "매수세 강함(참고)"
 
 
 def test_momentum_labels():
@@ -120,7 +120,8 @@ def test_history_diff_detects_grade_changes():
 def test_interpret_narratives():
     c = SignalConfig()
     s1 = interpret("STRONG_BUY", "전세난", 84, "강함", "상승", 0.5, c)
-    assert "전세난" in s1 and ("매수" in s1 or "상승" in s1)
+    assert "전세수급지수가 높은 구간" in s1
+    assert "전환 여부는 별도 거래 자료" in s1
     assert s1.endswith(".") and s1.count(".") <= 2
     s2 = interpret("SELL_RISK", "공급우위", 30, "약함", "하락", 1.8, c)
     assert "하락" in s2 or "약세" in s2
