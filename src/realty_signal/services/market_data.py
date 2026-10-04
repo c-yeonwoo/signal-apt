@@ -126,9 +126,11 @@ def assessed_signal_labels(today: str) -> dict[str, dict]:
 
 def data_age_days() -> float | None:
     try:
-        last = kb().last_date
-        import datetime as _dt
-        return (_dt.datetime.now() - last.to_pydatetime()).total_seconds() / 86400
+        from datetime import datetime, time
+        from realty_signal.time_kst import KST, now_kst
+
+        observed = datetime.combine(kb().last_date.date(), time.min, tzinfo=KST)
+        return (now_kst() - observed).total_seconds() / 86400
     except Exception:
         return None
 

@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 
 from realty_signal import db
 from realty_signal.ingest import hanbang
+from realty_signal.time_kst import today_kst
 
 CACHE_SECONDS = 86400
 SOURCE_URL = hanbang.SOURCE_URL
@@ -34,15 +35,15 @@ def _usable(value: object) -> bool:
     if day.isoformat() != value["date"]:
         return False
     if value["status"] == "immediate":
-        return day == date.today()
-    return day >= date.today()
+        return day == today_kst()
+    return day >= today_kst()
 
 
 def normalize(content: dict, source_id: str, *, today: date | None = None) -> dict:
     """날짜와 '즉시'만 확정 표현으로 읽는다. 초·중·하순은 확인 필요."""
     if not isinstance(content, dict) or str(content.get("atlfslBscInfoPk")) != str(source_id):
         raise ValueError("listing_identity_mismatch")
-    today = today or date.today()
+    today = today or today_kst()
     raw = str(content.get("mvnPsbltyDay") or "").strip()
     date_type = str(content.get("mvnDayTypeCd") or "").strip()
     base = {"source": "hanbang_detail", "source_url": SOURCE_URL,

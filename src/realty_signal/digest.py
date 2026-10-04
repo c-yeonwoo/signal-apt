@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import os
 import smtplib
-from datetime import date
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
 from realty_signal import config, db
 from realty_signal.brain import snapshots
+from realty_signal.time_kst import today_kst
 
 
 def build_user_digest(
@@ -109,7 +109,7 @@ def collect_digests(signal_df=None, changes: list[dict] | None = None, as_of: st
         changes = snapshots.diff(snapshots.load(), signal_df)
     regions = list(signal_df["region"]) if isinstance(signal_df, pd.DataFrame) else []
     try:
-        labels = md.assessed_signal_labels(date.today().isoformat())
+        labels = md.assessed_signal_labels(today_kst().isoformat())
     except Exception:  # noqa: BLE001 — 판정 장애 시 원시 BUY를 메일에 재노출하지 않는다
         labels = {}
     allowed = {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK"}

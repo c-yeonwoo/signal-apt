@@ -131,11 +131,12 @@ def _movers(cur_df, prev_df) -> list[dict]:
 
 def _stale_days(as_of: str) -> int:
     from datetime import date
+    from realty_signal.time_kst import today_kst
     try:
         y, m, d = (int(x) for x in as_of.split("-"))
     except ValueError:
         return 0
-    return (date.today() - date(y, m, d)).days
+    return (today_kst() - date(y, m, d)).days
 
 
 def latest(kb=None, supply=None) -> dict:

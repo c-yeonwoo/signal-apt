@@ -660,8 +660,8 @@ def report_feedback_counts(days: int = 30) -> dict:
 
 
 def _iso_week() -> str:
-    import datetime as _dt
-    return _dt.date.today().strftime("%G-W%V")
+    from realty_signal.time_kst import today_kst
+    return today_kst().strftime("%G-W%V")
 
 
 def usage_get(uid: int, kind: str) -> int:
