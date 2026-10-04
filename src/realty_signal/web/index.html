@@ -431,7 +431,8 @@
   .watch-card-more-body { padding:2px 0 4px; }
   .watch-card-target { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
   .watch-card-target input { width:120px; max-width:100%; }
-  .watch-card-target .btn, .watch-alternatives .btn { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+  .watch-card-target .btn, .watch-alternatives .btn, .watch-card-more-body > .watch-btn,
+  #laGeneralRetry { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
   .watch-alternatives { border-top:1px solid var(--line); margin-top:12px; padding-top:10px; }
   .watch-alternatives > div { flex-wrap:wrap; }
   .watch-alternatives > div > span { min-width:0; overflow-wrap:anywhere; }
@@ -801,6 +802,10 @@
       <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
       <button type="button" class="chip" onclick="SignalV2.openDiscovery()">내 조건으로 찾기</button>
       <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
+    </div>
+    <div id="laSourceWarning" role="status" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;font-size:13px;line-height:1.5">
+      <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.</span>
+      <button type="button" class="btn" id="laGeneralRetry" onclick="retryGeneralFromAll()">일반매물 다시 수집</button>
     </div>
     <div id="laBudgetNote" style="display:none;font-size:12px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
       <label id="laSaleFilterLabel" style="font-size:12px">매매 표시
@@ -3598,6 +3603,9 @@ function _laApplyResponse(types,d,preservePrice=false){
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
   document.getElementById('laStatus').textContent=`수집 매물 ${_laData.length}건${info.duplicate_records_collapsed?` · 같은 원천 중복 ${info.duplicate_records_collapsed}건 통합`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''} · KB 관측 ${d.asof||'–'}${info.data_age_days!=null?` · 관측 ${info.data_age_days}일 경과`:''} · 수집 범위 내 결과`;
+  const sourceWarning=document.getElementById('laSourceWarning');
+  sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
+  document.getElementById('laSourceWarningText').textContent='일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.';
   initLaPriceFilter();
   if(price && _laPrice){
     _laPrice.active=!!price.active;
@@ -3619,7 +3627,8 @@ function _laRevalidate(types,old){
     if(epoch!==_laCacheEpoch) return;
     _laCache.set(types,{at:Date.now(),data:d});
     const changed=JSON.stringify(d.listings)!==JSON.stringify(old.listings) || d.asof!==old.asof ||
-      d.meta?.private_access!==old.meta?.private_access;
+      d.meta?.private_access!==old.meta?.private_access ||
+      d.meta?.general_refresh_failed!==old.meta?.general_refresh_failed;
     if(changed && _laCurrentTypes===types && [..._laSel].join(',')===types && location.hash.slice(1)==='all')
       _laApplyResponse(types,d,true);
   }).catch(()=>{}).finally(()=>_laRevalidating.delete(types));
@@ -3690,6 +3699,7 @@ async function loadAllListings(){
   _laAccessDenied=false;
   const epoch=_laCacheEpoch;
   document.getElementById('laStatus').textContent='불러오는 중…';
+  document.getElementById('laSourceWarning').style.display='none';
   document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">최초 1회는 데이터 수집으로 수십초 걸릴 수 있어요</span></div>';
   try{ const r=await fetch('/api/listings/all?types='+encodeURIComponent(types));
     if(!r.ok) throw new Error('매물 조회 실패');
@@ -3697,7 +3707,25 @@ async function loadAllListings(){
     _laCache.set(types,{at:Date.now(),data:d}); _laApplyResponse(types,d);
   }catch(e){ if(gen!==_laRequestGen) return;
     _laData=[]; _laCurrentTypes=''; document.getElementById('laStatus').textContent='불러오기 실패';
+    document.getElementById('laSourceWarning').style.display='none';
     initLaPriceFilter(); renderAllListings(); }
+}
+async function retryGeneralFromAll(){
+  const button=document.getElementById('laGeneralRetry');
+  const message=document.getElementById('laSourceWarningText');
+  button.disabled=true; message.textContent='일반매물을 다시 수집하고 있습니다. 최대 3개 지역을 확인합니다…';
+  try{
+    const response=await fetch('/api/general-listings/refresh',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const result=await response.json();
+    if(!response.ok||!result.ok) throw new Error(result.reason==='cooldown'
+      ? '최근 수집 시도 후 10분이 지나야 다시 수집할 수 있습니다.'
+      : '일반매물 수집에 실패했습니다. 다른 원천의 매물은 계속 확인할 수 있습니다.');
+    _laInvalidateCache();
+    await loadAllListings();
+  }catch(error){
+    message.textContent=error.message||'일반매물 수집 상태를 확인하지 못했습니다.';
+  }finally{button.disabled=false;}
 }
 function renderLaTypeChips(){
   const el=document.getElementById('laTypeChips'); if(!el) return;
@@ -7927,7 +7955,8 @@ function _watchAliases(btn){
 function _syncWatchButtons(){
   document.querySelectorAll('.watch-btn').forEach(b=>{
     const on=_watchAliases(b).some(key=>_watchKeys.has(key));
-    b.textContent=on?'★ 찜함':'☆ 찜하기'; b.setAttribute('aria-pressed',String(on));
+    b.textContent=on?(b.dataset.watchContext==='candidate'?'★ 찜 해제':'★ 찜함'):'☆ 찜하기';
+    b.setAttribute('aria-pressed',String(on));
     b.disabled=_watchAliases(b).some(key=>_watchPendingKeys.has(key));
   });
 }
@@ -8021,21 +8050,21 @@ async function loadListingWatch(){
     return `<section class="sec watch-card">
       <div class="watch-card-head"><div><div class="watch-card-name"><h3>${esc(w.name)}</h3><span class="pill">${esc(w.kind)}</span></div>
         <div class="watch-card-region">${esc(w.region||'지역 미확인')}</div></div>
-        <div class="watch-card-actions"><button type="button" class="btn" data-watch-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-available="${!!c}" onclick="openWatchItem(this)">${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'매물 확인'}</button>
-          <button type="button" class="btn watch-btn" data-watch-key="${esc(w.key)}" aria-pressed="true" onclick="toggleListingWatch(this)">★ 찜함</button></div></div>
+        <div class="watch-card-actions"><button type="button" class="btn" data-watch-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-available="${!!c}" onclick="openWatchItem(this)">${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'매물 확인'}</button></div></div>
       <div class="watch-card-main"><div><span class="watch-card-label">${currentPriceLabel}</span>
         <div class="watch-card-price">${c?.price!=null?amount(c.price):'현재 가격 미확인'}</div></div>
         <div class="watch-card-update"><span class="watch-card-label">${isAsking?'호가 변화':w.kind==='청약'?'청약 일정':'진행 상태'}</span>
           <div class="watch-card-change">${esc(update)}</div></div></div>
       ${!c||c.stale?`<span class="watch-card-status">${esc(now)}</span>`:''}
-      <details class="watch-card-more" data-watch-key="${esc(w.key)}" ${expanded.has(w.key)?'open':''}><summary>${isAsking?'상세·알림':'상세'}</summary>
+      <details class="watch-card-more" data-watch-key="${esc(w.key)}" ${expanded.has(w.key)?'open':''}><summary>알림·찜 관리</summary>
         <div class="watch-card-more-body"><div class="watch-card-detail-line"><span>${savedPriceLabel}</span><b>${amount(w.saved_price)}</b></div>
           <span class="watch-card-status">${esc(now)}</span>
           ${isAsking?`<div class="watch-card-target">
           <label>목표 호가 (만원) <input class="ctrl" type="number" min="1" max="999999999" step="1" inputmode="numeric" value="${esc(w.target_price??'')}" placeholder="예: 50000"></label>
           <button type="button" class="btn" data-watch-key="${esc(w.key)}" onclick="saveWatchPriceTarget(this)">목표 저장·해제</button>
           <span class="watch-card-status">목표 위에서 아래로 내려갈 때 알립니다.</span></div>`:''}
-          ${alternatives?`<div class="watch-alternatives"><b style="font-size:13px">조건이 비슷한 후보 · 추천 아님</b>${alternatives}</div>`:''}
+          ${alternatives?`<div class="watch-alternatives"><b style="font-size:13px">같은 단지의 다른 후보 · 추천 아님</b>${alternatives}</div>`:''}
+          <button type="button" class="btn watch-btn" data-watch-key="${esc(w.key)}" data-watch-context="candidate" aria-pressed="true" onclick="toggleListingWatch(this)">★ 찜 해제</button>
         </div></details>
     </section>`;
   }).join('');

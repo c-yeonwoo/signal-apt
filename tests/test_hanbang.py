@@ -194,6 +194,7 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     assert guest.get("/api/general-listings").json()["listings"] == []
     public = guest.get("/api/listings/all?types=일반매물").json()
     assert public["listings"] == [] and public["meta"]["private_access"] is False
+    assert public["meta"]["general_refresh_failed"] is False
     current = owner.get("/api/listings/all?types=일반매물").json()["listings"][0]
     assert current["동"] == "상계동"
     assert guest.post("/api/listing-locality", json={"key": current["key"], "dong": "상계동"}).status_code == 403
@@ -209,13 +210,18 @@ def test_private_cache_and_integrated_listings_do_not_leak(tmp_path, monkeypatch
     assert guest.get("/api/listings/all?types=일반매물").json()["listings"] == []
     private = owner.get("/api/listings/all?types=일반매물").json()
     assert private["meta"]["private_access"] is True
+    assert private["meta"]["general_refresh_failed"] is False
     listing = private["listings"][0]
     assert listing["key"] == "일반매물:1" and listing["총액"] == 53_000
     assert listing["지역코드"] == "11350"
     assert listing["ref"]["방수"] == 3
     assert not listing["stale"]
     api._record_radar_refresh(cache, {"ok": False, "attempted_at": time.time()})
-    assert owner.get("/api/listings/all?types=일반매물").json()["listings"][0]["stale"]
+    failed = owner.get("/api/listings/all?types=일반매물").json()
+    assert failed["listings"][0]["stale"]
+    assert failed["meta"]["general_refresh_failed"] is True
+    assert guest.get("/api/listings/all?types=일반매물").json()["meta"]["general_refresh_failed"] is False
+    assert owner.get("/api/listings/all?types=청약").json()["meta"]["general_refresh_failed"] is False
     assert owner.post("/api/listing-watch", json={"key": listing["key"]}).json()["ok"]
     assert guest.post("/api/listing-watch", json={"key": listing["key"]}).status_code == 403
     assert guest.get("/api/listing-watch").json()["items"] == []
