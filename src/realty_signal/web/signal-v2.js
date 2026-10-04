@@ -23,12 +23,16 @@
 
   async function json(url, options) {
     const response = await fetch(url, options);
-    if (!response.ok) throw new Error(response.status === 401 ? '로그인이 필요합니다.' :
+    if (!response.ok) {
+      const inputError = response.status === 422 && url.startsWith('/api/v2/decision-notes')
+        ? (await response.json().catch(() => ({}))).detail : null;
+      throw new Error(typeof inputError === 'string' && inputError.trim() ? inputError : response.status === 401 ? '로그인이 필요합니다.' :
       response.status === 403 ? '이 매물에 접근할 수 없습니다.' :
       response.status === 404 ? '현재 수집분에서 대상을 찾지 못했습니다.' :
       response.status === 409 ? '자료나 내 조건이 바뀌었습니다. 리포트를 다시 열어 주세요.' :
       response.status === 429 ? '오늘 AI 설명 요청 한도에 도달했습니다. 기본 근거는 계속 볼 수 있습니다.' :
       '자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    }
     return response.json();
   }
 
@@ -937,7 +941,10 @@
       });
       if (response.status === 409) throw new Error('수집 결과가 바뀌었습니다. 다시 후보 찾기를 눌러 주세요.');
       if (response.status === 422 && cursor) throw new Error('검색 조건이 바뀌었습니다. 다시 후보 찾기를 눌러 주세요.');
-      if (response.status === 422) throw new Error('지역 코드나 검색 조건이 바뀌었습니다. 지역을 다시 선택해 주세요.');
+      if (response.status === 422) {
+        const detail = (await response.json().catch(() => ({}))).detail;
+        throw new Error(typeof detail === 'string' && detail.trim() ? detail : '검색 조건을 확인하고 다시 시도해 주세요.');
+      }
       if (!response.ok) throw new Error('후보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       const data = await response.json();
       if (generation !== discoveryGeneration || !document.getElementById('v2DiscoverDlg').open) return;

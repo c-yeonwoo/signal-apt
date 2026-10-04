@@ -17,6 +17,31 @@ from realty_signal.services import report_snapshots_v2 as snapshots
 router = APIRouter(tags=["reports-v2"])
 PRIVATE = {"Cache-Control": "private, no-store"}
 
+_DISCOVERY_INPUT_ERRORS = {
+    "invalid_conditions": "검색 조건을 다시 입력해 주세요.",
+    "unsupported_condition": "지원하지 않는 검색 조건이 있습니다. 조건을 다시 선택해 주세요.",
+    "invalid_condition_value": "호가·면적·방 개수·통근시간 등 숫자 조건을 다시 확인해 주세요.",
+    "invalid_move_in_date": "입주 필요일을 다시 선택해 주세요.",
+    "invalid_region": "지역을 목록에서 다시 선택해 주세요.",
+    "invalid_region_code": "지역을 목록에서 다시 선택해 주세요.",
+    "conflicting_region_conditions": "지역은 필수 또는 선호 중 하나만 선택해 주세요.",
+    "invalid_priority": "중요한 선호 조건을 다시 선택해 주세요.",
+    "invalid_limit": "표시할 후보 수를 다시 확인해 주세요.",
+    "invalid_cursor": "검색 조건이 바뀌었습니다. 처음부터 다시 검색해 주세요.",
+}
+_NOTE_INPUT_ERRORS = {
+    "invalid_note": "판단 기록을 다시 입력해 주세요.",
+    "invalid_thesis": "관심 이유를 1~500자로 입력해 주세요.",
+    "invalid_counter_condition": "다시 생각할 조건을 1~500자로 입력해 주세요.",
+    "invalid_horizon": "복기 시점을 다시 선택해 주세요.",
+    "invalid_report_id": "연결된 리포트를 확인할 수 없습니다. 리포트를 다시 열어 주세요.",
+}
+
+
+def _input_error(exc: ValueError, messages: dict[str, str]) -> str:
+    """Only expose reviewed validation messages, never an arbitrary exception body."""
+    return messages.get(str(exc), "입력값을 확인하고 다시 시도해 주세요.")
+
 
 def _id(payload: dict) -> str:
     return sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False,
@@ -310,7 +335,7 @@ def discovery(request: Request, data: dict = Body(...)):
     try:
         spec = _canonical_discovery_region(discovery_v2.validate(data))
     except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+        raise HTTPException(422, _input_error(exc, _DISCOVERY_INPUT_ERRORS)) from exc
     allowed = deps.personal_listings_allowed(request)
     rows, sources = [], []
     if allowed:
@@ -397,7 +422,7 @@ def discovery(request: Request, data: dict = Body(...)):
     except ValueError as exc:
         if str(exc) == "stale_cursor":
             raise HTTPException(409, "수집 결과가 바뀌었습니다. 처음부터 다시 검색하세요.") from exc
-        raise HTTPException(422, str(exc)) from exc
+        raise HTTPException(422, _input_error(exc, _DISCOVERY_INPUT_ERRORS)) from exc
     result["private_access"] = allowed
     states = [source["state"] for source in sources]
     degraded = any(state not in {"ready", "empty"} for state in states)
@@ -515,7 +540,7 @@ def decision_note_create(request: Request, data: dict = Body(...)):
     try:
         result = notes.create(uid, kind, key, data)
     except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+        raise HTTPException(422, _input_error(exc, _NOTE_INPUT_ERRORS)) from exc
     return JSONResponse(result, status_code=201, headers=PRIVATE)
 
 
@@ -530,7 +555,7 @@ def decision_note_update(request: Request, note_id: int, data: dict = Body(...))
     try:
         result = notes.update(uid, note_id, revision, data)
     except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+        raise HTTPException(422, _input_error(exc, _NOTE_INPUT_ERRORS)) from exc
     if result is None:
         raise HTTPException(409, "이 기록이 이미 수정됐거나 접근할 수 없습니다.")
     return JSONResponse(result, headers=PRIVATE)
