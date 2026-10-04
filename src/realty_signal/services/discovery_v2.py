@@ -11,7 +11,7 @@ from math import isfinite
 
 from realty_signal.services.property_analysis import snapshot
 
-VERSION = "discovery-v2-14"
+VERSION = "discovery-v2-15"
 KINDS = {"일반매물", "급매", "찐매물"}
 FIELDS = {"max_price_manwon", "min_area_m2", "min_rooms", "move_in_by", "max_commute_minutes", "max_monthly_manwon", "region", "prefer_region",
           "region_code", "prefer_region_code", "prefer_max_price_manwon", "prefer_min_area_m2", "priority"}
@@ -295,7 +295,7 @@ def classify(row: dict, spec: dict, *, finance: dict | None = None,
         verify = "판매 여부와 최신 호가가 예산 안으로 내려왔는지 원천에서 확인하세요."
     if listing.get("source_conflict"):
         reason = "같은 원천 ID의 매물 정보가 서로 달라 조건 판정을 보류했습니다."
-        verify = "원천에서 단지·전용면적·층 정보를 먼저 확인하세요."
+        verify = "원천에서 단지·전용면적·층, 판매 여부와 실제 호가를 먼저 확인하세요."
     return {"listing": listing, "eligibility": tier, "constraints": checks,
             "recommendation_reason": reason, "tradeoff": tradeoff,
             "verify_next": verify, "signal_context": row.get("시그널"),
@@ -321,12 +321,15 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
                         occupancy=(occupancy_by_key or {}).get(row["key"]),
                         commute=(commute_by_key or {}).get(row["key"]))
         groups[item["eligibility"]].append(item)
-    def stale_above_limit(item):
+    def unverified_quote_priority(item):
         snap = item["listing"]
-        return (item["eligibility"] == "verify" and snap["stale"]
-                and snap["asking_manwon"] is not None
-                and "max_price_manwon" in spec
-                and snap["asking_manwon"] > spec["max_price_manwon"])
+        if item["eligibility"] != "verify":
+            return 0
+        if ("max_price_manwon" in spec and snap["asking_manwon"] is not None
+                and snap["asking_manwon"] > spec["max_price_manwon"]
+                and (snap["stale"] or snap.get("source_conflict"))):
+            return 2
+        return 1 if snap.get("source_conflict") else 0
     def order(item):
         snap = item["listing"]
         # 입주일 조건을 요청한 경우에만, 같은 선호 적합도·확인도 안에서
@@ -335,7 +338,7 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
                        and snap["kind"] == "일반매물" and snap.get("move_in") is None else 1)
         commute_lookup = (0 if "max_commute_minutes" in spec and item["eligibility"] == "verify"
                           and snap.get("coordinate") and snap.get("commute") is None else 1)
-        return (stale_above_limit(item),
+        return (unverified_quote_priority(item),
                 -(item["preference"]["score"] or 0),
                 -(item["preference"]["coverage"] or 0),
                 move_lookup,
@@ -367,9 +370,9 @@ def discover(rows: list[dict], spec: dict, *, source_fingerprint=None, finance_o
                     overflow.append(item)
             items[:] = selected + overflow
         if items is groups["verify"]:
-            # Diversity passes may move a stale, previously over-budget quote
-            # forward; keep every such unverified price after other verify rows.
-            items.sort(key=stale_above_limit)
+            # Diversity passes may move a conflicting or previously over-budget
+            # quote forward; keep uncertain price evidence after ordinary rows.
+            items.sort(key=unverified_quote_priority)
     counts = {k: len(v) for k, v in groups.items()}
     # Count only candidates that become a basic candidate by relaxing exactly
     # one failed condition. Unknown or stale facts must not be promoted.

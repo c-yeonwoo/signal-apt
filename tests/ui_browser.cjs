@@ -155,6 +155,16 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           data.groups={matched:[],verify:[stale],explore:[],exceeded:[]};
           data.next_cursor=null;
         }
+        if(spec.max_price_manwon===62000){
+          const conflict={...candidate,listing:{...candidate.listing,key:'찐매물:synthetic-conflict',
+            name:'원천 충돌 후보',asking_manwon:120000,source_conflict:true},eligibility:'verify',
+            recommendation_reason:'같은 원천 ID의 매물 정보가 서로 달라 조건 판정을 보류했습니다.',
+            tradeoff:'현재 알려진 조건에서는 양보할 점을 확인하지 못했습니다.',
+            verify_next:'원천에서 단지·전용면적·층, 판매 여부와 실제 호가를 먼저 확인하세요.'};
+          data.counts={matched:0,verify:1,explore:0,exceeded:0};
+          data.groups={matched:[],verify:[conflict],explore:[],exceeded:[]};
+          data.next_cursor=null;
+        }
       }
       if(url.pathname==='/api/v2/discovery/occupancy') {
         occupancyChecked=true;
@@ -1357,7 +1367,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await staleCard.waitFor();
     assert.match(await staleCard.textContent(),/지난 수집 호가 12\.00억 · 현재 호가 미확인/);
     assert.match(await staleCard.textContent(),/판정 보류 이유: 지난 수집 호가는 설정한 상한보다 높았습니다/);
-    assert.match(await page.locator('#v2DiscoverResults').textContent(),/지난 호가가 예산을 넘는 확인 필요 후보는 뒤로/);
+    assert.match(await page.locator('#v2DiscoverResults').textContent(),/지난 호가가 예산을 넘는 후보는 뒤로/);
+    await maxPriceInput.fill('62000');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    const conflictCard=page.locator('#v2DiscoverResults [data-v2-group="verify"] [data-v2-card]');
+    await conflictCard.waitFor();
+    assert.match(await conflictCard.textContent(),/원천 정보 충돌 · 표시 호가 12\.00억 · 현재 호가 미확인/);
+    assert.match(await conflictCard.textContent(),/판정 보류 이유: 같은 원천 ID/);
+    assert.doesNotMatch(await conflictCard.textContent(),/양보할 점: 현재 알려진 조건/);
+    assert.match(await conflictCard.textContent(),/판매 여부와 실제 호가/);
     await maxPriceInput.fill('');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText('첫번째 후보').waitFor();
