@@ -17,6 +17,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
     let serverClientVersion='synthetic-v1';
+    let regionReportFailures=0, seriesFailures=0;
     page.on('pageerror', e=>errors.push(e.message));
     await page.route('**/*', async route=>{
       const url=new URL(route.request().url());
@@ -39,6 +40,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         {name:'미확인 주소',address:'시군구 미확인',sigungu:'',sido:'',region_id:null}
       ]}});
       const decoded=decodeURIComponent(url.pathname);
+      if(decoded==='/api/v2/regions/kb:1114000000/report' && regionReportFailures>0){
+        regionReportFailures--;
+        return route.fulfill({status:503,json:{detail:'synthetic source failure'}});
+      }
+      if(decoded==='/api/series/테스트구' && seriesFailures>0){
+        seriesFailures--;
+        return route.fulfill({status:503,json:{detail:'synthetic source failure'}});
+      }
       if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) data={type:'region',report_id:'b'.repeat(64),
         subject:{region:'테스트구',region_id:'kb:1114000000'},asof:'2026-09-28',
         assessment:{display_grade:'매수',assessment_status:'ready',scope_note:'테스트 권역 자료',
@@ -1063,11 +1072,32 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2ReportBody').getByText(/저장 당시 · 테스트구/).waitFor();
     assert.match(await page.locator('#v2ReportBody').textContent(),/현재 시그널·자료 신선도/);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    regionReportFailures=1;
+    await page.evaluate(()=>SignalV2.paintRegion('테스트구','kb:1114000000'));
+    await page.locator('#v2RegionRetry').waitFor();
+    assert.match(await page.locator('#haesolPanel').textContent(),/등급만으로 매수 판단하지 마세요/);
+    assert.doesNotMatch(await page.locator('#haesolPanel').textContent(),/판정 근거를 확인하고 있습니다/);
+    await page.locator('#v2RegionRetry').focus();
+    await page.keyboard.press('Enter');
+    await page.locator('.signal-assessment').waitFor();
+    seriesFailures=1;
+    await page.evaluate(()=>{_signalTrendRegion=null;_lastM=null;loadSignalTrend('테스트구');});
+    await page.getByRole('button',{name:'추세 다시 확인'}).waitFor();
+    assert.match(await page.locator('#signalTrendStatus').textContent(),/등급만으로 판단하지 말고/);
+    await page.getByRole('button',{name:'추세 다시 확인'}).focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(()=>document.getElementById('signalTrendStatus').textContent==='');
+    const priorPageErrors=errors.length;
+    await page.evaluate(()=>{loadSignalTrend('테스트구');_lastM=null;++_signalTrendGen;});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(errors.length,priorPageErrors,'cancelled cached redraw must not read cleared metrics');
+    await page.evaluate(()=>loadSignalTrend('테스트구'));
+    await page.waitForFunction(()=>document.getElementById('signalTrendStatus').textContent==='');
     assert(calls.some(x=>decodeURIComponent(x)==='/api/v2/regions/kb:1114000000/report'));
     assert.equal(await page.locator('#signalPanelTrend').isVisible(),true);
     assert.equal(await page.locator('#signalPanelMap').isVisible(),false);
     assert.equal(await page.locator('.signal-assessment').count(),1);
-    assert.equal(await page.locator('.signal-evidence-details').getAttribute('open'),'');
+    assert.equal(await page.locator('.signal-evidence-details').getAttribute('open'),null);
     assert.equal(await page.locator('#haesolPanel').evaluate(el=>getComputedStyle(el).maxHeight),'none');
     assert.equal(calls.some(x=>decodeURIComponent(x)==='/api/series/테스트구'),true);
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
@@ -1082,9 +1112,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#signalSide #list .row').first().click();
     assert.equal(await page.locator('#signalSide').evaluate(el=>el.inert),true);
     assert.equal(await page.locator('#sigbadge').evaluate(el=>el===document.activeElement),true);
+    const seriesCountBeforeTab=calls.filter(x=>decodeURIComponent(x)==='/api/series/테스트구').length;
     await page.getByRole('tab',{name:'가격·수급 추세'}).click();
     await page.waitForFunction(()=>document.getElementById('signalTrendStatus').textContent==='');
-    assert.equal(calls.filter(x=>decodeURIComponent(x)==='/api/series/테스트구').length,1);
+    assert.equal(calls.filter(x=>decodeURIComponent(x)==='/api/series/테스트구').length,seriesCountBeforeTab);
     await page.getByRole('tab',{name:'급지 지도'}).click();
     assert.equal(await page.locator('#signalPanelMap').isVisible(),true);
     assert.equal(await page.locator('#signalPanelTrend').isVisible(),false);
@@ -1117,6 +1148,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     await page.evaluate(()=>SignalV2.openDiscovery('테스트구'));
     await page.waitForFunction(()=>document.querySelector('#v2DiscoverForm [name=region_code]')?.value==='11140');
+    const maxPriceInput=page.locator('#v2DiscoverForm [name=max_price_manwon]');
+    await maxPriceInput.fill('60000');
+    assert.equal(await maxPriceInput.evaluate(el=>el.checkValidity()),true,'the example price must satisfy native validation');
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(()=>document.getElementById('v2DiscoverResults').textContent.includes('첫번째 후보'));
+    assert.equal(discoveryPayloads.at(-1).max_price_manwon,60000);
+    await maxPriceInput.fill('');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     assert.equal(discoveryPayloads.at(-1).prefer_region_code,'11140');
     await page.getByText('첫번째 후보').waitFor();

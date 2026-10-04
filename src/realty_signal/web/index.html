@@ -5196,16 +5196,22 @@ async function loadSignalTrend(region){
   const gen=++_signalTrendGen;
   const status=document.getElementById('signalTrendStatus');
   if(_signalTrendRegion===region && _lastM){
+    const metrics=_lastM, signal=_lastSig;
     status.textContent='';
-    requestAnimationFrame(()=>{ chart.resize(); drawChart(region,_lastM,_lastSig); });
+    requestAnimationFrame(()=>{
+      if(gen!==_signalTrendGen || selected!==region || _signalMode!=='trend') return;
+      chart.resize(); drawChart(region,metrics,signal);
+    });
     return;
   }
   status.textContent='주간 가격·수급 자료를 불러오는 중…';
-  chart.clear();
   try {
+    chart.clear();
     const response=await fetch(`/api/series/${encodeURIComponent(region)}`);
     if(!response.ok) throw new Error('series unavailable');
     const data=await response.json();
+    if(!data?.metrics || typeof data.metrics!=='object' || Array.isArray(data.metrics))
+      throw new Error('series shape unavailable');
     if(gen!==_signalTrendGen || selected!==region || _signalMode!=='trend') return;
     _lastM=data.metrics; _lastSig=allSignals.find(x=>x.region===region); _lastVol=data.volume||null;
     _signalTrendRegion=region;
@@ -5216,10 +5222,20 @@ async function loadSignalTrend(region){
       if(gen!==_signalTrendGen || selected!==region || _signalMode!=='trend') return;
     }
     renderHistPanel();
-    requestAnimationFrame(()=>{ chart.resize(); drawChart(region,data.metrics,_lastSig); });
+    const signal=_lastSig;
+    requestAnimationFrame(()=>{
+      if(gen!==_signalTrendGen || selected!==region || _signalMode!=='trend') return;
+      chart.resize(); drawChart(region,data.metrics,signal);
+    });
   } catch(_) {
-    if(gen===_signalTrendGen && selected===region && _signalMode==='trend')
-      status.textContent='추세 자료를 불러오지 못했습니다. 판정 근거는 계속 확인할 수 있습니다.';
+    if(gen===_signalTrendGen && selected===region && _signalMode==='trend'){
+      _signalTrendRegion=null; _lastM=null;
+      status.textContent='가격·수급 추세를 확인할 수 없습니다. 등급만으로 판단하지 말고 다시 확인해 주세요. ';
+      const retry=document.createElement('button');
+      retry.type='button'; retry.className='btn'; retry.textContent='추세 다시 확인';
+      retry.onclick=()=>loadSignalTrend(region);
+      status.appendChild(retry);
+    }
   }
 }
 let _filtersOpen=false;
@@ -8134,7 +8150,7 @@ async function startApp(needOnboard){
     <h2>내 조건으로 빠르게 찾기</h2>
     <p class="v2-muted">확인된 조건에 맞는 매물과 정보가 부족한 매물을 나눠 보여줍니다.</p>
     <form id="v2DiscoverForm" class="v2-form">
-      <label>호가 상한 · 만원<input name="max_price_manwon" type="number" min="1" step="1000" placeholder="예: 60000"></label>
+      <label>호가 상한 · 만원<input name="max_price_manwon" type="number" min="1" step="1" placeholder="예: 60000"></label>
       <label>최소 전용면적 · ㎡<input name="min_area_m2" type="number" min="1" step="1" placeholder="예: 59"></label>
       <label>최소 방 개수<input name="min_rooms" type="number" min="1" max="15" step="1" placeholder="예: 3"></label>
       <label>입주 필요일 이내<input name="move_in_by" type="date"></label>
