@@ -777,6 +777,28 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>renderList());
     assert.match(await page.locator('#list').textContent(),/모두 판단 보류 · 수급 참고 순/);
     await page.evaluate(()=>{
+      document.getElementById('search').value='';
+      document.getElementById('groupFilter').value='';
+      _filtersOpen=false; _otherSignalRegionsExpanded=false;
+      _favs=new Set(['region:노원구']);
+      _favRegionKeyByName=new Map([['노원구','kb:1135000000']]);
+      allSignals=[
+        {region:'노원구',group:'서울',region_id:'kb:1135000000',display_signal:'BUY',assessment_status:'ready'},
+        {region:'강북구',group:'서울',region_id:'kb:1130500000',display_signal:'STRONG_BUY',assessment_status:'ready'},
+      ];
+      renderList();
+    });
+    assert.equal(await page.locator('#list details.signal-others').count(),1);
+    assert.equal(await page.locator('#list details.signal-others').getAttribute('open'),null);
+    assert.match(await page.locator('#list details.signal-others summary').textContent(),/그 밖의 지역 1곳/);
+    await page.evaluate(()=>document.querySelector('#list details.signal-others summary').click());
+    await page.waitForFunction(()=>_otherSignalRegionsExpanded);
+    await page.evaluate(()=>renderList());
+    assert.equal(await page.locator('#list details.signal-others').getAttribute('open'),'');
+    await page.evaluate(()=>{ document.getElementById('search').value='없는지역'; renderList(); });
+    assert.match(await page.locator('#list').textContent(),/조건에 맞는 지역이 없습니다/);
+    await page.evaluate(()=>{
+      document.getElementById('search').value='';
       document.getElementById('advPanel').style.display='none';
       document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
       meta={last_date:'2026-09-28',zones:{jeonse_supply:[],buyer_idx_strong:70,buyer_demand_buy:20}};

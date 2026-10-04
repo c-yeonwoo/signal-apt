@@ -219,6 +219,9 @@
   .ghead { padding:12px 14px; font-weight:700; font-size:15px; cursor:pointer; background:#f1f5f9;
            border-bottom:1px solid var(--line); display:flex; align-items:center; gap:6px; position:sticky; top:0; }
   .ghead .cnt { color:var(--dim); font-weight:600; font-size:13px; }
+  .signal-others > summary { list-style:none; position:static; cursor:pointer; min-height:44px; }
+  .signal-others > summary::-webkit-details-marker { display:none; }
+  .signal-others[open] > summary .caret { transform:rotate(90deg); }
   .shead { padding:6px 12px 6px 22px; font-weight:600; cursor:pointer; display:flex; align-items:center;
            gap:6px; border-bottom:1px solid var(--line); background:#ffffff; }
   .caret { display:inline-block; width:10px; color:var(--dim); transition:transform .1s; }
@@ -4840,6 +4843,7 @@ function gyeonggiParent(name){ const i=name.indexOf(' '); return i<0?name:name.s
 
 const _SIGRANK = {STRONG_BUY:0, BUY:1, WATCH:2, NEUTRAL:3, SELL_RISK:4, HELD:5};
 function miniHead(t){ const h=document.createElement('div'); h.className='ghead'; h.style.cursor='default'; h.innerHTML=t; return h; }
+let _otherSignalRegionsExpanded=false;
 function renderList(){
   const q = document.getElementById('search').value.trim();
   const grp = document.getElementById('groupFilter').value;
@@ -4852,11 +4856,28 @@ function renderList(){
     || (b['전세수급']||0)-(a['전세수급']||0) || a.region.localeCompare(b.region));
   const favs = rows.filter(r => _favs.has('region:'+r.region));
   const rest = rows.filter(r => !_favs.has('region:'+r.region));
+  if(!rows.length){
+    const empty=document.createElement('p');
+    empty.className='v2-muted'; empty.style.padding='16px';
+    empty.textContent='조건에 맞는 지역이 없습니다. 지역 이름이나 신호·급지 조건을 바꿔보세요.';
+    list.appendChild(empty); return;
+  }
   if(favs.length){ list.appendChild(miniHead('★ 관심 지역')); favs.forEach(r=>list.appendChild(rowEl(r,0))); }
   const allHeld = rows.length>0 && rows.every(r=>displaySignal(r)==='HELD');
   const orderLabel = allHeld ? '모두 판단 보류 · 수급 참고 순' : '현재 판정 순';
-  list.appendChild(miniHead(`${favs.length?'그 밖의 지역':'전체'} <span class="cnt">${rest.length} · ${orderLabel}</span>`));
-  rest.forEach(r => list.appendChild(rowEl(r, 0)));
+  if(favs.length && rest.length && !q && !grp && !_filtersOpen){
+    const others=document.createElement('details'); others.className='signal-others';
+    others.open=_otherSignalRegionsExpanded;
+    const summary=document.createElement('summary'); summary.className='ghead';
+    summary.innerHTML=`<span class="caret" aria-hidden="true">▸</span>그 밖의 지역 <span class="cnt">${rest.length}곳 · ${orderLabel}</span>`;
+    others.appendChild(summary);
+    rest.forEach(r=>others.appendChild(rowEl(r,0)));
+    others.addEventListener('toggle',()=>{ if(others.isConnected) _otherSignalRegionsExpanded=others.open; });
+    list.appendChild(others);
+  } else if(rest.length){
+    list.appendChild(miniHead(`${favs.length?'그 밖의 지역':'전체'} <span class="cnt">${rest.length} · ${orderLabel}</span>`));
+    rest.forEach(r => list.appendChild(rowEl(r, 0)));
+  }
 }
 function renderZoneLegend(){
   // 전세수급 색구간 설명을 팝오버에 채움 (차트 배경색의 의미)
@@ -4921,6 +4942,7 @@ function toggleOverlayMenu(e){
     setTimeout(()=>document.addEventListener('click',close),0); }
 }
 async function selectRegion(region){
+  if(_favRegionKeyByName.size && !_favs.has('region:'+region)) _otherSignalRegionsExpanded=true;
   selected = region; renderList();
   const r = allSignals.find(x => x.region===region);
   if(!r) return;
