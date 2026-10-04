@@ -73,6 +73,21 @@ def region_audit_cmd():
     typer.echo(json.dumps(report, ensure_ascii=False, sort_keys=True))
 
 
+@app.command("issued-outcomes")
+def issued_outcomes_cmd():
+    """실제 발행 판정의 성숙한 12주 결과를 개인정보 없이 읽기 전용 집계한다."""
+    import json
+    import sqlite3
+    from realty_signal.services import issued_outcomes
+
+    try:
+        report = issued_outcomes.audit_database(store.load(), db.DB)
+    except (FileNotFoundError, ValueError, OSError, sqlite3.DatabaseError) as exc:
+        console.print(f"[red]발행 판정 감사 불가:[/red] {type(exc).__name__}")
+        raise typer.Exit(1) from exc
+    typer.echo(json.dumps(report, ensure_ascii=False, sort_keys=True))
+
+
 def _macos_notify(title: str, message: str):
     """macOS 알림 센터로 푸시 (실패해도 무시)."""
     import shutil
