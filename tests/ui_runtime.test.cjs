@@ -40,6 +40,22 @@ test('KB freshness legend changes to held at the same nine-calendar-day boundary
   assert.match(box.innerHTML,/background:#16a34a/);
 });
 
+test('unverified regulation is not drawn or labeled as a current designation', () => {
+  const map=vm.createContext({document:{querySelectorAll:()=>[]}});
+  vm.runInContext(extract('let _REGULATION =', 'function initMap('),map);
+  assert.equal(vm.runInContext("_regTags('노원구','11')",map),null);
+  assert.equal(vm.runInContext("_choTip('reg','노원구',{},'11',null,null)",map),
+    '노원구 · 현재 규제 지정 미검증');
+  assert.match(html,/규제 지정 최신성 미확인 · 계약 전 공식 고시 확인/);
+  const badge=vm.createContext({_eok:()=> '6억'});
+  vm.runInContext(extract('function _bpRegBadge(', 'async function _loadComplexWatch('),badge);
+  const rendered=badge._bpRegBadge({정책상태:'unverified',지역:'노원구',규제지역:true,
+    자격설명:'무주택',절대한도:60000});
+  assert.match(rendered,/규제·대출 규칙 최신성 미검증/);
+  assert.match(rendered,/규제지역 가정/);
+  assert.doesNotMatch(rendered,/>규제지역<|>비규제</);
+});
+
 test('inline app scripts parse and signal/listing navigation are separate tasks', () => {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   scripts.filter(Boolean).forEach(script => assert.doesNotThrow(() => new vm.Script(script)));

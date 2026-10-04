@@ -606,22 +606,48 @@ def _backtest():
 
 _ADV_RANK = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4}
 
-# 규제지역 정본은 `regulation` 모듈(기준일·근거 포함). 여기서는 지도·자문용으로 펼치기만 한다.
+# 저장된 규제 가정은 최신 고시가 검증되기 전까지 현재 지정 현황이 아니다.
 from realty_signal import regulation as _reg  # noqa: E402
 
-_REGULATION_ASOF = f"{_reg.AS_OF} 기준 (국토부 지정 · 시군구 근사)"
+_REGULATION_ASOF = f"{_reg.AS_OF} 저장 규칙 · 현재 지정 미검증"
+_REGULATION_NOTICE = "현재 규제 지정과 적용 요건을 검증하지 못했습니다. 계약·대출 전 공식 고시와 금융기관에 확인하세요."
+
+
+def _regulation_verified() -> bool:
+    manifest = _reg.policy_manifest()
+    regions = next((rule for rule in manifest.get("rules", []) if rule.get("id") == "regions"), {})
+    try:
+        today = today_kst()
+        effective = date.fromisoformat(regions["effective_from"])
+        reviewed = date.fromisoformat(str(regions["verified_at"])[:10])
+        review_due = date.fromisoformat(regions["review_due"])
+        until = date.fromisoformat(regions["effective_until"]) if regions.get("effective_until") else None
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (manifest.get("status") == "verified" and regions.get("status") == "verified"
+            and bool(regions.get("sources")) and bool(regions.get("verified_at"))
+            and effective <= today <= review_due and reviewed <= today
+            and (until is None or today <= until))
+
+
+def _regulation_asof() -> str:
+    return (f"{_reg.AS_OF} 기준 (검증된 목록 · 시군구 근사)" if _regulation_verified()
+            else _REGULATION_ASOF)
 
 
 def _regulation_of(region: str, sido: str | None = None) -> list[str]:
-    return _reg.designations(region, sido or _sido_of(region))
+    return _reg.designations(region, sido or _sido_of(region)) if _regulation_verified() else []
 
 
 def regulation_api():
-    """규제지역 지정 현황. 프론트 지도 오버레이·챗봇 공용 정본."""
+    """Expose current designations only after source and review-date verification."""
+    verified = _regulation_verified()
     return {
-        "asof": _REGULATION_ASOF,
-        "map": {r: list(_reg.DESIGNATION_TAGS) for r in _reg.regulated_regions()},
-        "notes": _reg.PARTIAL_NOTE,
+        "status": "verified" if verified else "unverified",
+        "asof": _regulation_asof(),
+        "map": ({r: list(_reg.DESIGNATION_TAGS) for r in _reg.regulated_regions()} if verified else {}),
+        "notes": _reg.PARTIAL_NOTE if verified else {},
+        "notice": None if verified else _REGULATION_NOTICE,
     }
 
 
@@ -635,7 +661,9 @@ def _adv_region_row(r: dict) -> dict:
     tags = _regulation_of(r.get("region") or "")
     if tags:
         out["규제지역"] = tags
-        out["규제기준"] = _REGULATION_ASOF
+        out["규제기준"] = _regulation_asof()
+    elif not _regulation_verified():
+        out["규제검증상태"] = "unverified"
     return out
 
 
@@ -803,14 +831,15 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
         return freshness()
     if name == "get_regulation":
         region = (args.get("region") or "").strip()
+        if not _regulation_verified():
+            return {**regulation_api(), "region": region or None,
+                    "current_designations": None, "LTV": None}
         if region:
             tags = _regulation_of(region)
             c = _reg.classify(region, _sido_of(region))
-            return {"region": region, "규제지역": tags or "지정 없음(참고용)",
-                    "수도권": c["수도권"], "LTV": _reg.LTV[c["규제지역"]],
-                    "대출한도": "15억↓ 6억 / 15~25억 4억 / 25억↑ 2억" if c["수도권"] else "제한 없음",
-                    "기준": _REGULATION_ASOF}
-        return {**regulation_api(), "기준": _REGULATION_ASOF}
+            return {"region": region, "status": "verified", "규제지역": tags or "확인된 목록에 지정 없음",
+                    "수도권": c["수도권"], "기준": _regulation_asof()}
+        return {**regulation_api(), "기준": _regulation_asof()}
     if name == "get_presale":
         region = (args.get("region") or "").strip()
         try:
@@ -2842,7 +2871,8 @@ def neighborhood(request: Request, region: str):
         "국면": {"phase": rg.get("phase") or _regime().get("phase"),
                 "color": _regime().get("color")},
         "평단가": lr.get("price"), "저평가도": lr.get("저평가도"), "입지점수": lr.get("입지점수"),
-        "규제지역": _regulation_of(region), "규제기준": _REGULATION_ASOF,
+        "규제지역": _regulation_of(region), "규제기준": _regulation_asof(),
+        "규제검증상태": "verified" if _regulation_verified() else "unverified",
         "미래가치": {"재건축후보수": redev_n, "개발계획": dev},
         "매물": {"급매": _qs_count() if _personal_listings_allowed(request=request) else None,
                  "청약": ps_cnt},

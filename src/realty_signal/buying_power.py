@@ -483,6 +483,7 @@ def statement(p: Params) -> dict:
         "LTV상한": detail["LTV상한"],
         "규제": {
             "기준일": reg.AS_OF,
+            "정책상태": reg.policy_manifest()["status"],
             "지역": p.region,
             "지역가정": p.region is None,   # True면 규제지역으로 보수 가정 중
             "규제지역": bool(p.regulated),

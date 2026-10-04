@@ -2333,12 +2333,15 @@ function _bpRegBadge(r){
   if(!r) return '';
   const pill=(t,c)=>`<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:${c};border:1px solid ${c}33;background:${c}10;margin-right:6px">${t}</span>`;
   const bits=[];
-  if(r['지역가정']) bits.push(pill('지역미정·규제가정','#b45309'));
+  const unverified=r['정책상태']!=='verified';
+  if(unverified) bits.push(pill('규제·대출 규칙 최신성 미검증','#b45309'));
+  else if(r['지역가정']) bits.push(pill('지역미정·규제가정','#b45309'));
   else if(r['규제지역']) bits.push(pill('규제지역','#b91c1c'));
   else if(r['수도권']) bits.push(pill('수도권','#c2410c'));
   else bits.push(pill('비규제','#15803d'));
   bits.push(`<span style="font-size:11px;color:var(--dim)">${r['지역']||'지역 미정'} · ${r['자격설명']}`
-    +(r['절대한도']?` · 한도 ${_eok(r['절대한도'])}`:'')+`</span>`);
+    +(r['절대한도']?` · 계산상 한도 ${_eok(r['절대한도'])}`:'')
+    +(unverified?` · ${r['규제지역']?'규제지역':'비규제'} 가정`:'')+`</span>`);
   return `<div>${bits.join('')}</div>`;
 }
 /** 내 예산 안에 새로 들어온 매물. **'새로 들어옴' 을 원인별로 구분한다** —
@@ -3795,19 +3798,20 @@ function _mapTile(){
   return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     {maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'});
 }
-// ===== 지도 오버레이(급지색 · 규제지역) — 모든 지도 공용, 배타적 선택 =====
-// 규제지역: 국토부 지정(참고용, 시군구 근사). 토허제는 실제 동/구역 단위 — 여기선 구 단위 표기.
-// 폴백: 서울 25개 구 + 경기 15곳(10·15 대책 12곳 + 2026.7.1 동탄·기흥·구리) 삼중 규제.
-let _REGULATION = (()=>{ const T=['투기과열지구','조정대상지역','토지거래허가구역'], m={};
-  ['종로구','중구','용산구','성동구','광진구','동대문구','중랑구','성북구','강북구','도봉구','노원구','은평구',
-   '서대문구','마포구','양천구','강서구','구로구','금천구','영등포구','동작구','관악구','서초구','강남구','송파구','강동구',
-   '과천시','광명시','하남시','의왕시','구리시','수원시 장안구','수원시 팔달구','수원시 영통구',
-   '성남시 수정구','성남시 중원구','성남시 분당구','안양시 동안구','용인시 수지구','용인시 기흥구','화성시 동탄구']
-    .forEach(r=>m[r]=T);
-  return { asof:'2026-07-01 기준 (국토부 지정 · 시군구 근사)', map:m, notes:{'화성시':'동탄구만 규제 (2026.7.1~)'} };
-})();
+// ===== 지도 오버레이(급지색 · 검증된 규제지역) — 모든 지도 공용 =====
+// 서버 규칙이 미검증이거나 API가 실패하면 정적 과거 목록을 현재 지정처럼 칠하지 않는다.
+let _REGULATION = {status:'unverified',asof:'저장 규칙의 최신성 미검증',map:{},notes:{}};
+function _regVerified(){ return _REGULATION.status==='verified'; }
+function _syncRegOverlayButtons(){
+  document.querySelectorAll('.ov-ctl button[data-m="reg"]').forEach(b=>{
+    b.disabled=!_regVerified();
+    b.textContent=b.disabled?'규제 확인 필요':'규제';
+    b.title=b.disabled?'현재 지정 현황을 검증하지 못했습니다':'확인된 규제지역 오버레이';
+  });
+}
 // 경계 데이터는 '성남시분당구'처럼 공백이 없어 정규화 키로 찾는다. 서울 중구/인천 중구는 sido 로 가른다.
 function _regTags(name, sido){
+  if(!_regVerified()) return null;
   const key=_onorm(name);
   if(key==='중구' && sido && sido!=='11') return null;
   const m=_REGULATION.map||{};
@@ -3844,12 +3848,14 @@ function _choTip(mode, name, gl, sido, sl, code){
     return `${name} · ${ko}${src}`;
   }
   if(mode==='grade'){ const row=_geoRow(gl,name,code); return name+(row&&_REGION_GRADE[row['급지']]?' · '+_REGION_GRADE[row['급지']].label:' · 자료 없음'); }
+  if(!_regVerified()) return name+' · 현재 규제 지정 미검증';
   const t=_regTags(name,sido), note=(_REGULATION.notes||{})[name];
-  return name+(t?' · '+t.join(', '):(note?' · '+note:' · 규제 없음'));
+  return name+(t?' · '+t.join(', '):(note?' · '+note:' · 확인된 목록에 지정 없음'));
 }
 async function setOverlay(map, mode, onClick){
   if(!map) return;
   if(map._ovLayer){ map._ovLayer.remove(); map._ovLayer=null; }
+  if(mode==='reg'&&!_regVerified()) mode=null;
   map._ovMode=mode;
   if(!mode) return;
   await _ensureGeo(); if(!_uvGeo) return;
@@ -3871,6 +3877,7 @@ function attachOverlayControl(map, initial, onClick){
         d.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); }; });
     return d; };
   ctl.addTo(map);
+  _syncRegOverlayButtons();
   setOverlay(map, initial||null, onClick);
 }
 function initMap(mapId){
@@ -4019,7 +4026,7 @@ async function mountTxCosts(el, override){
   const won=n=> (n==null)?'–':Number(n).toLocaleString()+'만';
   const rows=[['취득세',c['취득세']],['중개비',c['중개비']],['법무비',c['법무비']],['이사비',c['이사비']],['인테리어',c['인테리어']]]
     .map(([k,v])=>`<div class="tx-row"><span>${k}</span><span>${won(v)}</span></div>`).join('');
-  const hyp=[assum['규제지역']?'규제지역':'비규제', `주택${assum['주택수']??0}채`, assum['생애최초']?'생애최초':'']
+  const hyp=[assum['규제지역']?'규제지역 가정':'비규제 가정', `주택${assum['주택수']??0}채`, assum['생애최초']?'생애최초':'']
     .filter(Boolean).join(' · ');
   const interVal = interior!=null ? interior : (c['인테리어']??0);
   const moveVal = moving!=null ? moving : (c['이사비']??200);
@@ -5487,7 +5494,8 @@ function renderNbhd(d){
   h+=_nbSec('요약',
     `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">${badge(safeMarketSignal(_nbhdCur))}
       ${d['급지']?`<span class="pill">급지 ${d['급지']}</span>`:''}${d['국면']&&d['국면'].phase?`<span class="pill">국면 ${d['국면'].phase}</span>`:''}
-      ${(d['규제지역']||[]).map(x=>`<span class="pill" style="border-color:var(--danger);color:var(--danger)">${x}</span>`).join('')}</div>
+      ${d['규제검증상태']==='verified'?(d['규제지역']||[]).map(x=>`<span class="pill" style="border-color:var(--danger);color:var(--danger)">${x}</span>`).join('')
+        :'<span class="pill">규제 지정 최신성 미확인 · 계약 전 공식 고시 확인</span>'}</div>
      ${d['해설']?`<div style="font-size:12.5px;line-height:1.55;color:var(--txt)">${(d['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`:''}`);
   h+=_nbSec('가격 · 거래', `<div style="display:flex;gap:8px;flex-wrap:wrap">
      ${_nbStat('평단가', money(d['평단가']))}${d['저평가도']!=null?_nbStat('입지 모형 차이', uvVerdict(d['저평가도']).label):''}${d['공급압력']!=null?_nbStat('입주물량', d['공급압력']+'x'):''}
@@ -7524,7 +7532,12 @@ async function toggleFav(kind, key, label){
 async function startApp(needOnboard){
   document.body.classList.toggle('nick-global-disabled', window._featureFlags?.nick_global_entry_enabled===false);
   try{ _mapCfg=await (await fetch('/api/mapconfig')).json(); }catch(e){ _mapCfg=_mapCfg||{}; }   // 지도 타일 설정 선로드
-  fetch('/api/regulation').then(r=>r.json()).then(d=>{ if(d&&d.map) _REGULATION=d; }).catch(()=>{});   // 규제지역 정본(백엔드) — 폴백은 위 기본값
+  fetch('/api/regulation').then(r=>r.json()).then(d=>{
+    if(d&&d.status==='verified'&&d.map) _REGULATION=d;
+    else _REGULATION={status:'unverified',asof:d?.asof||'저장 규칙의 최신성 미검증',map:{},notes:{}};
+    _syncRegOverlayButtons();
+    if(!_regVerified()) Object.values(_ms).forEach(st=>{ if(st.map?._ovMode==='reg') setOverlay(st.map,null); });
+  }).catch(()=>{ _REGULATION={status:'unverified',asof:'저장 규칙의 최신성 미검증',map:{},notes:{}}; _syncRegOverlayButtons(); });
   await loadFavs();
   loadWatchKeys();
   renderFilters();
