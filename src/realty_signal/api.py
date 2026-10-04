@@ -3401,10 +3401,18 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     from realty_signal.services.listing_prices import attach as attach_prices
 
     private_access = _personal_listings_allowed(request=request)
-    out = _build_listings(set(t for t in types.split(",") if t),
-                          include_private=private_access)
+    requested_types = set(t for t in types.split(",") if t)
+    out = _build_listings(requested_types, include_private=private_access)
     source_record_count = len(out)
-    out = attach_prices(collapse(out))
+    collapsed = collapse(out)
+    cohort_rows = collapsed
+    sale_kinds = {"일반매물", "급매", "찐매물"}
+    if private_access and requested_types.intersection(sale_kinds) and not sale_kinds.issubset(requested_types):
+        try:
+            cohort_rows = collapse(_build_listings(sale_kinds, include_private=True))
+        except Exception:  # 호가 표본 보강 실패가 기존 매물 조회를 막지 않도록 한다.
+            cohort_rows = collapsed
+    out = attach_prices(collapsed, cohort_rows=cohort_rows)
     uid = _uid(request)
     if uid and private_access:
         locality = db.listing_localities(uid, [key for row in out if row.get("유형") in {"일반매물", "급매", "찐매물"}

@@ -762,6 +762,16 @@ test('listing price line shows comparable conditions but never turns missing dat
   assert.match(signalV2,/listingPriceLine\(x\.listing\.price_comparison\)/);
 });
 
+test('current asking sample is labeled as a limited sample and held data is never narrated', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('function listingAskingLine(', 'function _laAsk('),ctx);
+  assert.match(ctx.listingAskingLine({상태:'관측비교',공급사:'hanbang',호가차이율:-8.5,표본수:4}),
+    /한방 같은 단지·전용면적 다른 매물 4건.*8.5% 낮음.*수집 표본이며 시장 전체 시세가 아님/);
+  assert.equal(ctx.listingAskingLine({상태:'보류'}),'');
+  assert.match(html,/같은 공급사 호가 표본보다 낮은순/);
+  assert.match(html,/listingAskingLine\(x\.asking_comparison\)/);
+});
+
 test('trade-evidence sort puts supported lower quotes first and unverified rows last', () => {
   const ctx=vm.createContext({});
   vm.runInContext(extract('function _laTradePriceEvidence(', 'function renderAllListings(){'),ctx);
@@ -778,6 +788,12 @@ test('trade-evidence sort puts supported lower quotes first and unverified rows 
   assert.match(html,/같은 면적 실거래보다 낮은순/);
   assert.match(html,/if\(_laSort==='trade_low'\) return _laCompareTradePrice\(a,b\)/);
   assert.match(html,/할인율 아님/);
+  const askingLow={기회도:1,asking_comparison:{상태:'관측비교',호가차이율:-10,표본수:3}};
+  const askingHigh={기회도:100,asking_comparison:{상태:'관측비교',호가차이율:2,표본수:4}};
+  const askingUnknown={기회도:1000,asking_comparison:{상태:'보류',호가차이율:null,표본수:0}};
+  assert.ok(ctx._laCompareAsking(askingLow,askingHigh)<0);
+  assert.ok(ctx._laCompareAsking(askingHigh,askingUnknown)<0);
+  assert.match(html,/if\(_laSort==='asking_low'\) return _laCompareAsking\(a,b\)/);
 });
 
 test('observed source-price drops sort separately and are not rendered as transaction prices', () => {
