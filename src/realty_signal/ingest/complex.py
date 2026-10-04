@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from realty_signal.auction import _norm, _recent_yms
+from realty_signal.time_kst import today_kst
 
 _TRADE = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
 _RENT = "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent"
@@ -101,7 +102,7 @@ def _day_of(it) -> int:
 
 def comparison_evidence(trades: list[dict], *, asof: date | None = None) -> dict:
     """같은 전용면적의 최근 6개월 신고거래 분포. 현재 호가나 미래 적정가가 아니다."""
-    today = asof or date.today()
+    today = asof or today_kst()
     anchor = today.year * 12 + today.month
     recent = []
     for t in trades:

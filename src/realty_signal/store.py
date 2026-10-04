@@ -31,16 +31,8 @@ V2_REAL_TRADE_DIR = CACHE_DIR / "v2_real_trade"
 
 def _recent_months(n: int = 3) -> list[str]:
     """실거래 신고지연 감안, 직전 n개월 YYYYMM."""
-    from datetime import date
-
-    y, m = date.today().year, date.today().month
-    out = []
-    for _ in range(n):
-        m -= 1
-        if m == 0:
-            y, m = y - 1, 12
-        out.append(f"{y}{m:02d}")
-    return out
+    from realty_signal.time_kst import previous_months
+    return previous_months(n)
 
 
 def build_localities(out: Path = LOCALITY_FILE) -> "pd.DataFrame":

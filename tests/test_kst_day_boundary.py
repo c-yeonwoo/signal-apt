@@ -5,10 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from realty_signal import api, time_kst, weekly
+from realty_signal import api, auction, store, time_kst, weekly
+from realty_signal.ingest import complex as complex_ingest, volume
 from realty_signal.services import discovery_occupancy
 from realty_signal.services import market_data as md
-from realty_signal.time_kst import today_kst
+from realty_signal.time_kst import previous_months, today_kst
 
 
 def test_today_kst_crosses_day_before_utc_midnight():
@@ -16,6 +17,20 @@ def test_today_kst_crosses_day_before_utc_midnight():
     assert today_kst(datetime(2026, 10, 4, 15, 0, tzinfo=timezone.utc)) == date(2026, 10, 5)
     with pytest.raises(ValueError, match="aware datetime"):
         today_kst(datetime(2026, 10, 5, 0, 0))
+
+
+def test_completed_month_windows_follow_korean_month_boundary(monkeypatch):
+    before = datetime(2026, 9, 30, 14, 59, tzinfo=timezone.utc)
+    after = datetime(2026, 9, 30, 15, 0, tzinfo=timezone.utc)
+    assert previous_months(3, before) == ["202608", "202607", "202606"]
+    assert previous_months(3, after) == ["202609", "202608", "202607"]
+    monkeypatch.setattr(time_kst, "today_kst", lambda now=None: date(2026, 10, 1))
+    assert store._recent_months(3) == ["202609", "202608", "202607"]
+    assert auction._recent_yms(3) == ["202609", "202608", "202607"]
+    assert volume._yms(3) == ["202607", "202608", "202609"]
+    monkeypatch.setattr(complex_ingest, "today_kst", lambda: date(2026, 10, 1))
+    trades = [{"ym": "2026-04", "amt": 40000}, {"ym": "2026-05", "amt": 50000}]
+    assert complex_ingest.comparison_evidence(trades)["중앙값"] == 50000
 
 
 def test_weekly_staleness_uses_korean_day(monkeypatch):
