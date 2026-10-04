@@ -4,7 +4,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/index.html'), 'utf8');
+const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/signal-v2.js'), 'utf8');
 const extract = (start, end) => html.slice(html.indexOf(start), html.indexOf(end));
+
+test('Nick chat entry points and free-form question composer are absent while reports remain', () => {
+  assert.doesNotMatch(html, /askNick|nickCxBtn|advFab|advChatTab|advInput|advSend|닉에게|Nick에게|닉과 대화|\/api\/advisor\/stream/);
+  assert.doesNotMatch(signalV2, /Nick 호출|v2ExplainQuestion|이 리포트에 질문하기/);
+  assert.match(html, /id="advReport"/); // read-only rollout fallback
+  assert.match(signalV2, /핵심 판단 빠르게 확인/);
+  assert.match(html, /id="listingCompareDlg"/);
+});
 
 test('KB national affordability is not presented as the opposite HF burden index or a district metric', () => {
   assert.match(html, /전국 아파트 주택구매력지수/);

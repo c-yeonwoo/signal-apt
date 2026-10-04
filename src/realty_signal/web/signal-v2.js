@@ -117,8 +117,6 @@
     if (legacyPanel?.style.display === 'flex') {
       if (typeof window.clearListingReportContext === 'function') window.clearListingReportContext();
       legacyPanel.style.display = 'none';
-      const fab = document.getElementById('advFab');
-      if (fab) fab.style.display = 'block';
     }
     const dialog = document.getElementById('v2ReportDlg');
     if (!dialog.open) dialog.show();
@@ -318,9 +316,9 @@
         <div id="v2LocationResult" aria-live="polite"></div></details>
         <details class="v2-report-more"><summary>중개사에게 더 물어볼 것</summary>
           ${(report.next_actions || []).map(x => `<p>• ${esc(x)}</p>`).join('') || '<p>현재 판매 여부와 수리 상태를 확인하세요.</p>'}</details>
-        <details class="v2-report-more"><summary>이 리포트에 질문하기</summary>
-        <div class="v2-row" aria-label="이 리포트에 물어보기"><b>먼저 궁금한 것부터 보세요</b>
-          <p class="v2-muted">현재 리포트 근거를 쉽게 다시 보여 줍니다. 새 분석이나 Nick 호출은 하지 않습니다.</p>
+        <details class="v2-report-more"><summary>핵심 판단 빠르게 확인</summary>
+        <div class="v2-row" aria-label="핵심 판단 바로 확인"><b>먼저 궁금한 것부터 보세요</b>
+          <p class="v2-muted">현재 리포트의 가격·예산·주의 근거를 짧게 다시 보여 줍니다.</p>
           <button type="button" class="btn" data-v2-quick-question="price">가격이 싼가?</button>
           <button type="button" class="btn" data-v2-quick-question="budget">내 예산에 맞나?</button>
           <button type="button" class="btn" data-v2-quick-question="risk">뭘 조심해야 하나?</button>
@@ -328,8 +326,6 @@
         ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>이 리포트 더 쉽게 보기</b><p class="v2-muted">선택하면 AI가 현재 근거만 다시 풀어 설명합니다. 기본 리포트와 숫자는 바꾸지 않습니다.</p>
           <button type="button" class="btn" data-v2-explain="easy">쉽게 설명</button>
           <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
-          <label class="v2-muted">추가 질문 <input id="v2ExplainQuestion" maxlength="300" placeholder="이 근거에서 무엇을 확인할까요?"></label>
-          <button type="button" class="btn" id="v2ExplainQuestionSend">이 근거에 질문</button>
           <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}</details>
         <details class="v2-report-more"><summary>관심 기록·비교·리포트 저장</summary>
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
@@ -358,13 +354,6 @@
       body.querySelectorAll('[data-v2-explain]').forEach(button => button.onclick = () =>
         askExplanation(report, {type:'listing',key,mode:button.dataset.v2Explain},
           explanationTarget, currentExplanation));
-      const questionButton = body.querySelector('#v2ExplainQuestionSend');
-      if (questionButton) questionButton.onclick = () => {
-        const question = body.querySelector('#v2ExplainQuestion').value.trim();
-        if (!question) { explanationTarget.textContent = '질문을 입력해 주세요.'; return; }
-        askExplanation(report, {type:'listing',key,mode:'question',question},
-          explanationTarget, currentExplanation);
-      };
       body.querySelectorAll('[data-v2-quick-question]').forEach(button => button.onclick = () => {
         if (generation !== listingGeneration || !dialog.open) return;
         const answer = listingQuickAnswer(report, button.dataset.v2QuickQuestion);
