@@ -572,7 +572,7 @@ test('quicksale status separates verified empty from upstream failure', () => {
 
 test('radar card never borrows a region badge after source province mismatch', () => {
   const ctx = vm.createContext({safeMarketSignal: () => 'STRONG_BUY'});
-  vm.runInContext(extract('function safeRadarSignal(listing){', 'function _mtPass(region){'), ctx);
+  vm.runInContext(extract('function safeRadarSignal(listing){', 'function _mtPass(signal, grade){'), ctx);
   assert.equal(ctx.safeRadarSignal({지역: '중구', 시도: '인천', 시그널: ''}), 'HELD');
   assert.equal(ctx.safeRadarSignal({지역: '중구', 시도: '서울', 시그널: 'BUY'}), 'STRONG_BUY');
 });

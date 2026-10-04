@@ -13,12 +13,14 @@ def _listing(region="보류구"):
 
 def test_auction_routes_use_current_safe_grades_for_buy_regions_and_rank(monkeypatch):
     monkeypatch.setattr(api, "_display_signal_map", lambda: {"보류구": "HELD", "준비구": "BUY"})
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {"보류구": {"급지": "B"}}})
     monkeypatch.setattr(auction, "load", lambda: [_listing()])
     assert auction_routes.buy_regions() == [{"region": "준비구", "signal": "BUY"}]
     result = auction_routes.auction_listings()
     held = result["listings"][0]
     raw = auction.enrich([_listing()], {"보류구": "STRONG_BUY"})[0]
     assert held["지역시그널"] == "HELD"
+    assert held["지역급지"] == "B"
     assert held["우선순위점수"] == raw["우선순위점수"] - 20
 
 
@@ -59,7 +61,9 @@ def test_name_only_auction_in_same_named_district_cannot_borrow_buy(monkeypatch)
     monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-04")
     monkeypatch.setattr(auction, "load", lambda: [_listing("중구")])
     assert auction_routes.buy_regions() == [{"region": "노원구", "signal": "BUY"}]
-    assert auction_routes.auction_listings()["listings"][0]["지역시그널"] == "HELD"
+    ambiguous = auction_routes.auction_listings()["listings"][0]
+    assert ambiguous["지역시그널"] == "HELD"
+    assert ambiguous["지역급지"] is None
     row = api._build_listings({"경매"})[0]
     assert row["시그널"] == "HELD"
     assert row["지역식별상태"] == "held"

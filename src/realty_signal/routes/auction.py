@@ -36,9 +36,15 @@ def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익
     from realty_signal import api as app_api
 
     ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
+    signals = app_api._auction_signal_map()
+    region_grades = app_api._regime().get("regions", {})
+    listings = auction.enrich(auction.load(), signals, ov)
+    for item in listings:
+        region = item["region"]
+        item["지역급지"] = (region_grades.get(region) or {}).get("급지") if region in signals else None
     return {
         "params": {"target_margin": target_margin},
-        "listings": auction.enrich(auction.load(), app_api._auction_signal_map(), ov),
+        "listings": listings,
     }
 
 
