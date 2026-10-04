@@ -69,6 +69,41 @@ def test_pagination_marks_complete_only_after_short_page(monkeypatch):
     assert len(rows) == 2 and status["capped"] and not status["complete"]
 
 
+def test_named_region_lookup_uses_exact_source_identity_and_same_listing_filter(monkeypatch):
+    calls = []
+
+    def fake_request(path, payload=None):
+        calls.append((path, payload))
+        if path.startswith("/com/api/restapi/getsggcd?"):
+            assert "ctpvNm=%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C" in path
+            assert "sggNm=%EB%85%B8%EC%9B%90%EA%B5%AC" in path
+            return {"code": 200, "data": {"ctpvCdPk": 1, "sggCdPk": 151,
+                                          "ctpvNm": "서울특별시", "sggNm": "노원구"}}
+        return {"code": 200, "data": {"a": [_raw(1), _raw(2, dlngSeCd="B1")]}}
+
+    monkeypatch.setattr(hanbang, "_request", fake_request)
+    rows, status = hanbang.fetch_named_region_with_status("서울", "노원구", page_size=30)
+    assert status["ok"] and status["complete"] and status["source_ctpv"] == "서울특별시"
+    assert [row["hanbang_id"] for row in rows] == ["1"]
+    assert calls[1][1]["rgnCode"] == [{"ctpv": 1, "sgg": 151, "emd": 0}]
+    assert calls[1][1]["atlfslKndCdList"] == ["01"]
+    assert calls[1][1]["dlngList"][0]["types"] == ["A1"]
+
+
+def test_named_region_lookup_rejects_wrong_province_before_listing_request(monkeypatch):
+    calls = []
+
+    def fake_request(path, payload=None):
+        calls.append(path)
+        return {"code": 200, "data": {"ctpvCdPk": 4, "sggCdPk": 44,
+                                       "ctpvNm": "인천광역시", "sggNm": "중구"}}
+
+    monkeypatch.setattr(hanbang, "_request", fake_request)
+    rows, status = hanbang.fetch_named_region_with_status("서울", "중구")
+    assert rows == [] and not status["ok"] and len(calls) == 1
+    assert "요청 지역과 다릅니다" in status["error"]
+
+
 def test_source_error_is_not_empty_success(monkeypatch):
     monkeypatch.setattr(hanbang, "_request", lambda *_: (_ for _ in ()).throw(TimeoutError("timeout")))
     rows, status = hanbang.fetch_region_with_status(37.6, 127.1)
@@ -85,6 +120,34 @@ def test_scan_rejects_cross_province_same_named_district(monkeypatch):
     rows, status = api._hanbang_scan_with_status(["중구"])
     assert rows == [] and status["failed_requests"] == 1
     assert status["successful_regions"] == []
+
+
+def test_scan_recovers_from_coordinate_endpoint_failure_via_exact_named_region(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1]})
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(api, "_signal_map", lambda: {})
+    monkeypatch.setattr(hanbang, "fetch_region_with_status", lambda *_: (
+        [], {"ok": False, "phase": "location", "error": "ValueError: 원천 code -500"}))
+    monkeypatch.setattr(hanbang, "fetch_named_region_with_status", lambda sido, region: (
+        [hanbang.normalize(_raw())],
+        {"ok": True, "source_sgg": "노원구", "source_ctpv": "서울특별시", "complete": True}))
+    rows, status = api._hanbang_scan_with_status(["노원구"])
+    assert len(rows) == 1 and rows[0]["지역"] == "노원구"
+    assert status["successful_regions"] == ["노원구"] and status["failed_requests"] == 0
+    assert status["named_lookup_regions"] == ["노원구"]
+
+
+def test_scan_does_not_retry_named_lookup_after_listing_endpoint_failure(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1]})
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(api, "_signal_map", lambda: {})
+    monkeypatch.setattr(hanbang, "fetch_region_with_status", lambda *_: (
+        [], {"ok": False, "phase": "list", "error": "TimeoutError: 목록 지연"}))
+    def unexpected_lookup(*_):
+        raise AssertionError("목록 장애에 이름 조회를 재시도하면 안 됩니다")
+    monkeypatch.setattr(hanbang, "fetch_named_region_with_status", unexpected_lookup)
+    rows, status = api._hanbang_scan_with_status(["노원구"])
+    assert rows == [] and status["failed_requests"] == 1 and not status["named_lookup_regions"]
 
 
 def test_scan_drops_neighborhood_when_embedded_city_disagrees(monkeypatch):
