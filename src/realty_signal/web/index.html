@@ -423,6 +423,15 @@
   .v2-preferences summary { cursor:pointer; min-height:44px; display:flex; align-items:center; }
   .v2-preference-fields { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
   @media(max-width:600px) { #v2ReportDlg,#v2DiscoverDlg { width:100vw; height:100dvh; max-width:none; max-height:none; border-radius:0; } }
+  @media(max-width:240px) {
+    #v2DiscoverDlg .v2-panel,#v2ReportDlg .v2-panel { padding:12px; overflow-wrap:anywhere; }
+    #v2DiscoverDlg .v2-form label { width:100%; min-width:0; overflow-wrap:anywhere; }
+    #v2DiscoverDlg .v2-form input,#v2DiscoverDlg .v2-form select { width:100%; min-width:0; box-sizing:border-box; }
+    #v2DiscoverDlg .v2-preferences { min-width:0; box-sizing:border-box; }
+    #v2ReportDlg label { display:block; min-width:0; }
+    #v2ReportDlg input { width:100%; min-width:0; box-sizing:border-box; }
+    #v2DiscoverDlg .btn,#v2ReportDlg .btn { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+  }
   /* 시그널은 한 번에 한 과업만 보여 준다: 근거 → 추세 또는 지도. */
   #view-signal .wrap { height:calc(100dvh - var(--hh,70px) - var(--subnav-h,0px)); min-height:420px; }
   #view-signal .side { width:288px; flex:0 0 288px; }
