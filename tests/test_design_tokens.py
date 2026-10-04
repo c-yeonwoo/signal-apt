@@ -98,10 +98,11 @@ def test_docs_do_not_claim_demand_ladder_is_the_trigger():
         )
 
 
-def test_claude_md_describes_home_as_two_columns():
-    """CLAUDE.md 의 홈 서술이 실제 2열 레이아웃과 맞아야 한다."""
+def test_claude_md_describes_home_as_responsive_three_column_layout():
+    """CLAUDE.md 의 홈 서술이 실제 관심·시장·행동 3열 구조와 맞아야 한다."""
     html = INDEX.read_text(encoding="utf-8")
-    assert "dash-col-me" in html and "dash-col-market" in html, "홈이 2열 구조가 아니다"
+    assert "dash-col-me" in html and "dash-col-market" in html and "dash-actions" in html
+    assert 'grid-template-areas:"complex market actions"' in html
     text = CLAUDE.read_text(encoding="utf-8")
     assert "상단 3장이 주간 축" not in text, "홈을 '3장 세로'로 적은 옛 서술이 되살아났다"
-    assert "2열" in text, "CLAUDE.md 가 홈 2열 구조를 설명하지 않는다"
+    assert "3열" in text, "CLAUDE.md 가 홈 3열 구조를 설명하지 않는다"

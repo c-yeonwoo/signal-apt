@@ -39,13 +39,15 @@
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
   .page-head { font-size:20px; font-weight:600; letter-spacing:-0.02em; margin:0 0 6px; color:var(--txt); }
   .page-sub { color:var(--dim); font-size:16px; margin:0 0 18px; line-height:1.55; max-width:40em; }
-  .dash-layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr); grid-template-areas:"complex market" "actions actions"; gap:18px 22px; align-items:start; }
+  .dash-layout { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr) minmax(230px,.75fr);
+    grid-template-areas:"complex market actions"; gap:18px 20px; align-items:start; }
   .dash-col-me { grid-area:complex; }
   .dash-col-market { grid-area:market; }
   .dash-actions { grid-area:actions; }
   .dash-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
   .dash-col-label { font-size:17px; font-weight:700; color:var(--txt); letter-spacing:-0.02em;
     margin:2px 0 4px; }
+  .dash-actions .dash-col-label { margin-bottom:8px; }
   .dash-complex-link { border:0; padding:0; background:none; color:var(--accent); font:inherit; font-size:14px;
     font-weight:700; text-align:left; cursor:pointer; }
   .dash-more { margin-top:10px; }
@@ -56,6 +58,10 @@
   .dash-more[open] > summary::after { content:' ▴'; }
   .dash-more-body { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
   .dash-col > .dash-more > .dash-more-body > * + * { margin-top:12px; }
+  @media (min-width:761px) and (max-width:1080px) {
+    .dash-layout { grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr);
+      grid-template-areas:"complex market" "actions actions"; }
+  }
   /* 청약 필터·자격 */
   .ps-toolbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:0 0 14px;
     padding:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
@@ -2488,6 +2494,9 @@ async function _loadComplexWatch(){
       background:color-mix(in srgb,${col} 10%,transparent);
       border-color:color-mix(in srgb,${col} 22%,transparent)">${esc(c['말'])}</span>`;
   };
+  const items=[...(d.items||[])].sort((a,b)=>(b.changes||[]).length-(a.changes||[]).length
+    || Number(!!b.first_run)-Number(!!a.first_run));
+  const visibleItems=items.slice(0,4);
   const row = (it,index) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <button type="button" class="dash-complex-link" data-complex-index="${index}">${esc(it['단지명']||'단지명 확인 필요')}</button>
@@ -2498,6 +2507,8 @@ async function _loadComplexWatch(){
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(it.changes||[]).length?(it.changes||[]).map(chip).join(''):`<span style="font-size:13px;color:var(--dim)">${it['말']?esc(it['말']):it.first_run?'첫 비교 기록입니다':'이번 주 새 변화가 없습니다'}</span>`}</div>
     ${it.data_days!=null?`<div style="font-size:12px;color:var(--dim);margin-top:5px">실거래 수집 ${esc(it.data_days)}일 전</div>`:''}
   </div>`;
+  const renderRows=(rows,offset=0)=>rows.map((it,i)=>row(it,i+offset)).join('');
+  const moreItems=items.length>4?_dashMore(`관심단지 전체 ${items.length}곳 보기`,renderRows(items.slice(4),4)):'';
 
   const dead = (d.unavailable||[]).length
     ? `<div class="dash-unavailable"><div style="font-size:13px;font-weight:700;margin:8px 0 3px">확인이 필요한 관심단지 ${d.unavailable.length}곳</div>`
@@ -2509,18 +2520,18 @@ async function _loadComplexWatch(){
   if(d.quiet){
     wrap.innerHTML=_dashCard(head
       +`<div style="font-size:13.5px;line-height:1.55;margin-bottom:4px">${esc(d.quiet_reason||'관심단지의 최근 변화가 없습니다.')}</div>`
-      +(d.items||[]).map(row).join('')
+      +renderRows(visibleItems)+moreItems
       + dead);
-    wrap.querySelectorAll('[data-complex-index]').forEach(button=>button.onclick=()=>{const it=d.items[Number(button.dataset.complexIndex)]; if(it) openComplex(it['단지명'],it['지역']);});
+    wrap.querySelectorAll('[data-complex-index]').forEach(button=>button.onclick=()=>{const it=items[Number(button.dataset.complexIndex)]; if(it) openComplex(it['단지명'],it['지역']);});
     _ackWhenVisible(wrap,'/api/complex-watch/seen');
     return;
   }
   wrap.innerHTML=_dashCard(head
     + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">관심단지 ${d.total}곳 중 ${d.moved_total}곳이 움직였습니다</div>`
-    + (d.items||[]).map(row).join('')
+    + renderRows(visibleItems)+moreItems
     + `<div style="font-size:10.5px;color:var(--dim);margin-top:7px;line-height:1.5">${d.lag_note||''}</div>`
     + dead);
-  wrap.querySelectorAll('[data-complex-index]').forEach(button=>button.onclick=()=>{const it=d.items[Number(button.dataset.complexIndex)]; if(it) openComplex(it['단지명'],it['지역']);});
+  wrap.querySelectorAll('[data-complex-index]').forEach(button=>button.onclick=()=>{const it=items[Number(button.dataset.complexIndex)]; if(it) openComplex(it['단지명'],it['지역']);});
   _ackWhenVisible(wrap,'/api/complex-watch/seen');
 }
 
