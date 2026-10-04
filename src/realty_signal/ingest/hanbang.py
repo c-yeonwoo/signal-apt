@@ -19,6 +19,14 @@ _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; SignalAPT/1.0; personal-list
             "Accept": "application/json", "Referer": SOURCE_URL}
 PAGE_SIZE = 30
 MAX_PAGES = 3
+_SOURCE_SIDO = {
+    "서울": "서울특별시", "부산": "부산광역시", "대구": "대구광역시",
+    "인천": "인천광역시", "광주": "광주광역시", "대전": "대전광역시",
+    "울산": "울산광역시", "세종": "세종특별자치시", "경기": "경기도",
+    "강원": "강원특별자치도", "충북": "충청북도", "충남": "충청남도",
+    "전북": "전북특별자치도", "전남": "전라남도", "경북": "경상북도",
+    "경남": "경상남도", "제주": "제주특별자치도",
+}
 
 
 def _request(path: str, payload: dict | None = None) -> dict:
@@ -100,48 +108,76 @@ def normalize(row: dict) -> dict | None:
     }
 
 
+def _fetch_pages(location: dict, *, max_pages: int, page_size: int) -> tuple[list[dict], dict]:
+    """검증된 한방 지역 코드로만 목록을 읽는다."""
+    if not isinstance(location, dict) or not all(
+        type(location.get(key)) is int and location[key] > 0
+        for key in ("ctpvCdPk", "sggCdPk")
+    ):
+        raise ValueError("시도·시군구 코드가 없습니다")
+    code = {"ctpv": location["ctpvCdPk"], "sgg": location["sggCdPk"], "emd": 0}
+    seen, listings = set(), []
+    complete = False
+    for page in range(1, max_pages + 1):
+        if page > 1:
+            time.sleep(0.25)
+        payload = {
+            "atlfslKndCdList": ["01"],
+            "dlngList": [{"types": ["A1"], "trdeMinAmt": 0}],
+            "page": {"page": page, "size": page_size}, "rgnCode": [code],
+            "atlfslBscInfoPkList": [],
+            "searchSort": {"searchOrder": "01", "sortOrder": "DESC"},
+            "ctpv": 0, "sgg": 0, "emd": 0,
+        }
+        groups = _request("/mptl/atlfsl/atlfslList", payload)["data"]
+        if not isinstance(groups, dict):
+            raise ValueError("매물 목록 형식이 예상과 다릅니다")
+        raw_count = 0
+        for group in groups.values():
+            if not isinstance(group, list):
+                raise ValueError("매물 묶음 형식이 예상과 다릅니다")
+            raw_count += len(group)
+            for raw in group:
+                if not isinstance(raw, dict):
+                    continue
+                item = normalize(raw)
+                if item and item["hanbang_id"] not in seen:
+                    seen.add(item["hanbang_id"])
+                    listings.append(item)
+        if raw_count < page_size:
+            complete = True
+            break
+    return listings, {"ok": True, "pages": page, "complete": complete,
+                      "source_sgg": location.get("sggNm"), "source_ctpv": location.get("ctpvNm"),
+                      "capped": not complete}
+
+
 def fetch_region_with_status(lat: float, lng: float, *, max_pages: int = MAX_PAGES,
                              page_size: int = PAGE_SIZE) -> tuple[list[dict], dict]:
     """좌표의 시군구를 아파트 매매로 페이지 조회한다. 제한 도달은 완전 수집이 아니다."""
     try:
         q = urllib.parse.urlencode({"lat": lat, "lng": lng})
         location = _request(f"/mptl/getInitLocInfo?{q}")["data"]["locInfo"]
-        if not isinstance(location, dict) or not location.get("sggCdPk"):
-            raise ValueError("시군구 코드가 없습니다")
-        code = {"ctpv": location["ctpvCdPk"], "sgg": location["sggCdPk"], "emd": 0}
-        seen, listings = set(), []
-        complete = False
-        for page in range(1, max_pages + 1):
-            if page > 1:
-                time.sleep(0.25)
-            payload = {
-                "atlfslKndCdList": ["01"],
-                "dlngList": [{"types": ["A1"], "trdeMinAmt": 0}],
-                "page": {"page": page, "size": page_size}, "rgnCode": [code],
-                "atlfslBscInfoPkList": [],
-                "searchSort": {"searchOrder": "01", "sortOrder": "DESC"},
-                "ctpv": 0, "sgg": 0, "emd": 0,
-            }
-            groups = _request("/mptl/atlfsl/atlfslList", payload)["data"]
-            if not isinstance(groups, dict):
-                raise ValueError("매물 목록 형식이 예상과 다릅니다")
-            raw_count = 0
-            for group in groups.values():
-                if not isinstance(group, list):
-                    raise ValueError("매물 묶음 형식이 예상과 다릅니다")
-                raw_count += len(group)
-                for raw in group:
-                    if not isinstance(raw, dict):
-                        continue
-                    item = normalize(raw)
-                    if item and item["hanbang_id"] not in seen:
-                        seen.add(item["hanbang_id"])
-                        listings.append(item)
-            if raw_count < page_size:
-                complete = True
-                break
-        return listings, {"ok": True, "pages": page, "complete": complete,
-                          "source_sgg": location.get("sggNm"), "source_ctpv": location.get("ctpvNm"),
-                          "capped": not complete}
+    except Exception as exc:  # noqa: BLE001 - 좌표 조회 장애만 이름 조회로 대체한다
+        return [], {"ok": False, "phase": "location", "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+    try:
+        return _fetch_pages(location, max_pages=max_pages, page_size=page_size)
+    except Exception as exc:  # noqa: BLE001 - 장애와 정상 0건을 분리한다
+        return [], {"ok": False, "phase": "list", "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+
+
+def fetch_named_region_with_status(sido: str, sigungu: str, *, max_pages: int = MAX_PAGES,
+                                   page_size: int = PAGE_SIZE) -> tuple[list[dict], dict]:
+    """좌표 조회 장애 시 한방의 이름→코드 API로 동일 시도·시군구만 재조회한다."""
+    try:
+        source_sido = _SOURCE_SIDO.get(sido)
+        name = sigungu.removeprefix(f"{sido} ").strip()
+        if not source_sido or not name:
+            raise ValueError("지원하지 않는 시도·시군구입니다")
+        q = urllib.parse.urlencode({"ctpvNm": source_sido, "sggNm": name})
+        location = _request(f"/com/api/restapi/getsggcd?{q}")["data"]
+        if not isinstance(location, dict) or location.get("ctpvNm") != source_sido or location.get("sggNm") != name:
+            raise ValueError("한방 지역 코드 응답이 요청 지역과 다릅니다")
+        return _fetch_pages(location, max_pages=max_pages, page_size=page_size)
     except Exception as exc:  # noqa: BLE001 - 장애와 정상 0건을 분리한다
         return [], {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:120]}"}

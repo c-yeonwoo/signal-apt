@@ -3642,14 +3642,14 @@ def _hanbang_regions() -> list[str]:
 
 
 def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
-    from realty_signal.ingest.hanbang import fetch_region_with_status
+    from realty_signal.ingest.hanbang import fetch_region_with_status, fetch_named_region_with_status
 
     try:
         signals = _signal_map()
         signal_context = "available"
     except Exception:  # noqa: BLE001 - KB 장애가 외부 매물 수집을 막지 않는다
         signals, signal_context = {}, "unavailable"
-    listings, seen, succeeded, complete, limited, failures = [], set(), [], [], [], []
+    listings, seen, succeeded, complete, limited, failures, named = [], set(), [], [], [], [], []
     queryable = 0
     for region in regions[:3]:
         point = _bundled_centroids().get(region)
@@ -3657,10 +3657,18 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
             failures.append({"region": region, "error": "지원하는 시군구 중심좌표 없음"})
             continue
         queryable += 1
+        expected_sido = _sido_of(region)
         rows, status = fetch_region_with_status(*point)
+        used_named = False
+        if not status.get("ok") and status.get("phase") == "location" and expected_sido:
+            rows, named_status = fetch_named_region_with_status(expected_sido, region)
+            if named_status.get("ok"):
+                status = named_status
+                used_named = True
+            else:
+                status = {"ok": False, "error": f"좌표 조회 실패; 이름 조회 실패: {named_status.get('error', '원천 오류')}"}
         source_region = (status.get("source_sgg") or "").replace(" ", "")
         source_sido = (status.get("source_ctpv") or "").strip()
-        expected_sido = _sido_of(region)
         if (not status.get("ok") or not source_region or not region.replace(" ", "").endswith(source_region)
                 or not expected_sido or not source_sido.startswith(expected_sido)):
             failures.append({"region": region,
@@ -3669,6 +3677,8 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
         if any((item.get("지역") or "").replace(" ", "") != source_region for item in rows):
             failures.append({"region": region, "error": "원천 목록에 다른 시군구 매물이 섞여 있음"})
             continue
+        if used_named:
+            named.append(region)
         succeeded.append(region)
         (complete if status["complete"] else limited).append(region)
         for item in rows:
@@ -3688,6 +3698,7 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
         "requested_regions": len(regions[:3]), "queryable_regions": queryable,
         "successful_requests": len(succeeded), "successful_regions": succeeded,
         "complete_regions": complete, "limited_regions": limited,
+        "named_lookup_regions": named,
         "failed_requests": len(failures), "required_successes": required,
         "usable": len(succeeded) >= required, "signal_context": signal_context,
         "failures": failures[:3],
