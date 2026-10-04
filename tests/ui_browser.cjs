@@ -1234,6 +1234,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert(reportWidth<=360,`analysis panel overflows mobile viewport: ${reportWidth}`);
     await page.evaluate(()=>{_listingCompareSave([]);SignalV2.openDiscovery('테스트구');});
     assert.equal(await page.locator('#v2DiscoverCompare').isVisible(),false);
+    assert.equal(await page.locator('#v2DiscoverExtra').evaluate(el=>el.open),false);
+    assert.equal(await page.locator('#v2DiscoverForm [name=min_area_m2]').isVisible(),false);
     await page.waitForFunction(()=>document.querySelector('#v2DiscoverForm [name=region_code]')?.value==='11140');
     const maxPriceInput=page.locator('#v2DiscoverForm [name=max_price_manwon]');
     await maxPriceInput.fill('60000');
@@ -1283,7 +1285,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     await page.getByText('첫번째 후보').waitFor();
     assert.equal(await page.locator('#v2DiscoverResults [data-watch-key="일반매물:synthetic-1"]').getAttribute('aria-pressed'),'false');
+    await page.locator('#v2DiscoverExtra > summary').click();
+    await page.locator('#v2DiscoverForm [name=min_rooms]').fill('16');
+    await page.locator('#v2DiscoverExtra > summary').click();
+    const beforeInvalid=discoveryPayloads.length;
+    await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
+    assert.equal(discoveryPayloads.length,beforeInvalid,'hidden invalid criteria must not submit');
+    assert.equal(await page.locator('#v2DiscoverExtra').evaluate(el=>el.open),true,'reveal the invalid extra criterion');
     await page.locator('#v2DiscoverForm [name=min_rooms]').fill('3');
+    assert.match(await page.locator('#v2DiscoverExtraSummary').textContent(),/추가 조건 1개 적용/);
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
     assert.equal(discoveryPayloads.at(-1).min_rooms,3);
     assert.match(await page.locator('#v2DiscoverResults [data-v2-card]').first().textContent(),/방 3개/);
@@ -1320,7 +1330,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#v2DiscoverResults').textContent(),/후보는 확인 필요로 분류/);
     assert.match(await page.locator('#v2DiscoverResults h3').textContent(),/확인 필요/);
     await page.locator('#v2DiscoverForm [name=max_monthly_manwon]').fill('');
-    await page.locator('#v2DiscoverForm .v2-preferences summary').click();
+    await page.locator('#v2DiscoverForm .v2-preferences summary').first().click();
     await page.locator('#v2DiscoverForm [name=prefer_max_price_manwon]').fill('50000');
     await page.locator('#v2DiscoverForm [name=prefer_min_area_m2]').fill('84');
     await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
@@ -1423,7 +1433,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#v2NoteList [data-note-more]').count(),0);
     await page.evaluate(()=>{document.getElementById('v2NoteDlg').close();window.fetch=window.__notePagingFetch;
       delete window.__notePagingFetch;delete window.__noteRecord;delete window.__resolveNoteA;});
-    for (const width of [390, 1280]) {
+    for (const width of [390, 620, 1280]) {
       await page.setViewportSize({width,height:844});
       await page.evaluate(()=>SignalV2.openDiscovery());
       await page.locator('#v2DiscoverForm').getByRole('button',{name:'후보 찾기'}).click();
@@ -1590,6 +1600,6 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       'the deployment warning must not overflow a 180px reflow');
     assert.equal(nickPayloads.length,0);
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium 360/390/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');
+    console.log('PASS: Chromium 360/390/620/1280px and 180px reflow, candidate clarity, lazy fetch, history, loan rendering, keyboard toggle, A→B stale race, paged decision notes, quicksale evidence, listing reports and no Nick entry');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
