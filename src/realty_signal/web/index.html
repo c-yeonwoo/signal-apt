@@ -3796,7 +3796,7 @@ async function loadAllListings(){
   document.getElementById('laStatus').textContent='불러오는 중…';
   document.getElementById('laSourceWarning').style.display='none';
   document.getElementById('laSourceScope').style.display='none';
-  document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">최초 1회는 데이터 수집으로 수십초 걸릴 수 있어요</span></div>';
+  document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">저장된 목록을 모으고 있습니다.</span></div>';
   try{ const r=await fetch('/api/listings/all?types='+encodeURIComponent(types));
     if(!r.ok) throw new Error('매물 조회 실패');
     const d=await r.json(); if(gen!==_laRequestGen || epoch!==_laCacheEpoch) return;

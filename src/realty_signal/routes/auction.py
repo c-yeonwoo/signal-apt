@@ -40,7 +40,7 @@ def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익
     ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
     signals = app_api._auction_signal_map()
     region_grades = app_api._regime().get("regions", {})
-    external.ensure_hank_cache()
+    external.schedule_hank_refresh()
     listings = auction.enrich(auction.load(), signals, ov)
     for item in listings:
         region = item["region"]

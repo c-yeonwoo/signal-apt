@@ -384,8 +384,35 @@ def refresh_hank_cache(transport: DirectTransport | None = None, *, path=None, f
         return {"ok": True, "count": result.count, "refreshed": True}
 
 
+_REFRESH_LOCK = threading.Lock()
+_REFRESH_RUNNING = False
+
+
+def schedule_hank_refresh() -> None:
+    """만료된 진행 아파트 목록을 응답 밖에서 다시 받는다. 이미 받는 중이면 또 열지 않는다."""
+    global _REFRESH_RUNNING
+    if os.environ.get("PYTEST_CURRENT_TEST") or not hank_due():
+        return
+    with _REFRESH_LOCK:
+        if _REFRESH_RUNNING:
+            return
+        _REFRESH_RUNNING = True
+
+    def run() -> None:
+        global _REFRESH_RUNNING
+        try:
+            refresh_hank_cache()
+        except FetchError:
+            return
+        finally:
+            with _REFRESH_LOCK:
+                _REFRESH_RUNNING = False
+
+    threading.Thread(target=run, name="hank-refresh", daemon=True).start()
+
+
 def ensure_hank_cache() -> None:
-    """요청 경로용. 테스트에서는 네트워크를 열지 않는다."""
+    """동기 갱신. 목록 응답에서는 schedule_hank_refresh 를 쓴다. 테스트는 네트워크를 열지 않는다."""
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return
     if not hank_due():
