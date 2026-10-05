@@ -524,6 +524,11 @@ def test_market_navigation_keeps_grade_and_regional_price_exploration_discoverab
     assert "undervalued:{l:'지역 가격 비교'" in html
     assert "undervalued:'signal'" not in html
     assert "setOverlay(sigMap, 'grade'" in html
+    assert 'id="signalModeMap"' not in html
+    price = html.split('id="view-undervalued"', 1)[1].split('id="view-presale"', 1)[0]
+    signal = html.split('id="view-signal"', 1)[1].split('id="view-all"', 1)[0]
+    assert 'id="sigMap"' in price
+    assert 'id="sigMap"' not in signal
 
 
 def test_change_cards_ack_only_after_entering_the_viewport():

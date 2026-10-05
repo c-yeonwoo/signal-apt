@@ -327,6 +327,33 @@ test('stale budget watch shows a reconfirm action instead of disappearing', asyn
   assert.match(wrap.innerHTML,/openBuyingPower\(\)/);
 });
 
+test('grade choropleth sits above tiles and uses a darker-is-higher price scale', () => {
+  assert.match(html, /pane\.style\.zIndex='350'/);
+  assert.match(html, /choroplethPane/);
+  assert.doesNotMatch(html, /pane:mode==='signal'\?'overlayPane':'tilePane'/);
+  assert.doesNotMatch(html, /id="signalModeMap"/);
+  const price=html.split('id="view-undervalued"')[1].split('id="view-presale"')[0];
+  const signal=html.split('id="view-signal"')[1].split('id="view-all"')[0];
+  assert.match(price, /id="sigMap"/);
+  assert.doesNotMatch(signal, /id="sigMap"/);
+  const ctx=vm.createContext({
+    document:{getElementById:()=>null},
+    _geoRow:(lut,name,code)=>{
+      const row=lut&&lut[name];
+      return row&&code&&row.region_id===`kb:${code}00000`?row:null;
+    },
+  });
+  vm.runInContext(extract('const _GRADE_FILL=', 'function _choTip'), ctx);
+  const expensive=ctx._choStyle('grade','강남',{강남:{급지:'A',region_id:'kb:1168000000'}},'11',null,'11680');
+  const cheap=ctx._choStyle('grade','중랑',{중랑:{급지:'E',region_id:'kb:1126000000'}},'11',null,'11260');
+  const missing=ctx._choStyle('grade','없는구',{},'11',null,'11000');
+  assert.equal(expensive.fillColor, '#1e3a8a');
+  assert.equal(cheap.fillColor, '#dbeafe');
+  assert.notEqual(expensive.fillColor, cheap.fillColor);
+  assert.equal(missing.fillColor, '#e2e8f0');
+  assert.ok(expensive.fillOpacity>=0.7);
+});
+
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
   const ctx=vm.createContext({L:{tileLayer:(url,options)=>({url,options})}});
   vm.runInContext(extract('// 공용 지도 타일', '// ===== 지도 오버레이'),ctx);
