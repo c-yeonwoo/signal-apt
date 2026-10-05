@@ -395,7 +395,8 @@ def listing_location(request: Request, key: str):
     profile = db.profile_get(deps.uid(request)) or {}
     uid = deps.uid(request)
     entrance = db.entrance_get(uid, key) if uid else None
-    return JSONResponse(location.build(row, profile, entrance), headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(location.cached_build(row, profile, entrance, uid=uid),
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/api/listing-kapt")

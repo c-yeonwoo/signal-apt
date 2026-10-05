@@ -28,6 +28,7 @@
   let noteSubject = null, editingNote = null, notesCache = [];
   let noteList = {generation:0, next_cursor:null, loading:false};
   let savedReportList = {key:null, items:[], next_cursor:null, policy:null};
+  const tradeEnrichmentAttempted = new Set();
 
   async function json(url, options) {
     const response = await fetch(url, options);
@@ -104,8 +105,8 @@
       <div class="v2-field-grid">
         ${link(naver, naverNo ? '네이버 부동산 · 매물·사진' : '네이버에서 매물·사진 찾기', naverNo ? '단지 페이지 · 같은 매물인지 다시 확인' : '단지명 검색 · 정확한 매물 연결은 미확인')}
         ${query ? link(`https://map.naver.com/p/search/${encodeURIComponent(query)}`, '네이버 지도 · 거리뷰', '검색 결과에서 거리뷰를 선택 · 출입구 확인') : ''}
-        ${query ? link(search(`site:hogangnono.com ${query} 후기`), '호갱노노 · 거주 후기', '후기 검색 · 작성 시점과 단지를 확인') : ''}
-        ${query ? link(search(`site:asil.kr ${query} 단지톡`), '아실 · 단지톡', '후기 검색 · 작성 시점과 단지를 확인') : ''}
+        ${query ? link(`https://hogangnono.com/search?q=${encodeURIComponent(query)}`, '호갱노노 · 단지 검색', '호갱노노에서 직접 검색 · 단지를 선택해 후기 확인') : ''}
+        ${query ? link('https://www.asil.kr/asil/index.jsp', '아실 · 단지 찾기', '아실 지도에서 단지명 검색 · 단지톡 확인') : ''}
       </div>
       <p class="v2-muted">외부 사이트에서 단지·동·호수가 같은지 확인하세요. 후기와 사진은 분석 점수에 넣지 않습니다.</p>
     </section>`;
@@ -120,8 +121,10 @@
         diff > 0 ? `비슷한 조건의 최근 거래보다 ${diff.toLocaleString('ko-KR',{maximumFractionDigits:1})}% 높아요` : '비슷한 조건의 최근 거래와 비슷해요';
       return `<b>${esc(verdict)}</b><p class="v2-muted">같은 단지·전용면적 거래 ${esc(count)}건 기준${price['비교기준일'] ? ` · ${esc(price['비교기준일'])}` : ''}. 층 조건과 실제 계약가는 상세 근거에서 확인하세요.</p>`;
     }
-    return `<b>아직 싼 매물인지 판단할 수 없어요</b><p class="v2-muted">이 매물에 맞는 가격 비교 결과가 없습니다. 이유는 아래 상세 근거에서 볼 수 있어요.</p>
-      ${(failures || []).includes('trade_cache_unavailable') ? '<button type="button" class="btn" id="v2RefreshTrades">실거래 다시 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}`;
+    const loading = (failures || []).includes('trade_cache_unavailable');
+    return `<b>${loading ? '같은 면적 실거래를 확인하고 있어요' : '비교 가능한 거래가 부족해 가격 판단을 보류해요'}</b>
+      <p class="v2-muted">${esc(loading ? '처음 조회한 단지는 공식 거래 자료를 확인한 뒤 결과를 갱신합니다.' : price?.['이유'] || '같은 단지·면적의 최근 거래가 확인되지 않았습니다.')}</p>
+      ${loading ? '<button type="button" class="btn" id="v2RefreshTrades">실거래 다시 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}`;
   }
 
   function listingTradeFacts(price) {
@@ -181,7 +184,7 @@
       return `<b>저장한 매수력 상한 안이에요</b><p class="v2-muted">상한까지 ${esc(gapMoney(gap))} 남습니다. 취득세·수리비·대출 승인은 별도 확인이 필요해요.</p>`;
     if (fit?.status === 'above' && fit.gap_manwon != null && Number.isFinite(gap) && gap < 0)
       return `<b>저장한 매수력 상한을 넘어요</b><p class="v2-muted">상한보다 ${esc(gapMoney(Math.abs(gap)))} 높습니다. 자금 계획을 다시 확인하세요.</p>`;
-    return '<b>내 예산과는 아직 비교하지 않았어요</b><p class="v2-muted">자금 조건을 확정하면 호가와 비교할 수 있습니다.</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>';
+    return `<b>확정한 매수력과 비교할 수 없어요</b><p class="v2-muted">${esc(fit?.reason || '자금 조건을 확정하면 현재 호가와 즉시 비교합니다.')}</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>`;
   }
 
   function showReportDrawer() {
@@ -362,6 +365,7 @@
 
   async function openListing(key, fromDiscovery = false) {
     if (!key) return;
+    window.clearV2StationRoute?.();
     discoveryReturn = fromDiscovery ? {tab:location.hash.slice(1), key} : null;
     document.getElementById('v2BackToDiscovery').hidden = !discoveryReturn;
     if (!enabled('report_v2_enabled')) {
@@ -394,18 +398,16 @@
         <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
         <p class="v2-muted">매물 정보 ${esc(item.collected_at || '수집 시각 미확인')}${item.stale ? ' · 오래된 정보' : ''}</p></header>
         ${listingFieldLinks(item)}
-        <section class="v2-report-section" aria-label="궁금한 것에 대한 답"><h3>가격은 괜찮나요?</h3>
-          <div class="v2-answer">${listingPriceSummary(price, report.partial_failures, item.stale)}</div>
-          <h3>내 예산에 맞나요?</h3><div class="v2-answer">${listingBudgetSummary(fit, report.partial_failures)}</div></section>
+        <section class="v2-report-section v2-report-summary" aria-label="궁금한 것에 대한 답"><h3>이 매물, 먼저 볼 두 가지</h3>
+          <div class="v2-answer-grid"><div class="v2-answer"><span class="v2-answer-label">01 · 가격 비교</span><h4>가격은 괜찮나요?</h4>
+          ${listingPriceSummary(price, report.partial_failures, item.stale)}</div>
+          <div class="v2-answer"><span class="v2-answer-label">02 · 내 자금</span><h4>내 예산에 맞나요?</h4>${listingBudgetSummary(fit, report.partial_failures)}</div></div></section>
         ${['일반매물','급매','찐매물'].includes(item.kind) ? `<section class="v2-report-section" aria-label="취득·부대비용 추정">
           <h3>살 때 드는 돈은?</h3><p class="v2-muted">${costEligible
             ? '현재 수집 호가 기준의 취득·이사·수리 비용 가정입니다. 세율·규제 적용과 실제 필요 현금은 계약 전 다시 확인해야 합니다.'
             : '현재 호가·전용면적·지역 식별이 부족하거나 서로 충돌해 비용 추정을 보류합니다. 원천 자료를 먼저 확인하세요.'}</p>
           ${costSlot}</section>` : ''}
-        <section class="v2-report-section"><h3>현장에서 딱 두 가지 확인</h3>
-          <p>① 이 매물이 아직 판매 중이고 호가가 같은지 중개사에게 묻기</p>
-          <p>② 실내 사진·향·수리 상태가 실제 이 동·호수의 것인지 확인하기</p></section>
-        <details class="v2-report-more"><summary>실거래·단지 참고 신호와 판단 한계</summary>
+        <details class="v2-report-more v2-report-evidence"><summary><span class="v2-report-number">01</span><span><b>실거래와 단지 근거</b><small>가격 비교의 표본·시점·판단 한계</small></span></summary>
         <h3>국토부 동일 조건 거래</h3>${listingTradeFacts(price)}
         <h3>수집 호가와 가격 변화</h3>${listingSourcePriceFacts(item)}
         <h3>단지·지역 참고 신호</h3>${listingComplexContext(report.complex)}
@@ -414,13 +416,12 @@
         ${(report.lines || {}).price ? `<p class="v2-muted">${esc(report.lines.price)}</p>` : ''}
         ${(report.lines || {}).cash ? `<p class="v2-muted">${esc(report.lines.cash)}</p>` : ''}
         <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details></details>
-        <details class="v2-report-more"><summary>교통·학교·생활권 확인</summary>
-        <h3>교통·학교·생활권</h3>
+        <section class="v2-report-section v2-report-location" aria-label="교통 학교 생활권"><div class="v2-report-section-title"><span class="v2-report-number">02</span><div><h3>교통·학교·생활권</h3><small>매물 표시 좌표 기준 · 실제 출입구와는 다를 수 있어요</small></div></div>
         <p class="v2-muted">표시 좌표 기준 참고 자료입니다. 출입구·통학 배정·실제 출퇴근 시간은 확인이 필요합니다.</p>
-        <button type="button" class="btn" id="v2ListingLocation">입지 근거 확인</button>
-        <div id="v2LocationResult" aria-live="polite"></div></details>
-        <details class="v2-report-more"><summary>중개사에게 더 물어볼 것</summary>
-          ${(report.next_actions || []).map(x => `<p>• ${esc(x)}</p>`).join('') || '<p>현재 판매 여부와 수리 상태를 확인하세요.</p>'}</details>
+        <div id="v2LocationResult" aria-live="polite">가까운 역과 주변 시설을 확인하고 있습니다…</div>
+        <button type="button" class="btn" id="v2ListingLocation">입지 다시 확인</button></section>
+        <section class="v2-report-section v2-report-checklist" aria-label="중개사 확인 사항"><div class="v2-report-section-title"><span class="v2-report-number">03</span><div><h3>중개사에게 확인할 것</h3><small>계약 전에 답을 받아야 하는 질문</small></div></div>
+          <ol>${(report.next_actions || ['현재 판매 여부와 실제 호가는?', '실내 사진·향·수리 상태가 실제 동·호수와 같은가?']).map(x => `<li>${esc(x)}</li>`).join('')}</ol></section>
         <details class="v2-report-more"><summary>핵심 판단 빠르게 확인</summary>
         <div class="v2-row" aria-label="핵심 판단 바로 확인"><b>먼저 궁금한 것부터 보세요</b>
           <p class="v2-muted">현재 리포트의 가격·예산·주의 근거를 짧게 다시 보여 줍니다.</p>
@@ -478,6 +479,8 @@
       };
       body.querySelector('#v2ListingLink').onclick = () => copyListingLink(item.key);
       body.querySelector('#v2ListingLocation').onclick = () => loadLocation(key, generation);
+      if (item.coordinate) loadLocation(key, generation);
+      else body.querySelector('#v2LocationResult').textContent = '매물 표시 좌표가 없어 역·학교·시설을 연결하지 못했습니다.';
       body.querySelectorAll('[data-v2-report-feedback]').forEach(button => button.onclick = () => {
         if (generation !== listingGeneration) return;
         track(EVENTS.REPORT_TASK_FEEDBACK, {type:'listing', answer:button.dataset.v2ReportFeedback});
@@ -485,9 +488,10 @@
         body.querySelector('#v2ReportFeedbackStatus').textContent = '의견 고맙습니다. 리포트를 다듬는 데 참고하겠습니다.';
       });
       const refreshTrades = body.querySelector('#v2RefreshTrades');
-      if (refreshTrades) refreshTrades.onclick = async () => {
-        refreshTrades.disabled = true;
-        const status = body.querySelector('#v2RefreshTradesStatus');
+      if (refreshTrades) {
+        const refresh = async () => {
+          refreshTrades.disabled = true;
+          const status = body.querySelector('#v2RefreshTradesStatus');
         status.textContent = '실거래 원천을 확인하고 있습니다…';
         try {
           const updated = await json('/api/v2/listings/report-enrich', {method:'POST',
@@ -497,7 +501,7 @@
             if ((updated.partial_failures || []).some(x => x.startsWith('trade_'))) {
               status.textContent = '실거래 원천을 확인했지만 새 근거를 얻지 못했습니다. 가격 비교는 보류합니다.';
               refreshTrades.disabled = false;
-            } else openListing(key);
+            } else openListing(key, Boolean(discoveryReturn));
           }
         } catch (error) {
           if (generation === listingGeneration && dialog.open) {
@@ -505,7 +509,14 @@
             refreshTrades.disabled = false;
           }
         }
-      };
+        };
+        refreshTrades.onclick = refresh;
+        const attemptKey = `${key}|${item.collected_at || ''}`;
+        if (!item.stale && !tradeEnrichmentAttempted.has(attemptKey)) {
+          tradeEnrichmentAttempted.add(attemptKey);
+          refresh();
+        }
+      }
       body.querySelector('#v2SaveReport').onclick = async event => {
         const status = body.querySelector('#v2SaveReportStatus');
         const button = event.currentTarget;
@@ -641,19 +652,34 @@
     const schools = [...new Set(zones.flatMap(zone => (zone.schools || []).map(item => item.name).filter(Boolean)))];
     const schoolText = zones.length ? `통학구역 후보 · ${esc((schools.length ? schools : zones.map(z => z.name)).slice(0,5).join(' · '))}` :
       esc(school.reason || '통학구역 후보를 확인하지 못했습니다.');
-    const places = Object.values(amenities.by_category || {}).slice(0,5).map(category => {
+    const places = Object.values(amenities.by_category || {}).filter(category => category.label !== '지하철역').slice(0,4).map(category => {
       const first = category.places?.[0];
-      if (category.status === 'unavailable') return `${esc(category.label || '시설')} · 조회 실패`;
-      if (!first) return `${esc(category.label || '시설')} · 조회 결과 없음`;
-      return `${esc(category.label || '시설')} · ${esc(first.name)}${first.distance_m != null ? ` · 직선 ${esc(first.distance_m)}m` : ''}`;
+      if (category.status === 'unavailable') return `<div><b>${esc(category.label || '시설')}</b><span>조회 실패</span></div>`;
+      if (!first) return `<div><b>${esc(category.label || '시설')}</b><span>결과 없음</span></div>`;
+      return `<div><b>${esc(category.label || '시설')}</b><span>${esc(first.name)}${first.distance_m != null ? ` · 직선 ${esc(first.distance_m)}m` : ''}</span></div>`;
     });
     const sources = (data.evidence || []).map(item => `${esc(item.label)} · ${esc(item.asof || '기준일 미확인')} · ${esc(item.status)}`);
-    return `<div class="v2-row"><b>교통·직장</b><p>${locationRoute(mobility.station_walk, '가까운 역')}</p>
-      <p>${locationRoute(mobility.work_transit, '저장된 직장')}</p><p class="v2-muted">${esc(mobility.reason || '표시 좌표 기준입니다.')} ${esc(mobility.api_reason || '')} ${esc(mobility.transit_note || '')}</p></div>
-      <div class="v2-row"><b>통학구역</b><p>${schoolText}</p><p class="v2-muted">${school.boundary_near ? '통학구역 경계와 가까울 수 있습니다. ' : ''}${esc(school.coordinate_note || '실제 주소의 배정 학교는 교육청에 확인하세요.')}</p></div>
-      <div class="v2-row"><b>가까운 시설</b><p>${places.join('<br>') || esc(amenities.reason || '주변 시설을 확인하지 못했습니다.')}</p>
-      <p class="v2-muted">${esc(amenities.coordinate_note || '직선거리이며 실제 이동 경로·영업 상태는 확인되지 않았습니다.')}</p></div>
-      <details><summary>입지 자료와 기준일</summary><p class="v2-muted">${sources.join('<br>') || '확인된 입지 자료가 없습니다.'}</p></details>`;
+    const walk = mobility.station_walk || {}, point = mobility.station_point || {};
+    const observed = walk.status === 'observed' && Number.isFinite(Number(walk.minutes)) && walk.minutes > 0;
+    const distance = observed && walk.distance_m != null && Number.isFinite(Number(walk.distance_m)) ? Number(walk.distance_m) : null;
+    const straight = point.straight_distance_m != null && Number.isFinite(Number(point.straight_distance_m)) && point.straight_distance_m > 0
+      ? Math.round(point.straight_distance_m) : null;
+    const stationTitle = observed ? `${esc(walk.destination || point.name || '가까운 역')} · 도보 약 ${esc(walk.minutes)}분`
+      : point.name ? `${esc(point.name)} · 도보시간 미확인` : '가까운 역 자료 없음';
+    const stationDistance = distance != null ? `보행 경로 ${esc(distance)}m` : straight != null ? `직선 ${esc(straight)}m` : '거리 미확인';
+    const walkScale = observed ? `<div class="v2-walk-scale" role="img" aria-label="역까지 도보 약 ${esc(walk.minutes)}분">
+      <div class="v2-walk-track"><span style="left:${Math.min(100, Math.max(0, Number(walk.minutes) / 20 * 100))}%"></span></div>
+      <div class="v2-walk-labels"><small>5분</small><small>10분</small><small>20분 이상</small></div></div>` : '';
+    return `<div class="v2-location-card v2-location-station"><small>가까운 역</small><b>${stationTitle}</b>
+      <p>${stationDistance} · ${esc(mobility.origin_source === 'user_marked_candidate' ? '내 출입구 후보' : '매물 표시 좌표')} 기준</p>
+      ${walkScale}
+      ${observed || straight != null ? '<button type="button" class="btn" id="v2ShowStationMap">지도에 표시</button>' : ''}
+      <p class="v2-muted">${esc(mobility.reason || mobility.api_reason || '역과 출입구의 실제 보행 동선은 확인이 필요합니다.')}</p></div>
+      <div class="v2-location-card"><small>직장까지</small><b>${locationRoute(mobility.work_transit, '저장된 직장')}</b><p class="v2-muted">${esc(mobility.transit_note || '실제 출퇴근 시간대는 다를 수 있습니다.')}</p></div>
+      <div class="v2-location-card"><small>학교</small><b>${schoolText}</b><p class="v2-muted">${school.boundary_near ? '통학구역 경계와 가까울 수 있습니다. ' : ''}${esc(school.coordinate_note || '실제 배정 학교는 교육청에 확인하세요.')}</p></div>
+      <div class="v2-location-card"><small>생활 시설 · 가까운 순</small><div class="v2-location-places">${places.join('') || esc(amenities.reason || '주변 시설을 확인하지 못했습니다.')}</div>
+      <p class="v2-muted">직선거리이며 실제 이동 동선과 영업 상태는 확인되지 않았습니다.</p></div>
+      <details><summary>입지 자료 출처와 기준일</summary><p class="v2-muted">${sources.join('<br>') || '확인된 입지 자료가 없습니다.'}</p></details>`;
   }
 
   async function loadLocation(key, generation) {
@@ -668,6 +694,12 @@
       if (generation !== listingGeneration || !document.getElementById('v2ReportDlg').open) return;
       host.innerHTML = renderLocation(data);
       button.textContent = '입지 근거 다시 확인';
+      try { window.showV2StationRoute?.(data); } catch (_) { /* 입지 텍스트는 지도 오류와 독립적으로 표시 */ }
+      const showMap = host.querySelector('#v2ShowStationMap');
+      if (showMap) showMap.onclick = () => {
+        if (!window.showV2StationRoute?.(data, true))
+          showMap.textContent = '현재 지도에서 경로를 표시할 수 없습니다';
+      };
     } catch (error) {
       if (generation !== listingGeneration || !document.getElementById('v2ReportDlg').open) return;
       host.textContent = error.message;
@@ -698,6 +730,7 @@
   }
 
   document.getElementById('v2ReportDlg')?.addEventListener('close', () => {
+    window.clearV2StationRoute?.();
     discoveryReturn = null;
     document.getElementById('v2BackToDiscovery').hidden = true;
     const dialog = document.getElementById('v2ReportDlg');

@@ -543,6 +543,38 @@
   .v2-report-more { border-bottom:1px solid var(--line); padding:4px 0; }
   .v2-report-more > summary { cursor:pointer; min-height:48px; display:flex; align-items:center; font-weight:700; }
   .v2-report-more[open] { padding-bottom:14px; }
+  .v2-report-summary { background:linear-gradient(145deg,#eff9f7,#f6f8fc); border:1px solid #c9e2df;
+    border-radius:16px; padding:17px; margin:16px 0; }
+  .v2-report-summary h3 { margin:0 0 12px; font-size:17px; }
+  .v2-answer-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .v2-answer-grid .v2-answer { border:1px solid #dbe6e8; border-radius:12px; background:var(--panel); padding:12px; min-width:0; }
+  .v2-answer-label { display:block; color:#0b6e75; font-size:11px; font-weight:800; letter-spacing:.035em; margin-bottom:6px; }
+  .v2-answer h4 { margin:0 0 8px; font-size:13px; color:var(--dim); }
+  .v2-answer b { display:block; }
+  .v2-report-section-title { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .v2-report-section-title h3 { margin:0; font-size:17px; }
+  .v2-report-section-title small,.v2-report-evidence summary small { display:block; color:var(--dim); font-size:12px; font-weight:400; margin-top:2px; }
+  .v2-report-number { flex:none; display:grid; place-items:center; width:30px; height:30px; border-radius:9px;
+    background:#def2ed; color:#0b6e75; font-size:12px; font-weight:800; }
+  .v2-report-location,.v2-report-checklist { border:1px solid var(--line); border-radius:14px; padding:16px; margin:14px 0; background:var(--panel); }
+  .v2-report-evidence { border:1px solid var(--line); border-radius:14px; margin:14px 0; padding:0 14px; background:var(--panel); }
+  .v2-report-evidence > summary { gap:10px; min-height:64px; }
+  .v2-location-card { border:1px solid var(--line); border-radius:11px; padding:12px; margin:9px 0; background:var(--bg); }
+  .v2-location-card > small { display:block; color:var(--dim); font-size:12px; margin-bottom:5px; }
+  .v2-location-card > b { display:block; font-size:15px; line-height:1.4; }
+  .v2-location-card > p { margin:6px 0; }
+  .v2-location-station { border-color:#9dcfce; background:linear-gradient(120deg,#e9f7f4,var(--panel)); }
+  .v2-walk-scale { margin:15px 0 10px; }
+  .v2-walk-track { position:relative; height:8px; border-radius:99px; background:linear-gradient(90deg,#24b86f 0%,#d6bc45 50%,#e47959 100%); }
+  .v2-walk-track > span { position:absolute; top:50%; width:15px; height:15px; border-radius:50%;
+    transform:translate(-50%,-50%); background:var(--panel); border:3px solid #0b6e75; box-shadow:0 1px 4px #0003; }
+  .v2-walk-labels { display:flex; justify-content:space-between; color:var(--dim); margin-top:8px; }
+  .v2-location-places { display:grid; gap:7px; }
+  .v2-location-places > div { display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .v2-location-places span { text-align:right; }
+  .v2-report-checklist ol { padding-left:22px; margin:8px 0 0; }
+  .v2-report-checklist li { padding:4px 0; line-height:1.5; }
+  @media(max-width:720px) { .v2-answer-grid { grid-template-columns:1fr; } }
   #v2ReportDlg .btn { margin:3px; }
   .v2-top { position:sticky; top:0; display:flex; justify-content:flex-end; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); z-index:1; }
   #v2DiscoverCompare[hidden] { display:none; }
@@ -8444,6 +8476,36 @@ function _analysisShowRoute(which){
   _analysisRouteLayer=L.polyline(path,{color:'#2563eb',weight:4,opacity:.9}).addTo(map);
   map.fitBounds(_analysisRouteLayer.getBounds().pad(.18),{maxZoom:15});
 }
+let _v2StationLayer=null;
+function clearV2StationRoute(){
+  _v2StationLayer?.remove(); _v2StationLayer=null;
+}
+function showV2StationRoute(data, focus=false){
+  clearV2StationRoute();
+  const visible=document.body.className.match(/(?:^|\s)tab-(all|general|quicksale)(?:\s|$)/)?.[1];
+  const kind=data?.listing?.kind;
+  const mapId=({all:'laMap',general:'hbMap',quicksale:'qsMap'})[visible]
+    || (kind==='일반매물'?'hbMap':kind==='급매'?'qsMap':'laMap');
+  const map=_ms[mapId]?.map, walk=data?.mobility?.station_walk, station=data?.mobility?.station_point;
+  const valid=p=>Array.isArray(p)&&p.length===2&&Number.isFinite(+p[0])&&Number.isFinite(+p[1])
+    &&+p[0]>=33&&+p[0]<=39&&+p[1]>=124&&+p[1]<=132;
+  if(!map||typeof map.addLayer!=='function'||!valid(data?.listing?.coordinate)||!valid(station?.coordinate)) return false;
+  const routed=walk?.status==='observed'&&Array.isArray(walk.path)&&walk.path.length>=2
+    &&walk.path.every(valid);
+  const points=routed?walk.path:[data.listing.coordinate,station.coordinate];
+  const line=L.polyline(points,{color:'#0b6e75',weight:routed?5:3,opacity:.9,
+    dashArray:routed?null:'7 7',interactive:false});
+  const marker=L.circleMarker(station.coordinate,{radius:8,color:'#fff',weight:2,
+    fillColor:'#0b6e75',fillOpacity:1});
+  const label=routed?`${esc(station.name||'가까운 역')} · 도보 약 ${Number(walk.minutes)}분${walk.distance_m!=null?` · 경로 ${Number(walk.distance_m)}m`:''}`
+    :`${esc(station.name||'가까운 역')} · 직선 연결 · 도보시간 미확인`;
+  marker.bindTooltip(label,{direction:'top'});
+  _v2StationLayer=L.layerGroup([line,marker]).addTo(map);
+  if(focus) map.fitBounds(line.getBounds().pad(.25),{maxZoom:16});
+  return true;
+}
+window.clearV2StationRoute=clearV2StationRoute;
+window.showV2StationRoute=showV2StationRoute;
 function clearListingReportContext(){
   if(!_advListingKey) return;
   _analysisStopPick();
