@@ -40,6 +40,16 @@ def test_no_budget_is_not_computed(tmp_path, monkeypatch):
     assert bw.compute(1, [_row("a", 80_000)], 0)["reason"] == "no_budget"
 
 
+def test_held_auction_minimum_is_not_a_new_budget_hit(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    bw.mark_seen(1, [_row("a", 80_000)], BUDGET)
+    held = _row("hank:1", 50_000, "2026타경1", kind="경매")
+    held["입찰상태"] = "needs_review"
+    out = bw.compute(1, [_row("a", 80_000), held], BUDGET)
+    assert out["entered_total"] == 0
+    assert out["in_budget"] == 1
+
+
 def test_new_listing_is_labelled_new(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch)
     base = [_row("a", 80_000)]

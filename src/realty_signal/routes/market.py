@@ -148,6 +148,10 @@ def freshness(request: Request):
     qs = getattr(app_api, "QUICKSALE_FILE", store.CACHE_DIR / "quicksale.json")
     cert = getattr(app_api, "CERTIFIED_FILE", store.CACHE_DIR / "certified.json")
     hanbang = getattr(app_api, "HANBANG_FILE", store.CACHE_DIR / "hanbang_general.json")
+    from realty_signal.ingest.external import cache_path
+    hank_ts = _file_mtime(cache_path())
+    manual_ts = _file_mtime(AUCTION_FILE)
+    auction_ts = max((ts for ts in (hank_ts, manual_ts) if ts is not None), default=None)
     sources = [
         {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
          "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동 · 관측 지연 시 매일 확인",
@@ -161,8 +165,9 @@ def freshness(request: Request):
         {"key": "hanbang", "label": "일반 아파트 매매", "ts": _file_mtime(hanbang),
          "cycle": "하루 1회 자동 · 최대 3개 지역/지역당 3페이지",
          "note": "한방 아파트 매매 목록의 개인용 표본. 페이지 제한으로 전체 시장 매물이 아닙니다."},
-        {"key": "auction", "label": "경매 물건", "ts": _file_mtime(AUCTION_FILE),
-         "cycle": "관리자 등록·갱신 시", "note": "법원경매 물건과 시세를 관리자가 등록·갱신."},
+        {"key": "auction", "label": "경매 물건", "ts": auction_ts,
+         "cycle": "행크 목록 12시간 · 직접 등록은 그때그때",
+         "note": "행크 진행 아파트(서울·경기, 유찰 1회 이하) 목록과 좌표. 권리·시세·전용면적이 없어 권장 입찰가는 비운다. 직접 등록 물건은 따로 둔다."},
         {"key": "presale", "label": "청약", "ts": None, "cycle": "실시간",
          "note": "청약홈(applyhome) API를 조회 시점에 실시간 반영."},
         {"key": "redev", "label": "재건축·정비사업", "ts": db.kv_ts("redev_zones") or db.kv_max_ts("redev_cand:"),

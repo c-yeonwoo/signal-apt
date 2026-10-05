@@ -28,11 +28,21 @@ KEEP_RATIO = 1.3       # 예산의 이 배수까지 스냅샷에 담는다(진�
 MAX_SHOW = 8
 
 
+def _priced(rows: list[dict]) -> list[dict]:
+    """입찰을 보류한 경매의 최저가는 예산 안 호가가 아니다."""
+    out = []
+    for row in rows:
+        if row.get("유형") == "경매" and row.get("입찰상태") != "conditional_bid":
+            continue
+        total = row.get("총액")
+        if row.get("key") and isinstance(total, (int, float)) and total > 0:
+            out.append(row)
+    return out
+
+
 def _snapshot(rows: list[dict], budget: float) -> dict:
     cap = budget * KEEP_RATIO
-    return {str(r["key"]): r.get("총액")
-            for r in rows
-            if r.get("key") and isinstance(r.get("총액"), (int, float)) and r["총액"] <= cap}
+    return {str(r["key"]): r.get("총액") for r in _priced(rows) if r["총액"] <= cap}
 
 
 def _brief(r: dict) -> dict:
@@ -51,8 +61,7 @@ def compute(uid: int, rows: list[dict], budget: float | None) -> dict:
     prev_budget = prev.get("budget")
 
     # 가격을 아는 매물만 — 가격 미상(청약 등)을 '예산 내' 로 치지 않는다(N2 와 같은 원칙)
-    priced = [r for r in rows
-              if r.get("key") and isinstance(r.get("총액"), (int, float)) and r["총액"] > 0]
+    priced = _priced(rows)
     now_in = {str(r["key"]): r for r in priced if r["총액"] <= budget}
     now_all = {str(r["key"]): r for r in priced}
 

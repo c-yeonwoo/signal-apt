@@ -51,7 +51,7 @@ def test_scheduler_launches_sources_independently(monkeypatch):
     asyncio.run(exercise())
     assert set(calls) == {"kb", "quicksale", "certified", "hanbang", "localities",
                           "school_zones", "telegram_updates", "backup", "watch_alerts",
-                          "region_alerts", "presale_alerts"}
+                          "region_alerts", "presale_alerts", "hank"}
 
 
 def test_scheduler_expedites_unverified_hanbang_rescan(monkeypatch):
