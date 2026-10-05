@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Body, Request
 
 router = APIRouter(tags=["complex"])
@@ -15,6 +17,11 @@ def _api():
 @router.get("/api/complex-grades/{region}")
 def complex_grades(region: str):
     return _api().complex_grades(region)
+
+
+@router.get("/api/region-trade-prices/{region_ref}")
+def region_trade_prices(region_ref: str, area: Literal[59, 84] = 84):
+    return _api().region_trade_prices(region_ref, area)
 
 
 @router.get("/api/undervalued")

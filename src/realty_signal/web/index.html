@@ -321,6 +321,17 @@
   .uv-pill { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; }
   .uv-cx { margin-top:12px; padding:11px 13px; background:var(--bg);
     border:1px solid var(--line); border-radius:10px; font-size:12px; }
+  .rpc-controls { display:flex; flex-wrap:wrap; gap:10px; margin:16px 0; }
+  .rpc-controls label { display:flex; flex:1 1 180px; min-width:0; flex-direction:column; gap:5px; font-size:12px; font-weight:700; }
+  .rpc-controls select { width:100%; min-width:0; min-height:44px; }
+  .rpc-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .rpc-card { min-width:0; border:1px solid var(--line); border-radius:12px; padding:16px; background:var(--panel); overflow-wrap:anywhere; }
+  .rpc-card h3 { margin:0 0 10px; font-size:16px; }
+  .rpc-median { font-size:25px; font-weight:800; letter-spacing:-.03em; }
+  .rpc-bar { height:9px; border-radius:999px; background:#e2e8f0; margin:12px 0; overflow:hidden; }
+  .rpc-bar span { display:block; height:100%; background:var(--accent); border-radius:999px; }
+  .rpc-note { font-size:12px; color:var(--dim); line-height:1.55; }
+  @media(max-width:760px) { .rpc-grid { grid-template-columns:minmax(0,1fr); } }
   /* 구형 리포트 롤백 패널(채팅 기능 없음) */
   #advPanel.adv-report-mode { width:500px !important; height:calc(100vh - 32px) !important;
     max-height:none !important; max-width:calc(100vw - 24px) !important; resize:none !important; }
@@ -952,33 +963,22 @@
   </div>
 </div>
 
-<!-- 저평가 탭 -->
+<!-- 지역 실거래 가격 비교: 입지 회귀모형과 별개인 공개 거래 표본 -->
 <div id="view-undervalued" style="display:none">
   <div class="sec">
-    <h2 class="page-head">지역 가격 탐색</h2>
-    <p class="page-sub">제한된 입지 지표로 설명되지 않는 가격 차이를 살펴봅니다. 저평가·적정가 판정은 아닙니다.</p>
-    <details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:12px;color:var(--dim)">보는 방법</summary>
-      <div style="margin-top:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--dim);line-height:1.7">
-        가격대 선택 → 모형값보다 낮은 지역부터 → 동네·단지로 드릴다운. 통근 추정·교육업종 점포·환경 대리변수만 사용합니다. 학교 배정·단지 연식·층·브랜드 등은 반영되지 않아 실제 거래 비교가 필요합니다.
-      </div></details>
-  </div>
-  <div class="uvsplit">
-    <div class="uv-col" style="position:relative">
-      <div id="uvMap" style="height:100%;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
-      <div id="uvMapLegend" style="position:absolute;right:10px;bottom:12px;z-index:500;background:var(--panel);
-           border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.7;box-shadow:var(--shadow)"></div>
+    <h2 class="page-head">지역 가격 비교</h2>
+    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지역·단지의 적정가나 매수 신호는 아닙니다.</p>
+    <div class="rpc-controls">
+      <label>전용면적대 <select id="rpcArea" class="ctrl" onchange="renderRegionPriceComparison()"><option value="84">84㎡ ±5㎡</option><option value="59">59㎡ ±5㎡</option></select></label>
+      <label>첫 지역 <select id="rpcRegionA" class="ctrl" onchange="renderRegionPriceComparison()"></select></label>
+      <label>비교할 지역 <select id="rpcRegionB" class="ctrl" onchange="renderRegionPriceComparison()"></select></label>
     </div>
-    <div class="uv-col" style="border:1px solid var(--line);border-radius:var(--r-md);padding:6px 8px 2px;background:var(--panel)">
-      <div id="uvchart" style="height:100%"></div>
-    </div>
-  </div>
-  <div id="uvHaesol" style="margin:8px 2px 0;padding:10px 14px;background:var(--panel);
-       border:1px solid var(--line);border-radius:10px;font-size:14px;color:#334155;min-height:20px"></div>
-  <div class="sec" style="margin-top:14px">
-    <label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;margin-bottom:8px">
-      <input type="checkbox" id="uvBuyOnly" onchange="renderUvGroups()"> 매수신호(BUY+) 지역만</label>
-    <div id="uvGroups"></div>
-    <p id="uvEmpty" style="color:var(--dim)"></p>
+    <div id="rpcStatus" class="rpc-note" role="status" aria-live="polite">지역을 준비하고 있습니다.</div>
+    <div id="rpcCards" class="rpc-grid" style="margin-top:12px"></div>
+    <p id="rpcCompare" class="rpc-note" style="margin-top:12px"></p>
+    <details class="rpc-note" style="margin-top:16px"><summary style="cursor:pointer">이 비교의 범위와 한계</summary>
+      <p>직전 완료된 6개월의 실거래 중 선택한 면적 ±5㎡만 셉니다. 거래 취소분은 제외하지만, 단지·층·연식·수리 상태·입지와 거래량 차이는 통제하지 않습니다. 지역별 표본 중앙값을 개별 매물 가격이나 미래 수익률로 해석하지 마세요.</p>
+    </details>
   </div>
 </div>
 
@@ -1940,7 +1940,7 @@ const _BROWSE_TOOLS=['auction','redev','general','quicksale','presale','tradeup'
 const _GROUP_LABEL={market:'시장',browse:'매물 찾기', find:'내 후보', criteria:'내 조건'};
 const _SUBMETA={
   signal:{l:'가격·수급',d:'지역별 추세'},
-  undervalued:{l:'지역 가격 비교',d:'모형과 실거래'},
+  undervalued:{l:'지역 가격 비교',d:'면적별 실거래'},
   all:{l:'매물',d:'내 예산 순'},
   watch:{l:'찜한 매물',d:'가격·일정'},
 };
@@ -5010,8 +5010,93 @@ async function loadPsTypes(no, elId){
     <th class="l">주택형</th><th>분양가</th><th>평단가</th><th>시세대비</th><th class="l">특별공급</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-let uvChart, _uvList=[];
+let _rpcGeneration=0;
 async function loadUndervalued(){
+  const generation=++_rpcGeneration;
+  const status=document.getElementById('rpcStatus');
+  status.textContent='비교할 지역을 준비하고 있습니다.';
+  try{
+    const rows=allSignals.length?allSignals:await (async()=>{
+      const response=await fetch('/api/signals');
+      if(!response.ok) throw new Error('signals unavailable');
+      return response.json();
+    })();
+    if(generation!==_rpcGeneration) return;
+    const valid=rows.filter(row=>{
+      const code=String(row.region_id||'').replace(/^kb:/,'');
+      return /^kb:\d{10}$/.test(row.region_id||'') && code.slice(2,5)!=='000';
+    });
+    if(!valid.length){
+      status.textContent='지역 코드가 검증된 시군구가 없어 가격 표본을 연결하지 않았습니다.';
+      document.getElementById('rpcCards').innerHTML=''; return;
+    }
+    const a=document.getElementById('rpcRegionA'), b=document.getElementById('rpcRegionB');
+    const prevA=a.value, prevB=b.value;
+    const choices=valid.map(row=>`<option value="${row.region_id}">${esc(row.group||'')} ${esc(row.region)}</option>`).join('');
+    a.innerHTML=choices;
+    b.innerHTML='<option value="">비교 지역 선택</option>'+choices;
+    const favorite=typeof _favRegionKeyByName!=='undefined'
+      ? valid.find(row=>_favRegionKeyByName.has(row.region)):null;
+    const preferred=valid.find(row=>row.region===selected)||favorite||valid[0];
+    a.value=valid.some(row=>row.region_id===prevA)?prevA:preferred.region_id;
+    b.value=valid.some(row=>row.region_id===prevB)?prevB:'';
+    renderRegionPriceComparison();
+  }catch(_error){
+    if(generation===_rpcGeneration) status.textContent='지역 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.';
+  }
+}
+function _rpcCard(row, maxPrice){
+  const name=esc(row.region||'선택한 지역');
+  if(row.status==='region_unverified') return `<article class="rpc-card"><h3>${name}</h3><p class="rpc-note">지역 코드 확인 전에는 거래를 다른 지역에 붙이지 않습니다.</p></article>`;
+  if(row.status==='source_unavailable') return `<article class="rpc-card"><h3>${name}</h3><p class="rpc-note">국토부 실거래 원천을 불러오지 못했습니다. 0건으로 해석하지 마세요.</p></article>`;
+  const count=Number(row.count)||0;
+  const price=Number(row.median_manwon);
+  const usable=Number.isFinite(price)&&price>0&&count>=5;
+  const stale=row.status==='stale';
+  const months=Array.isArray(row.observed_months)?row.observed_months.join('~'):'거래월 미확인';
+  const computed=typeof row.computed_at==='string'?row.computed_at.slice(0,10):'확인 불가';
+  return `<article class="rpc-card"><h3>${name}</h3>
+    <div class="rpc-median">${usable?_eok(price):'중앙값 보류'}</div>
+    ${usable&&maxPrice?`<div class="rpc-bar" aria-hidden="true"><span style="width:${Math.max(3,Math.round(price/maxPrice*100))}%"></span></div>`:''}
+    <p class="rpc-note">전용 ${Number(row.area)||84}㎡ ±5㎡ · ${count}건 · 거래월 ${esc(months)}</p>
+    <p class="rpc-note">${stale?'원천 갱신 실패 · 이전 집계입니다. ':'비교 집계일 '}${esc(computed)}${!usable?' · 비교에 필요한 5건 미만':''}</p></article>`;
+}
+async function renderRegionPriceComparison(){
+  const generation=++_rpcGeneration;
+  const a=document.getElementById('rpcRegionA').value;
+  const b=document.getElementById('rpcRegionB').value;
+  const area=Number(document.getElementById('rpcArea').value);
+  const status=document.getElementById('rpcStatus'), cards=document.getElementById('rpcCards');
+  const compare=document.getElementById('rpcCompare');
+  if(!a) return;
+  if(a===b){ status.textContent='서로 다른 두 지역을 선택해 주세요.'; cards.innerHTML=''; compare.textContent=''; return; }
+  status.textContent='국토부 실거래 표본을 불러오는 중입니다. 첫 조회는 다소 걸릴 수 있습니다.';
+  cards.innerHTML=''; compare.textContent='';
+  const refs=b?[a,b]:[a];
+  const data=await Promise.all(refs.map(async ref=>{
+    try{
+      const response=await fetch('/api/region-trade-prices/'+encodeURIComponent(ref)+'?area='+area);
+      if(!response.ok) throw new Error('source unavailable');
+      return await response.json();
+    }catch(_error){
+      const option=[...document.getElementById('rpcRegionA').options].find(o=>o.value===ref);
+      return {status:'source_unavailable',region:option?.textContent||'선택한 지역'};
+    }
+  }));
+  if(generation!==_rpcGeneration) return;
+  const maxPrice=Math.max(...data.map(row=>Number(row.median_manwon)||0));
+  cards.innerHTML=data.map(row=>_rpcCard(row,maxPrice)).join('')+(b?'':
+    '<article class="rpc-card"><h3>다른 지역과 비교</h3><p class="rpc-note">위에서 비교할 지역을 선택하면 같은 면적대의 거래 표본을 나란히 보여 줍니다.</p></article>');
+  status.textContent='국토교통부 아파트 매매 실거래 · 직전 완료된 6개월 · 거래 취소분 제외';
+  const comparable=data.length===2&&data.every(row=>row.status==='ready'&&row.count>=5&&Number(row.median_manwon)>0);
+  if(comparable){
+    const diff=Math.abs(data[0].median_manwon-data[1].median_manwon);
+    compare.textContent=`두 지역 거래 표본의 중앙값 차이 ${diff===0?'0원':_eok(diff)}. 단지·층·연식과 거래량 차이는 통제하지 않았으므로 어느 지역이 저평가됐다는 뜻은 아닙니다.`;
+  }else compare.textContent=b?'표본 부족·원천 장애·지난 수집분이 있으면 가격 차이를 확정하지 않습니다.':'';
+}
+
+let uvChart, _uvList=[];
+async function loadLegacyUndervalued(){
   const d = await (await fetch('/api/undervalued')).json();
   const empty = document.getElementById('uvEmpty');
   if(!d.ready || !d.listings.length){

@@ -1112,6 +1112,37 @@ def complex_grades(region: str):
     return {"region": region, "complexes": _region_grades(region)}
 
 
+def region_trade_prices(region_ref: str, area: int = 84):
+    """Comparable-area district sale sample; no licensed locality model involved."""
+    from realty_signal.ingest.complex import SourceUnavailable
+    from realty_signal.ingest.complex_grade import region_trade_prices as collect_prices
+
+    if area not in (59, 84):
+        return {"status": "unsupported_area"}
+    identity = md.current_region_identity(region_ref)
+    if identity is None or identity["code"][2:5] == "000":
+        return {"status": "region_unverified"}
+    code = identity["code"][:5]
+    from realty_signal.auction import _recent_yms
+    cache_key = f"region_trade_prices:v1:{code}:{area}:{_recent_yms(1)[0]}"
+    cached = db.kv_get(cache_key, max_age=6 * 3600)
+    if cached is not None:
+        return cached
+    config.load_env()
+    try:
+        sample = collect_prices(code, config.public_data_key(), area)
+    except SourceUnavailable:
+        old = db.kv_get(cache_key)
+        return {**old, "status": "stale"} if old is not None else {
+            "status": "source_unavailable", "region": identity["name"], "area": area}
+    from realty_signal.time_kst import now_kst
+    result = {**sample, "region": identity["name"], "region_id": region_ref,
+              "area": area, "computed_at": now_kst().isoformat(),
+              "source": "국토교통부 아파트 매매 실거래 공개자료"}
+    db.kv_set(cache_key, result)
+    return result
+
+
 
 def undervalued():
     """수도권 시군구 저평가 랭킹 (입지 대비 가격). 시그널 등급 병합."""

@@ -46,11 +46,13 @@ def html() -> str:
     return INDEX.read_text(encoding="utf-8")
 
 
-def test_map_and_chart_sit_side_by_side(html):
-    """지도와 산점도는 같은 지역을 다르게 보여주므로 나란히 둔다(좁은 화면에서만 상하)."""
-    assert ".uvsplit { display:flex" in html
-    assert html.index('class="uvsplit"') < html.index('id="uvchart"')
-    assert ".uvsplit { flex-direction:column" in html   # 모바일 스택
+def test_region_price_view_uses_observed_trades_in_matching_area_bands(html):
+    assert 'id="rpcArea"' in html and 'id="rpcRegionA"' in html and 'id="rpcRegionB"' in html
+    assert '/api/region-trade-prices/' in html
+    assert 'id="rpcCards"' in html and 'class="rpc-grid"' in html
+    assert '.rpc-grid { grid-template-columns:minmax(0,1fr); }' in html
+    assert '국토교통부 아파트 매매 실거래' in html
+    assert '지역·단지의 적정가나 매수 신호는 아닙니다' in html
 
 
 def test_grade_groups_collapse_and_drill_down_to_complexes(html):
@@ -76,7 +78,14 @@ def test_locality_ui_does_not_relabel_proxy_as_school_district_or_fair_price(htm
     assert "market:   ['signal','undervalued']" in html
     assert "undervalued:{l:'지역 가격 비교'" in html
     assert "교육업종 점포·환경 대리변수" in html
-    assert "학교 배정·단지 연식·층·브랜드 등은 반영되지 않아" in html
+    assert "단지·층·연식·수리 상태·입지와 거래량 차이는 통제하지 않습니다" in html
     assert "모형보다 ${a}% 낮음" in html
     assert "실제 저가 순위 아님" in html
     assert "교통·학군·환경을 0~100으로 점수화" not in html
+
+
+def test_unlicensed_locality_model_is_not_region_price_default(html):
+    assert "undervalued:()=>loadUndervalued()" in html
+    assert "async function loadLegacyUndervalued()" in html
+    assert "async function loadUndervalued()" in html
+    assert html.index("async function loadUndervalued()") < html.index("async function loadLegacyUndervalued()")

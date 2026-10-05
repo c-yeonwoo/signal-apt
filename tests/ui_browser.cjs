@@ -41,6 +41,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         {name:'미확인 주소',address:'시군구 미확인',sigungu:'',sido:'',region_id:null}
       ]}});
       const decoded=decodeURIComponent(url.pathname);
+      if(decoded.startsWith('/api/region-trade-prices/')){
+        const region=decoded.endsWith('1115000000')?'옆구':'테스트구';
+        const area=Number(url.searchParams.get('area'));
+        return route.fulfill({json:area===59
+          ? {status:'insufficient_sample',region,area,count:2,median_manwon:null,observed_months:['2026-08','2026-09'],computed_at:'2026-10-05'}
+          : {status:'ready',region,area,count:8,median_manwon:region==='옆구'?70000:80000,
+            observed_months:['2026-04','2026-09'],computed_at:'2026-10-05'}});
+      }
       if(decoded==='/api/v2/regions/kb:1114000000/report' && regionReportFailures>0){
         regionReportFailures--;
         return route.fulfill({status:503,json:{detail:'synthetic source failure'}});
@@ -411,9 +419,30 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.getByRole('button',{name:'시그널',exact:true}).getAttribute('aria-current'),'page');
     assert.equal(await page.locator('#groupSubnav').isVisible(),true);
     assert.equal(await page.getByRole('button',{name:/가격·수급/}).count(),1);
+    await page.evaluate(()=>{allSignals=[
+      {region:'테스트구',region_id:'kb:1114000000',group:'서울'},
+      {region:'옆구',region_id:'kb:1115000000',group:'서울'}]; selected='테스트구';});
     await page.getByRole('button',{name:/지역 가격 비교/}).click();
     assert.equal(new URL(page.url()).hash,'#undervalued');
     assert.equal(await page.getByRole('button',{name:/지역 가격 비교/}).getAttribute('class').then(c=>c.includes('on')),true);
+    await page.locator('#rpcCards').getByText('8.0억').waitFor();
+    assert.match(await page.locator('#rpcCards').textContent(),/테스트구[\s\S]*8건.*2026-04~2026-09/);
+    await page.locator('#rpcRegionB').selectOption('kb:1115000000');
+    await page.locator('#rpcCards').getByText('7.0억').waitFor();
+    assert.match(await page.locator('#rpcCompare').textContent(),/중앙값 차이 1.0억.*저평가됐다는 뜻은 아닙니다/);
+    await page.locator('#rpcArea').selectOption('59');
+    await page.locator('#rpcCards').getByText('중앙값 보류').first().waitFor();
+    assert.equal(await page.locator('#rpcCards .rpc-median').count(),2);
+    assert.match(await page.locator('#rpcCompare').textContent(),/표본 부족/);
+    for(const width of [180,360,390,1280]){
+      await page.setViewportSize({width,height:800});
+      const layout=await page.evaluate(()=>({document:document.documentElement.scrollWidth,
+        viewport:innerWidth,cards:document.getElementById('rpcCards').scrollWidth,
+        available:document.getElementById('rpcCards').clientWidth}));
+      assert(layout.document<=layout.viewport && layout.cards<=layout.available,
+        `region price comparison overflow ${width}: ${JSON.stringify(layout)}`);
+    }
+    await page.setViewportSize({width:360,height:800});
     await page.getByRole('button',{name:/가격·수급/}).click();
     assert.equal(new URL(page.url()).hash,'#signal');
     await page.evaluate(()=>{mapSplit=()=>{};});
