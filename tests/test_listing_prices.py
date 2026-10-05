@@ -119,12 +119,15 @@ def test_list_report_and_discovery_endpoints_share_cached_evidence(monkeypatch):
     listed = client.get("/api/listings/all", params={"types": "일반매물"})
     assert listed.status_code == 200
     assert build_calls[:2] == [({"일반매물"}, True), ({"일반매물", "급매", "찐매물"}, True)]
-    prices = {r["key"]: r["price_comparison"] for r in listed.json()["listings"]}
+    listed_rows = {r["key"]: r for r in listed.json()["listings"]}
+    prices = {key: r["price_comparison"] for key, r in listed_rows.items()}
     assert [prices[r["key"]]["호가차이율"] for r in rows] == [0, -10]
     for r in rows:
         report = client.get("/api/v2/listings/report", params={"key": r["key"]})
         assert report.status_code == 200
         assert report.json()["price"] == prices[r["key"]]
+        assert report.json()["subject"]["asking_comparison"] == listed_rows[r["key"]]["asking_comparison"]
+        assert report.json()["subject"]["price_reduction"] == listed_rows[r["key"]]["price_reduction"]
         assert report.headers["cache-control"] == "private, no-store"
     discovered = client.post("/api/v2/discovery", json={})
     assert discovered.status_code == 200

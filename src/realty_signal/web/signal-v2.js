@@ -124,6 +124,55 @@
       ${(failures || []).includes('trade_cache_unavailable') ? '<button type="button" class="btn" id="v2RefreshTrades">실거래 다시 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}`;
   }
 
+  function listingTradeFacts(price) {
+    if (price?.['상태'] !== '관측비교' || !Number.isFinite(Number(price['중앙값']))
+        || Number(price['중앙값']) <= 0
+        || Number(price['표본수']) < 3) {
+      return `<p class="v2-muted">${esc(price?.['이유'] || '같은 단지·전용면적의 최근 거래 근거가 부족합니다.')}</p>`;
+    }
+    const range = Array.isArray(price['범위']) && price['범위'].length === 2
+      && price['범위'].every(value => Number.isFinite(Number(value)) && Number(value) > 0)
+      ? `${money(price['범위'][0])} ~ ${money(price['범위'][1])}` : '범위 미확인';
+    return `<div class="v2-fact-grid">
+      <div><small>비교 거래</small><b>${esc(price['표본수'])}건</b></div>
+      <div><small>중앙값</small><b>${money(price['중앙값'])}</b></div>
+      <div><small>관측 범위</small><b>${esc(range)}</b></div>
+    </div><p class="v2-muted">${esc(price['비교기준'] || '같은 단지·전용면적의 최근 신고 거래')} · ${esc(price['거래월범위'] || price['비교기준일'] || '기준일 미확인')}. 층·집 상태·시점 차이가 있어 가격 차이는 할인율이나 적정가가 아닙니다.</p>`;
+  }
+
+  function listingComplexContext(complex) {
+    const signal = complex?.['단지시그널'];
+    if (complex?.identity_status !== 'single_observed' || !signal)
+      return '<p class="v2-muted">확인된 단지 거래 근거가 부족해 단지 참고 신호를 표시하지 않습니다.</p>';
+    const grade = signal['판정상태'] === 'held' || signal['등급'] === 'HELD'
+      ? '판단 보류' : historicalGradeLabel(signal['등급']);
+    const regionGrade = complex['시그널'] === 'HELD' ? '판단 보류'
+      : historicalGradeLabel(complex['시그널']);
+    return `<div class="v2-row"><b>단지 참고 신호 · ${esc(grade)}</b>
+      ${complex['시그널'] ? `<p class="v2-muted">지역 신호 ${esc(regionGrade)}와 별개로, 단지 거래·전세·가격 자료를 합친 참고 지표입니다.</p>` : ''}
+      ${signal['주의'] ? `<p class="v2-muted">${esc(signal['주의'])}</p>` : ''}
+      <p class="v2-muted">이 매물의 가격 적정성이나 매수 권고가 아닙니다. 매물별 실거래 비교는 위 근거를 따릅니다.</p></div>`;
+  }
+
+  function listingSourcePriceFacts(item) {
+    if (item.stale || item.source_conflict) return '<p class="v2-muted">원천 호가가 오래됐거나 서로 충돌해 다른 호가와의 비교도 보류합니다.</p>';
+    const asking = item.asking_comparison || {};
+    const reduction = item.price_reduction || {};
+    const sample = asking['상태'] === '관측비교' && Number(asking['표본수']) >= 3
+      && Number.isFinite(Number(asking['중앙값'])) && Number(asking['중앙값']) > 0
+      && Number.isFinite(Number(asking['호가차이율']))
+      ? `<div class="v2-row"><b>같은 공급사의 현재 수집 호가 ${esc(asking['표본수'])}건</b>
+          <p class="v2-muted">같은 단지·전용면적의 다른 매물 중앙값 ${money(asking['중앙값'])}.
+          이 매물 호가와의 차이 ${esc(asking['호가차이율'])}%는 실거래 할인율이 아니며 층·동·상태가 다를 수 있습니다.</p></div>` : '';
+    const drop = reduction['상태'] === '수집호가인하관측' && Number.isFinite(Number(reduction['차이율']))
+      && Number(reduction['차이율']) < 0
+      ? `<div class="v2-row"><b>같은 원천 매물의 수집 호가 변화</b>
+          <p class="v2-muted">이전 관측보다 ${esc(Math.abs(Number(reduction['차이율'])))}% 낮게 수집됐습니다.
+          실제 거래가·현재 판매 여부·인하 이유는 확인되지 않았습니다.</p></div>` : '';
+    return sample || drop ? sample + drop
+      : '<p class="v2-muted">비교할 다른 매물 호가나 같은 매물의 가격 변화 관측이 아직 부족합니다.</p>';
+  }
+
   function listingBudgetSummary(fit, failures) {
     if ((failures || []).includes('buyer_profile_unavailable'))
       return '<b>내 예산 정보를 지금 불러오지 못했어요</b><p class="v2-muted">잠시 후 다시 열어 주세요. 가격 비교는 위에서 따로 확인할 수 있어요.</p>';
@@ -334,6 +383,12 @@
       const cautions = (report.cautions || []).map(x => `<div class="v2-row v2-caution">${esc(x.text)}</div>`).join('');
       const evidence = (report.evidence || []).map(x =>
         `${esc(x.label)} · ${esc(x.asof || '기준일 미확인')} · ${esc(x.status)}`).join('<br>');
+      const costEligible = ['일반매물','급매','찐매물'].includes(item.kind)
+        && !item.stale && !item.source_conflict && Number(item.asking_manwon) > 0
+        && Number.isFinite(Number(item.exclusive_m2)) && Number(item.exclusive_m2) > 0
+        && item.region_identity_status === 'matched' && !!item.region;
+      const costSlot = costEligible && typeof txCostsSlot === 'function'
+        ? txCostsSlot(item.asking_manwon, item.region, null, item.exclusive_m2) : '';
       body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">매물 확인 · 현장 검증 전</p>
         <h2>${esc(item.name || '매물')}</h2><p class="v2-report-price">${money(item.asking_manwon)}</p>
         <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
@@ -342,13 +397,18 @@
         <section class="v2-report-section" aria-label="궁금한 것에 대한 답"><h3>가격은 괜찮나요?</h3>
           <div class="v2-answer">${listingPriceSummary(price, report.partial_failures, item.stale)}</div>
           <h3>내 예산에 맞나요?</h3><div class="v2-answer">${listingBudgetSummary(fit, report.partial_failures)}</div></section>
+        ${['일반매물','급매','찐매물'].includes(item.kind) ? `<section class="v2-report-section" aria-label="취득·부대비용 추정">
+          <h3>살 때 드는 돈은?</h3><p class="v2-muted">${costEligible
+            ? '현재 수집 호가 기준의 취득·이사·수리 비용 가정입니다. 세율·규제 적용과 실제 필요 현금은 계약 전 다시 확인해야 합니다.'
+            : '현재 호가·전용면적·지역 식별이 부족하거나 서로 충돌해 비용 추정을 보류합니다. 원천 자료를 먼저 확인하세요.'}</p>
+          ${costSlot}</section>` : ''}
         <section class="v2-report-section"><h3>현장에서 딱 두 가지 확인</h3>
           <p>① 이 매물이 아직 판매 중이고 호가가 같은지 중개사에게 묻기</p>
           <p>② 실내 사진·향·수리 상태가 실제 이 동·호수의 것인지 확인하기</p></section>
-        <details class="v2-report-more"><summary>가격 근거와 판단의 한계 자세히</summary>
-        <h3>가격 근거</h3><div class="v2-row">${esc(price['이유'] ||
-          (price['상태'] === '관측비교' ? `동일 조건 실거래 ${price['표본수']}건과 비교했습니다.` :
-            '비교 가능한 실거래가 부족합니다.'))}</div>
+        <details class="v2-report-more"><summary>실거래·단지 참고 신호와 판단 한계</summary>
+        <h3>국토부 동일 조건 거래</h3>${listingTradeFacts(price)}
+        <h3>수집 호가와 가격 변화</h3>${listingSourcePriceFacts(item)}
+        <h3>단지·지역 참고 신호</h3>${listingComplexContext(report.complex)}
         ${pros ? `<h3>유리한 근거</h3>${pros}` : ''}
         ${cautions ? `<h3>주의할 근거</h3>${cautions}` : ''}
         ${(report.lines || {}).price ? `<p class="v2-muted">${esc(report.lines.price)}</p>` : ''}
@@ -387,6 +447,7 @@
           <button type="button" class="btn" data-v2-report-feedback="yes">네, 충분했어요</button>
           <button type="button" class="btn" data-v2-report-feedback="no">아니요, 더 필요해요</button>
           <p id="v2ReportFeedbackStatus" class="v2-muted" role="status"></p></div></details>`;
+      if (costSlot && typeof hydrateTxCosts === 'function') hydrateTxCosts(body);
       revealCurrentListingMap(item);
       body.querySelector('#v2ListingNote').onclick = () => openNote('listing', key, report.report_id);
       const budgetSetup = body.querySelector('#v2BudgetSetup');

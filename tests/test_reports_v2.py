@@ -142,6 +142,7 @@ def test_listing_report_get_uses_cache_and_post_requests_refresh(monkeypatch):
     monkeypatch.setattr(api, "_buyer_params", lambda profile: (_ for _ in ()).throw(ValueError()))
     first = json.loads(reports_v2.listing_report(None, row["key"]).body)
     assert calls == [True]
+    assert first["complex"]["status"] == "unavailable"
     assert "trade_cache_unavailable" in first["partial_failures"]
     assert first["status"] == "partial"
     refreshed = json.loads(reports_v2.listing_report_enrich(None, {"key": row["key"]}).body)

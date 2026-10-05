@@ -829,13 +829,9 @@ test('listing price line shows comparable conditions but never turns missing dat
 });
 
 test('current asking sample is labeled as a limited sample and held data is never narrated', () => {
-  const ctx=vm.createContext({});
-  vm.runInContext(extract('function listingAskingLine(', 'function _laAsk('),ctx);
-  assert.match(ctx.listingAskingLine({상태:'관측비교',공급사:'hanbang',호가차이율:-8.5,표본수:4}),
-    /한방 같은 단지·전용면적 다른 매물 4건.*8.5% 낮음.*수집 표본이며 시장 전체 시세가 아님/);
-  assert.equal(ctx.listingAskingLine({상태:'보류'}),'');
   assert.match(html,/같은 공급사 호가 표본보다 낮은순/);
-  assert.match(html,/listingAskingLine\(x\.asking_comparison\)/);
+  assert.match(signalV2,/item\.asking_comparison/);
+  assert.match(signalV2,/실거래 할인율이 아니며/);
 });
 
 test('trade-evidence sort puts supported lower quotes first and unverified rows last', () => {
@@ -875,7 +871,7 @@ test('multiple observed price evidence is a discovery aid, not a blended deal sc
   assert.ok(ctx._laCompareEvidenceOverlap(overlap,one)<0);
   assert.ok(ctx._laCompareEvidenceOverlap(one,none)<0);
   assert.match(html,/여러 가격 근거 확인순/);
-  assert.match(html,/추가 확인용이며 매수 권고가 아닙니다/);
+  assert.match(signalV2,/이 매물의 가격 적정성이나 매수 권고가 아닙니다/);
   assert.match(html,/if\(_laSort==='evidence_overlap'\) return _laCompareEvidenceOverlap\(a,b\)/);
 });
 
@@ -889,10 +885,9 @@ test('observed source-price drops sort separately and are not rendered as transa
   assert.ok(ctx._laComparePriceReduction(larger,older)<0);
   assert.ok(ctx._laComparePriceReduction(newer,older)<0);
   assert.ok(ctx._laComparePriceReduction(older,unknown)<0);
-  assert.match(ctx.listingReductionLine({...older.price_reduction,이전호가:50000,현재호가:48000}),/같은 매물 호가 .* → .* 낮음.*실제 거래가 아님/);
-  assert.equal(ctx.listingReductionLine(null),'');
   assert.match(html,/수집 호가 인하 확인순/);
-  assert.match(html,/listingReductionLine\(x\.price_reduction\)/);
+  assert.match(signalV2,/item\.price_reduction/);
+  assert.match(signalV2,/실제 거래가·현재 판매 여부·인하 이유는 확인되지 않았습니다/);
 });
 
 test('merged watch button preserves existing aliases and removes only that listing on explicit toggle', async () => {

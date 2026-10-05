@@ -23,9 +23,20 @@ def resolve(key: str, *, private_allowed: bool) -> dict:
     if kind in PRIVATE and not private_allowed:
         raise PermissionError("personal_listing")
     from realty_signal import api
-    if kind in {"급매", "찐매물"}:
-        from realty_signal.services.listing_inventory import index_by_key
-        row = index_by_key(api._build_listings({"급매", "찐매물"}, include_private=private_allowed)).get(key)
+    if kind in PRIVATE:
+        from realty_signal.services.listing_inventory import collapse
+        from realty_signal.services.listing_prices import attach as attach_prices
+        try:
+            cohort = collapse(api._build_listings(set(PRIVATE), include_private=private_allowed))
+        except Exception:  # An unrelated supplier failure must not hide an available listing report.
+            scope = {"일반매물"} if kind == "일반매물" else {"급매", "찐매물"}
+            cohort = collapse(api._build_listings(scope, include_private=private_allowed))
+        row = next((item for item in cohort if key in item.get("listing_aliases", [item.get("key")])), None)
+        if row is not None:
+            try:
+                row = attach_prices([row], cohort_rows=cohort)[0]
+            except Exception:  # Optional peer-price evidence must not block the main report.
+                pass
     else:
         row = next((r for r in api._build_listings({kind}, include_private=private_allowed)
                     if r.get("key") == key), None)
@@ -86,6 +97,8 @@ def snapshot(row: dict) -> dict:
         "source_conflict": bool(row.get("source_conflict")),
         "region_identity_status": row.get("지역식별상태"),
         "price_comparison": row.get("price_comparison"),
+        "asking_comparison": row.get("asking_comparison"),
+        "price_reduction": row.get("price_reduction"),
         "region": row.get("지역"), "region_sido": row.get("시도"),
         "region_code": row.get("지역코드"), "asking_manwon": price,
         "exclusive_m2": area, "rooms": _rooms(ref.get("방수")), "floor": floor,

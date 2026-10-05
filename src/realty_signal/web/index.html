@@ -349,14 +349,19 @@
   #laList .la-price { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:3px 6px; font-size:13px; overflow-wrap:anywhere; }
   #laList .la-price b { font-size:15px; }
   #laList .la-address { overflow-wrap:anywhere; }
-  #laList .la-watch { display:block; margin-top:8px; }
-  #laList .la-watch .btn { min-height:32px; font-size:12px; }
+  #laList .ms-subline { display:flex; align-items:center; flex-wrap:wrap; gap:4px 10px; }
+  #laList .ms-subline .sub { flex:1 1 140px; min-width:0; }
+  #laList .la-watch { margin-left:auto; flex:0 0 auto; }
+  #laList .la-watch .btn { min-height:36px; font-size:12px; white-space:nowrap; }
   #laList .ms-caret { align-self:center; }
-  #laList .ms-detail { font-size:13px; line-height:1.5; }
-  #laList .la-detail-line { margin:8px 0; }
+  #laList .ms-row.sel { background:#f0f5fb; box-shadow:inset 3px 0 0 var(--accent); border-bottom-color:transparent; }
+  #laList .ms-detail { margin:0 8px 10px; padding:14px; border:1px solid #cbd9eb; border-left:3px solid var(--accent); border-radius:0 0 12px 12px; background:#f8fbff; box-shadow:0 8px 20px rgba(15,23,42,.07); font-size:13px; line-height:1.5; }
+  #laList .la-detail-title { font-size:13px; font-weight:700; color:var(--txt); }
+  #laList .la-detail-hint { color:var(--dim); font-size:12px; margin-top:3px; }
   #laList .la-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
-  #laList .la-detail-actions .btn { min-height:36px; font-size:13px; }
-  #laList .la-detail-line .btn { min-height:36px; font-size:13px; padding:5px 10px; }
+  #laList .la-detail-actions .btn { min-height:38px; font-size:13px; }
+  #laList .la-address-edit { margin-top:10px; font-size:12px; color:var(--dim); }
+  #laList .la-address-edit summary { cursor:pointer; width:max-content; }
   #laList .la-dong-form { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
   #laList .la-dong-form input { width:120px; min-height:36px; border:1px solid var(--line); border-radius:7px; padding:5px 8px; font-size:14px; }
   #laList .tx-costs .tx-note { font-size:12px; }
@@ -510,6 +515,10 @@
   .v2-answer { border-left:3px solid var(--accent); padding:7px 0 7px 12px; }
   .v2-answer b { font-size:15px; line-height:1.45; }
   .v2-answer .v2-muted { margin-top:5px; }
+  .v2-fact-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr)); gap:8px; margin:8px 0; }
+  .v2-fact-grid > div { display:grid; gap:2px; padding:9px 10px; border:1px solid var(--line); border-radius:9px; background:var(--bg); min-width:0; }
+  .v2-fact-grid small { color:var(--dim); }
+  .v2-fact-grid b { overflow-wrap:anywhere; }
   .v2-field-check { padding:16px 0; border-bottom:1px solid var(--line); }
   .v2-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:12px 0; }
   .v2-field-link { display:flex; flex-direction:column; justify-content:center; min-height:68px; padding:10px; border:1px solid var(--line);
@@ -3813,14 +3822,6 @@ function listingPriceLine(price){
   const diff=gap===0?'차이 없음':`${Math.abs(gap)}% ${gap<0?'낮음':'높음'}`;
   return `${condition} 실거래 중앙값 대비 ${diff} · ${price['표본수']}건 (할인율 아님)`;
 }
-function listingAskingLine(evidence){
-  if(evidence?.['상태']!=='관측비교'||typeof evidence['호가차이율']!=='number'
-      ||!Number.isFinite(evidence['호가차이율'])||typeof evidence['표본수']!=='number') return '';
-  const source=evidence['공급사']==='hanbang'?'한방':'바로이집';
-  const gap=evidence['호가차이율'];
-  const diff=gap===0?'중앙값과 같음':`${Math.abs(gap)}% ${gap<0?'낮음':'높음'}`;
-  return `${source} 같은 단지·전용면적 다른 매물 ${evidence['표본수']}건의 호가 중앙값보다 ${diff} · 수집 표본이며 시장 전체 시세가 아님`;
-}
 function _laAsk(x){
   const v=x&&x['총액'];
   return (v!=null&&+v>0)?+v:null;
@@ -3928,14 +3929,6 @@ function _laCompareEvidenceOverlap(a,b){
   if(leftMulti&&left.length!==right.length)return right.length-left.length;
   return (b['기회도']??-1)-(a['기회도']??-1);
 }
-function listingReductionLine(evidence){
-  if(evidence?.['상태']!=='수집호가인하관측'||!Number.isFinite(evidence['이전호가'])
-      ||!Number.isFinite(evidence['현재호가'])||!Number.isFinite(evidence['차이율'])) return '';
-  const observed=Number(evidence['확인시각']);
-  const date=Number.isFinite(observed)&&observed>0
-    ?new Date(observed*1000).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric'}):'';
-  return `${date?`${date} 수집 확인 · `:''}같은 매물 호가 ${_eok(evidence['이전호가'])} → ${_eok(evidence['현재호가'])} · ${Math.abs(evidence['차이율'])}% 낮음 (실제 거래가 아님)`;
-}
 function renderAllListings(){
   _laRenderedKey=_laViewKey(_laCurrentTypes);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['시그널']||'HELD',x['지역급지']||null) &&
@@ -3971,26 +3964,21 @@ function renderAllListings(){
         :_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
       sub:`<span class="la-address">${esc(_laAddress(x))}</span>${listingPriceLine(x.price_comparison)?'<br>'+esc(listingPriceLine(x.price_comparison)):''}`,
       action:watchBtn(x['key'],x.listing_aliases)}),
-    detail:x=>{ const acts = (x['유형']==='청약'
-        ? `<span class="btn" style="padding:4px 10px;font-size:12px" onclick="openTypedList('청약')">청약 목록 →</span>`
-        : (['급매','찐매물'].includes(x['유형'])?qsEvidenceBtn(x):'')
-          + cxDetailBtn(x['단지명'], x['지역']) + cxSigBtn(x['단지명'], x['지역']))
-          + naverBtn(x['ref'] && x['ref']['complex_no']);
-      const priced=['일반매물','급매','찐매물','경매'].includes(x['유형']) && x['총액'];
-      const area=x['ref']&&(x['ref']['전용면적']||x['전용면적']);
-      const fit=x.budget_fit?.status;
-      return `${fit==='within'?'<div class="la-detail-line">확정 매수력 상한 이내 · 대출 승인은 별도 확인</div>':
-        fit==='above'?'<div class="la-detail-line">확정 매수력 상한 초과</div>':
-        _SALE_TYPES.includes(x['유형'])?'<div class="la-detail-line">내 매수력을 입력하면 호가와 비교할 수 있어요. <button type="button" class="btn" onclick="event.stopPropagation();openBuyingPower()">매수력 입력</button></div>':''}
-        ${x.price_comparison?.['상태']==='관측비교'?`<div class="la-detail-line">${esc(listingPriceLine(x.price_comparison))}</div>`:''}
-        ${listingAskingLine(x.asking_comparison)?`<div class="la-detail-line">${esc(listingAskingLine(x.asking_comparison))}</div>`:''}
-        ${listingReductionLine(x.price_reduction)?`<div class="la-detail-line">${esc(listingReductionLine(x.price_reduction))}</div>`:''}
-        ${_laPriceEvidenceTypes(x).length>=2?`<div class="la-detail-line">여러 가격 근거 관측: ${esc(_laPriceEvidenceTypes(x).join(' · '))} · 추가 확인용이며 매수 권고가 아닙니다.</div>`:''}
-        ${x.price_comparison?.['상태']==='보류'?'<div class="la-detail-line">실거래 비교 근거는 매물 리포트에서 확인할 수 있어요.</div>':''}
-        ${_SALE_TYPES.includes(x['유형'])&&(!x['동']||x['동출처']==='직접 입력')&&x['지역식별상태']==='matched'
-          ?`<div class="la-detail-line la-dong-form"><label>동 정보 <input aria-label="동 이름" placeholder="예: 상계동" value="${esc(x['동']||'')}" autocomplete="off"></label><button type="button" class="btn" data-listing-key="${esc(x['key'])}" onclick="event.stopPropagation();saveListingDong(this)">${x['동']?'수정 저장':'직접 저장'}</button></div>`:''}
-        ${priced?txCostsSlot(x['총액'], x['지역'], x['평형'], area):''}
-        <div class="la-detail-actions">${reportBtn(x['key'])}${acts}</div>`; },
+    detail:x=>{
+      const report=reportBtn(x['key'],'매물 리포트 보기');
+      const action=x['유형']==='청약'
+        ? `<button type="button" class="btn" onclick="event.stopPropagation();openTypedList('청약')">청약 목록에서 확인</button>`
+        : report||'<span class="la-detail-hint">현재 수집분의 매물 식별자를 확인할 수 없어 리포트를 열 수 없습니다.</span>';
+      const locality=_SALE_TYPES.includes(x['유형'])&&(!x['동']||x['동출처']==='직접 입력')&&x['지역식별상태']==='matched'
+        ? `<details class="la-address-edit"><summary>주소의 동 정보 보완</summary><div class="la-dong-form"><label>동 이름 <input aria-label="동 이름" placeholder="예: 상계동" value="${esc(x['동']||'')}" autocomplete="off"></label><button type="button" class="btn" data-listing-key="${esc(x['key'])}" onclick="event.stopPropagation();saveListingDong(this)">${x['동']?'수정 저장':'직접 저장'}</button></div></details>` : '';
+      const hint=x['유형']==='청약'?'공고의 청약 조건과 일정을 확인하세요.':
+        _SALE_TYPES.includes(x['유형'])?'가격·실거래·단지 참고 신호·비용을 한 리포트에서 확인하세요.':
+        x['유형']==='경매'?'경매 정보의 근거를 확인하세요. 권리·필요 현금은 별도 검토가 필요합니다.':
+        '현재 확인된 자료를 검토하고 원천에서 상태를 다시 확인하세요.';
+      return `<div class="la-detail-title">선택한 매물 확인</div>
+        <div class="la-detail-hint">${hint}</div>
+        <div class="la-detail-actions">${action}</div>${locality}`;
+    },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
     regionOf:x=>x['지역'],
@@ -4050,7 +4038,7 @@ function renderMsList(mapId, indices){
     const it=items[i], s=opt.summary(it,i);
     const row=document.createElement('div'); row.className='ms-row'; row.dataset.i=i;
     row.setAttribute('role','button'); row.tabIndex=0; row.setAttribute('aria-expanded','false');
-    row.innerHTML=`<div class="r1"><span class="nm">${s.nm}</span><span>${s.right||''} <span class="ms-caret" aria-hidden="true">⌄</span></span></div>${s.sub?`<div class="sub">${s.sub}</div>`:''}${s.action?`<div class="la-watch">${s.action}</div>`:''}`;
+    row.innerHTML=`<div class="r1"><span class="nm">${s.nm}</span><span>${s.right||''} <span class="ms-caret" aria-hidden="true">⌄</span></span></div>${s.action?`<div class="ms-subline">${s.sub?`<div class="sub">${s.sub}</div>`:''}<div class="la-watch">${s.action}</div></div>`:s.sub?`<div class="sub">${s.sub}</div>`:''}`;
     const det=document.createElement('div'); det.className='ms-detail'; det.style.display='none';
     row.onclick=()=>selectMsRow(mapId, i);
     row.onkeydown=e=>{ if(e.target===row&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); selectMsRow(mapId, i); } };
@@ -4529,7 +4517,7 @@ const loanBtn=(price,label)=>`<span class="btn" style="padding:3px 11px;margin-t
 function txCostsSlot(price, region, pyeong, area){
   if(!price || price<=0) return '';
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-  return `<details class="tx-costs" data-tx-costs data-price="${Math.round(price)}" data-region="${esc(region||'')}" data-pyeong="${pyeong!=null&&pyeong!==''?esc(pyeong):''}" data-area="${area!=null&&area!==''?esc(area):''}"><summary>실제비용 계산하기</summary><div class="tx-costs-body"></div></details>`;
+  return `<details class="tx-costs" data-tx-costs data-price="${Math.round(price)}" data-region="${esc(region||'')}" data-pyeong="${pyeong!=null&&pyeong!==''?esc(pyeong):''}" data-area="${area!=null&&area!==''?esc(area):''}"><summary>취득·부대비용 추정 보기</summary><div class="tx-costs-body"></div></details>`;
 }
 let _txTimers=new WeakMap();
 async function mountTxCosts(el, override){
@@ -4559,11 +4547,15 @@ async function mountTxCosts(el, override){
   const won=n=> (n==null)?'–':Number(n).toLocaleString()+'만';
   const rows=[['취득세',c['취득세']],['중개비',c['중개비']],['법무비',c['법무비']],['이사비',c['이사비']],['인테리어',c['인테리어']]]
     .map(([k,v])=>`<div class="tx-row"><span>${k}</span><span>${won(v)}</span></div>`).join('');
-  const hyp=[assum['규제지역']?'규제지역 가정':'비규제 가정', `주택${assum['주택수']??0}채`, assum['생애최초']?'생애최초':'']
+  const checks=d.assumption_checks||{};
+  const hyp=[checks.policy_status==='verified'?'정책 검증':'세율·규제 최신성 미검증',
+    assum['규제지역']?'규제지역 가정':'비규제 가정',
+    checks.home_count_entered===true?`주택${assum['주택수']??0}채`:`주택수 미입력 · ${assum['주택수']??0}채 임시 가정`,
+    assum['생애최초']?'생애최초':'']
     .filter(Boolean).join(' · ');
   const interVal = interior!=null ? interior : (c['인테리어']??0);
   const moveVal = moving!=null ? moving : (c['이사비']??200);
-  el.querySelector('summary').innerHTML=`실제비용 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b>`;
+  el.querySelector('summary').innerHTML=`비용 추정 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b>`;
   body.innerHTML=`
     <div style="margin-top:8px">${rows}
       <div class="tx-row total"><span>부대 합계</span><span>${won(c['합계'])}</span></div>
@@ -6026,9 +6018,9 @@ function naverBtn(cno){
   const no=String(cno||'').trim();
   return /^[1-9][0-9]{0,11}$/.test(no) ? ` <a class="btn" href="https://new.land.naver.com/complexes/${no}" target="_blank" rel="noopener noreferrer" style="padding:3px 10px;background:#eef2f7;color:#475569;text-decoration:none" onclick="event.stopPropagation()">네이버부동산 ↗</a>` : '';
 }
-function reportBtn(key){
+function reportBtn(key,label='매물 리포트'){
   if(!key || !/^(일반매물|급매|찐매물|경매):/.test(key)) return '';
-  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();SignalV2.openListing(this.dataset.reportKey)">매물분석</button>`;
+  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();SignalV2.openListing(this.dataset.reportKey)">${esc(label)}</button>`;
 }
 // ===== 동네 리포트 (v2: 주간 스냅샷·diff·관심지역 비교) =====
 let _nbhdCur=null;
