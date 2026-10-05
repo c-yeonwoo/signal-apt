@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import date
@@ -3539,29 +3540,93 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
     return out
 
 
-def listings_all(request: Request, types: str = "경매,급매,청약"):
-    """통합 매물 — 경매·급매·찐매물·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환)."""
-    from realty_signal.brain import ranking as eng_rank
+_LISTING_CACHEABLE = frozenset({"일반매물", "급매", "찐매물", "경매"})
+_listing_assembly_cache: dict[tuple, tuple[list[dict], int]] = {}
+_listing_assembly_lock = threading.Lock()
+
+
+def _listing_file_stamp(path) -> tuple:
+    try:
+        stat = path.stat()
+    except OSError:
+        return (str(path), None)
+    return (str(path), stat.st_mtime_ns, stat.st_size)
+
+
+def _listing_assembly_key(types: set[str], include_private: bool):
+    """디스크 원본이 그대로면 같은 키. 청약·재건축과 테스트는 캐시하지 않는다."""
+    if os.environ.get("PYTEST_CURRENT_TEST") or not types or types - _LISTING_CACHEABLE:
+        return None
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
+
+    paths = [store.CACHE_FILE, store.CODES_FILE, store.IDENTITY_FILE]
+    if "경매" in types:
+        from realty_signal.auction import AUCTION_FILE
+        from realty_signal.ingest.external import cache_path
+        paths.extend([AUCTION_FILE, cache_path()])
+    if include_private and types & {"일반매물", "급매", "찐매물"}:
+        paths.extend([
+            QUICKSALE_FILE, CERTIFIED_FILE, HANBANG_FILE,
+            _radar_refresh_file(QUICKSALE_FILE),
+            _radar_refresh_file(CERTIFIED_FILE),
+            _radar_refresh_file(HANBANG_FILE),
+        ])
+    return (
+        include_private, tuple(sorted(types)), today_kst().isoformat(), TIMING_VERSION,
+        tuple(_listing_file_stamp(path) for path in paths),
+    )
+
+
+def _assemble_listings(types: set[str], include_private: bool) -> tuple[list[dict], int]:
     from realty_signal.services.listing_inventory import collapse
     from realty_signal.services.listing_prices import attach as attach_prices
 
-    private_access = _personal_listings_allowed(request=request)
-    requested_types = set(t for t in types.split(",") if t)
-    if "경매" in requested_types:
-        from realty_signal.ingest import external
-        external.ensure_hank_cache()
-    out = _build_listings(requested_types, include_private=private_access)
+    out = _build_listings(types, include_private=include_private)
     source_record_count = len(out)
     collapsed = collapse(out)
     cohort_rows = collapsed
     sale_kinds = {"일반매물", "급매", "찐매물"}
-    if private_access and requested_types.intersection(sale_kinds) and not sale_kinds.issubset(requested_types):
+    if include_private and types.intersection(sale_kinds) and not sale_kinds.issubset(types):
         try:
             cohort_rows = collapse(_build_listings(sale_kinds, include_private=True))
         except Exception:  # 호가 표본 보강 실패가 기존 매물 조회를 막지 않도록 한다.
             cohort_rows = collapsed
     out = attach_prices(collapsed, cohort_rows=cohort_rows)
+    out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
+    return out, source_record_count
+
+
+def _assembled_listings(types: set[str], include_private: bool) -> tuple[list[dict], int]:
+    """합쳐 둔 공통 목록. 계정별 예산·관심은 호출한 쪽에서 얹는다."""
+    key = _listing_assembly_key(types, include_private)
+    if key is not None:
+        with _listing_assembly_lock:
+            hit = _listing_assembly_cache.get(key)
+        if hit is not None:
+            rows, count = hit
+            return [dict(row) for row in rows], count
+    rows, count = _assemble_listings(types, include_private)
+    if key is not None:
+        stored = [dict(row) for row in rows]
+        with _listing_assembly_lock:
+            if len(_listing_assembly_cache) >= 8:
+                _listing_assembly_cache.clear()
+            _listing_assembly_cache[key] = (stored, count)
+        return [dict(row) for row in stored], count
+    return rows, count
+
+
+def listings_all(request: Request, types: str = "경매,급매,청약"):
+    """통합 매물 — 경매·급매·찐매물·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환)."""
+    from realty_signal.brain import ranking as eng_rank
+    from realty_signal.signals.timing import VERSION as TIMING_VERSION
+
+    private_access = _personal_listings_allowed(request=request)
+    requested_types = set(t for t in types.split(",") if t)
+    if "경매" in requested_types:
+        from realty_signal.ingest import external
+        external.schedule_hank_refresh()
+    out, source_record_count = _assembled_listings(requested_types, private_access)
     uid = _uid(request)
     if uid and private_access:
         locality = db.listing_localities(uid, [key for row in out if row.get("유형") in {"일반매물", "급매", "찐매물"}
