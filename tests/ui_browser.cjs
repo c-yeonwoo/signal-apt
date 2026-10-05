@@ -16,7 +16,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const watchTargets=new Map();
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
-    let generalRefreshCooldown=false, buildingUnavailable=false;
+    let generalRefreshCooldown=false, buildingUnavailable=false, costsVerified=false;
     let serverClientVersion='synthetic-v1';
     let regionReportFailures=0, seriesFailures=0;
     page.on('pageerror', e=>errors.push(e.message));
@@ -73,7 +73,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       }
       if(url.pathname==='/api/listing-costs') data={매수가:50000,'총매입가':51600,
         부대비용:{취득세:500,중개비:100,법무비:50,이사비:200,인테리어:750,합계:1600},
-        가정:{주택수:0,규제지역:false},assumption_checks:{home_count_entered:false,policy_status:'unverified'},
+        가정:{주택수:0,규제지역:false},assumption_checks:{home_count_entered:costsVerified,policy_status:costsVerified?'verified':'unverified'},
         notes:['가정 기반 추정 · 최종 비용 확인 필요']};
       if(url.pathname==='/api/action-plan') data={actions:[{key:'confirm_power',title:'예산 가정을 확인하세요',cta:'예산 설정',tab:'mypage'}]};
       if(url.pathname==='/api/complex-watch') data={ready:true,total:6,moved_total:1,quiet:false,
@@ -887,9 +887,19 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.locator('#v2ReportBody .tx-costs').evaluate(el=>el.open),false);
     assert.equal(calls.filter(x=>x==='/api/listing-costs').length,0);
     await page.locator('#v2ReportBody .tx-costs summary').click();
-    await page.locator('#v2ReportBody .tx-costs .tx-costs-body').getByText('취득세').waitFor();
-    assert.match(await page.locator('#v2ReportBody .tx-costs .tx-note').textContent(),/세율·규제 최신성 미검증.*주택수 미입력/);
+    await page.locator('#v2ReportBody .tx-costs summary').getByText(/취득세·총매입 보류/).waitFor();
+    assert.equal(await page.locator('#v2ReportBody .tx-costs .tx-row').count(),4);
+    assert.doesNotMatch(await page.locator('#v2ReportBody .tx-costs .tx-costs-body').textContent(),/취득세\s*500만|총매입가\s*51,600만|부대 합계\s*1,600만/);
+    assert.match(await page.locator('#v2ReportBody .tx-costs .tx-costs-body').textContent(),/현재 세율·규제 적용 또는 주택수를 검증하지 못해/);
+    assert.match(await page.locator('#v2ReportBody .tx-costs .tx-note').last().textContent(),/세율·규제 최신성 미검증.*주택수 미입력/);
     assert.equal(calls.filter(x=>x==='/api/listing-costs').length,1);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    costsVerified=true;
+    await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
+    await page.locator('#v2ReportBody .tx-costs summary').click();
+    await page.locator('#v2ReportBody .tx-costs .tx-costs-body').getByText('총매입가', {exact:false}).waitFor();
+    assert.match(await page.locator('#v2ReportBody .tx-costs summary').textContent(),/총매입/);
+    assert.match(await page.locator('#v2ReportBody .tx-costs .tx-costs-body').textContent(),/취득세\s*500만/);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.evaluate(()=>SignalV2.openListing('일반매물:cost-held'));
     await page.locator('#v2ReportBody').getByText(/비용 추정을 보류합니다/).waitFor();
