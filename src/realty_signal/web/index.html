@@ -4543,11 +4543,12 @@ async function mountTxCosts(el, override){
   if(d.error){ body.textContent=d.error; delete el.dataset.txLoaded; return; }
   const c=d['부대비용']||{};
   const assum=d['가정']||{};
+  const checks=d.assumption_checks||{};
+  const totalReady=checks.policy_status==='verified' && checks.home_count_entered===true;
   const eok=n=> (n==null||n<=0)?'–':(n/10000).toFixed(2)+'억';
   const won=n=> (n==null)?'–':Number(n).toLocaleString()+'만';
-  const rows=[['취득세',c['취득세']],['중개비',c['중개비']],['법무비',c['법무비']],['이사비',c['이사비']],['인테리어',c['인테리어']]]
+  const rows=[...(totalReady?[['취득세',c['취득세']]]:[]),['중개비',c['중개비']],['법무비',c['법무비']],['이사비',c['이사비']],['인테리어',c['인테리어']]]
     .map(([k,v])=>`<div class="tx-row"><span>${k}</span><span>${won(v)}</span></div>`).join('');
-  const checks=d.assumption_checks||{};
   const hyp=[checks.policy_status==='verified'?'정책 검증':'세율·규제 최신성 미검증',
     assum['규제지역']?'규제지역 가정':'비규제 가정',
     checks.home_count_entered===true?`주택${assum['주택수']??0}채`:`주택수 미입력 · ${assum['주택수']??0}채 임시 가정`,
@@ -4555,11 +4556,14 @@ async function mountTxCosts(el, override){
     .filter(Boolean).join(' · ');
   const interVal = interior!=null ? interior : (c['인테리어']??0);
   const moveVal = moving!=null ? moving : (c['이사비']??200);
-  el.querySelector('summary').innerHTML=`비용 추정 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b>`;
+  el.querySelector('summary').innerHTML=totalReady
+    ? `비용 추정 · 부대 <b>${eok(c['합계'])}</b> · 총매입 <b style="color:var(--accent)">${eok(d['총매입가'])}</b>`
+    : '비용 항목 보기 · 취득세·총매입 보류';
   body.innerHTML=`
+    ${totalReady?'':'<p class="tx-note">현재 세율·규제 적용 또는 주택수를 검증하지 못해 취득세·부대 합계·총매입가를 표시하지 않습니다. 아래 항목도 가정에 따른 참고값입니다.</p>'}
     <div style="margin-top:8px">${rows}
-      <div class="tx-row total"><span>부대 합계</span><span>${won(c['합계'])}</span></div>
-      <div class="tx-row total"><span>총매입가 (매수 ${_eok(d['매수가'])}+부대)</span><span>${won(d['총매입가'])}</span></div>
+      ${totalReady?`<div class="tx-row total"><span>부대 합계</span><span>${won(c['합계'])}</span></div>
+      <div class="tx-row total"><span>총매입가 (매수 ${_eok(d['매수가'])}+부대)</span><span>${won(d['총매입가'])}</span></div>`:''}
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
       <label class="tx-edit">이사 <input type="number" min="0" step="50" value="${moveVal}" data-tx-move>만</label>
