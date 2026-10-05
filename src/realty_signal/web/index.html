@@ -3994,8 +3994,10 @@ function renderAllListings(){
         _SALE_TYPES.includes(x['유형'])?'가격·실거래·단지 참고 신호·비용을 한 리포트에서 확인하세요.':
         x['유형']==='경매'?'경매 정보의 근거를 확인하세요. 권리·필요 현금은 별도 검토가 필요합니다.':
         '현재 확인된 자료를 검토하고 원천에서 상태를 다시 확인하세요.';
+      const caseNo=x['유형']==='경매'&&x['사건번호']?`<div class="la-detail-hint">물건번호 ${esc(x['사건번호'])}</div>`:'';
       return `<div class="la-detail-title">선택한 매물 확인</div>
         <div class="la-detail-hint">${hint}</div>
+        ${caseNo}
         <div class="la-detail-actions">${action}</div>`;
     },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
@@ -7173,7 +7175,7 @@ function renderAuction(rows){
       <span>${area}</span>
       <span>연식 ${r['건축년도']?(2026-r['건축년도'])+'년':'–'}</span><span>세대 ${r['세대수']?r['세대수'].toLocaleString():'–'}</span>
       <span>용적 ${r['용적률']?r['용적률']+'%':'–'}</span></div>
-      <div class="kv" style="margin-top:5px"><span>감정 ${won(r['감정가'])}</span><span>최저 ${won(r['최저매각가'])}</span>
+      <div class="kv" style="margin-top:5px"><span>물건번호 ${esc(r['사건번호']||'–')}</span><span>감정 ${won(r['감정가'])}</span><span>최저 ${won(r['최저매각가'])}</span>
       <span>실거래 ${won(r['최근실거래가'])}</span><span>전세 ${won(r['최근전세가'])}</span>
       <span style="color:${r['목표달성']?'#16a34a':'#d97706'}">${r['목표달성']?'검토용 상한 '+won(r['권장입찰가']):'입찰 보류'}</span><span>임대 ${r['임대수익률']==null?'–':r['임대수익률']+'%'}</span>
       <span>입찰기일 ${esc(r['입찰기일']||'–')}</span></div>

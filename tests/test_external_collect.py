@@ -5,8 +5,8 @@ import json
 from realty_signal import api, auction
 from realty_signal.ingest import external
 from realty_signal.ingest.external import (
-    card_from_hank, cards_from_rows, collect, collect_hank, ensure_hank_cache,
-    hank_row, parse_place, refresh_hank_cache, write_hank_cache,
+    card_from_hank, cards_from_rows, collect, collect_hank, complex_name,
+    ensure_hank_cache, hank_row, parse_place, refresh_hank_cache, write_hank_cache,
 )
 from realty_signal.routes import auction as auction_routes
 
@@ -83,6 +83,16 @@ def test_place_parser_reads_district_and_dong():
     assert parse_place("경기 연천군 전곡읍 은대리")["지역"] == "연천군"
 
 
+def test_list_title_uses_the_complex_name_and_keeps_the_case_number():
+    named = card_from_hank(_sample(address="서울특별시 강남구 역삼동 757 역삼래미안 108동 1층102호"))
+    assert named["단지명"] == "역삼래미안"
+    assert named["사건번호"] == "2026타경9"
+    paren = card_from_hank(_sample(address="서울 용산구 이촌동 406, 219동 7층704호 (이촌동,한가람아파트)"))
+    assert paren["단지명"] == "한가람아파트"
+    assert complex_name("서울특별시 노원구 상계동 1") == ""
+    assert card_from_hank(_sample())["단지명"] == "상계동"
+
+
 def test_hank_card_converts_won_and_leaves_the_bid_empty():
     card = card_from_hank(_sample())
     assert card["id"] == "hank:9"
@@ -133,6 +143,8 @@ def test_listing_card_imports_hank_without_a_recommended_bid(monkeypatch):
     assert row["총액"] == 56000
     assert row["lat"] == 37.65 and row["lng"] == 127.06
     assert row["지역"] == "노원구" and row["동"] == "상계동"
+    assert row["단지명"] == "상계동"
+    assert row["사건번호"] == "2026타경9"
     assert row["평형"] is None
     assert row["시그널"] == "HELD"
     assert row["ref"]["건물면적"] == 84.2
