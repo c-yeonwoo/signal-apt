@@ -207,10 +207,11 @@
   }
   .main { flex:1; display:flex; flex-direction:column; min-width:0; }
   #chart { flex:1; min-height:220px; }
-  #sigMapWrap { flex:1 1 38%; min-height:240px; max-height:340px; display:flex; flex-direction:column;
-                border-bottom:1px solid var(--line); background:var(--panel); }
-  #sigMap { flex:1; min-height:160px; background:#e8eef5; }
-  #sigMapLegend { flex:0 0 auto; padding:8px 14px 10px; font-size:15px; line-height:1.45; }
+  #view-undervalued #sigMapWrap { display:flex; flex-direction:column; height:440px; min-height:300px;
+                margin:14px 0 4px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel); }
+  #view-undervalued #sigMap { flex:1; min-height:220px; background:#e8eef5; }
+  #view-undervalued #sigMapLegend { flex:0 0 auto; padding:10px 14px; font-size:13px; line-height:1.45;
+                background:var(--panel); border-top:1px solid var(--line); }
   #haesolPanel { max-height:92px; overflow:auto; }
   .acard { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; cursor:pointer;
            background:var(--panel); display:flex; flex-direction:column; gap:5px; transition:box-shadow .15s,border-color .15s; }
@@ -497,7 +498,7 @@
     #groupSubnav { padding:8px 12px; }
     .side.collapsed { max-height:0; border:none; }
     .main { min-height:64vh; }
-    #sigMapWrap { flex:0 0 auto; height:340px; max-height:none; }
+    #view-undervalued #sigMapWrap { height:360px; min-height:280px; }
     /* 좌우 분할 → 목록 위 + 지도 아래로 스택 */
     .mapsplit { flex-direction:column; height:auto; min-height:0; }
     .ms-list { width:100% !important; min-width:0; max-width:none; max-height:48vh; }
@@ -675,12 +676,6 @@
   .signal-more-menu button { display:block; width:100%; min-height:44px; padding:8px 10px; text-align:left;
                              border:0; border-radius:6px; background:transparent; color:var(--txt); font:inherit; cursor:pointer; }
   .signal-more-menu button:hover { background:var(--accent-weak); }
-  .signal-mode-tabs { display:flex; gap:4px; padding:8px 20px; border-bottom:1px solid var(--line);
-                      background:var(--panel); overflow-x:auto; flex:0 0 auto; }
-  .signal-mode-tabs button { min-height:44px; padding:8px 16px; border:0; border-radius:9px;
-                             background:transparent; color:var(--dim); font:inherit; font-size:15px;
-                             font-weight:700; cursor:pointer; white-space:nowrap; }
-  .signal-mode-tabs button[aria-selected="true"] { background:var(--accent-weak); color:var(--accent); }
   #sideOpenToggle:not([hidden]) { display:inline-flex; align-items:center; min-height:44px; }
   #sideOpenToggle[hidden] { display:none !important; }
   .signal-assessment { width:100%; box-sizing:border-box; margin:4px 0 6px; padding:14px 17px; max-width:none; border:1px solid var(--line);
@@ -708,9 +703,6 @@
   .signal-trend-status { color:var(--dim); font-size:13px; padding:0 14px; }
   .signal-trend-status:not(:empty) { padding-top:10px; padding-bottom:10px; }
   #signalPanelTrend #chart { flex:1 0 320px; min-height:320px; }
-  #signalPanelMap { display:flex; flex-direction:column; }
-  #sigMapWrap { flex:1 0 auto; min-height:360px; max-height:none; height:auto; border:0; }
-  #sigMapLegend { background:var(--panel); border-top:1px solid var(--line); }
   .signal-section-label { font-weight:700; font-size:14px; }
   @media (max-width:760px) {
     body.tab-signal header { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px;
@@ -744,8 +736,6 @@
     .signal-hero-title { order:-1; flex:1 1 100%; }
     .signal-hero-title h2 { font-size:19px; }
     .signal-listings-link { margin-left:auto; }
-    .signal-mode-tabs { padding:6px 10px; gap:2px; }
-    .signal-mode-tabs button { flex:1 0 auto; padding:8px 10px; font-size:14px; }
     #haesolPanel { padding:4px 12px 12px; }
     .signal-assessment { padding:11px 12px; }
     .signal-assessment-heading { display:block; }
@@ -753,7 +743,6 @@
     .signal-assessment-fact { align-items:flex-start; flex-wrap:wrap; gap:2px 8px; }
     .signal-assessment-fact b { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
     .signal-assessment-fact span { text-align:left; }
-    #sigMapWrap { min-height:300px; }
   }
 </style>
 </head>
@@ -843,11 +832,7 @@
           <button type="button" onclick="this.closest('details').open=false;openNbhd(selected)">동네 리포트</button>
         </div></details>
       </div>
-      <div class="signal-mode-tabs" role="tablist" aria-label="시그널 살펴보기" onkeydown="signalModeKey(event)">
-        <button type="button" id="signalModeTrend" role="tab" aria-controls="signalPanelTrend" aria-selected="true" onclick="setSignalView('trend')">가격·수급 추세</button>
-        <button type="button" id="signalModeMap" role="tab" aria-controls="signalPanelMap" aria-selected="false" tabindex="-1" onclick="setSignalView('map')">급지 지도</button>
-      </div>
-      <section id="signalPanelTrend" class="signal-pane" role="tabpanel" aria-labelledby="signalModeTrend" tabindex="0" hidden>
+      <section id="signalPanelTrend" class="signal-pane" tabindex="0">
         <div id="haesolPanel" aria-live="polite"></div>
         <div id="signalTrendStatus" role="status" class="signal-trend-status"></div>
         <div class="chartbar"><span class="signal-section-label">상세 지표</span>
@@ -875,12 +860,6 @@
           <span id="macroCaret" style="margin-left:auto">▴</span></div>
         <div id="macroMiniChart" style="height:76px"></div>
       </div>
-      </section>
-      <section id="signalPanelMap" class="signal-pane" role="tabpanel" aria-labelledby="signalModeMap" tabindex="0" hidden>
-        <div id="sigMapWrap">
-          <div id="sigMap" role="img" aria-label="이번 주 시군구 시그널 지도"></div>
-          <div id="sigMapLegend">지역별 가격 급지를 색으로 보여 줍니다. 색이 없는 지역은 급지 자료가 없습니다.</div>
-        </div>
       </section>
     </div>
   </div>
@@ -1010,7 +989,11 @@
 <div id="view-undervalued" style="display:none">
   <div class="sec">
     <h2 class="page-head">지역 가격 비교</h2>
-    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지역·단지의 적정가나 매수 신호는 아닙니다.</p>
+    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지도 색은 평단가 급지이며, 지역·단지의 적정가나 매수 신호는 아닙니다.</p>
+    <div id="sigMapWrap">
+      <div id="sigMap" role="img" aria-label="시군구 가격 급지 지도"></div>
+      <div id="sigMapLegend">평단가 급지입니다. 진한 색일수록 비싼 급지이고, 회색은 급지 자료가 없습니다. 매수 추천이 아닙니다.</div>
+    </div>
     <div class="rpc-controls">
       <label>전용면적대 <select id="rpcArea" class="ctrl" onchange="renderRegionPriceComparison()"><option value="84">84㎡ ±5㎡</option><option value="59">59㎡ ±5㎡</option></select></label>
       <label>첫 지역 <select id="rpcRegionA" class="ctrl" onchange="renderRegionPriceComparison()"></select></label>
@@ -4314,14 +4297,19 @@ function _geoRow(lut, name, code){
   const row=lut&&lut[_onorm(name)];
   return row&&code&&row.region_id===`kb:${code}00000`?row:null;
 }
+const _GRADE_FILL={A:'#1e3a8a',B:'#1d4ed8',C:'#3b82f6',D:'#93c5fd',E:'#dbeafe'};
 function _choStyle(mode, name, gl, sido, sl, code){
   if(mode==='signal'){
     const row=_geoRow(sl,name,code), col=row&&_SIG_COLOR[displaySignal(row)];
     const on=selected&&_onorm(selected)===_onorm(name);
     return {color:on?'#0f172a':'#fff',weight:on?3:1,fillColor:col||'#e2e8f0',fillOpacity:col?0.72:0.16};
   }
-  if(mode==='grade'){ const row=_geoRow(gl,name,code), gd=row&&_REGION_GRADE[row['급지']];
-    return {color:'#fff',weight:1,fillColor:gd?gd.col:'#e2e8f0',fillOpacity:gd?0.5:0.12}; }
+  if(mode==='grade'){
+    const row=_geoRow(gl,name,code), grade=row&&row['급지'], fill=_GRADE_FILL[grade]||'#e2e8f0';
+    const id=row&&row.region_id;
+    const picked=id&&(id===document.getElementById('rpcRegionA')?.value||id===document.getElementById('rpcRegionB')?.value);
+    return {color:picked?'#0f172a':'#fff',weight:picked?2.5:1,fillColor:fill,fillOpacity:grade?0.78:0.35};
+  }
   const t=_regTags(name,sido), c=t?_REG_COLOR[_regPrimary(t)]:null;
   const note=(_REGULATION.notes||{})[name];
   return {color:'#fff',weight:1,fillColor:c||(note?'#fbbf24':'#e2e8f0'),fillOpacity:c?0.5:(note?0.35:0.08)};
@@ -4347,7 +4335,11 @@ async function setOverlay(map, mode, onClick){
   await _ensureGeo(); if(!_uvGeo) return;
   const gl=_gradeLut();
   const sl=mode==='signal'?_signalLut():null;
-  map._ovLayer=L.geoJSON(_uvGeo,{ pane:mode==='signal'?'overlayPane':'tilePane',
+  if(mode!=='signal' && !map.getPane('choroplethPane')){
+    const pane=map.createPane('choroplethPane');
+    pane.style.zIndex='350';
+  }
+  map._ovLayer=L.geoJSON(_uvGeo,{ pane:mode==='signal'?'overlayPane':'choroplethPane',
     style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido,sl,f.properties.code),
     onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido,sl,f.properties.code),{sticky:true});
       if(onClick) l.on('click',()=>onClick(f.properties.name)); }
@@ -5105,7 +5097,9 @@ async function loadUndervalued(){
     });
     if(!valid.length){
       status.textContent='지역 코드가 검증된 시군구가 없어 가격 표본을 연결하지 않았습니다.';
-      document.getElementById('rpcCards').innerHTML=''; return;
+      document.getElementById('rpcCards').innerHTML='';
+      queueGradeMap();
+      return;
     }
     const a=document.getElementById('rpcRegionA'), b=document.getElementById('rpcRegionB');
     const prevA=a.value, prevB=b.value;
@@ -5119,7 +5113,10 @@ async function loadUndervalued(){
     b.value=valid.some(row=>row.region_id===prevB)?prevB:'';
     renderRegionPriceComparison();
   }catch(_error){
-    if(generation===_rpcGeneration) status.textContent='지역 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.';
+    if(generation===_rpcGeneration){
+      status.textContent='지역 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.';
+      queueGradeMap();
+    }
   }
 }
 function _rpcCard(row, maxPrice){
@@ -5145,8 +5142,8 @@ async function renderRegionPriceComparison(){
   const area=Number(document.getElementById('rpcArea').value);
   const status=document.getElementById('rpcStatus'), cards=document.getElementById('rpcCards');
   const compare=document.getElementById('rpcCompare');
-  if(!a) return;
-  if(a===b){ status.textContent='서로 다른 두 지역을 선택해 주세요.'; cards.innerHTML=''; compare.textContent=''; return; }
+  if(!a){ queueGradeMap(); return; }
+  if(a===b){ status.textContent='서로 다른 두 지역을 선택해 주세요.'; cards.innerHTML=''; compare.textContent=''; queueGradeMap(); return; }
   status.textContent='국토부 실거래 표본을 불러오는 중입니다. 첫 조회는 다소 걸릴 수 있습니다.';
   cards.innerHTML=''; compare.textContent='';
   const refs=b?[a,b]:[a];
@@ -5171,6 +5168,7 @@ async function renderRegionPriceComparison(){
     const diff=Math.abs(data[0].median_manwon-data[1].median_manwon);
     compare.textContent=`두 지역 거래 표본의 중앙값 차이 ${diff===0?'0원':_eok(diff)}. 단지·층·연식과 거래량 차이는 통제하지 않았으므로 어느 지역이 저평가됐다는 뜻은 아닙니다.`;
   }else compare.textContent=b?'표본 부족·원천 장애·지난 수집분이 있으면 가격 차이를 확정하지 않습니다.':'';
+  queueGradeMap();
 }
 
 let uvChart, _uvList=[];
@@ -5378,7 +5376,6 @@ function drawUvScatter(rows){
 }
 
 /* ---------- 시그널 탭 ---------- */
-const _SIGNAL_VIEWS=['trend','map'];
 let _signalMode='trend', _signalTrendGen=0, _signalTrendRegion=null;
 const _signalMobile=()=>window.matchMedia('(max-width:760px)').matches;
 function closeSignalRegions(restoreFocus=true){
@@ -5398,30 +5395,11 @@ function closeSignalRegions(restoreFocus=true){
   opener.hidden=mobile?false:!collapsed;
   if(wasOpen && restoreFocus) document.getElementById(mobile?'sideOpenToggle':'sideToggle').focus();
 }
-function signalModeKey(event){
-  const index=_SIGNAL_VIEWS.findIndex(mode=>event.target.id==='signalMode'+mode[0].toUpperCase()+mode.slice(1));
-  if(index<0) return;
-  if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) return;
-  const next=event.key==='ArrowRight'?index+1:event.key==='ArrowLeft'?index-1:
-    event.key==='Home'?0:_SIGNAL_VIEWS.length-1;
-  event.preventDefault();
-  const mode=_SIGNAL_VIEWS[(next+_SIGNAL_VIEWS.length)%_SIGNAL_VIEWS.length];
-  setSignalView(mode);
-  document.getElementById('signalMode'+mode[0].toUpperCase()+mode.slice(1)).focus();
-}
-function setSignalView(mode){
-  if(!_SIGNAL_VIEWS.includes(mode)) return;
-  _signalMode=mode;
-  for(const value of _SIGNAL_VIEWS){
-    const name=value[0].toUpperCase()+value.slice(1);
-    const panel=document.getElementById('signalPanel'+name), tab=document.getElementById('signalMode'+name);
-    panel.hidden=value!==mode;
-    tab.setAttribute('aria-selected',String(value===mode));
-    tab.tabIndex=value===mode?0:-1;
-  }
-  if(mode==='trend') loadSignalTrend(selected);
-  else ++_signalTrendGen;
-  if(mode==='map') requestAnimationFrame(()=>drawSigMap());
+function setSignalView(){
+  _signalMode='trend';
+  const panel=document.getElementById('signalPanelTrend');
+  if(panel) panel.hidden=false;
+  loadSignalTrend(selected);
 }
 document.addEventListener('keydown', event=>{
   const root=document.getElementById('view-signal');
@@ -5702,7 +5680,12 @@ async function selectRegion(region, focusHeading=false){
   document.getElementById('signalPanelTrend').scrollTop=0;
   window.SignalV2?.paintRegion(region, r.region_id);
 }
-let sigMap=null;
+let sigMap=null, _gradeDraw=Promise.resolve();
+function queueGradeMap(){
+  const run=()=>drawSigMap();
+  _gradeDraw=_gradeDraw.then(run, run);
+  return _gradeDraw;
+}
 function _sigScopeNote(r){
   const bits=[];
   const up=meta&&meta.zones&&meta.zones.momentum_up;
@@ -5717,7 +5700,6 @@ function _sigScopeNote(r){
   return bits.length?`<div style="margin-top:8px;color:var(--txt);font-size:15px;line-height:1.55">${bits.join(' ')}</div>`:'';
 }
 async function drawSigMap(){
-  if(_signalMode!=='map') return;
   const el=document.getElementById('sigMap');
   if(!el || typeof L==='undefined') return;
   if(!sigMap){
@@ -5726,20 +5708,19 @@ async function drawSigMap(){
   }
   await setOverlay(sigMap, 'grade', name=>{
     const row=(allSignals||[]).find(s=>_onorm(s.region)===_onorm(name));
-    if(row && row.region!==selected) selectRegion(row.region);
+    const a=document.getElementById('rpcRegionA'), b=document.getElementById('rpcRegionB');
+    if(!row||!row.region_id||!a||!b||a.value===row.region_id) return;
+    if(![...b.options].some(o=>o.value===row.region_id)) return;
+    b.value=row.region_id;
+    renderRegionPriceComparison();
   });
   const lg=document.getElementById('sigMapLegend');
   if(lg){
-    const order=['A','B','C','D','E'];
-    const seoul=(allSignals||[]).filter(s=>s.group==='서울' && /구$/.test(s.region) && !s.region.endsWith('개구'));
-    const cnt={};
-    seoul.forEach(s=>{ if(s['급지']) cnt[s['급지']]=(cnt[s['급지']]||0)+1; });
-    const chips=order.map(g=>{const info=_REGION_GRADE[g];return `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${info.col};display:inline-block"></span>${info.label}${cnt[g]?` ${cnt[g]}`:''}</span>`;}).join('');
-    const head=seoul.length?`서울 자치구 ${seoul.length}곳 · 평단가 기준 급지`:'시군구 평단가 기준 급지';
-    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">${head}</div><div>${chips}</div>
-      <div style="color:var(--dim);margin-top:2px">가격 분위에 따른 지역 분류입니다. 종합 입지 평가나 매수 추천을 뜻하지 않습니다. 회색은 급지 자료가 없습니다.</div>`;
+    const chips=['A','B','C','D','E'].map(g=>`<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${_GRADE_FILL[g]};display:inline-block"></span>${_REGION_GRADE[g].label}</span>`).join('');
+    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">수도권 시군구 · 평단가 급지</div><div>${chips}</div>
+      <div style="color:var(--dim);margin-top:2px">진한 파랑일수록 비싼 급지입니다. 회색은 급지 자료가 없습니다. 구를 누르면 아래 비교 지역으로 들어갑니다. 매수 추천이 아닙니다.</div>`;
   }
-  setTimeout(()=>{ try{sigMap.invalidateSize();}catch(e){} if(typeof chart!=='undefined' && chart) chart.resize(); }, 80);
+  setTimeout(()=>{ try{sigMap.invalidateSize();}catch(e){} }, 80);
 }
 function wrapKo(s, n){
   const out=[]; let cur='';
