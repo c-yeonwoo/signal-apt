@@ -1,7 +1,7 @@
 """Report endpoints expose deterministic evidence without opening private sources."""
 
 import json
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pandas as pd
@@ -124,6 +124,38 @@ def test_listing_report_does_not_reintroduce_affordable_line_for_stale_budget(mo
     assert "검증 가능한 확정 매수력이 없어" in report["lines"]["cash"]
     assert "계산상 됩니다" not in report["lines"]["cash"]
     assert report["decision"]["feasibility"] == "unknown"
+
+
+def test_listing_explanation_keeps_id_for_same_evidence_but_rejects_changed_price(monkeypatch):
+    from realty_signal import api, db
+    from realty_signal.services import buyer_decision, property_analysis, report_narrative
+
+    row = listing_row("stable-explanation", price=50_000, area=70)
+    monkeypatch.setattr(reports_v2.deps, "uid", lambda request: 7)
+    monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda request: True)
+    monkeypatch.setattr(property_analysis, "resolve", lambda key, private_allowed: row)
+    monkeypatch.setattr(api, "complex_detail", lambda region, name, **kwargs: {"평형별": []})
+    monkeypatch.setattr(db, "profile_get", lambda uid: {})
+    monkeypatch.setattr(db, "kv_get", lambda *args, **kwargs: [])
+    monkeypatch.setattr(reports_v2.config, "rollout_flags", lambda: {
+        "report_v2_enabled": True, "contextual_explanations_enabled": True})
+    start = datetime(2026, 10, 5, tzinfo=timezone.utc)
+    ticks = iter(start + timedelta(seconds=n) for n in range(4))
+    monkeypatch.setattr(buyer_decision, "datetime", SimpleNamespace(now=lambda tz: next(ticks)))
+    monkeypatch.setattr(report_narrative, "enqueue", lambda *args, **kwargs: (
+        {"job_id": "synthetic", "status": "pending"}, 202))
+
+    first = json.loads(reports_v2.listing_report(None, row["key"]).body)
+    second = json.loads(reports_v2.listing_report(None, row["key"]).body)
+    assert first["decision"]["generated_at"] != second["decision"]["generated_at"]
+    assert first["report_id"] == second["report_id"]
+    accepted = reports_v2.explanation_request(None, first["report_id"], {
+        "type": "listing", "key": row["key"], "mode": "easy"})
+    assert accepted.status_code == 202
+
+    row["총액"] = 51_000
+    changed = json.loads(reports_v2.listing_report(None, row["key"]).body)
+    assert changed["report_id"] != first["report_id"]
 
 
 def test_listing_report_get_uses_cache_and_post_requests_refresh(monkeypatch):
