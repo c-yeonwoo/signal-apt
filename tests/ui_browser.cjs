@@ -400,6 +400,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByRole('button',{name:'내 지도',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#mymap');
     assert.match(await page.locator('#myMapGuide').textContent(),/비교를 시작/);
+    assert.match(await page.locator('#mmTray').textContent(),/비교에 넣은 단지/);
     await page.getByRole('button',{name:'내 조건',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#mypage');
     assert.equal(await page.locator('#mp_capital').isVisible(),true);
