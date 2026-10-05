@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from realty_signal import config
 from realty_signal.routes import deps
+from realty_signal.services import buyer_decision
 from realty_signal.services import market_data as md
 from realty_signal.services import decision_notes_v2 as notes
 from realty_signal.services import report_snapshots_v2 as snapshots
@@ -44,7 +45,10 @@ def _input_error(exc: ValueError, messages: dict[str, str]) -> str:
 
 
 def _id(payload: dict) -> str:
-    return sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False,
+    # 생성 시각·캐시 적중 표시는 판단 근거가 아니다. 재조회만으로 ID가 바뀌면
+    # 저장본과 선택형 설명의 근거 일치 검사가 항상 실패한다.
+    stable = buyer_decision.cache_payload(payload)
+    return sha256(json.dumps(stable, sort_keys=True, ensure_ascii=False,
                              default=str).encode()).hexdigest()
 
 
