@@ -69,3 +69,23 @@ def test_price_comparison_route_is_registered():
     from realty_signal.routes.complex import router
     assert any(getattr(route, "path", None) == "/api/region-trade-prices/{region_ref}"
                for route in router.routes)
+
+
+def test_authenticated_query_area_reaches_handler(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from realty_signal import auth, db
+
+    monkeypatch.setattr(db, "DB", tmp_path / "app.db")
+    db._migrated[0] = False
+    for key in ("INVITE_CODES", "STUDENT_ALLOWLIST", "RAILWAY_ENVIRONMENT", "APP_ENV"):
+        monkeypatch.delenv(key, raising=False)
+    token, error = auth.signup("price@example.com", "secret1", accept_tos=True)
+    assert error is None
+    client = TestClient(api.app)
+    client.cookies.set(auth.COOKIE, token)
+    monkeypatch.setattr(api, "region_trade_prices", lambda ref, area: {"region_ref": ref, "area": area})
+    response = client.get("/api/region-trade-prices/kb%3A1135000000?area=84")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"region_ref": "kb:1135000000", "area": 84}
+    assert client.get("/api/region-trade-prices/kb%3A1135000000?area=59").json()["area"] == 59
+    assert client.get("/api/region-trade-prices/kb%3A1135000000?area=invalid").status_code == 422
