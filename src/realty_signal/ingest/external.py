@@ -240,6 +240,38 @@ def parse_place(address: str) -> dict:
     return {"시도": sido, "지역": region, "동": dong}
 
 
+_ROAD_PAREN = re.compile(r"\s*\((?:서울|경기|인천|부산|대구|광주|대전|울산|세종|제주)[^)]*\)")
+_NAME_PAREN = re.compile(r"\(([^)]+)\)")
+_UNIT_CLAUSE = re.compile(
+    r"제?[0-9]+동|제[가-힣]{1,4}동|[0-9]+층[0-9]*호|제?[0-9]+층|제?[0-9]+호|[0-9]+-[0-9]+호"
+)
+_LOT = re.compile(r"^[0-9]+(?:-[0-9]+)?$")
+
+
+def complex_name(address: str) -> str:
+    """목록 제목에 쓸 단지명. 없으면 빈 문자열. 사건번호는 넣지 않는다."""
+    text = " ".join((address or "").split())
+    for match in _NAME_PAREN.finditer(text):
+        inner = match.group(1).strip()
+        if re.match(r"^(서울|경기|인천|부산|대구|광주|대전|울산|세종|제주)", inner):
+            continue
+        if "," in inner:
+            name = inner.split(",")[-1].strip()
+            if name:
+                return name
+    head = _ROAD_PAREN.sub("", text)
+    head = re.sub(r"\s*외\s*[0-9]+필지.*$", "", head)
+    head = _UNIT_CLAUSE.sub(" ", head).replace(",", " ")
+    tokens = [token for token in head.split() if token and token != "외"]
+    lot_at = None
+    for index, token in enumerate(tokens):
+        if _LOT.match(token):
+            lot_at = index
+    if lot_at is None:
+        return ""
+    return " ".join(tokens[lot_at + 1:]).strip()
+
+
 def card_from_hank(row: dict) -> dict | None:
     """목록 한 건을 매물 카드 필드로. 권장 입찰가와 전용면적은 넣지 않는다."""
     lat, lng = _num(row.get("lat")), _num(row.get("lng"))
@@ -251,6 +283,7 @@ def card_from_hank(row: dict) -> dict | None:
     place = parse_place(row.get("address") or "")
     special = _text(row.get("special_condition"))
     case = _text(row.get("unique_id"))
+    title = complex_name(row.get("address") or "") or place["동"] or "아파트"
     hid = row.get("id")
     if hid not in (None, ""):
         ident = f"hank:{hid}"
@@ -265,7 +298,7 @@ def card_from_hank(row: dict) -> dict | None:
         "source": "hank",
         "id": ident,
         "사건번호": case,
-        "단지명": case or "아파트 경매",
+        "단지명": title,
         "region": place["지역"],
         "시도": place["시도"],
         "동": place["동"],

@@ -3449,7 +3449,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                "key": _listing_key(kind, raw, ref, name, region)}
         if kind == "경매":
             row.update(입찰상태=raw.get("입찰상태"), 확인할것=raw.get("확인할것") or [],
-                       검토용상한=raw.get("권장입찰가"))
+                       검토용상한=raw.get("권장입찰가"), 사건번호=raw.get("사건번호") or "")
         row.update(tr.to_dict())
         if kind == "경매" and raw.get("source"):
             row["source"] = raw.get("source")
