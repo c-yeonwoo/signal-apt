@@ -48,8 +48,28 @@ def test_places_and_routes_are_labeled_as_point_estimates(monkeypatch):
         "distance_m": 700, "path": [[37.65, 127.07], [37.66, 127.08]], "origin_quality": "listing_point_unverified_entrance"})
     out = listing_location.build(_row(), {"직장": "회사", "직장lat": 37.5, "직장lng": 127.0})
     assert out["mobility"]["station_walk"]["minutes"] == 9
+    assert out["mobility"]["station_point"]["coordinate"] == [37.66, 127.08]
     assert out["mobility"]["work_transit"]["destination"] == "회사"
     assert "출입구" in out["mobility"]["reason"]
+
+
+def test_location_short_process_cache_is_scoped_and_invalidated(monkeypatch):
+    listing_location._CACHE.clear()
+    monkeypatch.setattr(listing_location.config, "kakao_key", lambda: "test")
+    calls = []
+    monkeypatch.setattr(listing_location, "build", lambda row, profile, entrance: (
+        calls.append((row, profile, entrance)) or {"status": "observed"}))
+    row = _row()
+    profile = {"직장lat": 37.5, "직장lng": 127.0}
+    one = listing_location.cached_build(row, profile, uid=7)
+    assert listing_location.cached_build(row, profile, uid=7) is one
+    assert len(calls) == 1
+    listing_location.cached_build(row, profile, uid=8)
+    listing_location.cached_build(row, {**profile, "직장lng": 127.1}, uid=7)
+    listing_location.cached_build({**row, "fetched_at": 123}, profile, uid=7)
+    listing_location.cached_build(row, profile, {"lat": 37.65, "lng": 127.07}, uid=7)
+    assert len(calls) == 5
+    listing_location._CACHE.clear()
 
 
 def test_kakao_parse_walk_and_public_transit(monkeypatch):

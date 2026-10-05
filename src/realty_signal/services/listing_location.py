@@ -3,11 +3,47 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
+from hashlib import sha256
+import json
+from threading import Lock
+import time
 
 from realty_signal import config
 from realty_signal.ingest import kakao_places, school_zone
 from realty_signal.services import listing_entrance
 from realty_signal.services.property_analysis import snapshot
+
+# Kakao 응답은 디스크에 저장하지 않고 프로세스 안에서만 짧게 재사용한다.
+_CACHE: OrderedDict[str, tuple[float, int, dict]] = OrderedDict()
+_CACHE_LOCK = Lock()
+_CACHE_SECONDS = 15 * 60
+_FAILURE_SECONDS = 60
+
+
+def cached_build(row: dict, profile: dict | None = None, entrance: dict | None = None,
+                 *, uid: int | None = None) -> dict:
+    profile = profile or {}
+    identity = [uid, row.get("key"), row.get("fetched_at"), row.get("lat"), row.get("lng"),
+                entrance, [profile.get(k) for k in ("직장", "직장lat", "직장lng")], bool(config.kakao_key())]
+    key = sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    now = time.monotonic()
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+        if hit and now - hit[0] < hit[1]:
+            _CACHE.move_to_end(key)
+            return hit[2]
+    result = build(row, profile, entrance)
+    parts = [result.get("school") or {}, result.get("amenities") or {},
+             (result.get("mobility") or {}).get("station_walk") or {}]
+    parts.extend(((result.get("amenities") or {}).get("by_category") or {}).values())
+    ttl = _FAILURE_SECONDS if any(part.get("status") in {"unavailable", "failed"} for part in parts) else _CACHE_SECONDS
+    with _CACHE_LOCK:
+        _CACHE[key] = (time.monotonic(), ttl, result)
+        _CACHE.move_to_end(key)
+        while len(_CACHE) > 128:
+            _CACHE.popitem(last=False)
+    return result
 
 
 def _safe(call, fallback: dict) -> dict:
@@ -85,6 +121,8 @@ def build(row: dict, profile: dict | None = None, entrance: dict | None = None) 
         commute_route["origin_quality"] = origin_source
     mobility = {"status": "partial" if station_route or commute_route else "unverified",
                 "station_walk": station_route, "work_transit": commute_route,
+                "station_point": {"name": station["name"], "coordinate": [station["lat"], station["lng"]],
+                                  "straight_distance_m": station.get("distance_m")} if station else None,
                 **origin,
                 "transit_note": "대중교통 안내 시간은 실제 출퇴근 시간대의 소요시간을 보증하지 않습니다."}
     amenities = {"status": "partial" if any("count_within_radius" in p for p in places.values())

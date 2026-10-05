@@ -13,7 +13,8 @@ from realty_signal import config, jsonx
 
 HOST = "https://dapi.kakao.com"
 DOCS = "https://developers.kakao.com/docs/ko/kakaomap/rest-api"
-POI_TYPES = {"SW8": "지하철역", "MT1": "대형마트", "HP8": "병원", "CS2": "편의점"}
+POI_TYPES = {"SW8": "지하철역", "MT1": "대형마트", "HP8": "병원", "CS2": "편의점",
+             "PS3": "어린이집·유치원"}
 
 
 def _number(value):
