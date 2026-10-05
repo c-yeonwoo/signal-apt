@@ -45,6 +45,32 @@ def build(path: Path = typer.Argument(..., exists=True, help="KB 주간 시계�
                   f"(지역 {len(kb.regions)} · 최신 {kb.last_date.date()})")
 
 
+@app.command("collect-external")
+def collect_external(source: str = typer.Option("hank", help="쉼표로 구분. 기본은 hank. aptgin 은 건너뛴다")):
+    """외부 목록 수집. 행크 진행 아파트를 캐시에 쓴다. 세션은 저장하지 않는다."""
+    from realty_signal.ingest.external import collect, write_hank_cache
+
+    names = [part.strip() for part in source.split(",") if part.strip()]
+    try:
+        results = collect(names)
+    except Exception as exc:
+        console.print(f"[red]수집 불가:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    for result in results:
+        if result.skipped:
+            console.print(f"[yellow]{result.name}[/yellow] 건너뜀 — {result.error}")
+            continue
+        if not result.ok:
+            console.print(f"[red]{result.name}[/red] 실패 — {result.error}")
+            continue
+        if result.name == "hank":
+            write_hank_cache(result)
+            tail = " · 페이지 상한" if result.truncated else ""
+            console.print(f"[green]hank[/green] {result.count}건{tail}")
+        else:
+            console.print(f"[green]{result.name}[/green] {result.count}건")
+
+
 @app.command()
 def fetch():
     """KB 데이터허브에서 최신 지표를 자동 수집해 캐시 갱신 (엑셀 불필요)."""

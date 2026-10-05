@@ -245,6 +245,14 @@ async def _auto_refresh_loop():
         from realty_signal.services import telegram_updates
         return telegram_updates.run()
 
+    def hank_job():
+        from realty_signal.ingest import external
+        return external.refresh_hank_cache()
+
+    def hank_due() -> bool:
+        from realty_signal.ingest import external
+        return external.hank_due()
+
     specs = [
         ("kb", kb_job, 6*3600),
         ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
@@ -258,6 +266,7 @@ async def _auto_refresh_loop():
         ("region_alerts", region_alert_job, 900),
         ("presale_alerts", presale_alert_job, 6*3600),
         ("telegram_updates", telegram_update_job, 900),
+        ("hank", hank_job, 12 * 3600),
     ]
     # Each loop owns a renewable lease and its own retry/due clock.
     async def serve(name, fn, interval):
@@ -268,7 +277,8 @@ async def _auto_refresh_loop():
                                                  (name == "hanbang" and bool(config.personal_listing_email())
                                                   and _hanbang_stale()) or
                                                  (name == "quicksale" and _quicksale_stale()) or
-                                                 (name == "certified" and _certified_stale()))
+                                                 (name == "certified" and _certified_stale()) or
+                                                 (name == "hank" and hank_due()))
             except Exception:
                 log.error("job state failure: %s", name)
             await asyncio.sleep(60)
@@ -1888,6 +1898,8 @@ def tradeup(current_region: str, current_value: float, loan_balance: float = 0,
     floor = current_value * 0.6                           # 현 시세 60% 미만은 갈아타기 아님(오피스텔·소형 노이즈 제거)
     listings = []
     for L in _build_listings({"경매", "급매"}, include_private=_personal_listings_allowed(request=request)):
+        if L.get("유형") == "경매" and L.get("입찰상태") != "conditional_bid":
+            continue
         tot = L.get("총액")
         if not tot or tot > budget or tot < floor:
             continue
@@ -3425,7 +3437,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                            "matched" if raw.get("시도") else "name_only")
         tr = listing_timing(kind, raw, safe_signal, safe_grade, asof=_timing_asof())
         row = {"유형": kind, "단지명": name, "지역": region, "시도": raw.get("시도"),
-               "동": raw.get("동") if identity_ok and kind == "일반매물" else None,
+               "동": raw.get("동") if kind == "경매" or (identity_ok and kind == "일반매물") else None,
                "지역코드": source_code, "시그널": safe_signal,
                "원시시그널": signal or "", "판정상태": (assessment.get("assessment_status") or "held") if identity_ok else "held",
                "지역식별상태": identity_status,
@@ -3439,6 +3451,8 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             row.update(입찰상태=raw.get("입찰상태"), 확인할것=raw.get("확인할것") or [],
                        검토용상한=raw.get("권장입찰가"))
         row.update(tr.to_dict())
+        if kind == "경매" and raw.get("source"):
+            row["source"] = raw.get("source")
         if kind in {"일반매물", "급매", "찐매물"}:
             row["supplier_flags"] = (["urgent"] if raw.get("급매") or raw.get("급매표시") else []) + (
                 ["certified"] if raw.get("찐매물") or raw.get("검증표시") else [])
@@ -3466,10 +3480,21 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             raw_auction_signals = _signal_map()
         except Exception:  # noqa: BLE001 — 원시 등급 장애가 경매 매물 조회를 막지 않는다.
             raw_auction_signals = {}
-        for r in auction.enrich(auction.load(), safe_auction_signals, {}):
+        ranked = auction.enrich(auction.load(), safe_auction_signals, {})
+        known_cases = {r.get("사건번호") for r in ranked if r.get("사건번호")}
+        for r in ranked:
             add("경매", r.get("단지명"), r.get("region"), raw_auction_signals.get(r.get("region")),
                 "총비용우위", r.get("총비용우위율"), "%", r, r.get("lat"), r.get("lng"),
                 {"id": r.get("id")}, total=r.get("최저매각가") or r.get("권장입찰가"))
+        from realty_signal.ingest import external
+        for card in external.read_hank_cards():
+            if card.get("사건번호") and card["사건번호"] in known_cases:
+                continue
+            add("경매", card.get("단지명"), card.get("region"),
+                raw_auction_signals.get(card.get("region")),
+                "최저가", None, "", card, card.get("lat"), card.get("lng"),
+                {"id": card.get("id"), "건물면적": card.get("건물면적"), "주소": card.get("주소")},
+                total=card.get("최저매각가"))
     if "급매" in want:
         for m in _radar_verified_rows(QUICKSALE_FILE, _QUICKSALE_SCAN_VER):
             add("급매", m.get("단지명"), m.get("지역"), m.get("시그널"),
@@ -3523,6 +3548,9 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
 
     private_access = _personal_listings_allowed(request=request)
     requested_types = set(t for t in types.split(",") if t)
+    if "경매" in requested_types:
+        from realty_signal.ingest import external
+        external.ensure_hank_cache()
     out = _build_listings(requested_types, include_private=private_access)
     source_record_count = len(out)
     collapsed = collapse(out)

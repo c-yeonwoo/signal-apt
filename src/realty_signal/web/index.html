@@ -938,7 +938,7 @@
 <div id="view-auction" style="display:none">
   <div data-admin-only class="sec" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px">
     <div style="font-size:13px;font-weight:700;margin-bottom:6px">경매 매물 빠르게 넣기 (관리자)</div>
-    <p style="color:var(--dim);font-size:12px;margin:0 0 10px;line-height:1.55">법원 경매·온비드 물건 상세 페이지에서 북마클릿을 누르면 본문 텍스트가 클립보드에 복사되고 Signal APT 붙여넣기 창이 열립니다. 상업 경매사이트 자동 크롤은 하지 않습니다.</p>
+    <p style="color:var(--dim);font-size:12px;margin:0 0 10px;line-height:1.55">행크의 진행 아파트 목록은 자동으로 불러와 지도에 찍습니다. 권리와 시세가 없어 입찰가는 비워 둡니다. 법원 경매 상세는 북마클릿으로 넣은 물건만 계산합니다.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <a id="aucBookmarklet" href="#" class="btn primary" style="padding:6px 12px;text-decoration:none;cursor:grab" title="이 링크를 북마크바로 드래그">경매 긁어오기</a>
       <span class="btn" onclick="openPaste()">붙여넣기</span>
@@ -3858,6 +3858,17 @@ function listingPriceLine(price){
   const diff=gap===0?'차이 없음':`${Math.abs(gap)}% ${gap<0?'낮음':'높음'}`;
   return `${condition} 실거래 중앙값 대비 ${diff} · ${price['표본수']}건 (할인율 아님)`;
 }
+function _laAuctionSize(x){
+  const area=Number(x.ref?.['건물면적']);
+  return Number.isFinite(area)&&area>0?`건물 ${Math.round(area)}㎡ · 전용 아님`:'전용면적 확인 전';
+}
+function _laRowPrice(x){
+  if(_SALE_TYPES.includes(x['유형']))
+    return `<span class="la-price"><b>호가 ${_eok(x['총액'])}</b><span>${esc(_laArea(x))}</span></span>`;
+  if(x['유형']==='경매')
+    return `<span class="la-price"><b>최저가 ${_eok(x['총액'])}</b><span>${esc(_laAuctionSize(x))}</span></span>`;
+  return _mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`);
+}
 function _laAsk(x){
   const v=x&&x['총액'];
   return (v!=null&&+v>0)?+v:null;
@@ -3971,10 +3982,8 @@ function renderAllListings(){
   const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${regionSignalBadge(x['시그널']||'HELD')}`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${esc(x['단지명']||'–')} ${rowBadge(x)}`,
-      right:_SALE_TYPES.includes(x['유형'])
-        ?`<span class="la-price"><b>호가 ${_eok(x['총액'])}</b><span>${esc(_laArea(x))}</span></span>`
-        :_mtMetric(x['지표라벨'], `<b>${x['지표값']??'–'}${x['지표단위']||''}</b>`),
-      sub:`<span class="la-address">${esc(_laAddress(x))}</span>${listingPriceLine(x.price_comparison)?'<br>'+esc(listingPriceLine(x.price_comparison)):''}`,
+      right:_laRowPrice(x),
+      sub:`<span class="la-address">${esc(_laAddress(x))}</span>${x['유형']==='경매'&&(x['확인할것']||[])[0]?'<br>'+esc(x['확인할것'][0]):''}${listingPriceLine(x.price_comparison)?'<br>'+esc(listingPriceLine(x.price_comparison)):''}`,
       action:watchBtn(x['key'],x.listing_aliases)}),
     detail:x=>{
       const report=reportBtn(x['key'],'매물 리포트 보기');
@@ -7137,34 +7146,44 @@ function daysTo(d){ if(!d) return null; return Math.ceil((new Date(d) - new Date
 function renderAuction(rows){
   renderMtFilter('aucMtFilter', ()=>loadAuction());
   const cov=document.getElementById('aucCoverage');
-  if(cov) cov.textContent = `· 등록 ${(rows||[]).length}건 · 관리자 등록 기반(전량 자동수집 아님, 참고용)`;
+  const hankN=(rows||[]).filter(r=>r.source==='hank').length;
+  if(cov) cov.textContent = `· 행크 목록 ${hankN}건 · 직접 등록 ${(rows||[]).length-hankN}건 · 목록만으로는 입찰가를 만들지 않습니다`;
   rows = rows.filter(r=>inFocus(r['region']||'') && _mtPass(r['지역시그널']||'HELD',r['지역급지']||null));
   const sz = document.getElementById('fSize').value, ag = document.getElementById('fAge').value;
-  if(sz) rows = rows.filter(r=>{const a=r['전용면적']||0; return sz==='s'?a<=60:sz==='m'?(a>60&&a<=85):a>85;});
+  if(sz) rows = rows.filter(r=>{const a=r['전용면적']; if(!a) return false; return sz==='s'?a<=60:sz==='m'?(a>60&&a<=85):a>85;});
   if(ag) rows = rows.filter(r=>{ if(!r['건축년도']) return false; const y=2026-r['건축년도'];
     return ag==='new'?y<=10:ag==='mid'?(y>10&&y<=20):y>20;});
   document.getElementById('emptyMsg').textContent = rows.length ? '' :
-    '관심 매물이 없습니다. BUY+ 지역의 경매 매물을 "+ 매물 추가" 또는 CSV로 등록하세요.';
+    '조건에 맞는 경매 물건이 없습니다.';
   mapSplit('auctionList','auctionMap',rows,{
     summary:r=>{ const dl=daysTo(r['입찰기일']);
       const ready=r['입찰상태']==='conditional_bid';
-      return {nm:`${r['단지명']||'–'} ${regionSignalBadge(r['지역시그널']||'HELD')} ${ready?'':`<span class="pill">${r['입찰상태']==='no_bid'?'목표 미달':'확인 필요'}</span>`}`,
-        right:_mtMetric(ready?'검토용 상한':'입찰 판단', ready?`<b style="color:#16a34a">${won(r['권장입찰가'])}</b>`:'<b style="color:#d97706">보류</b>'),
-        sub:`${r['region']||''}${r['지역급지']?' · '+regionGradeBadge(r['지역급지']):''}${ready?' · 총비용 우위 '+r['총비용우위율']+'%':''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
-    detail:r=>`<div class="kv">
+      const hold=r['최저매각가']?`<b>${won(r['최저매각가'])}</b>`:'<b style="color:#d97706">보류</b>';
+      return {nm:`${esc(r['단지명']||'–')} ${regionSignalBadge(r['지역시그널']||'HELD')} ${ready?'':`<span class="pill">${r['입찰상태']==='no_bid'?'목표 미달':'확인 필요'}</span>`}`,
+        right:_mtMetric(ready?'검토용 상한':(r['최저매각가']?'최저가':'입찰 판단'), ready?`<b style="color:#16a34a">${won(r['권장입찰가'])}</b>`:hold),
+        sub:`${esc(r['region']||'')}${r['동']?' '+esc(r['동']):''}${r['지역급지']?' · '+regionGradeBadge(r['지역급지']):''}${ready?' · 총비용 우위 '+r['총비용우위율']+'%':''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
+    detail:r=>{
+      const hank=r.source==='hank';
+      const area=hank
+        ?(r['건물면적']?`건물면적 ${Math.round(r['건물면적'])}㎡ · 전용면적 아님`:'전용면적 확인 전')
+        :`평형 ${r['전용면적']?Math.round(r['전용면적'])+'㎡('+(r['전용면적']/3.3058).toFixed(0)+'평)':'–'}`;
+      const reasons=(r['확인할것']||[]).map(esc).join('<br>');
+      return `<div class="kv">
       ${r['단지급지']?'<span>'+gradeBadge(r['단지급지'],r['급지상위'])+'</span>':''}
-      <span>평형 ${r['전용면적']?Math.round(r['전용면적'])+'㎡('+(r['전용면적']/3.3058).toFixed(0)+'평)':'–'}</span>
+      <span>${area}</span>
       <span>연식 ${r['건축년도']?(2026-r['건축년도'])+'년':'–'}</span><span>세대 ${r['세대수']?r['세대수'].toLocaleString():'–'}</span>
       <span>용적 ${r['용적률']?r['용적률']+'%':'–'}</span></div>
       <div class="kv" style="margin-top:5px"><span>감정 ${won(r['감정가'])}</span><span>최저 ${won(r['최저매각가'])}</span>
       <span>실거래 ${won(r['최근실거래가'])}</span><span>전세 ${won(r['최근전세가'])}</span>
       <span style="color:${r['목표달성']?'#16a34a':'#d97706'}">${r['목표달성']?'검토용 상한 '+won(r['권장입찰가']):'입찰 보류'}</span><span>임대 ${r['임대수익률']==null?'–':r['임대수익률']+'%'}</span>
-      <span>입찰기일 ${r['입찰기일']||'–'}</span></div>
+      <span>입찰기일 ${esc(r['입찰기일']||'–')}</span></div>
+      ${reasons?`<div style="margin-top:7px;font-size:12px;line-height:1.5;color:#b45309">${reasons}</div>`:''}
       <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>
+        ${hank?'':`<span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>`}
         ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}${reportBtn(r['id']?'경매:'+r['id']:null)}${cxBtn(r['단지명'],r['region'])}
-        <span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span></div>`,
-    geoq:r=>{ const dong=(r['메모']||'').match(/[가-힣]+동/); return `${r['region']||''} ${dong?dong[0]+' ':''}${r['단지명']||''}`; },
+        ${hank?'':`<span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span>`}</div>`; },
+    coord:r=>(r.lat&&r.lng)?[+r.lat,+r.lng]:null,
+    geoq:r=>{ const dong=r['동']||((r['메모']||'').match(/[가-힣]+동)||[])[0]; return `${r['region']||''} ${dong?dong+' ':''}${r['단지명']||''}`; },
     regionOf:r=>r['region'],
     color:r=>r['목표달성']?'#16a34a':'#d97706',
     label:r=>`<b>${r['단지명']}</b><br>${r['region']||''} · ${r['목표달성']?'검토용 상한 '+won(r['권장입찰가']):'입찰 보류'}`,
