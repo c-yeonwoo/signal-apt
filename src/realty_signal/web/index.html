@@ -5011,6 +5011,10 @@ async function loadPsTypes(no, elId){
 }
 
 let _rpcGeneration=0;
+function _rpcRegionLabel(row){
+  const region=String(row.region||'').trim(), group=String(row.group||'').trim();
+  return group&&region&&!region.startsWith(group+' ')?`${group} ${region}`:region||group;
+}
 async function loadUndervalued(){
   const generation=++_rpcGeneration;
   const status=document.getElementById('rpcStatus');
@@ -5032,7 +5036,7 @@ async function loadUndervalued(){
     }
     const a=document.getElementById('rpcRegionA'), b=document.getElementById('rpcRegionB');
     const prevA=a.value, prevB=b.value;
-    const choices=valid.map(row=>`<option value="${row.region_id}">${esc(row.group||'')} ${esc(row.region)}</option>`).join('');
+    const choices=valid.map(row=>`<option value="${row.region_id}">${esc(_rpcRegionLabel(row))}</option>`).join('');
     a.innerHTML=choices;
     b.innerHTML='<option value="">비교 지역 선택</option>'+choices;
     const favorite=typeof _favRegionKeyByName!=='undefined'
@@ -5046,7 +5050,7 @@ async function loadUndervalued(){
   }
 }
 function _rpcCard(row, maxPrice){
-  const name=esc(row.region||'선택한 지역');
+  const name=esc(row.region_label||row.region||'선택한 지역');
   if(row.status==='region_unverified') return `<article class="rpc-card"><h3>${name}</h3><p class="rpc-note">지역 코드 확인 전에는 거래를 다른 지역에 붙이지 않습니다.</p></article>`;
   if(row.status==='source_unavailable') return `<article class="rpc-card"><h3>${name}</h3><p class="rpc-note">국토부 실거래 원천을 불러오지 못했습니다. 0건으로 해석하지 마세요.</p></article>`;
   const count=Number(row.count)||0;
@@ -5074,13 +5078,14 @@ async function renderRegionPriceComparison(){
   cards.innerHTML=''; compare.textContent='';
   const refs=b?[a,b]:[a];
   const data=await Promise.all(refs.map(async ref=>{
+    const option=[...document.getElementById('rpcRegionA').options].find(o=>o.value===ref);
+    const regionLabel=option?.textContent||'선택한 지역';
     try{
       const response=await fetch('/api/region-trade-prices/'+encodeURIComponent(ref)+'?area='+area);
       if(!response.ok) throw new Error('source unavailable');
-      return await response.json();
+      return {...await response.json(),region_label:regionLabel};
     }catch(_error){
-      const option=[...document.getElementById('rpcRegionA').options].find(o=>o.value===ref);
-      return {status:'source_unavailable',region:option?.textContent||'선택한 지역'};
+      return {status:'source_unavailable',region_label:regionLabel};
     }
   }));
   if(generation!==_rpcGeneration) return;

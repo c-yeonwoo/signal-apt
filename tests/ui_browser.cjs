@@ -421,12 +421,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.getByRole('button',{name:/가격·수급/}).count(),1);
     await page.evaluate(()=>{allSignals=[
       {region:'테스트구',region_id:'kb:1114000000',group:'서울'},
-      {region:'옆구',region_id:'kb:1115000000',group:'서울'}]; selected='테스트구';});
+      {region:'옆구',region_id:'kb:1115000000',group:'서울'},
+      {region:'인천 중구',region_id:'kb:2811000000',group:'인천'}]; selected='테스트구';});
     await page.getByRole('button',{name:/지역 가격 비교/}).click();
     assert.equal(new URL(page.url()).hash,'#undervalued');
     assert.equal(await page.getByRole('button',{name:/지역 가격 비교/}).getAttribute('class').then(c=>c.includes('on')),true);
     await page.locator('#rpcCards').getByText('8.0억').waitFor();
-    assert.match(await page.locator('#rpcCards').textContent(),/테스트구[\s\S]*8건.*2026-04~2026-09/);
+    assert.match(await page.locator('#rpcCards').textContent(),/서울 테스트구[\s\S]*8건.*2026-04~2026-09/);
+    assert.equal(await page.locator('#rpcRegionA option[value="kb:2811000000"]').textContent(),'인천 중구');
     await page.locator('#rpcRegionB').selectOption('kb:1115000000');
     await page.locator('#rpcCards').getByText('7.0억').waitFor();
     assert.match(await page.locator('#rpcCompare').textContent(),/중앙값 차이 1.0억.*저평가됐다는 뜻은 아닙니다/);
