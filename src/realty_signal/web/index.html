@@ -4550,10 +4550,11 @@ async function mountTxCosts(el, override){
   const rows=[...(totalReady?[['취득세',c['취득세']]]:[]),['중개비',c['중개비']],['법무비',c['법무비']],['이사비',c['이사비']],['인테리어',c['인테리어']]]
     .map(([k,v])=>`<div class="tx-row"><span>${k}</span><span>${won(v)}</span></div>`).join('');
   const hyp=[checks.policy_status==='verified'?'정책 검증':'세율·규제 최신성 미검증',
-    assum['규제지역']?'규제지역 가정':'비규제 가정',
+    ...(totalReady?[assum['규제지역']?'규제지역 가정':'비규제 가정']:[]),
     checks.home_count_entered===true?`주택${assum['주택수']??0}채`:`주택수 미입력 · ${assum['주택수']??0}채 임시 가정`,
-    assum['생애최초']?'생애최초':'']
+    totalReady&&assum['생애최초']?'생애최초':'']
     .filter(Boolean).join(' · ');
+  const visibleNotes=(d.notes||[]).filter(note=>totalReady||!/취득세|감면|규제 기준일/.test(note)).slice(0,2);
   const interVal = interior!=null ? interior : (c['인테리어']??0);
   const moveVal = moving!=null ? moving : (c['이사비']??200);
   el.querySelector('summary').innerHTML=totalReady
@@ -4569,7 +4570,7 @@ async function mountTxCosts(el, override){
       <label class="tx-edit">이사 <input type="number" min="0" step="50" value="${moveVal}" data-tx-move>만</label>
       <label class="tx-edit">인테리어 <input type="number" min="0" step="100" value="${interVal}" data-tx-inter>만</label>
     </div>
-    <div class="tx-note">${hyp?hyp+' · ':''}${(d.notes||[]).slice(0,2).join(' · ')}</div>
+    <div class="tx-note">${hyp?hyp+' · ':''}${visibleNotes.join(' · ')}</div>
   `;
   const re=()=>{
     const mv=+el.querySelector('[data-tx-move]')?.value;
