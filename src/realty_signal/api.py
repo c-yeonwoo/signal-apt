@@ -3596,10 +3596,13 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     general_scope = None
     if general_refresh.get("ok") is True:
         failed = general_refresh.get("failed_requests")
-        failed = max(0, min(3, failed)) if type(failed) is int else 0
+        failed = max(0, min(_HANBANG_REGION_CAP, failed)) if type(failed) is int else 0
         limited = general_refresh.get("limited_regions")
-        limited = min(3, len(limited)) if isinstance(limited, list) else 0
-        if failed or limited:
+        limited = min(_HANBANG_REGION_CAP, len(limited)) if isinstance(limited, list) else 0
+        if general_refresh.get("empty_reason") == "no_favorite_complexes":
+            general_scope = {"failed_regions": 0, "page_limited_regions": 0,
+                             "no_favorite_complexes": True}
+        elif failed or limited:
             general_scope = {"failed_regions": failed, "page_limited_regions": limited}
     return {
         "listings": public_rows,
@@ -3633,7 +3636,7 @@ def certified():
 
 
 def hanbang():
-    """한방 일반 아파트 매매 — 개인 계정용, 최대 3개 시군구·페이지 제한."""
+    """한방 일반 아파트 매매 — 개인 계정 관심단지의 공유 미러. 지역당 3페이지."""
     out = _radar_cached_response(HANBANG_FILE, _HANBANG_SCAN_VER)
     if out.get("last_success_at") is not None and out.get("_scan_ver", 0) < _HANBANG_SCAN_VER:
         out["listings"] = []
@@ -3700,19 +3703,55 @@ def _scan_region_current(region: str) -> bool:
     return bool(code and identity and identity[0] == region and identity[2] == code[:5])
 
 
-def _hanbang_regions() -> list[str]:
-    """개인 계정 관심지역 우선. 한 번에 최대 3개 시군구만 저빈도로 조회한다."""
+_HANBANG_REGION_CAP = 8
+
+
+def _complex_name_key(name: str) -> str:
+    """단지명 비교용. 공백을 없애고 끝의 '아파트'만 뺀다."""
+    text = "".join(str(name or "").split())
+    suffix = "아파트"
+    if text.endswith(suffix) and len(text) > len(suffix):
+        text = text[: -len(suffix)]
+    return text
+
+
+def _complex_name_allowed(name: str, allowed: set[str]) -> bool:
+    key = _complex_name_key(name)
+    return bool(key) and any(_complex_name_key(item) == key for item in allowed)
+
+
+def _hanbang_complex_targets() -> dict[str, set[str]]:
+    """개인 계정이 찍어 둔 관심단지. 지역 → 단지명.
+
+    매수력·관심지역·매수권 구 목록은 수집 범위에 쓰지 않는다. 조회는 이 집합을
+    하루 한 번 받아 두는 공유 미러다.
+    """
     owner_email = config.personal_listing_email()
     owner = db.user_by_email(owner_email) if owner_email else None
+    if not owner:
+        return {}
     known = set(_bundled_centroids())
-    favorites = ([region for region in db.actionable_region_favs(owner["id"])
-                  if region in known and _scan_region_current(region)] if owner else [])
-    if len(favorites) >= 3:
-        return list(dict.fromkeys(favorites))[:3]
-    return list(dict.fromkeys(favorites + _scan_regions()))[:3]
+    grouped: dict[str, set[str]] = {}
+    for fav in db.fav_list(owner["id"]):
+        if fav.get("kind") != "complex" or "|" not in (fav.get("key") or ""):
+            continue
+        region, name = fav["key"].split("|", 1)
+        name = name.strip()
+        if not name or region not in known or not _scan_region_current(region):
+            continue
+        if region not in grouped and len(grouped) >= _HANBANG_REGION_CAP:
+            continue
+        grouped.setdefault(region, set()).add(name)
+    return grouped
 
 
-def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
+def _hanbang_regions() -> list[str]:
+    """관심단지가 있는 시군구. 매수권 구 전체는 받지 않는다."""
+    return list(_hanbang_complex_targets())
+
+
+def _hanbang_scan_with_status(regions: list[str], names: dict[str, set[str]] | None = None
+                              ) -> tuple[list[dict], dict]:
     from realty_signal.ingest.hanbang import fetch_region_with_status, fetch_named_region_with_status
 
     try:
@@ -3722,7 +3761,7 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
         signals, signal_context = {}, "unavailable"
     listings, seen, succeeded, complete, limited, failures, named = [], set(), [], [], [], [], []
     queryable = 0
-    for region in regions[:3]:
+    for region in regions[:_HANBANG_REGION_CAP]:
         point = _bundled_centroids().get(region)
         if not point:
             failures.append({"region": region, "error": "지원하는 시군구 중심좌표 없음"})
@@ -3752,7 +3791,10 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
             named.append(region)
         succeeded.append(region)
         (complete if status["complete"] else limited).append(region)
+        allowed = (names.get(region) or set()) if names is not None else None
         for item in rows:
+            if allowed is not None and not _complex_name_allowed(item.get("단지명") or "", allowed):
+                continue
             if item["hanbang_id"] in seen:
                 continue
             seen.add(item["hanbang_id"])
@@ -3766,7 +3808,7 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
             listings.append(item)
     required = max(1, (queryable + 1) // 2)
     return listings, {
-        "requested_regions": len(regions[:3]), "queryable_regions": queryable,
+        "requested_regions": len(regions[:_HANBANG_REGION_CAP]), "queryable_regions": queryable,
         "successful_requests": len(succeeded), "successful_regions": succeeded,
         "complete_regions": complete, "limited_regions": limited,
         "named_lookup_regions": named,
@@ -3776,7 +3818,8 @@ def _hanbang_scan_with_status(regions: list[str]) -> tuple[list[dict], dict]:
     }
 
 
-def _hanbang_preserve_unscanned(listings: list[dict], scan: dict) -> list[dict]:
+def _hanbang_preserve_unscanned(listings: list[dict], scan: dict,
+                                names: dict[str, set[str]] | None = None) -> list[dict]:
     """오류·페이지 제한 지역의 이전 매물을 지난 결과로 보존한다."""
     import time
     if not HANBANG_FILE.exists():
@@ -3785,12 +3828,15 @@ def _hanbang_preserve_unscanned(listings: list[dict], scan: dict) -> list[dict]:
     ids = {row["hanbang_id"] for row in listings}
     complete = set(scan["complete_regions"])
     requested = set(scan["regions"])
-    return listings + [
+    kept = [
         {**row, "stale": True} for row in previous
         if row.get("hanbang_id") not in ids and row.get("지역") in requested
         and row.get("지역") not in complete
         and time.time() - (row.get("fetched_at") or HANBANG_FILE.stat().st_mtime) <= 7 * 86400
+        and (names is None or _complex_name_allowed(
+            row.get("단지명") or "", names.get(row.get("지역")) or set()))
     ]
+    return listings + kept
 
 
 def _preserve_unscanned(path, listings, scan):
@@ -3872,19 +3918,37 @@ def hanbang_refresh(data: dict = Body(default={})):
         return {"ok": False, "reason": "cooldown", "message": "10분 후 다시 수집할 수 있습니다."}
     requested = data.get("regions")
     known = set(_bundled_centroids())
+    targets = None
     if requested is not None:
         if (not isinstance(requested, list) or len(requested) > 3
                 or any(not isinstance(region, str) or region not in known for region in requested)):
             raise HTTPException(422, "수집 지역은 지원 시군구 최대 3곳만 지정할 수 있습니다.")
-    regions = list(dict.fromkeys(requested)) if requested else _hanbang_regions()
-    listings, scan = _hanbang_scan_with_status(regions)
+        regions = list(dict.fromkeys(requested))
+    else:
+        targets = _hanbang_complex_targets()
+        regions = list(targets)
+        if not regions:
+            scan = {
+                "requested_regions": 0, "queryable_regions": 0, "successful_requests": 0,
+                "successful_regions": [], "complete_regions": [], "limited_regions": [],
+                "named_lookup_regions": [], "failed_requests": 0, "required_successes": 0,
+                "usable": True, "signal_context": "unused", "failures": [], "regions": [],
+                "empty_reason": "no_favorite_complexes",
+            }
+            status = {"attempted_at": time.time(), "ok": True, **scan}
+            from realty_signal.storage import atomic_json
+            atomic_json(HANBANG_FILE, {"ready": True, "listings": [], "regions": [],
+                                       "count": 0, "_scan_ver": _HANBANG_SCAN_VER})
+            _record_radar_refresh(HANBANG_FILE, status)
+            return {"ok": True, "count": 0, "regions": 0, "scan": status}
+    listings, scan = _hanbang_scan_with_status(regions, names=targets)
     scan["regions"] = regions
     status = {"attempted_at": time.time(), "ok": bool(scan["usable"]), **scan}
     if not scan["usable"]:
         status["error"] = "원천 응답 부족으로 기존 일반 매물 결과를 유지했습니다."
         _record_radar_refresh(HANBANG_FILE, status)
         return {"ok": False, "count": 0, "regions": len(regions), "scan": status}
-    listings = _hanbang_preserve_unscanned(listings, scan)
+    listings = _hanbang_preserve_unscanned(listings, scan, names=targets)
     from realty_signal.storage import atomic_json
     atomic_json(HANBANG_FILE, {"ready": True, "listings": listings,
                                "regions": regions, "count": len(listings),
