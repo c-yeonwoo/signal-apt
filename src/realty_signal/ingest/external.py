@@ -10,7 +10,6 @@ EXTERNAL_HTTP_PROXY 가 있으면 그 프록시만 탄다. 나중에 프록시 �
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import threading
@@ -21,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from realty_signal import store
+from realty_signal import jsonx, store
 
 _UA = "Mozilla/5.0"
 _HANK = "https://api.hauction.co.kr/api/v1"
@@ -56,10 +55,10 @@ class DirectTransport:
                                                     "X-HANK-PLATFORM": "web"})
         try:
             with opener.open(req, timeout=self.timeout) as res:
-                return json.loads(res.read().decode())
+                return jsonx.loads(res.read().decode())
         except urllib.error.HTTPError as exc:
             raise FetchError(f"HTTP {exc.code}") from exc
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
             raise FetchError(type(exc).__name__) from exc
 
 
@@ -192,7 +191,7 @@ def write_hank_cache(result: SourceResult, path=None) -> None:
         "truncated": result.truncated,
         "rows": result.rows,
     }
-    target.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    target.write_text(jsonx.dumps(payload), encoding="utf-8")
 
 
 def manwon(value: Any) -> int | None:
@@ -304,8 +303,8 @@ def _read_cache(path=None) -> dict | None:
     if not target.exists():
         return None
     try:
-        data = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = jsonx.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
 
