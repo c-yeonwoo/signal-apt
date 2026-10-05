@@ -1307,9 +1307,9 @@ def _same_presale_district(identity: dict | None, row: dict) -> bool:
 
 
 def presale_list(request: Request):
-    """청약 단지 — 확인된 동일 시군구→임박→안전한 시그널 순서."""
+    """청약 단지 — 진행상태→확인된 동일 시군구→임박→안전한 시그널 순서."""
     sig_rank = {"STRONG_BUY": 0, "BUY": 1, "WATCH": 2, "NEUTRAL": 3, "SELL_RISK": 4, "HELD": 5}
-    st_rank = {"접수중": 0, "접수예정": 1, "발표대기": 2, "계약중": 3, "공고": 4, "완료": 5}
+    st_rank = {"접수중": 0, "접수예정": 1, "발표대기": 2, "계약중": 3, "완료": 4, "공고": 5}
     home = _verified_home_region(db.profile_get(_uid(request)))
 
     items = []
@@ -1318,7 +1318,7 @@ def presale_list(request: Request):
         items.append(d)
 
     def key(d):
-        return (0 if d["거주지일치"] else 1, st_rank.get(d["상태"], 6),
+        return (st_rank.get(d["상태"], 6), 0 if d["거주지일치"] else 1,
                 d["Dday"] if d["Dday"] is not None else 999, sig_rank.get(d["시그널"], 5))
     return sorted(items, key=key)
 

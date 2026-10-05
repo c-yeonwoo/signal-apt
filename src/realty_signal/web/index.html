@@ -1019,9 +1019,9 @@
   <div class="sec">
     <h3>청약·분양 단지 <span class="pill">청약홈</span>
       <button class="chip" id="gajeomBtn" onclick="openGajeom()" style="margin-left:8px;display:none;background:var(--accent);color:#fff;border-color:var(--accent)">내 청약 가점 <b id="gajeomBadge">–</b></button></h3>
-    <p class="page-sub" style="margin-bottom:12px;font-size:14px">접수중·임박 단지를 먼저 보여줍니다.</p>
+    <p class="page-sub" style="margin-bottom:12px;font-size:14px">기본으로 접수중·접수예정만 보여줍니다.</p>
     <div class="ps-toolbar">
-      <label><input type="checkbox" id="psOpen" onchange="renderPresale()" checked> 접수중·예정만</label>
+      <label><input type="checkbox" id="psShowPast" onchange="renderPresale()"> 완료된 건도 보기 <span style="color:var(--dim);font-size:12px">(발표대기·계약중 포함)</span></label>
       <div id="psMtFilter" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
     </div>
     <div id="psTeukgong" class="ps-elig"></div>
@@ -5000,10 +5000,12 @@ function psStatusBadge(st, dday){
 function renderPresale(){
   renderTeukgong();
   renderMtFilter('psMtFilter', renderPresale);
-  const openOnly = document.getElementById('psOpen').checked;
+  const showPast = document.getElementById('psShowPast').checked;
+  const statusOrder = {'접수중':0,'접수예정':1,'발표대기':2,'계약중':3,'완료':4,'공고':5};
   const rows = _presaleList
-    .filter(r => !openOnly || ['접수중','접수예정'].includes(r['상태']))
-    .filter(r => inFocus(r['지역']||'') && _mtPass(r['시그널']||'HELD',r['지역급지']||null));
+    .filter(r => showPast || ['접수중','접수예정'].includes(r['상태']))
+    .filter(r => inFocus(r['지역']||'') && _mtPass(r['시그널']||'HELD',r['지역급지']||null))
+    .sort((a,b)=>(statusOrder[a['상태']]??6)-(statusOrder[b['상태']]??6));
   document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 청약 단지가 없습니다.';
   mapSplit('psList','psMap',rows,{
     summary:r=>({nm:`${esc(r['단지명']||'–')} ${r['거주지일치']?'<span class="pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" title="시·도와 시군구만 일치합니다. 우선공급 자격은 모집공고에서 확인하세요.">거주지 일치</span>':''} ${regionSignalBadge(r['시그널']||'HELD')} ${r['정비사업']?'<span class="pill">정비</span>':''}`,
