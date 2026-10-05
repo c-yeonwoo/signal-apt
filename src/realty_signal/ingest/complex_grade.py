@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import urllib.request
 import xml.etree.ElementTree as ET
+import statistics
 
 from realty_signal.auction import _norm, _recent_yms
 
@@ -79,3 +80,37 @@ def region_median_pyeong(lawd5: str, key: str, months: int = 6) -> float | None:
     if not rows:
         return None
     return round(sorted(p for _, p in rows)[len(rows) // 2])
+
+
+def region_trade_prices(lawd5: str, key: str, target_area: int, months: int = 6) -> dict:
+    """Completed-month apartment sales in one exclusive-area band, not an appraisal.
+
+    The shared MOLIT source excludes cancelled deals. We deliberately do not mix
+    59㎡ and 84㎡ apartments or use a listing asking price as a transaction.
+    """
+    from realty_signal.ingest.complex import _items_parallel
+
+    requested = _recent_yms(months)
+    prices: list[int] = []
+    observed: list[str] = []
+    for it in _items_parallel(_BASE, lawd5, key, requested):
+        try:
+            area = float(it.findtext("excluUseAr"))
+            amount = int((it.findtext("dealAmount") or "").replace(",", "").strip())
+        except (ValueError, TypeError, OverflowError):
+            continue
+        if not (abs(area - target_area) <= 5 and amount > 0):
+            continue
+        prices.append(amount)
+        year, month = (it.findtext("dealYear") or "").strip(), (it.findtext("dealMonth") or "").strip()
+        if year.isdigit() and month.isdigit():
+            observed.append(f"{year}-{int(month):02d}")
+    count = len(prices)
+    return {
+        "status": "ready" if count >= 5 else "insufficient_sample",
+        "count": count,
+        "median_manwon": round(statistics.median(prices)) if count >= 5 else None,
+        "area_band_m2": [target_area - 5, target_area + 5],
+        "requested_months": [requested[-1], requested[0]],
+        "observed_months": [min(observed), max(observed)] if observed else None,
+    }
