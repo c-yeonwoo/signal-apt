@@ -675,7 +675,10 @@
       ${walkScale}
       ${observed || straight != null ? '<button type="button" class="btn" id="v2ShowStationMap">지도에 표시</button>' : ''}
       <p class="v2-muted">${esc(mobility.reason || mobility.api_reason || '역과 출입구의 실제 보행 동선은 확인이 필요합니다.')}</p></div>
-      <div class="v2-location-card"><small>직장까지</small><b>${locationRoute(mobility.work_transit, '저장된 직장')}</b><p class="v2-muted">${esc(mobility.transit_note || '실제 출퇴근 시간대는 다를 수 있습니다.')}</p></div>
+      <div class="v2-location-card"><small>직장까지</small><b>${mobility.work_transit
+        ? locationRoute(mobility.work_transit, '저장된 직장') : '저장된 직장 위치가 없어 계산하지 않았어요'}</b>
+        ${mobility.work_transit ? `<p class="v2-muted">${esc(mobility.transit_note || '실제 출퇴근 시간대는 다를 수 있습니다.')}</p>`
+          : '<button type="button" class="btn" id="v2WorkSetup">직장 위치 설정</button>'}</div>
       <div class="v2-location-card"><small>학교</small><b>${schoolText}</b><p class="v2-muted">${school.boundary_near ? '통학구역 경계와 가까울 수 있습니다. ' : ''}${esc(school.coordinate_note || '실제 배정 학교는 교육청에 확인하세요.')}</p></div>
       <div class="v2-location-card"><small>생활 시설 · 가까운 순</small><div class="v2-location-places">${places.join('') || esc(amenities.reason || '주변 시설을 확인하지 못했습니다.')}</div>
       <p class="v2-muted">직선거리이며 실제 이동 동선과 영업 상태는 확인되지 않았습니다.</p></div>
@@ -699,6 +702,11 @@
       if (showMap) showMap.onclick = () => {
         if (!window.showV2StationRoute?.(data, true))
           showMap.textContent = '현재 지도에서 경로를 표시할 수 없습니다';
+      };
+      const workSetup = host.querySelector('#v2WorkSetup');
+      if (workSetup) workSetup.onclick = () => {
+        document.getElementById('v2ReportDlg').close();
+        window.switchTab?.('mypage');
       };
     } catch (error) {
       if (generation !== listingGeneration || !document.getElementById('v2ReportDlg').open) return;
