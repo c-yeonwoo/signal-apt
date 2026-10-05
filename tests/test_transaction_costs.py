@@ -6,6 +6,21 @@ from realty_signal import buying_power as bp
 from realty_signal import transaction_costs as tc
 
 
+def test_cost_route_marks_missing_home_count_and_unverified_policy(monkeypatch):
+    from realty_signal import db
+    from realty_signal.routes import market
+
+    monkeypatch.setattr(market.deps, "uid", lambda _request: 7)
+    monkeypatch.setattr(db, "profile_get", lambda _uid: {})
+    missing = market.listing_costs(None, 50_000, region="노원구", area=59)
+    assert missing["assumption_checks"] == {
+        "home_count_entered": False, "policy_status": "unverified"}
+    monkeypatch.setattr(db, "profile_get", lambda _uid: {"주택수": 1})
+    entered = market.listing_costs(None, 50_000, region="노원구", area=59)
+    assert entered["assumption_checks"]["home_count_entered"] is True
+    assert entered["가정"]["주택수"] == 1
+
+
 def test_estimate_matches_acq_tax_and_broker():
     price = 80_000  # 8억
     out = tc.estimate(price, region="수원시 영통구", pyeong=25, homes=0, interior=0, moving=0)

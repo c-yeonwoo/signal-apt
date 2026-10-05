@@ -100,7 +100,8 @@ def _listing_report(request: Request, key: str, *, cache_only: bool) -> JSONResp
               "decision": base.get("decision"), "lines": base.get("lines"),
               "positive": base.get("pros") or [], "cautions": base.get("cautions") or [],
               "unknowns": base.get("questions") or [], "evidence": base.get("evidence") or [],
-              "building": base.get("building"), "development": base.get("development"),
+              "complex": base.get("complex"), "building": base.get("building"),
+              "development": base.get("development"),
               "partial_failures": base.get("partial_failures") or [],
               "next_actions": base.get("questions") or []}
     report["report_id"] = _id(report)

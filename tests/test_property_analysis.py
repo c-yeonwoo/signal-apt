@@ -35,6 +35,20 @@ def test_selected_listing_is_resolved_on_server_and_private_denied_before_read(m
         raise AssertionError("personal listing was exposed")
 
 
+def test_optional_peer_price_failure_does_not_hide_selected_listing(monkeypatch):
+    from realty_signal.services import listing_prices
+
+    def build(kinds, **_kwargs):
+        if kinds == set(analysis.PRIVATE):
+            raise RuntimeError("unrelated supplier failed")
+        return [_row()]
+
+    monkeypatch.setattr(api, "_build_listings", build)
+    monkeypatch.setattr(listing_prices, "attach", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        RuntimeError("optional peer comparison failed")))
+    assert analysis.resolve("일반매물:hb-1", private_allowed=True)["총액"] == 52000
+
+
 def test_schedule_uses_name_overlap_and_refuses_district_stage():
     zones = [
         {"구역명": "가상 재건축", "위치": "노원구 가상단지", "구분": "재건축"},

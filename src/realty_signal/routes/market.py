@@ -690,8 +690,12 @@ def listing_costs(
         return JSONResponse({"error": "price required"}, status_code=400)
 
     uid_ = deps.uid(request)
-    profile = db.profile_get(uid_) if uid_ else {}
+    profile = (db.profile_get(uid_) if uid_ else None) or {}
     conf = (profile.get("매수력") or {}).get("가정") or {}
+    stored_homes = profile.get("주택수")
+    if stored_homes is None or stored_homes == "":
+        stored_homes = conf.get("주택수")
+    home_count_entered = homes is not None or (stored_homes is not None and stored_homes != "")
 
     def _pick_homes() -> int:
         if homes is not None:
@@ -709,7 +713,7 @@ def listing_costs(
             v = conf.get("생애최초")
         return bool(v)
 
-    return tc.estimate(
+    result = tc.estimate(
         price,
         region=(region or "").strip() or None,
         exclusive_m2=area,
@@ -719,3 +723,9 @@ def listing_costs(
         moving=moving,
         interior=interior,
     )
+    from realty_signal import regulation
+    result["assumption_checks"] = {
+        "home_count_entered": home_count_entered,
+        "policy_status": regulation.policy_manifest()["status"],
+    }
+    return result
