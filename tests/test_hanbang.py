@@ -110,6 +110,42 @@ def test_source_error_is_not_empty_success(monkeypatch):
     assert rows == [] and not status["ok"] and "TimeoutError" in status["error"]
 
 
+def test_favorite_complexes_select_regions_and_drop_other_names(monkeypatch):
+    monkeypatch.setattr(api, "_bundled_centroids", lambda: {
+        "노원구": [37.6, 127.1], "강남구": [37.5, 127.0]})
+    monkeypatch.setattr(api, "_scan_region_current", lambda region: region == "노원구")
+    monkeypatch.setattr(api.config, "personal_listing_email", lambda: "owner@example.com")
+    monkeypatch.setattr(api.db, "user_by_email", lambda email: {"id": 7})
+    monkeypatch.setattr(api.db, "fav_list", lambda uid: [
+        {"kind": "region", "key": "강남구"},
+        {"kind": "complex", "key": "노원구|상계주공아파트"},
+        {"kind": "complex", "key": "강남구|은마"},
+    ])
+    assert api._hanbang_regions() == ["노원구"]
+    monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
+    monkeypatch.setattr(api, "_signal_map", lambda: {"노원구": "BUY"})
+    monkeypatch.setattr(hanbang, "fetch_region_with_status", lambda *_: (
+        [hanbang.normalize(_raw(1)), hanbang.normalize(_raw(2, hsmpNm="다른단지\\n서울 노원구 상계동"))],
+        {"ok": True, "source_sgg": "노원구", "source_ctpv": "서울특별시", "complete": True}))
+    rows, status = api._hanbang_scan_with_status(
+        ["노원구"], names={"노원구": {"상계주공아파트"}})
+    assert [row["단지명"] for row in rows] == ["상계주공"]
+    assert status["successful_regions"] == ["노원구"]
+
+
+def test_refresh_without_favorite_complexes_replaces_the_district_sample(tmp_path, monkeypatch):
+    cache = tmp_path / "hanbang.json"
+    cache.write_text(json.dumps({"ready": True, "listings": [{"hanbang_id": "old"}],
+                                 "_scan_ver": api._HANBANG_SCAN_VER}), encoding="utf-8")
+    monkeypatch.setattr(api, "HANBANG_FILE", cache)
+    monkeypatch.setattr(api, "_radar_refresh_status", lambda path: {})
+    monkeypatch.setattr(api, "_hanbang_complex_targets", lambda: {})
+    result = api.hanbang_refresh({})
+    assert result["ok"] and result["scan"]["empty_reason"] == "no_favorite_complexes"
+    saved = json.loads(cache.read_text(encoding="utf-8"))
+    assert saved["listings"] == []
+
+
 def test_scan_rejects_cross_province_same_named_district(monkeypatch):
     monkeypatch.setattr(api, "_bundled_centroids", lambda: {"중구": [37.56, 126.99]})
     monkeypatch.setattr(api, "_sido_of", lambda region: "서울")
@@ -243,7 +279,7 @@ def test_failed_refresh_preserves_previous_cache(tmp_path, monkeypatch):
     cache.write_text(original, encoding="utf-8")
     monkeypatch.setattr(api, "HANBANG_FILE", cache)
     monkeypatch.setattr(api, "_bundled_centroids", lambda: {"노원구": [37.6, 127.1]})
-    monkeypatch.setattr(api, "_hanbang_scan_with_status", lambda regions: ([], {
+    monkeypatch.setattr(api, "_hanbang_scan_with_status", lambda regions, names=None: ([], {
         "usable": False, "queryable_regions": 1, "successful_regions": [],
         "failed_requests": 1, "requested_regions": 1}))
     result = api.hanbang_refresh({"regions": ["노원구"]})

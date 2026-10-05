@@ -105,7 +105,7 @@ def test_scan_targets_use_current_assessment_and_skip_retired_favorite(monkeypat
     monkeypatch.setattr(api.db, "fav_list", lambda uid: [{"kind": "region", "key": "서구"}])
 
     assert api._scan_regions() == ["강남구"]
-    assert api._hanbang_regions() == ["강남구"]
+    assert api._hanbang_regions() == []
 
 
 def test_ambiguous_scan_center_requires_same_current_boundary_code(monkeypatch):
