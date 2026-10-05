@@ -6683,8 +6683,12 @@ function loadCxTxCosts(cx, region){
 async function loadCxBuilding(name, region){
   const el=document.getElementById('cxBuilding'); if(!el) return;
   let d; try{ d=await (await fetch(`/api/complex/${encodeURIComponent(region)}/${encodeURIComponent(name)}/building`)).json(); }
-  catch(e){ el.textContent='건축물대장 조회 실패'; return; }
-  if(!d.ok){ el.textContent='건축물대장 없음(지번 매칭 실패 또는 키 미설정)'; return; }
+  catch(e){ el.textContent='건축물대장을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.'; return; }
+  if(!d.ok){
+    el.innerHTML='이 단지의 건축물대장을 연결하지 못했습니다. 단지 주소를 확인한 뒤 '
+      +'<a href="https://www.gov.kr/mw/AA020InfoCappView.do?CappBizCD=15000000098" target="_blank" rel="noopener noreferrer">정부24에서 직접 열람 ↗</a>해 주세요.';
+    return;
+  }
   const b=d.building||{};
   const age=b['사용승인일']?`${String(b['사용승인일']).slice(0,4)}년 승인`:(b['건축년도']?`${b['건축년도']}년`:'–');
   el.innerHTML=`<div style="font-size:12px;font-weight:700;margin-bottom:6px">건축물대장</div>

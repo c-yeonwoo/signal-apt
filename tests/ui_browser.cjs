@@ -16,7 +16,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const watchTargets=new Map();
     const reportsByKey=new Map(), savedReports=new Map();
     let entranceChosen=false, tradeEnriched=false, regionReport=null, comparisonReport=null, occupancyChecked=false, commuteChecked=false;
-    let generalRefreshCooldown=false;
+    let generalRefreshCooldown=false, buildingUnavailable=false;
     let serverClientVersion='synthetic-v1';
     let regionReportFailures=0, seriesFailures=0;
     page.on('pageerror', e=>errors.push(e.message));
@@ -64,7 +64,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
           비교거래:{상태:'관측',건수:4,중앙값:50000,최저:45000,최고:55000,거래월범위:'2026-08~2026-09'}}],
         매매추이:[{ym:'2026-08',평단가:2000,건수:4}],최근평단가:2000,총거래:4,기간:'2026-08',추세pct:0};
-      if(decoded==='/api/complex/테스트구/테스트단지/building') data={ok:true,building:{세대수:123,건축년도:2005}};
+      if(decoded==='/api/complex/테스트구/테스트단지/building') data=buildingUnavailable
+        ? {ok:false} : {ok:true,building:{세대수:123,건축년도:2005}};
       if(decoded==='/api/complex/테스트구/테스트단지/quote-check') {
         quotePayloads.push(route.request().postDataJSON());
         data={상태:'관측비교',입력호가:48000,입력층:11,
@@ -716,6 +717,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.getByText('산술 차이',{exact:false}).waitFor();
     assert.match(await page.locator('#cxQuoteResult').textContent(),/2,000만.*낮음/);
     assert.match(await page.locator('#cxQuoteResult').textContent(),/11층 ±2층/);
+    await page.keyboard.press('Escape');
+    buildingUnavailable=true;
+    await page.evaluate(()=>openComplex('테스트단지','테스트구'));
+    await page.locator('#cxMoreDetails > summary').click();
+    await page.getByText('이 단지의 건축물대장을 연결하지 못했습니다.',{exact:false}).waitFor();
+    assert.doesNotMatch(await page.locator('#cxBuilding').textContent(),/키 미설정|지번 매칭 실패/);
+    assert.equal(await page.locator('#cxBuilding a').getAttribute('href'),
+      'https://www.gov.kr/mw/AA020InfoCappView.do?CappBizCD=15000000098');
     await page.keyboard.press('Escape');
     await page.evaluate(()=>{
       document.body.insertAdjacentHTML('beforeend', '<div id="qsEvidenceFixture">'
