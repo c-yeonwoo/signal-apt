@@ -992,6 +992,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2LocationResult').getByText(/테스트역 · 도보 약 8분/).waitFor();
     assert.match(await page.locator('#v2LocationResult').textContent(),/통학구역 후보 · 테스트초/);
     assert.match(await page.locator('#v2LocationResult').textContent(),/보행 경로 620m/);
+    assert.match(await page.locator('#v2LocationResult').textContent(),/저장된 직장 위치가 없어 계산하지 않았어요/);
+    assert.equal(await page.locator('#v2WorkSetup').isVisible(),true);
     assert.equal(calls.filter(path=>path==='/api/listing-location').length,locationCalls+1);
     assert.equal(nickPayloads.length,0);
     await page.locator('#v2ReportBody').getByText('관심 기록·비교·리포트 저장',{exact:true}).click();
