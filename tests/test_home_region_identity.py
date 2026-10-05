@@ -42,6 +42,20 @@ def test_presale_residence_requires_verified_code_and_matching_province(monkeypa
     assert all(not r["거주지일치"] for r in api.presale_list(object()))
 
 
+def test_presale_status_precedes_residence_and_keeps_requested_lifecycle_order(monkeypatch):
+    _identities(monkeypatch)
+    statuses = ["완료", "접수예정", "계약중", "발표대기", "접수중", "공고"]
+    rows = [{"단지명": status, "지역": "중구", "시도": "서울" if status == "접수예정" else "부산",
+             "상태": status, "Dday": None, "시그널": "WATCH"} for status in statuses]
+    monkeypatch.setattr(api, "_presale_visible_items", lambda: [dict(row) for row in rows])
+    monkeypatch.setattr(api, "_uid", lambda request: 7)
+    monkeypatch.setattr(api.db, "profile_get", lambda uid: {"거주지": "중구", "거주지코드": SEOUL["region_id"]})
+
+    result = api.presale_list(object())
+    assert [row["상태"] for row in result] == ["접수중", "접수예정", "발표대기", "계약중", "완료", "공고"]
+    assert result[1]["거주지일치"] is True
+
+
 def test_legacy_unique_residence_requires_current_identity(monkeypatch):
     identity = {"region_id": "kb:1135000000", "code": "1135000000",
                 "name": "노원구", "sido": "서울"}

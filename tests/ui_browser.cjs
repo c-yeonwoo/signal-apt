@@ -869,6 +869,27 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(scopedSignals.default.auction.html,/지역 신호 · 판단 보류/);
     assert.deepEqual(scopedSignals.buyOnly,{presale:0,auction:0});
     assert.deepEqual(scopedSignals.gradeOnly,{presale:0,auction:0});
+    assert.equal(await page.locator('#psShowPast').isChecked(),false);
+    const presaleLifecycle=await page.evaluate(()=>{
+      const original=mapSplit, oldList=_presaleList, oldBuyOnly=_mtBuyOnly, oldGrades=_mtGradeSet, oldFocus=_focusRegion;
+      const toggle=document.getElementById('psShowPast'), seen=[];
+      try{
+        mapSplit=(listId,_mapId,rows)=>{if(listId==='psList') seen.push(rows.map(row=>row['상태']));};
+        _presaleList=['완료','접수예정','계약중','접수중','발표대기','공고'].map(status=>({
+          단지명:status,지역:'테스트구',상태:status,시그널:'HELD'}));
+        _mtBuyOnly=false; _mtGradeSet=new Set(['A','B','C','D','E']); _focusRegion=null;
+        renderPresale();
+        toggle.checked=true; toggle.dispatchEvent(new Event('change'));
+        return seen;
+      }finally{
+        mapSplit=original; _presaleList=oldList; _mtBuyOnly=oldBuyOnly;
+        _mtGradeSet=oldGrades; _focusRegion=oldFocus; toggle.checked=false;
+      }
+    });
+    assert.deepEqual(presaleLifecycle,[
+      ['접수중','접수예정'],
+      ['접수중','접수예정','발표대기','계약중','완료','공고']
+    ]);
     assert.match(await page.locator('#laList').textContent(),/전용 59㎡/);
     assert.match(await page.locator('#laList').textContent(),/호가 5.0억.*전용 59㎡/);
     assert.match(await page.locator('#laList').textContent(),/서울 테스트구 상계동/);
