@@ -873,15 +873,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       rowRight:el.getBoundingClientRect().right}));
     assert(watchLayout.watch<watchLayout.row/2 && watchLayout.right<=watchLayout.rowRight,
       `watch action must not fill the list width: ${JSON.stringify(watchLayout)}`);
-    await page.locator('#laList .ms-detail .la-address-edit summary').click();
-    await page.locator('#laList .ms-detail [aria-label="동 이름"]').fill('용두동');
-    await page.locator('#laList .ms-detail').getByRole('button',{name:'직접 저장'}).click();
-    await page.waitForFunction(()=>document.querySelector('#laList .ms-row .la-address')?.textContent?.includes('용두동'));
-    assert.match(await firstSale.textContent(),/서울 테스트구 용두동 \(직접 입력\)/);
-    assert(calls.includes('/api/listing-locality'));
-    await page.locator('#laList .ms-detail [aria-label="동 이름"]').fill('상계동');
-    await page.locator('#laList .ms-detail').getByRole('button',{name:'수정 저장'}).click();
-    await page.waitForFunction(()=>document.querySelector('#laList .ms-row .la-address')?.textContent?.includes('상계동'));
+    assert.equal(await page.locator('#laList .la-address-edit').count(),0);
+    assert.equal(calls.filter(x=>x==='/api/listing-locality').length,0);
     await page.locator('#laList .ms-detail .la-detail-actions button').click();
     await page.locator('#v2ReportBody').getByText('살 때 드는 돈은?',{exact:true}).waitFor();
     assert.equal(await page.locator('#v2ReportBody .tx-costs').evaluate(el=>el.open),false);
@@ -918,6 +911,33 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         `unified sale list overflow ${width}: ${JSON.stringify(layout)}`);
     }
     await page.setViewportSize({width:360,height:800});
+    await page.evaluate(()=>{
+      window.__savedLaData=_laData;
+      const first=_laData.find(x=>x.key==='급매:merged-1');
+      const second={...first,key:'급매:merged-2',총액:80000,평형:34,
+        ref:{...first.ref,전용면적:84,complex_no:'same-complex'}};
+      _laData=[{...first,ref:{...first.ref,complex_no:'same-complex'}},second,
+        _laData.find(x=>x.key==='일반매물:normal-1')];
+      renderAllListings();
+    });
+    const groupedSale=page.locator('#laList .ms-group-head');
+    const singleSale=page.locator('#laList > .ms-row');
+    assert.equal(await groupedSale.count(),1);
+    assert.equal(await singleSale.count(),1);
+    assert.match(await groupedSale.textContent(),/통합인증단지.*2건.*호가 5\.0억~8\.0억.*전용 59~84㎡.*서울 테스트구/);
+    assert.match(await singleSale.textContent(),/통합일반단지.*호가 5\.0억.*전용 59㎡.*서울 테스트구 상계동/);
+    assert.equal(await groupedSale.getAttribute('aria-expanded'),'false');
+    await groupedSale.click();
+    assert.equal(await groupedSale.getAttribute('aria-expanded'),'true');
+    assert.equal(await page.locator('#laList .ms-group-body .ms-row:visible').count(),2);
+    await groupedSale.click();
+    assert.equal(await page.locator('#laList .ms-group-body .ms-row:visible').count(),0);
+    const groupedLayout=await groupedSale.evaluate(el=>({groupWidth:el.getBoundingClientRect().width,
+      parentWidth:el.parentElement.parentElement.getBoundingClientRect().width,
+      scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
+    assert(groupedLayout.groupWidth<=groupedLayout.parentWidth && groupedLayout.scrollWidth<=groupedLayout.clientWidth,
+      `group summary must fit the list: ${JSON.stringify(groupedLayout)}`);
+    await page.evaluate(()=>{_laData=window.__savedLaData;renderAllListings();});
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));

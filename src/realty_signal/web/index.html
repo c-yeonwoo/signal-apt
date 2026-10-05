@@ -345,6 +345,14 @@
     display:inline-block; max-width:100%; box-sizing:border-box; white-space:normal; overflow-wrap:anywhere; vertical-align:middle;
   }
   #laList .ms-row .sub { margin-top:6px; font-size:13px; line-height:1.4; }
+  #laList .ms-group-head { padding:14px 16px; background:#f8fafc; font-weight:400; }
+  #laList .ms-group-head[aria-expanded="true"] { background:#edf4fc; border-left:3px solid var(--accent); padding-left:13px; }
+  #laList .ms-group-head .nm { font-weight:600; font-size:14px; min-width:0; flex:1 1 155px; }
+  #laList .ms-group-head .r1 { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:4px 10px; }
+  #laList .ms-group-head .sub { color:var(--dim); font-size:13px; font-weight:400; margin-top:6px; }
+  #laList .ms-group-count { display:inline-block; border-radius:999px; padding:2px 7px; background:#dbeafe; color:#1d4ed8; font-size:11px; white-space:nowrap; }
+  #laList .ms-group-body { border-left:3px solid var(--accent); background:#f8fbff; }
+  #laList .ms-group-body .ms-row { padding-left:20px; }
   #laList .r1 > span:last-child { min-width:0; max-width:100%; }
   #laList .la-price { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:3px 6px; font-size:13px; overflow-wrap:anywhere; }
   #laList .la-price b { font-size:15px; }
@@ -360,10 +368,6 @@
   #laList .la-detail-hint { color:var(--dim); font-size:12px; margin-top:3px; }
   #laList .la-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
   #laList .la-detail-actions .btn { min-height:38px; font-size:13px; }
-  #laList .la-address-edit { margin-top:10px; font-size:12px; color:var(--dim); }
-  #laList .la-address-edit summary { cursor:pointer; width:max-content; }
-  #laList .la-dong-form { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
-  #laList .la-dong-form input { width:120px; min-height:36px; border:1px solid var(--line); border-radius:7px; padding:5px 8px; font-size:14px; }
   #laList .tx-costs .tx-note { font-size:12px; }
   .ms-caret { color:var(--dim); font-size:13px; transition:transform .15s; }
   .ms-row.sel .ms-caret { transform:rotate(180deg); }
@@ -3844,30 +3848,6 @@ function _laPricePass(x){
   const cap = _laPrice.max>=_laPrice.hi ? Infinity : _laPrice.max;  // 상한 끝 = 그 이상 전부 포함
   return v>=_laPrice.min && v<=cap;
 }
-async function saveListingDong(btn){
-  const input=btn.parentElement.querySelector('input');
-  const dong=input?.value.trim()||'';
-  if(!/^[가-힣][가-힣0-9]{0,11}(?:동|읍|면|리)$/.test(dong)){
-    toast('동·읍·면·리 이름을 확인해 주세요.'); return;
-  }
-  btn.disabled=true;
-  try{
-    const key=btn.dataset.listingKey;
-    const response=await fetch('/api/listing-locality',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({key,dong})});
-    if(!response.ok) throw new Error('동 이름을 저장하지 못했습니다.');
-    const row=_laData.find(x=>x.key===key);
-    if(row){
-      row['동']=dong; row['동출처']='직접 입력';
-      const address=btn.closest('.ms-detail')?.previousElementSibling?.querySelector('.la-address');
-      if(address) address.textContent=_laAddress(row);
-    }
-    _laInvalidateCache();
-    btn.disabled=false;
-    btn.textContent='수정 저장';
-    toast('동 이름을 내 계정에 저장했습니다.');
-  }catch(e){ btn.disabled=false; toast(e.message||'동 이름을 저장하지 못했습니다.'); }
-}
 function _laTradePriceEvidence(row){
   const price=row?.price_comparison;
   const diff=price?.['호가차이율'];
@@ -3969,15 +3949,13 @@ function renderAllListings(){
       const action=x['유형']==='청약'
         ? `<button type="button" class="btn" onclick="event.stopPropagation();openTypedList('청약')">청약 목록에서 확인</button>`
         : report||'<span class="la-detail-hint">현재 수집분의 매물 식별자를 확인할 수 없어 리포트를 열 수 없습니다.</span>';
-      const locality=_SALE_TYPES.includes(x['유형'])&&(!x['동']||x['동출처']==='직접 입력')&&x['지역식별상태']==='matched'
-        ? `<details class="la-address-edit"><summary>주소의 동 정보 보완</summary><div class="la-dong-form"><label>동 이름 <input aria-label="동 이름" placeholder="예: 상계동" value="${esc(x['동']||'')}" autocomplete="off"></label><button type="button" class="btn" data-listing-key="${esc(x['key'])}" onclick="event.stopPropagation();saveListingDong(this)">${x['동']?'수정 저장':'직접 저장'}</button></div></details>` : '';
       const hint=x['유형']==='청약'?'공고의 청약 조건과 일정을 확인하세요.':
         _SALE_TYPES.includes(x['유형'])?'가격·실거래·단지 참고 신호·비용을 한 리포트에서 확인하세요.':
         x['유형']==='경매'?'경매 정보의 근거를 확인하세요. 권리·필요 현금은 별도 검토가 필요합니다.':
         '현재 확인된 자료를 검토하고 원천에서 상태를 다시 확인하세요.';
       return `<div class="la-detail-title">선택한 매물 확인</div>
         <div class="la-detail-hint">${hint}</div>
-        <div class="la-detail-actions">${action}</div>${locality}`;
+        <div class="la-detail-actions">${action}</div>`;
     },
     coord:x=>(x['lat']&&x['lng'])?[x['lat'],x['lng']]:null,
     geoq:x=>`${x['지역']||''} ${x['단지명']||''}`,
@@ -3988,6 +3966,19 @@ function renderAllListings(){
       return id&&x['지역코드']&&x['단지명']?
         `${x.source||x['유형']}|${x['지역코드']}|${id}|${x['단지명'].trim()}`:null; },
     groupLabel:group=>`${group[0]['단지명']} · ${group.length}개 매물 · ${[...new Set(group.map(x=>x['평형']).filter(Boolean))].slice(0,3).join(' / ')||'면적 확인 필요'}${group.some(x=>x['평형'])?'평':''}`,
+    groupSummary:group=>{
+      const first=group[0], prices=group.map(_laAsk).filter(v=>v!=null&&v>0);
+      const amount=prices.length===group.length
+        ? `호가 ${_eok(Math.min(...prices))}${Math.min(...prices)===Math.max(...prices)?'':`~${_eok(Math.max(...prices))}`}`
+        : '호가 일부 미확인';
+      const areas=[...new Set(group.map(x=>Number(x.ref?.['전용면적']??x['전용면적']))
+        .filter(v=>Number.isFinite(v)&&v>0).map(v=>Math.round(v)))].sort((a,b)=>a-b);
+      const area=areas.length===1?`전용 ${areas[0]}㎡`:areas.length>1?`전용 ${areas[0]}~${areas.at(-1)}㎡`:'전용면적 확인 필요';
+      const sameSignal=group.every(x=>x['시그널']===first['시그널']);
+      return {nm:`${esc(first['단지명']||'–')} <span class="ms-group-count">${group.length}건</span> ${sameSignal?regionSignalBadge(first['시그널']||'HELD'):''}`,
+        right:`<span class="la-price"><b>${amount}</b><span>${area}</span></span>`,
+        sub:`<span class="la-address">${esc(_laAddress(first))}</span>`};
+    },
     label:x=>`<b>${x['단지명']}</b><br>${_SALE_TYPES.includes(x['유형'])?qsAreaLabel(x.ref||{}):x['유형']} · ${_eok(x['총액'])}<br>${esc(_laSourceLabel(x))}`,
   });
 }
@@ -4051,13 +4042,20 @@ function renderMsList(mapId, indices){
     const head=document.createElement('button'); head.type='button'; head.className='ms-group-head';
     const body=document.createElement('div'); body.className='ms-group-body';
     const open=st.openGroupKeys.has(group.key);
-    head.textContent=`${open?'▾':'▸'} ${opt.groupLabel?opt.groupLabel(group.indices.map(i=>items[i])):`${group.indices.length}개 매물`}`;
+    const groupItems=group.indices.map(i=>items[i]);
+    const setHead=expanded=>{
+      if(opt.groupSummary){
+        const s=opt.groupSummary(groupItems);
+        head.innerHTML=`<div class="r1"><span class="nm">${s.nm}</span><span>${s.right||''} <span class="ms-caret" aria-hidden="true">${expanded?'⌃':'⌄'}</span></span></div>${s.sub?`<div class="sub">${s.sub}</div>`:''}`;
+      }else head.textContent=`${expanded?'▾':'▸'} ${opt.groupLabel?opt.groupLabel(groupItems):`${group.indices.length}개 매물`}`;
+    };
+    setHead(open);
     head.setAttribute('aria-expanded',String(open));
     body.style.display=open?'block':'none';
     head.onclick=()=>{
       const next=head.getAttribute('aria-expanded')!=='true';
       head.setAttribute('aria-expanded',String(next)); body.style.display=next?'block':'none';
-      head.textContent=`${next?'▾':'▸'} ${opt.groupLabel?opt.groupLabel(group.indices.map(i=>items[i])):`${group.indices.length}개 매물`}`;
+      setHead(next);
       if(next) st.openGroupKeys.add(group.key); else st.openGroupKeys.delete(group.key);
       if(!next&&group.indices.includes(st.sel)){
         st._selectionGen=(st._selectionGen||0)+1;
