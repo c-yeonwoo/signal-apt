@@ -438,6 +438,20 @@
   #view-mypage .grid2 { gap:18px 18px; }
   #view-mypage .grid2 label { font-size:13px; gap:6px; }
   #view-mypage .ctrl { padding:9px 11px; font-size:14px; }
+  .mine-card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 16px 18px; margin:0 0 14px; }
+  .mine-card h3 { margin:0 0 4px; font-size:16px; letter-spacing:-0.02em; }
+  .mine-card .hint { margin:0 0 14px; color:var(--dim); font-size:13px; line-height:1.55; }
+  .mine-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px 16px; }
+  .mine-fields label, #view-mypage .mine-fields label { font-size:13px; font-weight:650; color:var(--txt); gap:6px; }
+  .mine-fields .field-note { font-weight:500; color:var(--dim); font-size:12px; }
+  #view-mypage details.mine-more { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:2px 16px 12px; }
+  #view-mypage details.mine-more > summary { list-style:none; }
+  .mine-guide { font-size:13px; line-height:1.55; color:var(--txt); }
+  .mine-guide ol { margin:8px 0 0; padding-left:18px; }
+  .mine-guide li { margin:4px 0; }
+  .mine-legend { display:flex; flex-direction:column; gap:8px; margin-top:12px; font-size:12px; line-height:1.45; color:var(--dim); }
+  .mine-legend b { color:var(--txt); font-weight:700; }
+  @media (max-width:600px) { .mine-fields { grid-template-columns:1fr; } }
   .watch-heading { margin-bottom:14px; }
   .watch-heading .page-sub { margin:0; font-size:14px; }
   .watch-records > summary, .watch-card-more > summary { cursor:pointer; color:var(--accent); font-weight:700; min-height:44px; display:flex; align-items:center; }
@@ -763,8 +777,7 @@
     <button class="tab on" data-group="home" aria-current="page" onclick="switchTab('dashboard')" title="다음 할 일과 확인할 후보">홈</button>
     <button class="tab" data-group="market" onclick="switchTab('signal')" title="이번 주 동네 판정과 근거">시그널</button>
     <button class="tab" data-group="browse" onclick="switchTab('all')" title="일반·급매·경매·청약 후보를 지도에서 찾기">매물 찾기</button>
-    <button class="tab" data-group="criteria" onclick="switchTab('mypage')" title="예산·출퇴근·주거 조건">내 조건</button>
-    <button class="tab" data-group="find" onclick="switchTab('watch')" title="찜한 매물·청약과 관심단지">내 후보</button>
+    <button class="tab" data-group="mine" onclick="switchTab('mymap')" title="관심 지도에서 비교하고, 찜한 매물과 조건을 같이 봅니다">내 지도</button>
   </div>
   <div class="right">
     <button class="navlink" onclick="switchTab('about')" title="시그널 APT란? · 과거 비교·경기국면·용어·데이터출처">가이드</button>
@@ -774,8 +787,6 @@
       <button class="navlink" id="acctBtn" onclick="toggleAcctMenu(event)"><span id="myPageLabel">계정</span> ▾</button>
       <div id="acctMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);min-width:190px;z-index:1200;padding:4px">
         <div id="acctEmail" style="padding:7px 12px 8px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line);margin-bottom:4px"></div>
-        <a class="acct-item" onclick="acctGo('profile')">프로필 수정</a>
-        <a class="acct-item" onclick="acctGo('map')">관심 지도</a>
         <a class="acct-item" id="adminMenuItem" style="display:none;border-top:1px solid var(--line);margin-top:4px" onclick="closeAcctMenu();openAdmin()">관리자</a>
         <a class="acct-item" onclick="closeAcctMenu();logout()" style="color:#dc2626">로그아웃</a>
       </div>
@@ -1035,9 +1046,9 @@
 
 <div id="view-general" style="display:none">
   <h2 class="page-head">일반 아파트 매매 <span class="pill">한방 · 개인용</span></h2>
-  <p class="page-sub">관심지역 우선 최대 3개 시군구, 지역당 최신 3페이지의 표본입니다. 전체 매물·현재 판매 여부를 보장하지 않습니다.</p>
+  <p class="page-sub">관심단지의 매매 호가를 하루 한 번 받아 둡니다. 그 지역 최신 3페이지 안의 관심단지만 남깁니다. 전체 매물·현재 판매 여부는 보장하지 않습니다.</p>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-    <button class="btn" id="hbRefreshBtn" onclick="refreshGeneralListings()">관심지역 다시 수집</button>
+    <button class="btn" id="hbRefreshBtn" onclick="refreshGeneralListings()">관심단지 다시 수집</button>
     <span id="hbStatus" style="color:var(--dim);font-size:12px"></span>
   </div>
   <div class="mapsplit"><div class="ms-list" id="hbList"></div><div class="ms-map" id="hbMap"></div></div>
@@ -1528,24 +1539,25 @@
 </dialog>
 
 <div id="view-mypage" style="display:none">
- <div style="max-width:980px;margin:0 auto;padding:22px 18px 48px">
+ <div style="max-width:760px;margin:0 auto;padding:22px 18px 48px">
   <div style="margin-bottom:14px">
-    <h2 class="page-head" style="margin:0 0 3px">프로필 수정</h2>
+    <h2 class="page-head" style="margin:0 0 3px">내 조건</h2>
     <div id="mp_email" style="color:var(--dim);font-size:13px"></div>
   </div>
 
-  <p id="mp_summary" style="color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 20px"></p>
+  <section class="mine-card">
+    <h3>매수에 쓰는 돈</h3>
+    <p class="hint">후보가 예산 안인지 볼 때 이 숫자를 씁니다. 은행 대출 승인이 아닙니다.</p>
+    <p id="mp_summary" style="color:var(--txt);font-size:13px;line-height:1.6;margin:0 0 14px"></p>
+    <div class="mine-fields">
+      <label>지금 집<select id="mp_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select><span class="field-note">규제와 취득세가 여기서 갈립니다.</span></label>
+      <label>쓸 수 있는 현금<span class="field-note">만원</span><input id="mp_capital" type="number" inputmode="numeric" placeholder="25000이면 2억 5천만 원" class="ctrl" style="width:100%"></label>
+      <label>연소득<span class="field-note">만원 · 대출 한도 계산</span><input id="mp_income" type="number" inputmode="numeric" placeholder="예: 7000" class="ctrl" style="width:100%"></label>
+    </div>
+  </section>
 
-  <div class="mp-sec">매수 기준</div>
-  <p class="page-sub">먼저 자금과 주택 보유 상태만 설정하세요. 후보의 예산 비교에 쓰입니다.</p>
-  <div class="grid2">
-    <label>주택 보유<br><select id="mp_own" class="ctrl" style="width:100%"><option value="0">무주택</option><option value="1">1주택</option><option value="2">다주택</option></select></label>
-    <label>가용 자본(만원)<br><input id="mp_capital" type="number" placeholder="예: 50000" class="ctrl" style="width:100%"></label>
-    <label>연소득(만원)<br><input id="mp_income" type="number" placeholder="DSR 한도 계산" class="ctrl" style="width:100%"></label>
-  </div>
-
-  <details id="mpExtra" style="margin-top:24px;border-top:1px solid var(--line);padding-top:10px">
-   <summary style="cursor:pointer;color:var(--accent);font-weight:700;min-height:44px;display:flex;align-items:center">지역·평형·통근·청약 설정</summary>
+  <details id="mpExtra" class="mine-more">
+   <summary style="cursor:pointer;color:var(--accent);font-weight:700;min-height:48px;display:flex;align-items:center">사는 곳, 평형, 출퇴근, 청약</summary>
    <p class="page-sub" style="margin:0 0 16px">필요할 때만 입력하세요. 설정하지 않은 조건은 추천에서 확정하지 않습니다.</p>
    <div class="grid2">
     <label>거주지<br>
@@ -1581,7 +1593,7 @@
   <button id="mpTradeupLink" type="button" class="btn" style="display:none;margin-top:20px" onclick="switchTab('tradeup')">갈아타기 계산 보기</button>
   </details>
 
-  <button class="btn" onclick="saveMyPage()" style="display:block;margin:26px auto 0;max-width:360px;width:100%;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">프로필 저장</button>
+  <button class="btn" onclick="saveMyPage()" style="display:block;margin:18px auto 0;max-width:360px;width:100%;background:var(--accent);color:#fff;font-weight:700;padding:13px;font-size:15px">이 조건으로 저장</button>
  </div>
 </div>
 
@@ -1589,7 +1601,7 @@
 <div id="view-watch" style="display:none">
  <div style="max-width:960px;margin:0 auto;padding:22px 18px 40px">
   <div class="watch-heading"><h2 class="page-head">내 후보</h2>
-    <p class="page-sub">찜한 매물과 청약의 가격·일정 변화를 확인하세요.</p>
+    <p class="page-sub">찜한 매물 한 건의 가격과 일정입니다. 동네는 관심지역, 아파트는 관심 지도의 관심단지입니다.</p>
   </div>
   <div id="watchStatus" role="status" style="font-size:13px;color:var(--dim);margin:10px 0"></div>
   <div id="watchList"></div>
@@ -1604,8 +1616,8 @@
 <!-- 내 시그널 맵 (별도 페이지) -->
 <div id="view-mymap" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px;min-width:0">
-  <h2 class="page-head">내 시그널 맵</h2>
-  <p class="page-sub">관심지역·단지 · 핀 두 개로 표시 좌표 간 거리 확인</p>
+  <h2 class="page-head">관심 지도</h2>
+  <p class="page-sub">관심지역은 동네 판정, 관심단지는 비교할 아파트, 찜한 매물은 내 후보입니다. 핀을 눌러 거리와 비교를 여세요.</p>
   <div id="mmSummary" style="display:none;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="position:relative;flex:1 1 220px;min-width:0;max-width:360px">
@@ -1618,12 +1630,22 @@
   <div style="display:flex;gap:12px;flex-wrap:wrap">
     <div id="myMap" style="flex:1 1 540px;min-width:0;width:100%;height:560px;border:1px solid var(--line);border-radius:var(--r-md);background:#f1f5f9"></div>
     <aside style="width:290px;flex:1 1 280px;min-width:0;max-width:100%">
-      <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px;overflow-wrap:anywhere">핀 두 개를 클릭해 표시 좌표 간 거리를 확인하세요.</div>
-      <div id="myMapInfo" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;min-height:60px"></div>
-      <div style="font-size:11px;color:var(--dim);margin-top:10px;line-height:1.8">
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#2563eb;display:inline-block"></span> 거주지 시군구 중심</span><br>
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#16a34a;display:inline-block"></span> 관심지역 중심</span><br>
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:50%;background:#ea580c;display:inline-block"></span> 관심단지</span></div>
+      <div id="myMapGuide" class="mine-guide" style="border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;margin-bottom:10px">
+        <b>여기서 비교를 시작합니다</b>
+        <ol>
+          <li>단지를 검색해 지도에 찍습니다.</li>
+          <li>핀에서 관심단지로 두거나 비교에 넣습니다.</li>
+          <li>핀 두 개로 거리와 출퇴근 시간을 봅니다.</li>
+        </ol>
+      </div>
+      <div id="myMapDist" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;color:var(--dim);margin-bottom:10px;overflow-wrap:anywhere">핀 두 개를 누르면 표시 좌표 사이 거리와 대중교통 시간이 나옵니다.</div>
+      <div id="myMapInfo" style="border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;font-size:13px;min-height:60px">핀을 누르면 그 장소에서 할 일이 여기에 나옵니다.</div>
+      <div class="mine-legend">
+        <span><b>거주지</b> 시군구 중심입니다. 실제 집 주소가 아닙니다.</span>
+        <span><b>관심지역</b> 동네 시그널을 지켜보는 시군구입니다. 핀은 구 중심입니다.</span>
+        <span><b>관심단지</b> 비교하고 통근을 볼 아파트입니다. 그 구의 매수 등급이 단지 추천은 아닙니다.</span>
+        <span><b>찜한 매물</b> 호가와 일정이 있는 한 건입니다. 내 후보에서 봅니다.</span>
+      </div>
       <div id="myMapEmpty" style="font-size:12px;color:var(--dim);margin-top:10px"></div>
     </aside>
   </div>
@@ -1631,10 +1653,10 @@
   <!-- 단지 비교표 (지도 아래 인라인) -->
   <section id="mmCompare" style="margin-top:22px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px">
-      <h3 style="margin:0;font-size:18px">단지 비교</h3>
+      <h3 style="margin:0;font-size:18px">나란히 비교</h3>
       <button id="cmpRun" class="btn" style="background:var(--accent);color:#fff;font-weight:700;padding:6px 15px" onclick="runCompare()">비교하기</button>
     </div>
-    <p class="page-sub" style="margin-bottom:10px">검색·관심단지에서 열 추가 후 비교하기</p>
+    <p class="page-sub" style="margin-bottom:10px">지도에서 고른 단지의 실거래·전세·거래를 같은 표로 봅니다. 지역 등급을 단지 매수 추천으로 읽지 않습니다.</p>
     <div id="cmpCrit" style="display:none;margin:0 0 10px">
       <span style="font-size:12px;color:var(--dim);margin-right:6px">무엇을 중요하게 보시나요? <span style="color:var(--txt)">(복수 선택 → AI 추천)</span></span>
       <span id="cmpCritChips"></span>
@@ -1963,23 +1985,23 @@ function renderMtFilter(hostId, rerender){
 // ===== 동네 판정과 매물 탐색은 독립된 상단 과업이다. =====
 const _GROUPS={
   home:     ['dashboard'],
-  criteria: ['mypage'],
   market:   ['signal','undervalued'],
   browse:   ['all'],
-  find:     ['watch'],
+  mine:     ['mymap','watch','mypage'],
 };
 const _BROWSE_TOOLS=['auction','redev','general','quicksale','presale','tradeup','report'];
-const _GROUP_LABEL={market:'시장',browse:'매물 찾기', find:'내 후보', criteria:'내 조건'};
+const _GROUP_LABEL={market:'시장',browse:'매물 찾기', mine:'내 지도'};
 const _SUBMETA={
   signal:{l:'가격·수급',d:'지역별 추세'},
   undervalued:{l:'지역 가격 비교',d:'면적별 실거래'},
   all:{l:'매물',d:'내 예산 순'},
-  watch:{l:'찜한 매물',d:'가격·일정'},
+  mymap:{l:'관심 지도',d:'비교·거리'},
+  watch:{l:'내 후보',d:'찜한 매물'},
+  mypage:{l:'내 조건',d:'예산·생활'},
 };
 const _LISTING=['all','general','quicksale','presale','auction','redev','tradeup'];
 const _ALLVIEWS=['dashboard','signal','undervalued','all','general','auction','quicksale','presale','redev','tradeup','watch','mymap','report','glossary','about','mypage'];
 function _groupOf(v){
-  if(v==='mymap') return 'find';
   if(_BROWSE_TOOLS.includes(v)) return 'browse';
   for(const g in _GROUPS) if(_GROUPS[g].includes(v)) return g;
   return null;
@@ -2009,7 +2031,7 @@ function inFocus(region){ return !_focusRegion || (region||'').includes(_focusRe
 const _LISTLOAD={all:()=>loadAllListings(), general:()=>loadGeneralListings(), auction:()=>loadAuction(), quicksale:()=>loadQuicksale(), presale:()=>loadPresale(), redev:()=>loadRedev()};
 function _subBtn(v, active){
   const m=_SUBMETA[v];
-  return `<button class="subtab${v===active?' on':''}" data-sub="${v}" onclick="switchTab('${v}')">${m.l}<small>${m.d}</small></button>`;
+  return `<button class="subtab${v===active?' on':''}" data-sub="${v}" aria-label="${m.l}" onclick="switchTab('${v}')">${m.l}<small>${m.d}</small></button>`;
 }
 function renderGroupSubnav(grp, active){
   document.getElementById('groupSubLabel').textContent=_GROUP_LABEL[grp]||'';
@@ -2030,7 +2052,7 @@ const _LOAD={
 };
 function switchTab(t, fromHistory=false){
   // 그룹 alias — 상단 메인탭 클릭 시 그룹 기본 뷰로
-  if(t==='market') t='signal'; else if(t==='listings') t='all'; else if(t==='find') t='watch'; else if(t==='home') t='dashboard';
+  if(t==='market') t='signal'; else if(t==='listings') t='all'; else if(t==='find'||t==='mine') t='mymap'; else if(t==='criteria') t='mypage'; else if(t==='home') t='dashboard';
   if(!_ALLVIEWS.includes(t)) return;
   const enteringSignal=t==='signal' && !document.body.classList.contains('tab-signal');
   if(t!=='signal' && document.getElementById('view-signal').classList.contains('picker-open')) closeSignalRegions(false);
@@ -2045,7 +2067,7 @@ function switchTab(t, fromHistory=false){
   });
   const mpBtn=document.getElementById('myPageBtn'); if(mpBtn) mpBtn.classList.toggle('on', t==='mypage');
   // 오래된 세부 화면에서만 매물 목록으로 돌아가는 작은 경로를 둔다.
-  const showSub=(grp==='browse' && t!=='all') || grp==='market';
+  const showSub=(grp==='browse' && t!=='all') || grp==='market' || grp==='mine';
   const sn=document.getElementById('groupSubnav'); if(sn) sn.style.display=showSub?'flex':'none';
   if(showSub) renderGroupSubnav(grp, t);
   if(t==='all') renderListingFocus();
@@ -2059,7 +2081,7 @@ function switchTab(t, fromHistory=false){
   if(location.hash.slice(1)!==t) history[fromHistory?'replaceState':'pushState'](null, '', '#'+t);
   if(window._signalAppReady) checkClientVersion();
 }
-const _ROUTES=[..._ALLVIEWS, 'market','listings','find','home'];
+const _ROUTES=[..._ALLVIEWS, 'market','listings','find','mine','criteria','home'];
 // 없앤 탭의 옛 링크는 지금 하는 일로 보낸다.
 const _GONE={news:'dashboard', report:'dashboard'};
 const _TYPE_HASH={general:'일반매물', quicksale:'급매', presale:'청약'};
@@ -3499,7 +3521,7 @@ async function loadGeneralListings(force=false){
 }
 async function refreshGeneralListings(){
   const btn=document.getElementById('hbRefreshBtn'), status=document.getElementById('hbStatus');
-  btn.disabled=true; status.textContent='관심지역 수집 중… (최대 3곳, 수십 초)';
+  btn.disabled=true; status.textContent='관심단지 수집 중… (수십 초)';
   try{ const r=await fetch('/api/general-listings/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json(); if(!r.ok||!data.ok) throw new Error(data.message||data.scan?.error||data.detail||'수집 실패');
     _laInvalidateCache();
@@ -3681,14 +3703,19 @@ function _laApplyResponse(types,d,preservePrice=false){
   sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
   document.getElementById('laSourceWarningText').textContent='일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.';
   const scopeNote=document.getElementById('laSourceScope'), scope=info.general_scope||{};
-  const scopeCount=n=>Number.isInteger(n)&&n>0&&n<=3?n:0;
+  const scopeCount=n=>Number.isInteger(n)&&n>0&&n<=8?n:0;
   const scopeReasons=[];
+  if(info.private_access===true && info.general_refresh_failed!==true && scope.no_favorite_complexes){
+    scopeNote.style.display='block';
+    scopeNote.textContent='관심단지가 없어 일반매물을 받아 두지 않았습니다. 단지를 ★로 등록하면 그 단지만 하루 한 번 받아 둡니다.';
+  }else{
   if(info.private_access===true && info.general_refresh_failed!==true){
     if(scopeCount(scope.failed_regions)) scopeReasons.push(`${scope.failed_regions}곳 조회 실패`);
     if(scopeCount(scope.page_limited_regions)) scopeReasons.push(`${scope.page_limited_regions}곳 페이지 제한`);
   }
   scopeNote.style.display=scopeReasons.length?'block':'none';
-  scopeNote.textContent=scopeReasons.length?`마지막 일반매물 수집은 일부만 확인됐습니다 · ${scopeReasons.join(' · ')}. 전체 매물은 아닙니다.`:'';
+  scopeNote.textContent=scopeReasons.length?`마지막 일반매물 수집은 일부만 확인됐습니다 · ${scopeReasons.join(' · ')}. 관심단지가 그 페이지 밖에 있으면 빠집니다.`:'';
+  }
   initLaPriceFilter();
   if(price && _laPrice){
     _laPrice.active=!!price.active;
@@ -3799,7 +3826,7 @@ async function loadAllListings(){
 async function retryGeneralFromAll(){
   const button=document.getElementById('laGeneralRetry');
   const message=document.getElementById('laSourceWarningText');
-  button.disabled=true; message.textContent='일반매물을 다시 수집하고 있습니다. 최대 3개 지역을 확인합니다…';
+  button.disabled=true; message.textContent='일반매물을 다시 수집하고 있습니다. 관심단지가 있는 지역을 확인합니다…';
   try{
     const response=await fetch('/api/general-listings/refresh',{
       method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -7642,9 +7669,9 @@ async function drawMyMap(){
   });
   document.getElementById('myMapEmpty').textContent = p['거주지'] && !homeVerified
     ? '거주지 위치를 확인하지 못했습니다. 내 조건에서 주소 검색 결과를 다시 선택해 주세요.'
-    : pts.length ? '' : '표시할 핀이 없습니다. 내 조건에서 거주지를 선택하거나, 단지 검색·★로 관심지역·관심단지를 추가하세요.';
-  document.getElementById('myMapDist').textContent = '핀 두 개를 클릭해 표시 좌표 간 거리를 확인하세요.';
-  document.getElementById('myMapInfo').innerHTML = '';
+    : pts.length ? '' : '아직 핀이 없습니다. 위에서 단지를 검색하거나, 내 조건에서 거주지를 고르세요.';
+  document.getElementById('myMapDist').textContent = '핀 두 개를 누르면 표시 좌표 사이 거리와 대중교통 시간이 나옵니다.';
+  document.getElementById('myMapInfo').textContent = '핀을 누르면 그 장소에서 할 일이 여기에 나옵니다.';
   updateCmpChip();
   renderCompareTable();
   if(pts.length){ const g=L.featureGroup(_myMarkers); myMap.fitBounds(g.getBounds().pad(0.25)); }
@@ -7656,13 +7683,13 @@ function renderMmSummary(){
   const regs=_myPts.filter(p=>p.kind==='region'), cxs=_myPts.filter(p=>p.kind==='complex');
   if(!home && !regs.length && !cxs.length){ box.style.display='none'; return; }
   const buyish=s=>['STRONG_BUY','BUY'].includes(s);
-  const cxRated=cxs.filter(p=>p.cxsig).length, cxBuy=cxs.filter(p=>p.cxsig&&buyish(p.cxsig['등급'])).length;
+  const cxRated=cxs.filter(p=>p.cxsig).length;
   const card=(t,v,sub)=>`<div style="flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 13px"><div style="font-size:11px;color:var(--dim)">${t}</div><div style="font-size:15px;font-weight:800;margin-top:2px">${v}</div>${sub?`<div style="font-size:10px;color:var(--dim);margin-top:1px">${sub}</div>`:''}</div>`;
   box.style.display='flex';
   box.innerHTML =
     (home?card('거주지 시그널', home.sig?badge(home.sig):'–', home.name):'') +
-    (regs.length?card('관심지역 매수신호', `${regs.filter(p=>buyish(p.sig)).length} / ${regs.length}`, '📍 BUY+ 지역 수'):'') +
-    (cxs.length?card('관심단지 매수신호', `${cxBuy} / ${cxs.length}`, cxRated<cxs.length?'단지 시그널 계산 중…':'🏢 단지 시그널 기준'):'');
+    (regs.length?card('관심지역', `${regs.filter(p=>buyish(p.sig)).length} / ${regs.length}`, '동네 판정이 매수·강력매수인 곳'):'') +
+    (cxs.length?card('관심단지', `${cxs.length}곳`, cxRated<cxs.length?'단지 자료를 불러오는 중':'비교와 통근을 볼 아파트'):'');
 }
 async function _loadMyCxSigs(){
   const targets=_myPts.map((pt,i)=>({pt,i})).filter(o=>o.pt.kind==='complex'||o.pt.kind==='search');
@@ -7739,12 +7766,13 @@ function myPinClick(i){
       info+=`<div style="margin-top:6px;font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${bits.join(' · ')}${(pt.spark&&pt.spark.length>=2)?_sparkMini(pt.spark):''}</div>`;
     const favd=(_favs||new Set()).has('complex:'+cxFavKey(pt.region,pt.name));
     info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-      <span class="btn" style="padding:4px 10px;font-size:12px${favd?';background:var(--accent);color:#fff':''}" onclick="mmToggleFav('${nm}','${pt.region}')">${favd?'★ 관심단지':'☆ 관심단지'}</span>
-      <span class="btn" style="padding:4px 10px;font-size:12px" onclick="addToCompare('${nm}','${pt.region}');updateCmpChip()">＋ 비교</span>
-      <span class="btn" style="padding:4px 10px;font-size:12px" onclick="openComplex('${nm}','${pt.region}')">상세 ›</span></div>`;
-  } else info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+      <span class="btn" style="padding:4px 10px;font-size:12px${favd?';background:var(--accent);color:#fff':''}" onclick="mmToggleFav('${nm}','${pt.region}')">${favd?'★ 관심단지':'관심단지로 두기'}</span>
+      <span class="btn" style="padding:4px 10px;font-size:12px" onclick="addToCompare('${nm}','${pt.region}');updateCmpChip()">비교에 넣기</span>
+      <span class="btn" style="padding:4px 10px;font-size:12px" onclick="openComplex('${nm}','${pt.region}')">단지 상세</span></div>`;
+  } else if(pt.region) info+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
       <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openNbhd('${pt.region}')">동네 리포트</span>
-      <span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널 보기 →</span></div>`;
+      <span class="btn" style="padding:4px 11px;font-size:12px" onclick="switchTab('signal');selectRegion('${pt.region}')">시그널</span>
+      <span class="btn" style="padding:4px 11px;font-size:12px" onclick="focusListings('${pt.region}')">이 지역 매물</span></div>`;
   const wp=_profile||{};
   const commute = (pt.kind!=='work' && wp['직장lat'] && wp['직장lng']);
   if(commute) info+=`<div style="margin-top:7px;font-size:12px;color:var(--dim)">💼 ${esc(wp['직장']||'직장')}까지 표시 좌표 기준 <span id="mmCommute">계산 중…</span></div>`;

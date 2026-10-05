@@ -397,6 +397,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#dashMarketExtra > summary').click();
     assert.equal(calls.filter(x=>x==='/api/regime').length,1);
     assert.equal(calls.filter(x=>x==='/api/shortlist').length,0);
+    await page.getByRole('button',{name:'내 지도',exact:true}).click();
+    assert.equal(new URL(page.url()).hash,'#mymap');
+    assert.match(await page.locator('#myMapGuide').textContent(),/비교를 시작/);
     await page.getByRole('button',{name:'내 조건',exact:true}).click();
     assert.equal(new URL(page.url()).hash,'#mypage');
     assert.equal(await page.locator('#mp_capital').isVisible(),true);
@@ -413,6 +416,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       assert(profileWidth<=width,`profile page overflows at ${width}px: ${profileWidth}`);
     }
     await page.setViewportSize({width:360,height:800});
+    await page.goBack();
     await page.goBack();
     await page.waitForFunction(()=>document.body.className==='tab-dashboard');
     await page.getByRole('button',{name:'시그널',exact:true}).click();
