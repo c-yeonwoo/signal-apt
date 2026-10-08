@@ -1927,6 +1927,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       escaped:'&lt;img src=x onerror=alert(1)&gt; · 직선 연결 · 도보시간 미확인'});
     await page.evaluate(()=>openCalc('auction-1','검증단지'));
     assert.match(await page.locator('#aucScenarioResult').textContent(),/내 자금과 사건별 비용/);
+    assert.equal(await page.locator('#calcRights button').count(),0);
+    assert.match(await page.locator('#calcRights').textContent(),/저장된 입력 원문은 공개하지 않습니다/);
     await page.evaluate(()=>runAuctionScenario());
     assert.match(await page.locator('#aucScenarioResult').textContent(),/아직 입찰가를 계산할 수 없어요/);
     await page.locator('#aucCash').fill('10000');

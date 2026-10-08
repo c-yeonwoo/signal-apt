@@ -7414,11 +7414,16 @@ async function openCalc(id){
     const slider=document.getElementById('aucBidSlider');
     slider.min=lst['최저매각가']||1; slider.max=Math.max(+slider.min+1,lst['시세']||lst['최근실거래가']||(+slider.min*2));
     slider.value=lst['최저매각가']||slider.min;
-    const take=lst['인수보증금'], rightsButton=document.createElement('button');
-    rightsButton.type='button'; rightsButton.className='btn';
-    rightsButton.textContent=`권리·점유 확인${take!=null?` · 입력 인수 ${won(take)}`:' 필요'}`;
-    rightsButton.addEventListener('click',()=>openRights(id,lst['단지명']||''));
-    document.getElementById('calcRights').replaceChildren(rightsButton);
+    const take=lst['인수보증금'], rightsArea=document.getElementById('calcRights');
+    if(_isAdmin){
+      const rightsButton=document.createElement('button');
+      rightsButton.type='button'; rightsButton.className='btn';
+      rightsButton.textContent=`권리·점유 확인${take!=null?` · 입력 인수 ${won(take)}`:' 필요'}`;
+      rightsButton.addEventListener('click',()=>openRights(id,lst['단지명']||''));
+      rightsArea.replaceChildren(rightsButton);
+    }else{
+      rightsArea.textContent='권리·점유 원본 서류는 직접 확인하세요. 저장된 입력 원문은 공개하지 않습니다.';
+    }
     document.getElementById('aucScenarioResult').textContent='내 자금과 사건별 비용을 입력해 계산해 보세요.';
   }catch(e){ if(_auctionScenarioId===id) document.getElementById('aucScenarioResult').textContent='물건 정보를 불러오지 못했습니다.'; }
 }

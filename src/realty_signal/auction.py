@@ -561,6 +561,16 @@ def import_csv(text: str) -> int:
 _SIG_WEIGHT = {"STRONG_BUY": 2, "BUY": 1}
 
 
+def public_fields(lst: Listing) -> dict:
+    """공개 응답에는 관리자가 적은 권리·임차인 원문과 자유 메모를 내보내지 않는다."""
+    row = asdict(lst)
+    row["권리분석"] = {"조사완료": (lst.권리분석 or {}).get("조사완료") is True}
+    dong = re.search(r"([가-힣]+동)", lst.메모 or "")
+    row["동"] = dong.group(1) if dong else None
+    row["메모"] = ""
+    return row
+
+
 def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | None = None) -> list[dict]:
     """탐색 목록에는 목적·현금·세금이 없는 옛 단순 상한을 노출하지 않는다."""
     out = []
@@ -568,7 +578,7 @@ def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | N
         sig = signals.get(lst.region, "HELD")
         score = _SIG_WEIGHT.get(sig, 0) * 10 - 100
         out.append({
-            **asdict(lst), "지역시그널": sig, "권장입찰가": None,
+            **public_fields(lst), "지역시그널": sig, "권장입찰가": None,
             "예상낙찰가": None, "총비용우위": None, "총비용우위율": None,
             "시세차익": None, "시세차익률": None,
             "임대수익률": None, "매도수익률": None,
