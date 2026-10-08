@@ -166,6 +166,36 @@ def test_rights_roundtrip_keeps_input(client):
     assert d["인수보증금"] == 30000
 
 
+def test_public_auction_responses_hide_rights_names_and_free_memo(client, monkeypatch):
+    from realty_signal.ingest import external
+
+    private = {"권리": [{"종류": "근저당권", "일자": "2019-03-05", "금액": 24000,
+                       "권리자": "비공개 권리자", "메모": "비공개 권리 메모"}],
+               "임차인": [{"이름": "비공개 임차인", "전입일": "2018-01-02",
+                        "보증금": 30000, "배당요구": False}]}
+    client.post(f"/api/auction/rights/{client.listing.id}", json=private)
+    auction.update(client.listing.id, {"메모": "상계동 비공개 현장 메모"})
+    monkeypatch.setattr(app_api, "_auction_signal_map", lambda: {})
+    monkeypatch.setattr(app_api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(external, "schedule_hank_refresh", lambda: None)
+    monkeypatch.setattr(external, "read_hank_cards", lambda: [])
+
+    viewer_token, err = auth.signup("viewer@example.com", "secret1", accept_tos=True)
+    assert err is None
+    viewer = TestClient(app_api.app)
+    viewer.cookies.set(auth.COOKIE, viewer_token)
+    assert viewer.get(f"/api/auction/rights/{client.listing.id}").status_code == 403
+    listing = viewer.get("/api/auction/listings").json()["listings"][0]
+    calc = viewer.get(f"/api/auction/calc/{client.listing.id}").json()["listing"]
+    for row in (listing, calc):
+        assert row["권리분석"] == {"조사완료": False}
+        assert row["메모"] == ""
+        assert row["동"] == "상계동"
+        assert "비공개" not in str(row)
+    saved = client.get(f"/api/auction/rights/{client.listing.id}").json()
+    assert saved["입력"]["임차인"][0]["이름"] == "비공개 임차인"
+
+
 def test_rights_write_is_admin_only(client, monkeypatch):
     monkeypatch.setenv("ADMIN_EMAILS", "someone-else@example.com")
     r = client.post(f"/api/auction/rights/{client.listing.id}", json=RIGHTS)

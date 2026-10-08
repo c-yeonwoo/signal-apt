@@ -60,7 +60,7 @@ def auction_calc(listing_id: str):
     if lst is None:
         raise HTTPException(404, "listing not found")
     return {
-        "listing": _asdict(lst),
+        "listing": auction.public_fields(lst),
         "recommend": {"상태": "needs_review", "입찰가": None,
                       "사유": ["목적별 입찰 시뮬레이터에서 현금·세금·권리 근거를 입력하세요."]},
         "table": [],
@@ -110,7 +110,9 @@ def auction_parse(request: Request, data: dict = Body(...)):
 
 
 @router.get("/api/auction/rights/{listing_id}")
-def auction_rights_get(listing_id: str):
+def auction_rights_get(request: Request, listing_id: str):
+    if err := deps.require_admin(request):
+        return err
     lst = auction.get(listing_id)
     if lst is None:
         raise HTTPException(404, "listing not found")
