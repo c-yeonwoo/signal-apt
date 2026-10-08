@@ -67,6 +67,29 @@ test('KB freshness legend changes to held at the same nine-calendar-day boundary
   assert.match(box.innerHTML,/background:#16a34a/);
 });
 
+test('KB freshness uses the Korean date at midnight rather than elapsed UTC hours', async () => {
+  const box={innerHTML:''};
+  const data={now:Date.parse('2026-10-08T14:59:59Z')/1000,기준일:'2026-09-30',
+    sources:[{key:'signal',label:'KB 시장 시그널',asof:'2026-09-30',ts:0,cycle:'주간'}]};
+  const ctx=vm.createContext({
+    document:{getElementById:id=>id==='freshBox'?box:null},
+    fetch:async()=>({json:async()=>data}),
+  });
+  vm.runInContext(extract('function _relTime(', 'async function openHistModal('),ctx);
+  await ctx.loadFreshness();
+  assert.doesNotMatch(box.innerHTML,/시그널 판단 보류/);
+  assert.match(box.innerHTML,/background:#16a34a/);
+  data.now=Date.parse('2026-10-08T15:00:00Z')/1000;
+  await ctx.loadFreshness();
+  assert.match(box.innerHTML,/9일 전/);
+  assert.match(box.innerHTML,/시그널 판단 보류/);
+  assert.match(box.innerHTML,/background:#dc2626/);
+  data.sources[0].asof='2026-10-10';
+  await ctx.loadFreshness();
+  assert.match(box.innerHTML,/관측일 미확인 · 시그널 판단 보류/);
+  assert.match(box.innerHTML,/background:#94a3b8/);
+});
+
 test('unverified regulation is not drawn or labeled as a current designation', () => {
   const map=vm.createContext({document:{querySelectorAll:()=>[]}});
   vm.runInContext(extract('let _REGULATION =', 'function initMap('),map);
