@@ -84,17 +84,16 @@ def _auction_alerts() -> list[dict]:
                             "최저": lst.최저매각가, "날짜": d.isoformat()})
         if not lst.낙찰일:
             continue
-        try:
-            for s in auction.plan(lst)["steps"]:
-                sd = date.fromisoformat(s["날짜"])
-                if 0 <= (sd - today).days <= AUCTION_WINDOW:
-                    out.append({"kind": "plan", "D": (sd - today).days, "단지": lst.단지명,
-                                "region": lst.region,
-                                "단계": s["단계"], "할일": s["할일"], "금액": s["금액"],
-                                "날짜": s["날짜"]})
-                    break
-        except Exception:  # noqa: BLE001
-            continue
+        # 낙찰 후 날짜는 사건별 법원 통지가 있어야 알릴 수 있다. 고정 D+일을 기한으로 보내지 않는다.
+        for label, raw, todo in (
+            ("매각허가결정", lst.매각허가결정일, "법원 결정·이의 여부를 확인하세요."),
+            ("대금지급기한", lst.대금지급기한, "법원 통지와 잔금·대출 실행액을 다시 확인하세요."),
+        ):
+            day = auction._date_of(raw)
+            if day is not None and 0 <= (day - today).days <= AUCTION_WINDOW:
+                out.append({"kind": "plan", "D": (day - today).days, "단지": lst.단지명,
+                            "region": lst.region, "단계": label, "할일": todo,
+                            "금액": None, "날짜": day.isoformat()})
     out.sort(key=lambda a: a["D"])
     return out
 

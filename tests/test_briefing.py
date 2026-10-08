@@ -185,11 +185,13 @@ def test_post_win_step_appears(uid, monkeypatch, tmp_path):
     from realty_signal import auction
 
     monkeypatch.setattr(auction, "AUCTION_FILE", tmp_path / "auction.json")
-    won = (briefing.today_kst() - timedelta(days=13)).isoformat()   # D+14 매각허가확정이 내일
+    won = (briefing.today_kst() - timedelta(days=13)).isoformat()
+    confirmed = (briefing.today_kst() + timedelta(days=1)).isoformat()
     auction.add({"단지명": "낙찰단지", "region": "노원구", "감정가": 85000,
-                 "최저매각가": 54400, "낙찰가": 60000, "낙찰일": won})
+                 "최저매각가": 54400, "낙찰가": 60000, "낙찰일": won,
+                 "매각허가결정일": confirmed})
     t = briefing.build(uid, force=True)["text"]
-    assert "낙찰단지" in t and "매각허가결정 확정" in t
+    assert "낙찰단지" in t and "매각허가결정" in t
 
 
 def test_run_sends_and_moves_snapshot(uid, monkeypatch):

@@ -10,11 +10,6 @@ from realty_signal.routes import deps
 router = APIRouter(tags=["auction"])
 
 
-def _overrides(target_margin, loan_ratio, loan_rate, hold_months):
-    return {"목표시세차익률": target_margin, "대출비율": loan_ratio,
-            "대출금리": loan_rate, "보유개월": hold_months}
-
-
 def _asdict(lst):
     from dataclasses import asdict
     return asdict(lst)
@@ -30,18 +25,15 @@ def buy_regions():
 
 
 @router.get("/api/auction/listings")
-def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익률"],
-                     loan_ratio: float | None = None, loan_rate: float | None = None,
-                     hold_months: int | None = None):
+def auction_listings():
     from realty_signal import api as app_api
 
     from realty_signal.ingest import external
 
-    ov = _overrides(target_margin, loan_ratio, loan_rate, hold_months)
     signals = app_api._auction_signal_map()
     region_grades = app_api._regime().get("regions", {})
     external.schedule_hank_refresh()
-    listings = auction.enrich(auction.load(), signals, ov)
+    listings = auction.enrich(auction.load(), signals)
     for item in listings:
         region = item["region"]
         item["지역급지"] = (region_grades.get(region) or {}).get("급지") if region in signals else None
@@ -57,24 +49,36 @@ def auction_listings(target_margin: float = auction.DEFAULTS["목표시세차익
             "지역급지": (region_grades.get(region) or {}).get("급지") if safe else None,
         })
     return {
-        "params": {"target_margin": target_margin},
+        "params": {"mode": "purpose_specific"},
         "listings": listings,
     }
 
 
 @router.get("/api/auction/calc/{listing_id}")
-def auction_calc(listing_id: str, target_margin: float = auction.DEFAULTS["목표시세차익률"],
-                 loan_ratio: float | None = None, loan_rate: float | None = None,
-                 hold_months: int | None = None):
+def auction_calc(listing_id: str):
     lst = next((x for x in auction.load() if x.id == listing_id), None)
     if lst is None:
         raise HTTPException(404, "listing not found")
-    p = auction._p(_overrides(target_margin, loan_ratio, loan_rate, hold_months))
     return {
         "listing": _asdict(lst),
-        "recommend": auction.recommend(lst, p),
-        "table": auction.table(lst, p),
+        "recommend": {"상태": "needs_review", "입찰가": None,
+                      "사유": ["목적별 입찰 시뮬레이터에서 현금·세금·권리 근거를 입력하세요."]},
+        "table": [],
     }
+
+
+@router.post("/api/auction/scenario/{listing_id}")
+def auction_scenario(listing_id: str, data: dict = Body(...)):
+    """저장 없는 목적별 계산. 사용자 가정은 검증된 정책·대출로 승격하지 않는다."""
+    from realty_signal.auction_bid_engine import evaluate
+
+    lst = auction.get(listing_id)
+    if lst is None:
+        raise HTTPException(404, "listing not found")
+    try:
+        return evaluate(lst, data)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/api/auction/listings")
@@ -183,6 +187,23 @@ def auction_refresh_market(request: Request):
     key = config.public_data_key()
     codes = json.loads(store.CODES_FILE.read_text(encoding="utf-8")) if store.CODES_FILE.exists() else {}
     return {"updated": auction.update_market(codes, key)}
+
+
+@router.post("/api/auction/refresh-market/{listing_id}")
+def auction_refresh_one_market(request: Request, listing_id: str):
+    """입찰 시뮬레이터에서 현재 물건의 국토부 표본만 갱신한다."""
+    if err := deps.require_admin(request):
+        return err
+    if auction.get(listing_id) is None:
+        raise HTTPException(404, "listing not found")
+    import json
+    config.load_env()
+    key = config.public_data_key()
+    codes = json.loads(store.CODES_FILE.read_text(encoding="utf-8")) if store.CODES_FILE.exists() else {}
+    updated = auction.update_market(codes, key, listing_id)
+    current = auction.get(listing_id)
+    return {"updated": updated, "sample_count": len(current.실거래표본),
+            "refreshed_at": current.실거래표본갱신일 or None}
 
 
 @router.post("/api/auction/import")

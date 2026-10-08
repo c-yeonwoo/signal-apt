@@ -293,6 +293,19 @@
   .zrow { display:flex; align-items:center; gap:8px; margin:4px 0; }
   .zsw-sm { width:15px; height:15px; border-radius:3px; flex:0 0 auto; }
   /* 경매 */
+  #calcDlg { box-sizing:border-box; }
+  .auc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr)); gap:10px; }
+  .auc-field { display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--dim); min-width:0; }
+  .auc-field input:not([type=range]),.auc-field select { width:100%; box-sizing:border-box; min-height:36px; padding:6px 8px;
+    border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--txt); font:inherit; font-size:14px; }
+  .auc-field input[type=range] { width:100%; accent-color:var(--accent); }
+  .auc-section { border:1px solid var(--line); border-radius:12px; padding:14px; margin:10px 0; background:var(--panel); }
+  .auc-section h4 { font-size:14px; margin:0 0 10px; }
+  .auc-output { border-radius:12px; padding:14px; background:#f1f5f9; border:1px solid var(--line); margin:12px 0; }
+  .auc-output-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:9px; margin-top:10px; }
+  .auc-metric { background:#fff; border:1px solid var(--line); border-radius:9px; padding:10px; }
+  .auc-metric small { color:var(--dim); display:block; margin-bottom:4px; }
+  .auc-metric strong { font-size:17px; }
   #view-auction, #view-undervalued, #view-presale, #view-general, #view-quicksale, #view-redev, #view-mymap, #view-watch, #view-report { padding:16px 20px; height:calc(100vh - var(--hh, 70px)); overflow:auto; }
   /* 좌우 분할 지도 뷰 (경매/청약/재건축/급매 공통) */
   .mapsplit { display:flex; gap:0; height:calc(100vh - 178px); min-height:420px; }
@@ -950,35 +963,18 @@
     <div class="hot" id="hotRegions" style="margin-top:8px"></div>
   </details>
   <details class="sec">
-    <summary>입찰가 계산 기준 · 필터 <span class="pill">공식 조정 가능</span></summary>
+    <summary>경매 후보 필터 <span class="pill">입찰가는 물건별로 계산</span></summary>
     <div class="params" style="margin-top:10px">
-      <label>목표 총비용 우위율 % <input id="pMargin" type="number" value="10" step="1" oninput="loadAuction()"></label>
-      <label>대출비율 % <input id="pLoan" type="number" value="70" step="5" oninput="loadAuction()"></label>
-      <label>대출금리 % <input id="pRate" type="number" value="5" step="0.1" oninput="loadAuction()"></label>
-      <label>보유개월 <input id="pHold" type="number" value="6" step="1" oninput="loadAuction()"></label>
       <label>평형 <select id="fSize" onchange="loadAuction()" class="ctrl">
         <option value="">전체</option><option value="s">소형(≤60㎡)</option><option value="m">중형(60~85)</option><option value="l">대형(>85)</option></select></label>
       <label>연식 <select id="fAge" onchange="loadAuction()" class="ctrl">
         <option value="">전체</option><option value="new">신축(≤10년)</option><option value="mid">준신축(10~20)</option><option value="old">구축(>20)</option></select></label>
       <input id="csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)">
-      <span class="pill" style="color:var(--dim)">매물 추가·실거래 갱신은 관리자 메뉴에서</span>
+      <span class="pill" style="color:var(--dim)">물건을 열어 목적·현금·세금·보증금을 넣으면 가정상 상한을 볼 수 있습니다.</span>
     </div>
-    <details style="margin-top:10px;font-size:13px;color:var(--dim)">
-      <summary style="cursor:pointer;color:var(--accent)">계산식 설명 (입찰가 산정 모델)</summary>
-      <div style="padding:10px 4px;line-height:1.9">
-        • <b>경매 총매입</b> = 입찰가 + 등기비(입찰가×취득세율+법무비) + 명도비(전용평×15만) + 미납관리비 + 수리비 + 보유이자(대출금×금리×개월/12)<br>
-        • <b>일반매매 총매입</b> = 시세 + 취득세 + 중개수수료 + 법무비<br>
-        • <b>총비용 우위율</b> = (시세로 일반매수한 가정 비용 − 경매 총매입비용) ÷ 경매 총매입비용. <b>매도 수익률이 아닙니다.</b><br>
-        • <b>검토용 입찰 상한</b> = 낙찰가율을 1%씩 올린 표에서 <b>목표 총비용 우위율을 만족하는 최대 입찰가</b><br>
-        • <b>실투자금</b> = 경매총매입 − 대출금(입찰가×대출비율) &nbsp;|&nbsp;
-          <b>임대수익률</b> = (월세×12 − 연이자) ÷ (실투자금 − 임대보증금) &nbsp;|&nbsp;
-          <b>단기매도수익률</b> = (매도가 − 경매총매입 − 매도중개보수) ÷ 실투자금<br>
-        <span style="color:#94a3b8">※ 시세·권리·면적이 미확인되면 상한을 계산하지 않습니다. 대출비율·세율·비용은 예시 가정이며 개인 승인/세후 이익이 아닙니다.</span>
-      </div>
-    </details>
   </details>
   <div class="sec">
-    <h3>경매 전략 (입찰기일 기준)</h3>
+    <h3>경매 일정과 준비</h3>
     <div class="strat" id="strat"></div>
   </div>
   <div class="sec">
@@ -1191,33 +1187,83 @@
   <p style="color:var(--dim);font-size:11px;margin-top:14px">※ 국면은 KB 지역 주간 가격의 후행 분류이며 다음 가격을 예측하지 않습니다. 지역 평균과 개별 단지는 다를 수 있습니다.</p>
 </dialog>
 
-<dialog id="calcDlg" style="width:760px">
-  <h3 id="calcTitle"></h3>
-  <div id="calcBreak" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px"></div>
-
-  <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-      <b style="font-size:14px">대출 계산기</b>
-      <label style="font-size:12px"><input type="checkbox" id="ln_first" checked onchange="firstHomePreset()"> 생애최초</label>
-      <span class="pill">금융 우대 기준 · 원금균등/원리금균등</span>
-    </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dim)">
-      <label>매입가(만원) <input id="bid_price" type="number" style="width:90px" oninput="recalcLoan()"></label>
-      <label>LTV % <input id="bid_ltv" type="number" value="80" step="5" style="width:56px" oninput="recalcLoan()"></label>
-      <label>금리 % <input id="bid_rate" type="number" value="3.5" step="0.1" style="width:56px" oninput="recalcLoan()"></label>
-      <label>기간(년) <input id="bid_years" type="number" value="30" step="1" style="width:52px" oninput="recalcLoan()"></label>
-      <label>상환 <select id="bid_method" onchange="recalcLoan()" class="ctrl">
-        <option value="원금균등">원금균등</option><option value="원리금균등">원리금균등</option></select></label>
-    </div>
-    <div id="bid_out" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"></div>
+<dialog id="calcDlg" style="width:760px;max-width:96vw;max-height:92vh;overflow:auto" oninput="auctionScenarioDirty()" onchange="auctionScenarioDirty()">
+  <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
+    <div><h3 id="calcTitle" style="margin:0 0 5px"></h3>
+      <p style="color:var(--dim);font-size:12px;margin:0">매각가·대출·세금은 자동 확정값이 아닙니다. 내 조건을 넣어 먼저 감당 가능한 범위를 확인하세요.</p></div>
+    <button type="button" class="btn" onclick="document.getElementById('calcDlg').close()" aria-label="닫기">✕</button>
   </div>
-
+  <section class="auc-section">
+    <h4>1. 어떤 목적으로 살 건가요?</h4>
+    <div class="auc-grid">
+      <label class="auc-field">목적<select id="aucPurpose" onchange="auctionPurposeChanged()">
+        <option value="owner">실거주 · 일반매매와 비교</option><option value="flip">단기매도 · 순이익</option>
+        <option value="rent">임대 · 현금흐름</option></select></label>
+      <label class="auc-field">입찰가 · 만원<input id="aucBid" type="number" min="1" step="1" oninput="auctionSyncSlider()"></label>
+      <label class="auc-field">보수적 시세 · 만원<input id="aucMarket" type="number" min="1" step="1" placeholder="동일 면적 실거래 확인"></label>
+      <label class="auc-field">사용 가능 현금 · 만원<input id="aucCash" type="number" min="1" step="1" placeholder="잔금 전 준비 가능액"></label>
+    </div>
+    <label class="auc-field" style="margin-top:12px">입찰가를 움직여 비용·현금을 비교하세요
+      <input id="aucBidSlider" type="range" min="1" max="100000" step="1" oninput="auctionSlide()" onchange="runAuctionScenario()"></label>
+  </section>
+  <section class="auc-section">
+    <h4>2. 반드시 확인할 돈</h4>
+    <div class="auc-grid">
+      <label class="auc-field">법원 공고 입찰보증금 · 만원<input id="aucDeposit" type="number" min="0" step="1" placeholder="공고 확인 후 입력"></label>
+      <label class="auc-field">입찰범위 최대 취득세율 · %<input id="aucTax" type="number" min="0" max="100" step="0.1" placeholder="내 주택 수 기준 확인"></label>
+      <label class="auc-field">확인받은 대출액 · 만원<input id="aucLoan" type="number" min="0" step="1" value="0"></label>
+      <label class="auc-field">확인받은 금리 · %<input id="aucRate" type="number" min="0" max="100" step="0.1" placeholder="대출 없으면 비움"></label>
+      <label class="auc-field">잔금 후 보유기간 · 개월<input id="aucHold" type="number" min="0" step="1" value="6"></label>
+      <label class="auc-field">명도비 가정 · 만원<input id="aucEviction" type="number" min="0" step="1" placeholder="점유 확인 후 입력"></label>
+    </div>
+    <p style="color:var(--dim);font-size:11px;margin:8px 0 0">대출이 확인되지 않았다면 0원으로 계산합니다. 임대보증금은 잔금일에 미리 들어온 돈으로 계산하지 않습니다.</p>
+  </section>
+  <section class="auc-section" id="aucOwnerFields">
+    <h4>3. 실거주 목표</h4>
+    <div class="auc-grid">
+      <label class="auc-field">최소 절약액 · 만원<input id="aucSaving" type="number" min="0" step="1" placeholder="직접 매수보다 아끼고 싶은 돈"></label>
+      <label class="auc-field">일반매매 중개율 · %<input id="aucBuyBroker" type="number" min="0" max="100" step="0.1" placeholder="확인 후 입력"></label>
+    </div>
+  </section>
+  <section class="auc-section" id="aucFlipFields" style="display:none">
+    <h4>3. 단기매도 목표</h4>
+    <div class="auc-grid">
+      <label class="auc-field">보수적 매도가 · 만원<input id="aucSale" type="number" min="0" step="1"></label>
+      <label class="auc-field">매도 중개율 · %<input id="aucSaleBroker" type="number" min="0" max="100" step="0.1"></label>
+      <label class="auc-field">입찰범위 최대 매도 세금 · 만원<input id="aucSaleTax" type="number" min="0" step="1"></label>
+      <label class="auc-field">목표 순이익 · 만원<input id="aucProfit" type="number" min="0" step="1"></label>
+    </div>
+  </section>
+  <section class="auc-section" id="aucRentFields" style="display:none">
+    <h4>3. 임대 목표</h4>
+    <div class="auc-grid">
+      <label class="auc-field">월세 · 만원<input id="aucRent" type="number" min="0" step="1"></label>
+      <label class="auc-field">임대보증금 · 만원<input id="aucRentDeposit" type="number" min="0" step="1"></label>
+      <label class="auc-field">공실률 · %<input id="aucVacancy" type="number" min="0" max="100" step="1"></label>
+      <label class="auc-field">연 운영비 · 만원<input id="aucOperating" type="number" min="0" step="1"></label>
+      <label class="auc-field">연 원금상환 · 만원<input id="aucPrincipal" type="number" min="0" step="1" value="0"></label>
+      <label class="auc-field">목표 현금수익률 · %<input id="aucYield" type="number" min="0" max="100" step="0.1"></label>
+    </div>
+  </section>
+  <details class="auc-section"><summary style="cursor:pointer;font-weight:700">부대비용 더 자세히 입력</summary>
+    <div class="auc-grid" style="margin-top:12px">
+      <label class="auc-field">법무·등기 수수료 · 만원<input id="aucLegal" type="number" min="0" step="1" value="100"></label>
+      <label class="auc-field">미납 관리비 · 만원<input id="aucManagement" type="number" min="0" step="1" value="0"></label>
+      <label class="auc-field">수리비 · 만원<input id="aucRepair" type="number" min="0" step="1" value="0"></label>
+      <label class="auc-field">예비비 · 만원<input id="aucContingency" type="number" min="0" step="1" value="0"></label>
+    </div>
+  </details>
+  <div class="auc-section" style="font-size:12px;line-height:1.8">
+    <label><input type="checkbox" id="aucDocsChecked"> 법원 매각물건명세서·현황조사서·평가서와 기일을 직접 확인했습니다</label><br>
+    <label><input type="checkbox" id="aucTaxChecked"> 내 주택 수·취득/매도 세금과 입력 범위의 최대치를 확인했습니다</label><br>
+    <label><input type="checkbox" id="aucCostsChecked"> 점유·명도·관리비·수리 범위와 비용을 확인했습니다</label><br>
+    <label><input type="checkbox" id="aucLoanChecked"> 입력한 대출액·금리를 금융기관에 확인했습니다</label>
+    <div style="color:var(--dim);font-size:11px">체크만으로 법률·세무·대출 승인을 보증하지 않습니다. 동일 면적 실거래 표본은 관리자 ‘실거래 갱신’ 결과를 사용합니다.</div>
+  </div>
+  <button type="button" id="aucRefreshMarket" class="btn" style="display:none;width:100%;justify-content:center;margin:0 0 8px" onclick="refreshAuctionScenarioMarket()">이 물건의 국토부 실거래 갱신</button>
+  <button type="button" class="btn primary" onclick="runAuctionScenario()" style="width:100%;justify-content:center">입찰가·필요 현금 계산</button>
+  <div id="aucScenarioResult" class="auc-output" aria-live="polite">조건을 입력하면 목적별 비용과 가정상 입찰 상한을 보여 줍니다.</div>
   <div id="calcRights" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"></div>
-
-  <div style="max-height:42vh;overflow:auto">
-    <table id="calcTable"></table>
-  </div>
-  <div class="dlg-foot"><button class="btn" onclick="document.getElementById('calcDlg').close()">닫기</button></div>
 </dialog>
 
 <dialog id="rightsDlg" style="width:720px;max-width:96vw;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--txt)">
@@ -7080,10 +7126,6 @@ async function submitAdd(){
   document.querySelectorAll('#addDlg input').forEach(i=>{ if(i.type==='number'&&!['f_단지명'].includes(i.id)) i.value=i.value&&['f_월임대료','f_임대보증금','f_매도가','f_미납관리비','f_수리비','f_유찰횟수'].includes(i.id)?'0':''; else i.value=''; });
   loadAuction();
 }
-function aparams(){
-  const g = id => +document.getElementById(id).value;
-  return `target_margin=${(g('pMargin')||10)/100}&loan_ratio=${(g('pLoan')||70)/100}&loan_rate=${(g('pRate')||5)/100}&hold_months=${g('pHold')||6}`;
-}
 async function importCsv(input){
   const file = input.files[0]; if(!file) return;
   const text = await file.text();
@@ -7172,32 +7214,6 @@ async function refreshMarket(){
   setTimeout(()=>{b.textContent=o;b.disabled=false;},2500);
 }
 
-function firstHomePreset(){
-  const on=document.getElementById('ln_first').checked;
-  document.getElementById('bid_ltv').value = on?80:70;
-  document.getElementById('bid_rate').value = on?3.5:4.5;
-  recalcLoan();
-}
-function recalcLoan(){
-  const v=id=>+document.getElementById(id).value;
-  const price=v('bid_price'), ltv=v('bid_ltv')/100, rm=v('bid_rate')/100/12, n=v('bid_years')*12;
-  if(!price||!n){ document.getElementById('bid_out').innerHTML=''; return; }
-  const loan=price*ltv, equity=price-loan;
-  let monthly, interest;
-  if(document.getElementById('bid_method').value==='원리금균등'){
-    monthly = rm? loan*rm*Math.pow(1+rm,n)/(Math.pow(1+rm,n)-1) : loan/n;
-    interest = monthly*n - loan;
-  }else{ // 원금균등: 첫달 최대
-    monthly = loan/n + loan*rm;          // 첫달 납입
-    interest = loan*rm*(n+1)/2;          // 총이자
-  }
-  const card=(t,val,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#1e293b'}">${val}</div></div>`;
-  document.getElementById('bid_out').innerHTML =
-    card('자본금', won(equity), '#d97706') + card(`대출금 (LTV ${v('bid_ltv')}%)`, won(loan), '#16a34a') +
-    card(document.getElementById('bid_method').value==='원금균등'?'월납입(첫달)':'월납입금', won(Math.round(monthly))) +
-    card(`이자총액 (${v('bid_years')}년)`, won(Math.round(interest)));
-}
-
 async function loadAuction(){
   // BUY+ 지역 가이드
   const hot = await (await fetch('/api/auction/buy-regions')).json();
@@ -7206,7 +7222,7 @@ async function loadAuction(){
     ? safeHot.map(h=>`<span class="badge ${safeMarketSignal(h.region)}" style="cursor:pointer" onclick="prefillRegion('${h.region}')">${h.region}</span>`).join('')
     : '<span style="color:var(--dim)">판정 확인된 BUY+ 지역 없음</span>';
 
-  const res = await (await fetch(`/api/auction/listings?${aparams()}`)).json();
+  const res = await (await fetch('/api/auction/listings')).json();
   renderAuction(res.listings);
 }
 function prefillRegion(r){ switchTab('auction'); openAdd(); document.getElementById('f_region').value = r; }
@@ -7227,11 +7243,10 @@ function renderAuction(rows){
     '조건에 맞는 경매 물건이 없습니다.';
   mapSplit('auctionList','auctionMap',rows,{
     summary:r=>{ const dl=daysTo(r['입찰기일']);
-      const ready=r['입찰상태']==='conditional_bid';
       const hold=r['최저매각가']?`<b>${won(r['최저매각가'])}</b>`:'<b style="color:#d97706">보류</b>';
-      return {nm:`${esc(r['단지명']||'–')} ${regionSignalBadge(r['지역시그널']||'HELD')} ${ready?'':`<span class="pill">${r['입찰상태']==='no_bid'?'목표 미달':'확인 필요'}</span>`}`,
-        right:_mtMetric(ready?'검토용 상한':(r['최저매각가']?'최저가':'입찰 판단'), ready?`<b style="color:#16a34a">${won(r['권장입찰가'])}</b>`:hold),
-        sub:`${esc(r['region']||'')}${r['동']?' '+esc(r['동']):''}${r['지역급지']?' · '+regionGradeBadge(r['지역급지']):''}${ready?' · 총비용 우위 '+r['총비용우위율']+'%':''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
+      return {nm:`${esc(r['단지명']||'–')} ${regionSignalBadge(r['지역시그널']||'HELD')} <span class="pill">자료 확인</span>`,
+        right:_mtMetric(r['최저매각가']?'최저가':'가격 미확인',hold),
+        sub:`${esc(r['region']||'')}${r['동']?' '+esc(r['동']):''}${r['지역급지']?' · '+regionGradeBadge(r['지역급지']):''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
     detail:r=>{
       const hank=r.source==='hank';
       const area=hank
@@ -7245,18 +7260,18 @@ function renderAuction(rows){
       <span>용적 ${r['용적률']?r['용적률']+'%':'–'}</span></div>
       <div class="kv" style="margin-top:5px"><span>물건번호 ${esc(r['사건번호']||'–')}</span><span>감정 ${won(r['감정가'])}</span><span>최저 ${won(r['최저매각가'])}</span>
       <span>실거래 ${won(r['최근실거래가'])}</span><span>전세 ${won(r['최근전세가'])}</span>
-      <span style="color:${r['목표달성']?'#16a34a':'#d97706'}">${r['목표달성']?'검토용 상한 '+won(r['권장입찰가']):'입찰 보류'}</span><span>임대 ${r['임대수익률']==null?'–':r['임대수익률']+'%'}</span>
+      <span style="color:#b45309">입찰비용·현금 확인 전</span>
       <span>입찰기일 ${esc(r['입찰기일']||'–')}</span></div>
       ${reasons?`<div style="margin-top:7px;font-size:12px;line-height:1.5;color:#b45309">${reasons}</div>`:''}
       <div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        ${hank?'':`<span class="btn" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc('${r['id']}','${(r['단지명']||'').replace(/'/g,'')}')">입찰 민감도</span>`}
-        ${loanBtn(r['최근실거래가']||r['권장입찰가'],r['단지명'])}${reportBtn(r['id']?'경매:'+r['id']:null)}${cxBtn(r['단지명'],r['region'])}
+        ${hank?'':`<button type="button" class="btn" data-auction-id="${esc(r['id'])}" style="padding:3px 10px;background:#eef2f7" onclick="event.stopPropagation();openCalc(this.dataset.auctionId)">입찰 시뮬레이터</button>`}
+        ${reportBtn(r['id']?'경매:'+r['id']:null)}${cxBtn(r['단지명'],r['region'])}
         ${hank?'':`<span class="btn del" style="padding:3px 10px" onclick="event.stopPropagation();delListing('${r['id']}')">삭제</span>`}</div>`; },
     coord:r=>(r.lat&&r.lng)?[+r.lat,+r.lng]:null,
     geoq:r=>{ const dong=r['동']||((r['메모']||'').match(/[가-힣]+동/)||[])[0]; return `${r['region']||''} ${dong?dong+' ':''}${r['단지명']||''}`; },
     regionOf:r=>r['region'],
-    color:r=>r['목표달성']?'#16a34a':'#d97706',
-    label:r=>`<b>${r['단지명']}</b><br>${r['region']||''} · ${r['목표달성']?'검토용 상한 '+won(r['권장입찰가']):'입찰 보류'}`,
+    color:r=>'#d97706',
+    label:r=>`<b>${esc(r['단지명']||'–')}</b><br>${esc(r['region']||'')} · 입찰 검토 전`,
   });
   renderStrategy(rows);
 }
@@ -7264,50 +7279,148 @@ function renderStrategy(rows){
   const withDate = rows.filter(r=>r['입찰기일'] && daysTo(r['입찰기일'])>=0);
   const wk = withDate.filter(r=>daysTo(r['입찰기일'])<=7);
   const wk2 = withDate.filter(r=>{const d=daysTo(r['입찰기일']); return d>7 && d<=14;});
-  const profit = rows.filter(r=>r['목표달성']);
-  const top = profit[0];
+  const rightsPending = rows.filter(r=>!r['권리분석']?.['조사완료'] || r['인수보증금']==null);
   const card = (t, big, sub) => `<div class="scard"><div style="color:var(--dim);font-size:12px">${t}</div>
      <div class="big">${big}</div><div style="color:var(--dim);font-size:12px">${sub}</div></div>`;
   document.getElementById('strat').innerHTML =
-    card('이번 주 입찰(7일내)', wk.length+'건', wk.map(r=>r['단지명']).slice(0,3).join(', ')||'없음') +
-    card('2주 내 입찰', wk2.length+'건', wk2.map(r=>r['단지명']).slice(0,3).join(', ')||'없음') +
-    card('목표달성 매물', profit.length+'건', `전체 ${rows.length}건 중`) +
-    card('최우선 단지', top?top['단지명']:'–',
-         top?`${top['region']} · 검토용 상한 ${won(top['권장입찰가'])} · 총비용 우위 ${top['총비용우위율']}%`:'조건을 충족한 매물이 없습니다');
+    card('이번 주 입찰 · 7일 이내', wk.length+'건', wk.map(r=>`${esc(r['단지명'])} · ${esc(r['region']||'')}`).slice(0,3).join(', ')||'없음') +
+    card('2주 내 입찰', wk2.length+'건', wk2.map(r=>`${esc(r['단지명'])} · ${esc(r['region']||'')}`).slice(0,3).join(', ')||'없음') +
+    card('권리·점유 확인 필요', rightsPending.length+'건', '확인 전에는 입찰가를 확정하지 않습니다');
 }
 
-async function openCalc(id, name){
-  const d = await (await fetch(`/api/auction/calc/${id}?${aparams()}`)).json();
-  const rec = d.recommend;
-  const ready=rec['상태']==='conditional_bid';
-  document.getElementById('calcTitle').textContent = `${name} — ${ready?'검토용 입찰 상한':'입찰 판단 보류'}`;
-  const bd = (t,v,c)=>`<div class="scard" style="min-width:120px"><div style="color:var(--dim);font-size:11px">${t}</div><div style="font-size:18px;font-weight:700;color:${c||'#1e293b'}">${v}</div></div>`;
-  document.getElementById('calcBreak').innerHTML = ready ?
-    bd('검토용 상한', won(rec['입찰가']), '#16a34a') + bd('경매 총매입', won(rec['경매총매입'])) +
-    bd('일반매매 가정 비용', won(rec['매매총매입'])) + bd('총비용 우위', won(rec['총비용우위']), '#16a34a') +
-    bd('총비용 우위율', rec['총비용우위율']+'%', '#16a34a') + bd('실투자금', won(rec['실투자금'])) +
-    (rec['임대수익률']!=null?bd('임대수익률', rec['임대수익률']+'%'):'') +
-    (rec['매도수익률']!=null?bd('단기매도수익률', rec['매도수익률']+'%'):'') :
-    `<div style="color:#b45309;font-size:13px">${(rec['사유']||[]).join('<br>')}</div>`;
-  const cols = [['낙찰가율','낙찰가율','%'],['입찰가','입찰가'],['경매총매입','경매총매입'],
-                ['총비용 우위','총비용우위'],['우위율','총비용우위율','%'],['임대수익률','임대수익률','%'],['실투자금','실투자금']];
-  let h = '<thead><tr>'+cols.map(c=>`<th>${c[0]}</th>`).join('')+'</tr></thead><tbody>';
-  d.table.forEach(row=>{
-    const hit = row['입찰가']===rec['입찰가'];
-    h += `<tr style="${hit?'background:#14532d55':''}">`+cols.map(c=>{
-      let v=row[c[1]]; if(v==null) v='–'; else if(c[2]==='%') v=v+'%'; else if(['입찰가','경매총매입','총비용우위','실투자금'].includes(c[1])) v=won(v);
-      return `<td>${v}</td>`;
-    }).join('')+'</tr>';
-  });
-  document.getElementById('calcTable').innerHTML = h+'</tbody>';
-  document.getElementById('bid_price').value = ready ? rec['입찰가'] : '';
-  recalcLoan();
-  const take=(d.listing||{})['인수보증금'];
-  const rx=document.getElementById('calcRights');
-  if(rx) rx.innerHTML=`<span class="btn" onclick="openRights('${id}','${(name||'').replace(/'/g,'')}')">권리분석${take!=null?` · 확인된 인수 ${won(take)}`:' 필요'}</span>
-    <span class="btn" onclick="openPlan('${id}','${(name||'').replace(/'/g,'')}')">낙찰 후 플랜</span>
-    ${ready?'<span style="font-size:11px;color:#ea580c">개인 자금·대출 한도 확인 전의 검토용 상한입니다.</span>':'<span style="font-size:11px;color:#ea580c">확인 전에는 입찰가를 제시하지 않습니다.</span>'}`;
+let _auctionScenarioId=null, _auctionScenarioSeq=0;
+function auctionScenarioDirty(){
+  const output=document.getElementById('aucScenarioResult');
+  const stale=output.dataset.calculated==='1'||output.textContent==='계산 중…';
+  ++_auctionScenarioSeq; // 입력을 바꾼 뒤 도착한 옛 응답은 무시한다.
+  if(stale){
+    output.textContent='입력이 바뀌었습니다. 다시 계산해 주세요.';
+    output.dataset.calculated='0';
+  }
+}
+function auctionPurposeChanged(){
+  const purpose=document.getElementById('aucPurpose').value;
+  for(const [id,key] of [['aucOwnerFields','owner'],['aucFlipFields','flip'],['aucRentFields','rent']])
+    document.getElementById(id).style.display=purpose===key?'':'none';
+}
+function auctionSyncSlider(){
+  const slider=document.getElementById('aucBidSlider'), bid=+document.getElementById('aucBid').value;
+  if(bid>0){ slider.max=Math.max(+slider.max,bid); slider.value=bid; }
+}
+function auctionSlide(){ document.getElementById('aucBid').value=document.getElementById('aucBidSlider').value; }
+function _auctionScenarioData(){
+  const body={purpose:document.getElementById('aucPurpose').value};
+  const fields={aucBid:'bid',aucMarket:'market_low',aucCash:'cash_budget',aucDeposit:'court_deposit',
+    aucTax:'tax_rate',aucLoan:'confirmed_loan',aucRate:'loan_rate',aucHold:'hold_months',
+    aucEviction:'eviction_cost',aucSaving:'min_saving',aucBuyBroker:'buy_broker_rate',
+    aucSale:'sale_low',aucSaleBroker:'sale_broker_rate',aucSaleTax:'sale_tax',aucProfit:'min_profit',
+    aucRent:'rent_monthly',aucRentDeposit:'rent_deposit',aucVacancy:'vacancy_rate',
+    aucOperating:'annual_operating',aucPrincipal:'annual_principal',aucYield:'target_yield',
+    aucLegal:'legal_cost',aucManagement:'management_cost',aucRepair:'repair_cost',
+    aucContingency:'contingency'};
+  const pct=new Set(['aucTax','aucRate','aucBuyBroker','aucSaleBroker','aucVacancy','aucYield']);
+  for(const [id,key] of Object.entries(fields)){
+    const raw=document.getElementById(id).value;
+    if(raw!=='') body[key]=+raw/(pct.has(id)?100:1);
+  }
+  body.court_documents_checked=document.getElementById('aucDocsChecked').checked;
+  body.tax_checked=document.getElementById('aucTaxChecked').checked;
+  body.costs_checked=document.getElementById('aucCostsChecked').checked;
+  body.loan_checked=document.getElementById('aucLoanChecked').checked;
+  return body;
+}
+async function runAuctionScenario(){
+  if(!_auctionScenarioId) return;
+  const output=document.getElementById('aucScenarioResult'), seq=++_auctionScenarioSeq;
+  output.textContent='계산 중…';
+  let response, data;
+  try{
+    response=await fetch(`/api/auction/scenario/${encodeURIComponent(_auctionScenarioId)}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_auctionScenarioData())});
+    data=await response.json();
+  }catch(e){ if(seq===_auctionScenarioSeq) output.textContent='계산 요청에 실패했습니다. 다시 시도해 주세요.'; return; }
+  if(seq!==_auctionScenarioSeq) return;
+  if(!response.ok){ output.textContent=data.detail||'입력값을 확인해 주세요.'; return; }
+  output.dataset.calculated='1';
+  if(data.status==='needs_review'){
+    output.innerHTML=`<strong>아직 입찰가를 계산할 수 없어요</strong><p style="margin:7px 0">${(data.missing||[]).map(x=>'• '+esc(x)).join('<br>')}</p>
+      <small>${(data.market_notes||[]).map(esc).join(' · ')}</small>`;
+    return;
+  }
+  const s=data.scenario||{}, metric=(label,value)=>`<div class="auc-metric"><small>${label}</small><strong>${value}</strong></div>`;
+  const cap=data.scenario_ceiling!=null?won(data.scenario_ceiling):'없음';
+  const title=data.status==='no_bid'?'최저가에서도 목표와 현금 한도를 함께 충족하지 못합니다':
+    data.status==='conditional_ceiling'?'사용자 확인 기준 · 검토용 상한':'가정상 상한 · 입찰 결정값 아님';
+  const purpose=data.purpose;
+  const extra=purpose==='owner'?metric('일반매매 대비 절약액',won(s['절약액'])):
+    purpose==='flip'?metric('세후 순이익 가정',won(s['세후순이익가정'])):
+    metric('연간 순현금흐름',won(s['연간순현금흐름']));
+  const yieldMetric=purpose==='owner'?'':metric('현금 수익률 가정',s['현금수익률']==null?'계산 불가':s['현금수익률']+'%');
+  const cashSteps=(s['현금단계']||[]).map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)">
+    <span>${esc(x['단계'])}${x['반환의무']!=null?' · 반환 의무':''}</span>
+    <b>${x['유출']!=null?'-'+won(x['유출']):'+'+won(x['유입'])}</b></div>`).join('');
+  const currentPass=s['목표충족']&&s['자금충족'];
+  output.innerHTML=`<strong style="color:${data.status==='conditional_ceiling'?'#166534':'#92400e'}">${title}</strong>
+    <div style="font-size:13px;margin-top:4px">${data.status==='no_bid'?'입찰 보류':`목적별 상한 ${cap}`}</div>
+    <div style="font-size:12px;color:${currentPass?'#166534':'#b45309'};margin-top:3px">현재 입력 입찰가 ${won(s['입찰가'])} · ${currentPass?'목표·현금 조건 충족':'목표 또는 현금 한도 초과'}</div>
+    <div class="auc-output-grid">${metric('현재 입찰가 총비용',won(s['경매총비용']))}${metric('최대 필요 현금',won(s['최대필요현금']))}
+      ${metric('반영한 대출액',won(s['확인대출반영']))}${extra}${yieldMetric}</div>
+    <details style="margin-top:10px;font-size:12px"><summary style="cursor:pointer;font-weight:700">돈이 필요한 순서 보기 · 날짜는 사건별 확인</summary>
+      <div style="margin-top:7px">${cashSteps}</div></details>
+    <p style="font-size:11px;color:var(--dim);margin:10px 0 0">${(data.market_notes||[]).map(esc).join(' · ')}
+    ${data.review_ceiling==null?' · 확인할 것: '+(data.missing||[]).map(esc).join(', ')+'. 검토용 상한이 아닙니다.':''}
+    ${purpose==='rent'?' · 임대보증금은 반환할 부채이며 최대 필요 현금에서 미리 차감하지 않았습니다.':''}</p>`;
+}
+async function refreshAuctionScenarioMarket(){
+  if(!_auctionScenarioId || !_isAdmin) return;
+  const button=document.getElementById('aucRefreshMarket'), id=_auctionScenarioId;
+  button.disabled=true; button.textContent='국토부 실거래 확인 중…';
+  try{
+    const response=await fetch(`/api/auction/refresh-market/${encodeURIComponent(id)}`,{method:'POST'});
+    const data=await response.json();
+    if(!response.ok || data.ok===false) throw new Error('refresh failed');
+    if(_auctionScenarioId===id){
+      button.textContent=`갱신 완료 · 저장 표본 ${data.sample_count||0}건`;
+      await runAuctionScenario();
+    }
+  }catch(e){ if(_auctionScenarioId===id) button.textContent='갱신 실패 · 다시 시도'; }
+  finally{ button.disabled=false; }
+}
+async function openCalc(id){
+  _auctionScenarioId=id;
+  document.getElementById('calcTitle').textContent='입찰 시뮬레이터';
+  document.getElementById('aucScenarioResult').textContent='물건 정보를 불러오는 중…';
+  document.getElementById('aucScenarioResult').dataset.calculated='0';
+  const refresh=document.getElementById('aucRefreshMarket');
+  refresh.style.display=_isAdmin?'':'none'; refresh.textContent='이 물건의 국토부 실거래 갱신';
   document.getElementById('calcDlg').showModal();
+  try{
+    const response=await fetch(`/api/auction/calc/${encodeURIComponent(id)}`);
+    if(!response.ok) throw new Error('not found');
+    const d=await response.json(), lst=d.listing||{}, set=(key,value)=>{document.getElementById(key).value=value??'';};
+    if(_auctionScenarioId!==id || !document.getElementById('calcDlg').open) return;
+    document.getElementById('calcTitle').textContent=`${lst['단지명']||'경매 물건'} · 입찰 시뮬레이터`;
+    set('aucPurpose','owner'); auctionPurposeChanged();
+    // 기존 참고 시세는 동일 면적 검증 표본이 아닐 수 있다. 엔진이 저장된 공식 표본을 직접 판단한다.
+    set('aucBid',lst['최저매각가']); set('aucMarket','');
+    set('aucCash',''); set('aucDeposit',lst['입찰보증금']); set('aucTax',''); set('aucLoan',0); set('aucRate','');
+    set('aucHold',6); set('aucEviction',''); set('aucSaving',''); set('aucBuyBroker','');
+    set('aucSale',lst['매도가']||''); set('aucRent',lst['월임대료']||'');
+    set('aucRentDeposit',lst['임대보증금']||'');
+    set('aucManagement',lst['미납관리비']||0); set('aucRepair',lst['수리비']||0);
+    for(const key of ['aucSaleBroker','aucSaleTax','aucProfit','aucVacancy','aucOperating','aucYield']) set(key,'');
+    set('aucPrincipal',0); set('aucLegal',100); set('aucContingency',0);
+    for(const key of ['aucDocsChecked','aucTaxChecked','aucCostsChecked','aucLoanChecked']) document.getElementById(key).checked=false;
+    const slider=document.getElementById('aucBidSlider');
+    slider.min=lst['최저매각가']||1; slider.max=Math.max(+slider.min+1,lst['시세']||lst['최근실거래가']||(+slider.min*2));
+    slider.value=lst['최저매각가']||slider.min;
+    const take=lst['인수보증금'], rightsButton=document.createElement('button');
+    rightsButton.type='button'; rightsButton.className='btn';
+    rightsButton.textContent=`권리·점유 확인${take!=null?` · 입력 인수 ${won(take)}`:' 필요'}`;
+    rightsButton.addEventListener('click',()=>openRights(id,lst['단지명']||''));
+    document.getElementById('calcRights').replaceChildren(rightsButton);
+    document.getElementById('aucScenarioResult').textContent='내 자금과 사건별 비용을 입력해 계산해 보세요.';
+  }catch(e){ if(_auctionScenarioId===id) document.getElementById('aucScenarioResult').textContent='물건 정보를 불러오지 못했습니다.'; }
 }
 
 // ===== 권리분석 — 말소기준 기준 인수/소멸 판정 → 인수금액을 입찰가에 반영 =====
@@ -7369,6 +7482,11 @@ async function rxSave(){
   if(!d.ok){ toast(d.error||'저장에 실패했습니다.'); return; }
   _rxShow(d['분석']);
   toast(d['분석']['확인필요']||!_rxBody()['조사완료']?'확인할 항목이 남아 입찰가 산정을 보류합니다.':`확인된 인수 ${won(d['분석']['인수합계'])} 반영`);
+  if(_auctionScenarioId===_rxId && document.getElementById('calcDlg').open){
+    const b=document.querySelector('#calcRights button');
+    if(b) b.textContent=d['분석']['인수합계']==null?'권리·점유 확인 필요':`권리·점유 확인 · 입력 인수 ${won(d['분석']['인수합계'])}`;
+    runAuctionScenario();
+  }
   loadAuction();
 }
 function _rxShow(a){
@@ -7409,16 +7527,16 @@ async function openPlan(id,name){
       .map(([t,v])=>`<div class="scard" style="min-width:106px"><div style="color:var(--dim);font-size:11px">${t}</div>
         <div style="font-size:16px;font-weight:700">${won(v)}</div></div>`).join('')}</div>
     <div style="font-size:11px;color:#b45309;margin-bottom:10px">대출비율 ${Math.round((p['대출비율가정']||0)*100)}%는 예시일 뿐 승인액이 아닙니다. 필요현금에는 대리입찰비·보유이자·확인된 인수보증금이 포함되며, 날짜가 미정인 비용은 아래 일정에 배정하지 않았습니다.</div>
-    ${p['추정입찰가']?'<div style="font-size:11px;color:#ea580c;margin-bottom:10px">아직 낙찰 전이라 검토용 상한으로 계산했습니다.</div>':''}
+    ${p['일정상태']==='법원기한확인필요'?'<div style="font-size:11px;color:#ea580c;margin-bottom:10px">법원에서 정한 결정일·대금지급기한을 아직 확인하지 않았습니다.</div>':''}
     ${(p['사유']||[]).length?`<div style="font-size:11px;color:#ea580c;margin-bottom:10px">${p['사유'].join('<br>')}</div>`:''}`;
   const steps=p.steps.map(s=>`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
-      <div style="min-width:96px"><div style="font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);font-weight:700">D+${s['D']}</div>
-        <div style="font-size:11px;color:var(--dim)">${s['날짜']}</div></div>
+      <div style="min-width:96px"><div style="font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);font-weight:700">${s['D']==null?'날짜 미확인':'D+'+s['D']}</div>
+        <div style="font-size:11px;color:var(--dim)">${s['날짜']||'법원·현장 확인'}</div></div>
       <div style="flex:1"><div style="font-size:13px;font-weight:600">${s['단계']}</div>
         <div style="font-size:11px;color:var(--dim)">${s['할일']}</div></div>
       <div style="min-width:80px;text-align:right;font-size:13px;color:${s['금액']?'#dc2626':'var(--dim)'}">${s['금액']?won(Math.abs(s['금액'])):'–'}</div>
     </div>`).join('');
-  body.innerHTML=sum+steps+`<div style="font-size:11px;color:var(--dim);margin-top:10px">일정은 민사집행법 통상 진행 기준의 추정입니다. 법원·사건마다 달라집니다.</div>`;
+  body.innerHTML=sum+steps+`<div style="font-size:11px;color:var(--dim);margin-top:10px">날짜는 입력된 사건별 법원 기한만 표시합니다. 없는 날짜는 확인 전입니다.</div>`;
 }
 
 // ===== 인증 게이트 =====

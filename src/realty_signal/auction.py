@@ -1,6 +1,10 @@
-"""경매 매물 관리 + 입찰가 산정 + 우선순위/전략.
+"""경매 매물 관리 + 과거 계산 모델.
 
-입찰가 계산은 경매 입찰가 산정표 모델이다:
+실제 화면의 목적별 시뮬레이션은 ``auction_bid_engine``을 사용한다. 아래의
+``breakdown``/``table``/``recommend``는 과거 모델의 호환·회귀 비교 코드이며
+목록, 계산 API, 낙찰 후 플랜에서 자동 상한으로 사용하지 않는다.
+
+과거 계산 모델:
   - 경매 총매입비용 = 입찰가 + 등기비 + 명도비 + 미납관리비 + 수리비 + 대리입찰 + 인수보증금 + 보유이자
   - 일반매매 총매입비용 = 시세 + 취득세 + 중개수수료 + 법무비
   - 총비용우위 = 일반매매총매입 − 경매총매입. 매도 이익/수익률이 아니다.
@@ -23,6 +27,7 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
+from math import isfinite
 from pathlib import Path
 
 AUCTION_FILE = Path("data/cache/auction.json")
@@ -53,6 +58,7 @@ class Listing:
     region: str = ""
     감정가: float = 0.0          # 만원
     최저매각가: float | None = None
+    입찰보증금: float | None = None  # 법원 사건별 공고 금액(만원), 일률 10%로 확정하지 않음
     유찰횟수: int = 0
     입찰기일: str = ""
     시세: float | None = None
@@ -69,7 +75,11 @@ class Listing:
     권리분석: dict = field(default_factory=dict)
     낙찰가: float | None = None   # 낙찰 후 플랜 기준가
     낙찰일: str = ""
+    매각허가결정일: str = ""       # 법원 통지 기준. D+7 같은 고정 추정일이 아님
+    대금지급기한: str = ""         # 법원 통지 기준
     최근실거래가: float | None = None   # 국토부 동일단지 최근 매매(만원)
+    실거래표본: list[dict] = field(default_factory=list)  # 국토부 동일단지·전용면적 ±0.1㎡
+    실거래표본갱신일: str = ""           # KST 날짜, 과거 자료의 현재성 오인 방지
     최근전세가: float | None = None     # 국토부 동일단지 최근 전세(만원)
     건축년도: int | None = None         # 국토부 실거래 매칭 단지 건축년도
     용적률: float | None = None         # 건축물대장 총괄표제부(%)
@@ -232,42 +242,34 @@ def update(listing_id: str, patch: dict) -> Listing | None:
 
 
 # --- 낙찰 후 실행 플랜 ---
-BOND_RATE = 0.10          # 입찰보증금 = 최저매각가의 10%
-_STEPS = [                # (D+일, 단계, 할 일)  민사집행법 통상 일정 기준
-    (0, "낙찰(최고가매수신고)", "보증금 영수증 보관. 매각물건명세서 다시 대조."),
-    (7, "매각허가결정", "이해관계인 이의·항고 여부 확인."),
-    (14, "매각허가결정 확정", "항고 없으면 확정. 경락잔금대출 신청 시작(승인 2~3주)."),
-    (44, "대금지급기한", "잔금 납부 = 소유권 취득. 같은 날 소유권이전·말소등기 촉탁."),
-    (45, "인도명령 신청", "대금납부 후 6개월 내 신청 가능. 점유자 특정해 바로 접수."),
-    (75, "명도 협의/집행", "협의 이사비 vs 강제집행 비용 비교. 협의가 대개 싸고 빠르다."),
-    (105, "수리·입주/임대", "명도 완료 후 수리. 임대면 이 시점부터 월세 발생."),
-]
-
-
 def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) -> dict:
-    """낙찰 후 일정·자금 계획 — 언제 얼마가 필요한지가 안 보이면 입찰을 못 한다."""
-    from datetime import date, timedelta
+    """입력한 사건별 기일만 일정에 표시한다. 누락된 법원 기한을 D+일로 만들지 않는다."""
 
     pp = _p(p)
-    bid = 낙찰가 or lst.낙찰가 or 0
-    if not bid:
-        rec = recommend(lst, pp)
-        bid = rec["입찰가"]
-        assumed = True
-    else:
-        assumed = False
+    bid = 낙찰가 if 낙찰가 is not None else lst.낙찰가
+    assumed = False  # 자동 산정 입찰가를 플랜의 사실값으로 사용하지 않는다
     if bid is None or bid <= 0:
         if bid is not None and bid < 0:
             return {"상태": "invalid_assumption", "사유": ["낙찰가가 0보다 커야 합니다."],
                     "낙찰가": None, "총현금": None, "steps": []}
-        return {"상태": rec["상태"], "사유": rec["사유"], "낙찰가": None,
+        return {"상태": "needs_review", "사유": ["입찰가 또는 실제 낙찰가를 먼저 입력하세요."], "낙찰가": None,
                 "총현금": None, "steps": []}
-    base_day = _date_of(lst.낙찰일) or _date_of(lst.입찰기일) or date.today()
+    base_day = _date_of(lst.낙찰일) or _date_of(lst.입찰기일)
+    if base_day is None:
+        return {"상태": "needs_review", "사유": ["법원 입찰기일 또는 실제 낙찰일 확인이 필요합니다."],
+                "낙찰가": None, "총현금": None, "steps": []}
 
-    보증금 = round((lst.최저매각가 or lst.감정가 * _floor_rate(lst)) * BOND_RATE)
+    raw_deposit = pp.get("입찰보증금") if pp.get("입찰보증금") is not None else lst.입찰보증금
+    try:
+        deposit_value = float(raw_deposit)
+    except (TypeError, ValueError):
+        deposit_value = float("nan")
+    if not isfinite(deposit_value) or not 0 < deposit_value <= bid:
+        return {"상태": "needs_review", "사유": ["법원 공고의 입찰보증금 금액을 확인하세요."],
+                "낙찰가": None, "총현금": None, "steps": []}
+    보증금 = round(deposit_value)
     등기비 = round(bid * pp["취득세율"] + pp["법무비"] / 10000)
     명도비 = round(lst.전용면적 * pp["㎡_평"] * pp["명도_평당"] / 10000)
-    from math import isfinite
     try:
         loan_ratio = float(lst.대출비율 if lst.대출비율 is not None else pp["대출비율"])
     except (TypeError, ValueError):
@@ -280,29 +282,40 @@ def plan(lst: Listing, 낙찰가: float | None = None, p: dict | None = None) ->
     잔금 = max(0, round(bid - 보증금 - 대출))
     보유이자 = round(대출 * (lst.대출금리 if lst.대출금리 is not None else pp["대출금리"])
                  / 12 * pp["보유개월"])
-    money = {0: -(보증금 + lst.대리입찰비), 44: -(잔금 + 등기비),
-             75: -(명도비 + lst.미납관리비),
-             105: -round(lst.수리비)}
+    money = [-(보증금 + lst.대리입찰비), -(잔금 + 등기비),
+             -(명도비 + lst.미납관리비 + lst.수리비)]
     # 인수보증금 반환 시점과 보유이자 지급 시점은 사건·대출별로 달라 날짜를 단정하지 않는다.
     undated = (round(lst.인수보증금) + 보유이자) if lst.인수보증금 is not None else None
-    assumed_cash = (sum(-x for x in money.values()) + undated) if undated is not None else None
+    assumed_cash = (sum(-x for x in money) + undated) if undated is not None else None
     no_loan_cash = (assumed_cash + 대출 - 보유이자) if assumed_cash is not None else None
     steps = []
-    for d, title, todo in _STEPS:
-        amt = money.get(d)
-        steps.append({"D": d, "날짜": (base_day + timedelta(days=d)).isoformat(),
+    for title, raw_date, todo, amount in (
+        ("입찰·낙찰", lst.낙찰일 or lst.입찰기일,
+         "보증금 영수증과 법원 공고를 보관하세요.", money[0]),
+        ("매각허가결정", lst.매각허가결정일,
+         "법원 결정과 이의·항고 여부를 확인하세요.", None),
+        ("대금지급기한", lst.대금지급기한,
+         "법원 통지의 기한과 잔금·대출 실행액을 확인하세요.", money[1]),
+        ("명도·수리", "", "점유자 협의·수리 시점은 사건별로 확인하세요.", money[2]),
+    ):
+        day = _date_of(raw_date)
+        steps.append({"D": (day - base_day).days if day else None,
+                      "날짜": day.isoformat() if day else None,
                       "단계": title, "할일": todo,
-                      "금액": round(amt) if amt else None})
+                      "금액": round(amount) if amount else None})
     return {
         "기준일": base_day.isoformat(), "낙찰가": round(bid), "추정입찰가": assumed,
         "보증금": 보증금, "경락잔금대출": 대출, "잔금": 잔금,
         "대출상태": "미승인_가정", "대출확인필요": True, "대출비율가정": loan_ratio,
         "등기비": 등기비, "명도비": 명도비,
         "대리입찰비": round(lst.대리입찰비), "보유이자": 보유이자,
+        "일정상태": "법원기한확인필요" if not lst.대금지급기한 else "입력기한기준",
         "날짜미정현금": undated,
         "가정시필요현금": assumed_cash, "무대출필요현금": no_loan_cash,
         "총현금": assumed_cash,  # 기존 API 호환: 승인된 대출 기준의 확정 현금이 아님
         "사유": (["대출비율은 승인액이 아닌 가정입니다. 입찰 전 은행 심사와 잔금일 자금 조달을 확인하세요."]
+               + (["법원 매각허가결정일·대금지급기한을 입력하기 전에는 일정 날짜를 비웁니다."]
+                  if not lst.매각허가결정일 or not lst.대금지급기한 else [])
                + (["인수 보증금이 미확정이므로 필요현금 합계를 계산하지 않습니다."]
                   if lst.인수보증금 is None else [])
                + (["인수보증금·보유이자는 지급 시점이 달라 일정표 밖 예비현금으로 표시합니다."]
@@ -390,13 +403,15 @@ def _recent_yms(n: int = 6) -> list[str]:
     return previous_months(n)
 
 
-def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str):
+def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str,
+                       with_samples: bool = False):
     """국토부 매매 실거래에서 동일단지(동+이름+면적) 최근 (거래금액 만원, 건축년도, 지번).
 
     지번 = (bjdongCd, bonbun, bubun) — 건축물대장 조회용. 매칭 실패 시 (None, None, None).
     """
     base = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
     best = None
+    samples = []
     cn = _norm(core)
     for ym in _recent_yms(6):
         from realty_signal.ingest.complex import _items
@@ -420,7 +435,21 @@ def recent_trade_price(lawd5: str, dong: str, core: str, area: float, key: str):
                 continue
             if best is None or d > best[0]:
                 best = (d, amt, by, jibun)
-    return (best[1], best[2], best[3]) if best else (None, None, None)
+            # 단순 단지명 부분 일치·15% 면적 허용은 기존 참고가격에만 적용한다.
+            # 입찰 엔진의 검증 표본에는 정확한 단지명과 전용면적을 요구한다.
+            if area > 0 and an == cn and abs(ar - area) <= 0.1:
+                try:
+                    sold_at = f"{d[0]:04d}-{d[1]:02d}-{d[2]:02d}"
+                    floor = int(it.findtext("floor")) if it.findtext("floor") else None
+                except (ValueError, TypeError):
+                    continue
+                samples.append({"source": "molit", "price": amt, "exclusive_m2": ar,
+                                "sold_at": sold_at, "floor": floor})
+    result = (best[1], best[2], best[3]) if best else (None, None, None)
+    if with_samples:
+        unique = {(x["sold_at"], x["price"], x["floor"]): x for x in samples}
+        return (*result, sorted(unique.values(), key=lambda x: x["sold_at"], reverse=True))
+    return result
 
 
 def recent_jeonse_price(lawd5: str, dong: str, core: str, area: float, key: str) -> float | None:
@@ -456,7 +485,7 @@ def recent_jeonse_price(lawd5: str, dong: str, core: str, area: float, key: str)
     return best[1] if best else None
 
 
-def update_market(codes: dict, key: str) -> int:
+def update_market(codes: dict, key: str, listing_id: str | None = None) -> int:
     """등록 매물의 최근 실거래가 + 건축물대장(용적률·세대수·연식)을 국토부에서 조회해 채운다."""
     from realty_signal.ingest.building import fetch_building
     from realty_signal.ingest.complex_grade import grade_in_region, region_grades
@@ -465,18 +494,27 @@ def update_market(codes: dict, key: str) -> int:
     n = 0
     grade_cache: dict[str, list] = {}  # 시군구별 단지 급지 랭킹 (실거래 호출 재사용)
     for lst in listings:
+        if listing_id is not None and lst.id != listing_id:
+            continue
         code = codes.get(lst.region, "")
         if not (code and code.isdigit()):
             continue
         dong_m = re.search(r"([가-힣]+동)", lst.메모 or "")
         dong = dong_m.group(1) if dong_m else ""
         # 괄호 안 별칭(예: '(별내포스코더샵)')도 매칭에 쓰이도록 전체 단지명 사용
-        price, build_year, jibun = recent_trade_price(code[:5], dong, lst.단지명, lst.전용면적, key)
+        price, build_year, jibun, samples = recent_trade_price(
+            code[:5], dong, lst.단지명, lst.전용면적, key, with_samples=True)
+        if samples:
+            lst.실거래표본 = samples
+            from realty_signal.time_kst import today_kst
+            lst.실거래표본갱신일 = today_kst().isoformat()
         if price:
             lst.최근실거래가 = price
             if build_year:
                 lst.건축년도 = build_year
             n += 1
+        if listing_id is not None:
+            continue  # 상세의 즉시 갱신은 입찰 엔진 표본만; 대장·급지·전세 조회를 기다리지 않는다
         # 실거래로 찾은 지번 → 건축물대장(용적률·건폐율·세대수·연식·층)
         if jibun and jibun[1]:
             b = fetch_building(code[:5], jibun[0], jibun[1], jibun[2], key)
@@ -524,25 +562,21 @@ _SIG_WEIGHT = {"STRONG_BUY": 2, "BUY": 1}
 
 
 def enrich(listings: list[Listing], signals: dict[str, str], overrides: dict | None = None) -> list[dict]:
-    """매물 + 검토용 상한/총비용 우위율 + 지역시그널 + 우선순위 점수."""
-    p = _p(overrides)
+    """탐색 목록에는 목적·현금·세금이 없는 옛 단순 상한을 노출하지 않는다."""
     out = []
     for lst in listings:
-        rec = recommend(lst, p)
         sig = signals.get(lst.region, "HELD")
-        margin = rec.get("총비용우위율")
-        score = (_SIG_WEIGHT.get(sig, 0) * 10 + margin) if margin is not None else -100
-        if rec["상태"] != "conditional_bid":
-            score -= 100
+        score = _SIG_WEIGHT.get(sig, 0) * 10 - 100
         out.append({
-            **asdict(lst), "지역시그널": sig, "권장입찰가": rec["입찰가"],
-            "예상낙찰가": None, "총비용우위": rec.get("총비용우위"), "총비용우위율": margin,
-            "시세차익": rec.get("총비용우위"), "시세차익률": margin,  # 호환 필드
-            "임대수익률": rec.get("임대수익률"), "매도수익률": rec.get("매도수익률"),
-            "최저매각가": rec.get("최저매각가") or lst.최저매각가,
+            **asdict(lst), "지역시그널": sig, "권장입찰가": None,
+            "예상낙찰가": None, "총비용우위": None, "총비용우위율": None,
+            "시세차익": None, "시세차익률": None,
+            "임대수익률": None, "매도수익률": None,
+            "최저매각가": lst.최저매각가,
             "우선순위점수": round(score, 1),
-            "목표달성": rec["상태"] == "conditional_bid",
-            "입찰상태": rec["상태"], "확인할것": rec["사유"],
+            "목표달성": False,
+            "입찰상태": "needs_review",
+            "확인할것": ["목적별 비용·현금·권리·시세를 입찰 시뮬레이터에서 확인하세요."],
         })
     out.sort(key=lambda r: r["우선순위점수"], reverse=True)
     return out
