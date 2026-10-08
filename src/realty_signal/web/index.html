@@ -7031,18 +7031,23 @@ async function loadFreshness(){
   const now=d.now||Math.floor(Date.now()/1000);
   const kbAsOf=d.sources.find(s=>s.key==='signal')?.asof;
   const kbAsOfTs=/^\d{4}-\d{2}-\d{2}$/.test(kbAsOf||'') ? Date.parse(`${kbAsOf}T00:00:00Z`)/1000 : null;
-  const kbAge=Number.isFinite(kbAsOfTs) && kbAsOfTs ? (now-kbAsOfTs)/86400 : null;
-  const kbAgeDays=kbAge==null ? null : Math.floor(kbAge);
+  // /ready and the assessment gate compare KST calendar dates, not elapsed UTC hours.
+  const kstToday=new Date((now+9*3600)*1000).toISOString().slice(0,10);
+  const kbAgeDays=Number.isFinite(kbAsOfTs) && kbAsOfTs
+    ? (Date.parse(`${kstToday}T00:00:00Z`)/1000-kbAsOfTs)/86400 : null;
+  const kbStatus=kbAgeDays==null || kbAgeDays<0?'unknown':kbAgeDays>8?'stale':'fresh';
   const kbCheck=d.kb_fetch?.observation_check;
   const dot=s=>{ const ts=s.key==='signal' ? kbAsOfTs : s.ts;
     if(!ts) return '#94a3b8'; const days=Math.floor((now-ts)/86400);
-    if(s.key==='signal') return days<=8?'#16a34a':'#dc2626';
+    if(s.key==='signal') return kbStatus==='fresh'?'#16a34a':kbStatus==='stale'?'#dc2626':'#94a3b8';
     return days<=8?'#16a34a':days<=31?'#ca8a04':'#dc2626'; };
-  const when=s=>{ const r=_relTime(s.key==='signal'?kbAsOfTs:s.ts, now);
-    return r?`<b>${s.key==='signal'?'관측 ':''}${r}${s.key==='signal'&&kbAgeDays>8?' · 시그널 판단 보류':''}</b>`:`<span style="color:var(--dim)">${s.key==='signal'?'관측일 미확인':s.cycle||'–'}</span>`; };
+  const when=s=>{ if(s.key==='signal'&&kbStatus==='unknown') return '<span style="color:var(--dim)">관측일 미확인 · 시그널 판단 보류</span>';
+    const r=_relTime(s.key==='signal'?kbAsOfTs:s.ts, now);
+    return r?`<b>${s.key==='signal'?'관측 ':''}${r}${s.key==='signal'&&kbStatus==='stale'?' · 시그널 판단 보류':''}</b>`:`<span style="color:var(--dim)">${s.key==='signal'?'관측일 미확인':s.cycle||'–'}</span>`; };
   box.innerHTML=`<div style="font-size:13px;font-weight:700;margin-bottom:2px">데이터 신선도 <span style="font-weight:400;font-size:11px;color:var(--dim)">· 소스별 최종 갱신</span></div>
     <div style="font-size:11px;color:var(--dim);margin-bottom:8px">분석 기준일 <b style="color:var(--txt)">${d['기준일']||'–'}</b> (KB 시장 시그널)</div>`
-    + (kbAgeDays!=null && kbAgeDays>8 ? `<p class="v2-caution" style="font-size:11px;margin:0 0 8px">KB 관측 기준일이 ${kbAgeDays}일 전입니다. ${kbCheck?.changed===false?'최근 수집 확인에서도 새 관측일이 없었습니다. ':''}최신 공표를 확인하기 전까지 이 시그널을 현재 시장 상황으로 단정하지 마세요.</p>` : '')
+    + (kbStatus==='stale' ? `<p class="v2-caution" style="font-size:11px;margin:0 0 8px">KB 관측 기준일이 ${kbAgeDays}일 전입니다. ${kbCheck?.changed===false?'최근 수집 확인에서도 새 관측일이 없었습니다. ':''}최신 공표를 확인하기 전까지 이 시그널을 현재 시장 상황으로 단정하지 마세요.</p>` :
+       kbStatus==='unknown' ? '<p class="v2-caution" style="font-size:11px;margin:0 0 8px">KB 관측 기준일을 확인할 수 없습니다. 현재 시장 시그널로 판단하지 마세요.</p>' : '')
     + d.sources.map(s=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)">
         <span style="width:8px;height:8px;border-radius:50%;background:${dot(s)};margin-top:5px;flex:none"></span>
         <div style="flex:1;min-width:0">
