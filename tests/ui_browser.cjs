@@ -193,9 +193,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
         return route.fulfill({status:403,json:{detail:'forbidden'}});
       const naverMatched=url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='급매:naver-match';
+      const auctionReport=url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='경매:auction-1';
       if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
         subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
-          kind:'일반매물',asking_manwon:50000,exclusive_m2:59,region_identity_status:'matched',collected_at:'2026-09-29',
+          kind:auctionReport?'경매':'일반매물',asking_manwon:auctionReport?42000:50000,exclusive_m2:59,region_identity_status:'matched',collected_at:'2026-09-29',
           coordinate:url.searchParams.get('key')==='일반매물:location-auto'?[37.65,127.07]:null,
           naver_complex_no:naverMatched?'12345':null,
           asking_comparison:naverMatched?{상태:'관측비교',표본수:4,중앙값:53000,호가차이율:-5.7}:null,
@@ -209,7 +210,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         buyer_fit:naverMatched?{status:'within',gap_manwon:3000}:{status:'unknown'},
         positive:[{text:'동일 조건 실거래가 있습니다.'}],
         cautions:[{text:'현재 판매 여부는 확인되지 않았습니다.'}],
-        next_actions:['실제 호가 확인'],evidence:[{id:'trades',label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
+        next_actions:[auctionReport?'중개사에게 실제 호가 확인':'실제 호가 확인'],evidence:[{id:'trades',label:'국토부 실거래',asof:'2026-09-29',status:'관측'}]};
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:profile-fail')
         data.partial_failures=['buyer_profile_unavailable'];
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:cost-held'){
@@ -667,6 +668,17 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#view-watch').getByRole('button',{name:'매물 확인'}).click();
     await page.locator('#v2ReportDlg').getByText('한방테스트단지',{exact:false}).waitFor();
     assert.equal(await page.locator('#v2BackToDiscovery').isVisible(),false);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.evaluate(()=>window.SignalV2.openListing('경매:auction-1'));
+    await page.locator('#v2ReportBody').getByText('경매 물건, 먼저 확인할 두 가지',{exact:true}).waitFor();
+    const auctionReportText=await page.locator('#v2ReportBody').textContent();
+    assert.match(auctionReportText,/최저매각가/);
+    assert.match(auctionReportText,/권리 안전성·필요 현금·입찰가/);
+    assert.match(auctionReportText,/매각물건명세서·현황조사서·감정평가서/);
+    assert.doesNotMatch(auctionReportText,/가격은 괜찮나요|내 예산에 맞나요|중개사에게 실제 호가 확인/);
+    assert.match(auctionReportText,/사건·권리 정보 아님/);
+    assert.match(auctionReportText,/경매 최저가·낙찰가와는 다른 자료/);
+    assert.doesNotMatch(auctionReportText,/수집 호가와 가격 변화/);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
     await page.evaluate(()=>switchTab('watch'));
     assert.equal(await page.locator('.watch-card-more').getAttribute('open'),'');
