@@ -94,21 +94,23 @@
 
   function listingFieldLinks(item) {
     const query = [item.region, item.name].filter(Boolean).join(' ').trim();
+    const auction = item.kind === '경매';
     const search = terms => `https://search.naver.com/search.naver?query=${encodeURIComponent(terms)}`;
     const naverNo = /^[1-9][0-9]{0,11}$/.test(String(item.naver_complex_no || ''))
       ? String(item.naver_complex_no) : null;
-    const naver = naverNo ? `https://new.land.naver.com/complexes/${naverNo}` :
+    const naver = auction ? `https://map.naver.com/p/search/${encodeURIComponent(query)}` :
+      naverNo ? `https://new.land.naver.com/complexes/${naverNo}` :
       search(`${query} 아파트 매매 네이버 부동산`);
     const link = (href, label, note) => `<a class="v2-field-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><b>${esc(label)} ↗</b><small>${esc(note)}</small></a>`;
-    return `<section class="v2-field-check" aria-label="사진 거리뷰 후기 현장 확인">
-      <h3>실제 모습과 거주 경험 보기</h3>
+    return `<section class="v2-field-check" aria-label="${auction ? '위치와 주변 환경 확인' : '사진 거리뷰 후기 현장 확인'}">
+      <h3>${auction ? '위치와 주변 환경 확인' : '실제 모습과 거주 경험 보기'}</h3>
       <div class="v2-field-grid">
-        ${link(naver, naverNo ? '네이버 부동산 · 매물·사진' : '네이버에서 매물·사진 찾기', naverNo ? '단지 페이지 · 같은 매물인지 다시 확인' : '단지명 검색 · 정확한 매물 연결은 미확인')}
-        ${query ? link(`https://map.naver.com/p/search/${encodeURIComponent(query)}`, '네이버 지도 · 거리뷰', '검색 결과에서 거리뷰를 선택 · 출입구 확인') : ''}
-        ${query ? link(`https://hogangnono.com/search?q=${encodeURIComponent(query)}`, '호갱노노 · 단지 검색', '호갱노노에서 직접 검색 · 단지를 선택해 후기 확인') : ''}
-        ${query ? link('https://www.asil.kr/asil/index.jsp', '아실 · 단지 찾기', '아실 지도에서 단지명 검색 · 단지톡 확인') : ''}
+        ${link(naver, auction ? '네이버 지도 · 위치 확인' : naverNo ? '네이버 부동산 · 매물·사진' : '네이버에서 매물·사진 찾기', auction ? '주변 위치 참고 · 사건·권리 정보 아님' : naverNo ? '단지 페이지 · 같은 매물인지 다시 확인' : '단지명 검색 · 정확한 매물 연결은 미확인')}
+        ${!auction && query ? link(`https://map.naver.com/p/search/${encodeURIComponent(query)}`, '네이버 지도 · 거리뷰', '검색 결과에서 거리뷰를 선택 · 출입구 확인') : ''}
+        ${!auction && query ? link(`https://hogangnono.com/search?q=${encodeURIComponent(query)}`, '호갱노노 · 단지 검색', '호갱노노에서 직접 검색 · 단지를 선택해 후기 확인') : ''}
+        ${!auction && query ? link('https://www.asil.kr/asil/index.jsp', '아실 · 단지 찾기', '아실 지도에서 단지명 검색 · 단지톡 확인') : ''}
       </div>
-      <p class="v2-muted">외부 사이트에서 단지·동·호수가 같은지 확인하세요. 후기와 사진은 분석 점수에 넣지 않습니다.</p>
+      <p class="v2-muted">${auction ? '지도는 위치 참고용입니다. 법원 공고·사건 서류를 대신하지 않으며 권리·점유 판단에 사용하지 마세요.' : '외부 사이트에서 단지·동·호수가 같은지 확인하세요. 후기와 사진은 분석 점수에 넣지 않습니다.'}</p>
     </section>`;
   }
 
@@ -393,36 +395,56 @@
         && item.region_identity_status === 'matched' && !!item.region;
       const costSlot = costEligible && typeof txCostsSlot === 'function'
         ? txCostsSlot(item.asking_manwon, item.region, null, item.exclusive_m2) : '';
-      body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">매물 확인 · 현장 검증 전</p>
-        <h2>${esc(item.name || '매물')}</h2><p class="v2-report-price">${money(item.asking_manwon)}</p>
-        <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
-        <p class="v2-muted">매물 정보 ${esc(item.collected_at || '수집 시각 미확인')}${item.stale ? ' · 오래된 정보' : ''}</p></header>
-        ${listingFieldLinks(item)}
-        <section class="v2-report-section v2-report-summary" aria-label="궁금한 것에 대한 답"><h3>이 매물, 먼저 볼 두 가지</h3>
+      const isAuction = item.kind === '경매';
+      const summary = isAuction
+        ? `<section class="v2-report-section v2-report-summary" aria-label="경매 물건 먼저 확인할 내용"><h3>경매 물건, 먼저 확인할 두 가지</h3>
+          <div class="v2-answer-grid"><div class="v2-answer"><span class="v2-answer-label">01 · 최저매각가</span><h4>입찰가와 다릅니다</h4>
+            <b>${money(item.asking_manwon)}</b><p class="v2-muted">현재 표시된 최저매각가입니다. 감정가·시세·낙찰가나 가격 경쟁력을 뜻하지 않습니다.</p></div>
+          <div class="v2-answer"><span class="v2-answer-label">02 · 권리·현금</span><h4>확인 전 판단 보류</h4>
+            <p class="v2-muted">법원 서류와 점유·인수 권리, 잔금 자금 확인 전에는 권리 안전성·필요 현금·입찰가를 판단할 수 없습니다.</p></div></div></section>`
+        : `<section class="v2-report-section v2-report-summary" aria-label="궁금한 것에 대한 답"><h3>이 매물, 먼저 볼 두 가지</h3>
           <div class="v2-answer-grid"><div class="v2-answer"><span class="v2-answer-label">01 · 가격 비교</span><h4>가격은 괜찮나요?</h4>
           ${listingPriceSummary(price, report.partial_failures, item.stale)}</div>
-          <div class="v2-answer"><span class="v2-answer-label">02 · 내 자금</span><h4>내 예산에 맞나요?</h4>${listingBudgetSummary(fit, report.partial_failures)}</div></div></section>
+          <div class="v2-answer"><span class="v2-answer-label">02 · 내 자금</span><h4>내 예산에 맞나요?</h4>${listingBudgetSummary(fit, report.partial_failures)}</div></div></section>`;
+      const actionItems = isAuction ? [
+        '법원 원문에서 사건번호·매각기일·최저매각가가 최신인지 확인',
+        '매각물건명세서·현황조사서·감정평가서를 직접 확인',
+        '점유자·임차인·인수 가능 권리와 미납 관리비를 별도로 검토',
+        '입찰보증금·잔금 기한과 자금 조달 가능 여부를 확인',
+      ] : (report.next_actions || ['현재 판매 여부와 실제 호가는?', '실내 사진·향·수리 상태가 실제 동·호수와 같은가?']);
+      const evidenceSection = isAuction
+        ? `<details class="v2-report-more v2-report-evidence"><summary><span class="v2-report-number">01</span><span><b>아파트 거래 참고</b><small>경매 최저가·낙찰가와는 다른 자료</small></span></summary>
+          <h3>국토부 매매 실거래</h3>${listingTradeFacts(price)}
+          <p class="v2-muted">일반 매매 신고 거래의 참고 자료입니다. 경매 물건의 감정가·최저매각가·낙찰가와 동일한 가격 비교가 아닙니다.</p>
+          ${listingComplexContext(report.complex)}</details>`
+        : `<details class="v2-report-more v2-report-evidence"><summary><span class="v2-report-number">01</span><span><b>실거래와 단지 근거</b><small>가격 비교의 표본·시점·판단 한계</small></span></summary>
+          <h3>국토부 동일 조건 거래</h3>${listingTradeFacts(price)}
+          <h3>수집 호가와 가격 변화</h3>${listingSourcePriceFacts(item)}
+          <h3>단지·지역 참고 신호</h3>${listingComplexContext(report.complex)}
+          ${pros ? `<h3>유리한 근거</h3>${pros}` : ''}
+          ${cautions ? `<h3>주의할 근거</h3>${cautions}` : ''}
+          ${(report.lines || {}).price ? `<p class="v2-muted">${esc(report.lines.price)}</p>` : ''}
+          ${(report.lines || {}).cash ? `<p class="v2-muted">${esc(report.lines.cash)}</p>` : ''}
+          <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details></details>`;
+      body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">${isAuction ? '경매 후보 · 법원 원문 확인 전' : '매물 확인 · 현장 검증 전'}</p>
+        <h2>${esc(item.name || '매물')}</h2><p class="v2-report-price">${isAuction ? `최저매각가 ${money(item.asking_manwon)}` : money(item.asking_manwon)}</p>
+        <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
+        <p class="v2-muted">매물 정보 ${esc(item.collected_at || '수집 시각 미확인')}${item.stale ? ' · 오래된 정보' : ''}</p></header>
+        ${summary}
+        ${listingFieldLinks(item)}
         ${['일반매물','급매','찐매물'].includes(item.kind) ? `<section class="v2-report-section" aria-label="취득·부대비용 추정">
           <h3>살 때 드는 돈은?</h3><p class="v2-muted">${costEligible
             ? '현재 수집 호가 기준의 취득·이사·수리 비용 가정입니다. 세율·규제 적용과 실제 필요 현금은 계약 전 다시 확인해야 합니다.'
             : '현재 호가·전용면적·지역 식별이 부족하거나 서로 충돌해 비용 추정을 보류합니다. 원천 자료를 먼저 확인하세요.'}</p>
           ${costSlot}</section>` : ''}
-        <details class="v2-report-more v2-report-evidence"><summary><span class="v2-report-number">01</span><span><b>실거래와 단지 근거</b><small>가격 비교의 표본·시점·판단 한계</small></span></summary>
-        <h3>국토부 동일 조건 거래</h3>${listingTradeFacts(price)}
-        <h3>수집 호가와 가격 변화</h3>${listingSourcePriceFacts(item)}
-        <h3>단지·지역 참고 신호</h3>${listingComplexContext(report.complex)}
-        ${pros ? `<h3>유리한 근거</h3>${pros}` : ''}
-        ${cautions ? `<h3>주의할 근거</h3>${cautions}` : ''}
-        ${(report.lines || {}).price ? `<p class="v2-muted">${esc(report.lines.price)}</p>` : ''}
-        ${(report.lines || {}).cash ? `<p class="v2-muted">${esc(report.lines.cash)}</p>` : ''}
-        <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details></details>
+        ${evidenceSection}
         <section class="v2-report-section v2-report-location" aria-label="교통 학교 생활권"><div class="v2-report-section-title"><span class="v2-report-number">02</span><div><h3>교통·학교·생활권</h3><small>매물 표시 좌표 기준 · 실제 출입구와는 다를 수 있어요</small></div></div>
         <p class="v2-muted">표시 좌표 기준 참고 자료입니다. 출입구·통학 배정·실제 출퇴근 시간은 확인이 필요합니다.</p>
         <div id="v2LocationResult" aria-live="polite">가까운 역과 주변 시설을 확인하고 있습니다…</div>
         <button type="button" class="btn" id="v2ListingLocation">입지 다시 확인</button></section>
-        <section class="v2-report-section v2-report-checklist" aria-label="중개사 확인 사항"><div class="v2-report-section-title"><span class="v2-report-number">03</span><div><h3>중개사에게 확인할 것</h3><small>계약 전에 답을 받아야 하는 질문</small></div></div>
-          <ol>${(report.next_actions || ['현재 판매 여부와 실제 호가는?', '실내 사진·향·수리 상태가 실제 동·호수와 같은가?']).map(x => `<li>${esc(x)}</li>`).join('')}</ol></section>
-        <details class="v2-report-more"><summary>핵심 판단 빠르게 확인</summary>
+        <section class="v2-report-section v2-report-checklist" aria-label="${isAuction ? '경매 입찰 전 확인 사항' : '중개사 확인 사항'}"><div class="v2-report-section-title"><span class="v2-report-number">03</span><div><h3>${isAuction ? '입찰 전에 직접 확인할 것' : '중개사에게 확인할 것'}</h3><small>${isAuction ? '법원 원문과 권리·자금 검토가 필요합니다' : '계약 전에 답을 받아야 하는 질문'}</small></div></div>
+          <ol>${actionItems.map(x => `<li>${esc(x)}</li>`).join('')}</ol>${isAuction ? '<p class="v2-muted">이 목록만으로 권리 안전성이나 입찰 적정성을 판단할 수 없습니다.</p>' : ''}</section>
+        ${!isAuction ? `<details class="v2-report-more"><summary>핵심 판단 빠르게 확인</summary>
         <div class="v2-row" aria-label="핵심 판단 바로 확인"><b>먼저 궁금한 것부터 보세요</b>
           <p class="v2-muted">현재 리포트의 가격·예산·주의 근거를 짧게 다시 보여 줍니다.</p>
           <button type="button" class="btn" data-v2-quick-question="price">가격이 싼가?</button>
@@ -432,7 +454,7 @@
         ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>이 리포트 더 쉽게 보기</b><p class="v2-muted">선택하면 AI가 현재 근거만 다시 풀어 설명합니다. 기본 리포트와 숫자는 바꾸지 않습니다.</p>
           <button type="button" class="btn" data-v2-explain="easy">쉽게 설명</button>
           <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
-          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}</details>
+          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}</details>` : ''}
         <details class="v2-report-more"><summary>관심 기록·비교·리포트 저장</summary>
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
         <button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>

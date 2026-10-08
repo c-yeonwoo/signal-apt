@@ -83,6 +83,33 @@ test('unverified regulation is not drawn or labeled as a current designation', (
   assert.doesNotMatch(rendered,/>규제지역<|>비규제</);
 });
 
+test('grade map reports when regional boundaries or price-grade joins are unavailable', async () => {
+  const ctx = vm.createContext({_uvGeo:null, fetch:async()=>({ok:false,json:async()=>({})})});
+  vm.runInContext(extract("let _uvGeoError=''", 'function _geoRow('), ctx);
+  assert.equal(await ctx._ensureGeo(), null);
+  assert.match(vm.runInContext('_uvGeoError',ctx),/지역 경계 지도를 불러오지 못했습니다/);
+  const valid = vm.createContext({_uvGeo:null,fetch:async()=>({ok:true,json:async()=>({type:'FeatureCollection',features:[]})})});
+  vm.runInContext(extract("let _uvGeoError=''", 'function _geoRow('), valid);
+  assert.deepEqual(JSON.parse(JSON.stringify(await valid._ensureGeo())),{type:'FeatureCollection',features:[]});
+  assert.equal(vm.runInContext('_uvGeoError',valid),'');
+  assert.match(html,/현재 급지 자료와 지도 지역을 연결하지 못했습니다/);
+});
+
+test('optional Telegram opt-in is compact and keeps notification details expandable', async () => {
+  const el={innerHTML:''};
+  const ctx=vm.createContext({document:{getElementById:id=>id==='dashNotify'?el:null},
+    fetch:async()=>({ok:true,json:async()=>({blocked:[{channel:'telegram',available:true,linked:false,
+      reason:'연결 전입니다.',how:'마이페이지에서 연결합니다.'}],note:'선택 알림입니다.'})}),
+    esc:value=>String(value),switchTab(){},});
+  vm.runInContext(extract('async function _loadNotifyStatus(){','async function _loadWeekly(){'),ctx);
+  await ctx._loadNotifyStatus();
+  assert.match(el.innerHTML,/dash-notify-optin/);
+  assert.match(el.innerHTML,/브리핑·관심단지·찜한 매물·청약 알림을 받아보세요/);
+  assert.match(el.innerHTML,/<details>/);
+  assert.match(el.innerHTML,/알림 연결/);
+  assert.doesNotMatch(el.innerHTML,/dash-card/);
+});
+
 test('GTX evidence is opt-in, coexists with map overlays, and separates operating from construction', async () => {
   const data=JSON.parse(fs.readFileSync(path.join(__dirname,'../src/realty_signal/web/gtx-evidence.json'),'utf8'));
   const lines=[], pins=[], removed=[];
@@ -821,7 +848,7 @@ test('listing price filter and budget sort require server-validated buyer fit', 
   assert.equal(ctx._laPricePass({총액: 160000}), false);
   assert.match(html, /내 예산 순/);
   assert.doesNotMatch(html, /언제·어디를 볼지/);
-  assert.match(html, /시그널<\/b> — 이번 주 동네 색깔이 지도에 있고, 매물 목록은 그 옆입니다/);
+  assert.match(html, /시그널·지역 가격 비교<\/b> — 가격·수급 추세와 판정 근거를 먼저 보고/);
   assert.match(html, /id="sigMap"/);
   assert.match(html, /onclick="switchTab\('signal'\)"[^>]*>시그널</);
 });
