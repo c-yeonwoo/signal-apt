@@ -11,7 +11,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage({viewport:{width:360,height:800}});
-    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[], explanationPayloads=[], targetPayloads=[];
+    const errors=[], calls=[], quotePayloads=[], nickPayloads=[], eventPayloads=[], discoveryPayloads=[], explanationPayloads=[], targetPayloads=[], auctionScenarioPayloads=[];
     const watched=new Set(['급매:synthetic-1']);
     const watchTargets=new Map();
     const reportsByKey=new Map(), savedReports=new Map();
@@ -32,6 +32,20 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       calls.push(url.pathname);
       let data={ready:false,items:[],listings:[],regions:[],actions:[],message:'합성 테스트 데이터'};
       if(url.pathname==='/api/auth/me') return route.fulfill({status:401,json:{}});
+      if(url.pathname==='/api/auction/calc/auction-1') return route.fulfill({json:{listing:{
+        id:'auction-1','단지명':'검증단지','최저매각가':6400,'시세':12000,'인수보증금':null,
+        '미납관리비':0,'수리비':0,'월임대료':0,'임대보증금':0},recommend:{},table:[]}});
+      if(url.pathname==='/api/auction/scenario/auction-1'){
+        const spec=route.request().postDataJSON(); auctionScenarioPayloads.push(spec);
+        if(!spec.court_deposit || !spec.tax_rate) return route.fulfill({json:{status:'needs_review',
+          missing:['법원 공고의 입찰보증금','개인 조건에 맞는 취득 관련 세율'],market_notes:['시세는 사용자 가정입니다.']}});
+        return route.fulfill({json:{status:'assumption_only',purpose:spec.purpose,
+          scenario_ceiling:7100,review_ceiling:null,market_notes:['시세는 사용자 가정입니다.'],
+          missing:['동일 면적 국토부 실거래 3건 갱신'],
+          scenario:{'입찰가':spec.bid,'목표충족':true,'자금충족':true,
+            '경매총비용':7600,'최대필요현금':7600,'확인대출반영':0,
+            '절약액':4500,'연간순현금흐름':300,'현금수익률':5.2}}});
+      }
       if(url.pathname==='/api/events'){
         eventPayloads.push(route.request().postDataJSON());
         return route.fulfill({json:{ok:true}});
@@ -1911,6 +1925,32 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(stationOverlay,{routed:true,route:{points:3,label:'테스트역 · 도보 약 8분 · 경로 620m',focused:true},
       straight:true,fallback:{dash:'7 7',label:'테스트역 · 직선 연결 · 도보시간 미확인',previousRemoved:true},
       escaped:'&lt;img src=x onerror=alert(1)&gt; · 직선 연결 · 도보시간 미확인'});
+    await page.evaluate(()=>openCalc('auction-1','검증단지'));
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/내 자금과 사건별 비용/);
+    await page.evaluate(()=>runAuctionScenario());
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/아직 입찰가를 계산할 수 없어요/);
+    await page.locator('#aucCash').fill('10000');
+    await page.locator('#aucDeposit').fill('640');
+    await page.locator('#aucTax').fill('1.1');
+    await page.locator('#aucEviction').fill('200');
+    await page.locator('#aucSaving').fill('1000');
+    await page.evaluate(()=>runAuctionScenario());
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/가정상 상한/);
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/최대 필요 현금/);
+    assert(Math.abs(auctionScenarioPayloads.at(-1).tax_rate-0.011)<1e-9);
+    assert.equal(auctionScenarioPayloads.at(-1).confirmed_loan,0);
+    await page.locator('#aucTax').fill('1.2');
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/입력이 바뀌었습니다/);
+    await page.locator('#aucPurpose').selectOption('rent');
+    assert.equal(await page.locator('#aucRentFields').isVisible(),true);
+    assert.equal(await page.locator('#aucOwnerFields').isVisible(),false);
+    await page.setViewportSize({width:180,height:800});
+    const auctionLayout=await page.evaluate(()=>({viewport:innerWidth,
+      dialog:document.getElementById('calcDlg').getBoundingClientRect().right,
+      content:document.getElementById('aucScenarioResult').getBoundingClientRect().right}));
+    assert(auctionLayout.dialog<=auctionLayout.viewport && auctionLayout.content<=auctionLayout.viewport,
+      `auction simulator overflows at 180px: ${JSON.stringify(auctionLayout)}`);
+    await page.evaluate(()=>document.getElementById('calcDlg').close());
     serverClientVersion='synthetic-v2';
     await page.evaluate(()=>{window._signalAppReady=true; return checkClientVersion(true);});
     assert.equal(await page.locator('#clientUpdateBanner').isVisible(),true);

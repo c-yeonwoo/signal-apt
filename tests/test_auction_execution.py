@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from realty_signal import api as app_api
-from realty_signal import auction, auth, db
+from realty_signal import auction, auth, db, store
 
 PASTE = """
 서울중앙지방법원 2024타경51234
@@ -23,7 +23,8 @@ PASTE = """
 def lst(tmp_path, monkeypatch):
     monkeypatch.setattr(auction, "AUCTION_FILE", tmp_path / "auction.json")
     return auction.add({"단지명": "상계주공7", "region": "노원구", "감정가": 85000,
-                        "최저매각가": 54400, "전용면적": 79.07, "시세": 82000,
+                        "최저매각가": 54400, "입찰보증금": 5440,
+                        "전용면적": 79.07, "시세": 82000,
                         "입찰기일": "2026-08-20", "인수보증금": 0,
                         "권리분석": {"조사완료": True, "분석": {"확인필요": False, "인수합계": 0}}})
 
@@ -53,18 +54,23 @@ def test_parse_confidence_medium_when_partial():
 
 
 # ---------- 낙찰 후 플랜 ----------
-def test_plan_uses_recommended_bid_before_win(lst):
+def test_plan_does_not_invent_bid_before_win(lst):
     p = auction.plan(lst)
-    assert p["추정입찰가"] is True
-    assert p["낙찰가"] > 0
-    assert p["기준일"] == "2026-08-20"
-    assert [s["D"] for s in p["steps"]] == [0, 7, 14, 44, 45, 75, 105]
+    assert p["상태"] == "needs_review"
+    assert p["낙찰가"] is None and p["steps"] == []
+
+
+def test_plan_requires_court_deposit(lst):
+    lst.입찰보증금 = None
+    p = auction.plan(lst, 60000)
+    assert p["상태"] == "needs_review" and p["총현금"] is None
+    assert "보증금" in p["사유"][0]
 
 
 def test_plan_cash_adds_up(lst):
     p = auction.plan(lst, 60000)
     assert p["추정입찰가"] is False and p["낙찰가"] == 60000
-    assert p["보증금"] == round(54400 * auction.BOND_RATE)
+    assert p["보증금"] == 5440
     assert p["경락잔금대출"] == round(60000 * auction.DEFAULTS["대출비율"])
     assert p["잔금"] == 60000 - p["보증금"] - p["경락잔금대출"]
     assert p["대출확인필요"] and p["대출상태"] == "미승인_가정"
@@ -104,10 +110,12 @@ def test_plan_rejects_invalid_loan_assumptions_without_server_error(lst):
 
 
 def test_plan_dates_shift_to_win_date(lst):
-    auction.update(lst.id, {"낙찰일": "2026-09-01", "낙찰가": 60000})
+    auction.update(lst.id, {"낙찰일": "2026-09-01", "낙찰가": 60000,
+                            "매각허가결정일": "2026-09-08"})
     p = auction.plan(auction.get(lst.id))
     assert p["기준일"] == "2026-09-01"
     assert p["steps"][1]["날짜"] == "2026-09-08"
+    assert p["steps"][2]["날짜"] is None  # 법원 대금지급기한을 D+44로 지어내지 않음
 
 
 # ---------- API ----------
@@ -124,7 +132,8 @@ def client(tmp_path, monkeypatch):
     c = TestClient(app_api.app)
     c.cookies.set(auth.COOKIE, token)
     c.listing = auction.add({"단지명": "상계주공7", "region": "노원구", "감정가": 85000,
-                             "최저매각가": 54400, "전용면적": 79.07, "시세": 82000,
+                             "최저매각가": 54400, "입찰보증금": 5440,
+                             "전용면적": 79.07, "시세": 82000,
                              "입찰기일": "2026-08-20"})
     return c
 
@@ -146,7 +155,7 @@ def test_rights_save_feeds_bid_calculation(client):
     assert d["분석"]["인수합계"] == 30000
     assert auction.get(client.listing.id).인수보증금 == 30000
     after = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]
-    assert after["상태"] == "no_bid" and after["입찰가"] is None
+    assert after["상태"] == "needs_review" and after["입찰가"] is None
 
 
 def test_rights_roundtrip_keeps_input(client):
@@ -189,7 +198,38 @@ def test_clean_rights_still_need_source_attestation(client):
     assert client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]["입찰가"] is None
     client.post(f"/api/auction/rights/{client.listing.id}", json={**clean, "조사완료": True})
     rec = client.get(f"/api/auction/calc/{client.listing.id}").json()["recommend"]
-    assert rec["상태"] == "conditional_bid" and rec["입찰가"] > 0
+    assert rec["상태"] == "needs_review" and rec["입찰가"] is None
+
+
+def test_scenario_api_requires_rights_and_keeps_manual_market_as_assumption(client):
+    payload = {"purpose": "owner", "bid": 60000, "market_low": 82000,
+               "court_deposit": 5440, "cash_budget": 90000, "tax_rate": .011,
+               "buy_broker_rate": .005, "eviction_cost": 500, "min_saving": 1000}
+    url = f"/api/auction/scenario/{client.listing.id}"
+    before = client.post(url, json=payload).json()
+    assert before["status"] == "needs_review" and before["scenario_ceiling"] is None
+    clean = {"권리": RIGHTS["권리"], "임차인": [], "조사완료": True}
+    client.post(f"/api/auction/rights/{client.listing.id}", json=clean)
+    after = client.post(url, json=payload).json()
+    assert after["status"] == "assumption_only"
+    assert after["scenario_ceiling"] is not None and after["review_ceiling"] is None
+    assert after["scenario"]["최대필요현금"] >= after["scenario"]["경매총비용"]
+    assert client.post(url, json={**payload, "tax_rate": -1}).status_code == 422
+
+
+def test_single_listing_trade_refresh_does_not_refresh_all(client, monkeypatch, tmp_path):
+    from realty_signal import config
+
+    monkeypatch.setattr(store, "CODES_FILE", tmp_path / "missing-codes.json")
+    monkeypatch.setattr(config, "load_env", lambda: None)
+    monkeypatch.setattr(config, "public_data_key", lambda: "synthetic")
+    seen = []
+    monkeypatch.setattr(auction, "update_market", lambda codes, key, listing_id=None:
+                        seen.append((codes, key, listing_id)) or 0)
+    response = client.post(f"/api/auction/refresh-market/{client.listing.id}")
+    assert response.status_code == 200
+    assert seen == [({}, "synthetic", client.listing.id)]
+    assert response.json()["sample_count"] == 0
 
 
 def test_integrated_listing_preserves_auction_hold_state(client, monkeypatch):
@@ -203,7 +243,7 @@ def test_integrated_listing_preserves_auction_hold_state(client, monkeypatch):
     client.post(f"/api/auction/rights/{client.listing.id}",
                 json={**RIGHTS, "조사완료": True})
     blocked = app_api._build_listings({"경매"})[0]
-    assert blocked["입찰상태"] == "no_bid"
+    assert blocked["입찰상태"] == "needs_review"
     assert blocked["검토용상한"] is None and blocked["기회도"] == 0
 
 
