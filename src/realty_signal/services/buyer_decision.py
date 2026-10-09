@@ -103,7 +103,8 @@ def card_lines(row: dict, decision: dict | None) -> dict:
     finance = row.get("자금") or {}
     kind = row.get("유형") or ""
     src = row.get("가격출처") or ""
-    modeled = src in ("지역평단추정", "단지평단추정")
+    asking = kind in ("급매", "찐매물", "일반매물") and (row.get("price_kind") == "asking" or src == "매물가")
+    modeled = src in ("지역평단추정", "단지평단추정") and not asking
     auction_state = row.get("입찰상태") if kind == "경매" else None
     decision = decision or {}
     if kind == "경매" and auction_state and auction_state != "conditional_bid":
@@ -115,7 +116,7 @@ def card_lines(row: dict, decision: dict | None) -> dict:
         elif finance.get("가능") is False or decision.get("feasibility") == "infeasible":
             state = "가진 돈으로 안 됩니다"
         elif modeled:
-            state = "짐작한 가격입니다. 매물 가격은 모릅니다"
+            state = "참고가격 기준 계산"
         elif decision.get("feasibility") == "unknown":
             state = "확인이 필요합니다"
         else:
@@ -127,19 +128,19 @@ def card_lines(row: dict, decision: dict | None) -> dict:
     elif row.get("총액") or row.get("추정가") or row.get("예상가"):
         cash = "살 수 있는 가격을 저장하면 필요한 돈을 계산합니다"
     else:
-        cash = "가격이 없어 필요한 돈을 계산하지 못했습니다"
+        cash = "호가를 확인하면 필요현금과 월 부담을 계산합니다"
     if kind == "경매":
         price = "최저 입찰가입니다. 세금과 비용은 따로입니다"
-    elif src == "매물가":
-        price = "매물에 적힌 가격입니다. 아직 팔리는지는 모릅니다"
+    elif asking:
+        price = "수집된 매도 호가 · 계약 가능 여부는 중개사 확인"
     elif modeled:
-        price = "동네 평균으로 짐작한 가격입니다. 매물 가격이 아닙니다"
+        price = "지역 실거래 기반 참고가격" if src == "지역평단추정" else "단지 실거래 기반 참고가격"
     elif src == "사용자입력":
         price = "직접 넣은 가격입니다. 매물에 적힌 가격이 아닙니다"
     elif row.get("추정가") or row.get("총액") or row.get("예상가"):
         price = "이 가격이 어디서 온 것인지 확인이 필요합니다"
     else:
-        price = "가격을 모릅니다"
+        price = "현재 매물에서 호가 확인"
     unknowns = decision.get("unknowns") or []
     blocking = decision.get("blocking_reasons") or []
     unknown = " · ".join(unknowns[:2]) if unknowns else (blocking[0] if blocking else "매물 가격, 권리, 은행 대출")

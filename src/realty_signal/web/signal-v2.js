@@ -429,7 +429,7 @@
       body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">${isAuction ? '경매 후보 · 법원 원문 확인 전' : '매물 확인 · 현장 검증 전'}</p>
         <h2>${esc(item.name || '매물')}</h2><p class="v2-report-price">${isAuction ? `최저매각가 ${money(item.asking_manwon)}` : money(item.asking_manwon)}</p>
         <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
-        <p class="v2-muted">매물 정보 ${esc(item.collected_at || '수집 시각 미확인')}${item.stale ? ' · 오래된 정보' : ''}</p></header>
+        <p class="v2-muted">호가 수집 ${esc(item.collected_at || '날짜 확인 필요')}${item.stale ? ' · 최신 호가 재확인 필요' : item.refresh_due ? ' · 최근 수집 호가로 비교' : ''}</p></header>
         ${summary}
         ${listingFieldLinks(item)}
         ${['일반매물','급매','찐매물'].includes(item.kind) ? `<section class="v2-report-section" aria-label="취득·부대비용 추정">
