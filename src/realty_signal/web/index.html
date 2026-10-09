@@ -8889,7 +8889,7 @@ function renderListingWatch(){
       <td data-label="지역 신호">${c?.signal?regionSignalBadge(c.signal):'<span class="watch-note">지역 신호 미확인</span>'}</td>
       <td data-label="바로가기"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button type="button" class="btn" style="padding:7px 10px;min-height:36px;font-size:12px" data-watch-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-available="${!!c}" onclick="openWatchItem(this)">${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'리포트'}</button>
-        <details class="watch-card-more" data-watch-key="${esc(w.key)}" ${expanded.has(w.key)?'open':''}><summary>관리</summary><div class="watch-detail-content">
+        <details class="watch-card-more" data-watch-key="${esc(w.key)}" ${expanded.has(w.key)?'open':''}><summary>알림·찜 관리</summary><div class="watch-detail-content">
           <span class="watch-card-status">${esc(now)} · ${savedPriceLabel} ${amount(w.saved_price)}</span>
           ${isAsking?`<div class="watch-card-target" style="margin-top:8px"><label>목표 호가(만원) <input class="ctrl" type="number" min="1" max="999999999" step="1" inputmode="numeric" value="${esc(w.target_price??'')}" placeholder="예: 50000"></label>
           <button type="button" class="btn" data-watch-key="${esc(w.key)}" onclick="saveWatchPriceTarget(this)">목표 저장·해제</button></div>`:''}
