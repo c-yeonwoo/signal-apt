@@ -558,8 +558,9 @@ def listing_watch_get(request: Request):
     from realty_signal.services import listing_watch as watch
 
     uid = deps.uid(request)
+    private_allowed = deps.personal_listings_allowed(request)
     saved = db.listing_watch_list(uid)
-    if not deps.personal_listings_allowed(request):
+    if not private_allowed:
         saved = [row for row in saved if row["kind"] not in watch.PRIVATE]
     targets = db.listing_watch_price_targets(uid)
     for row in saved:
@@ -567,9 +568,22 @@ def listing_watch_get(request: Request):
             row["target_price"] = targets.get(row["key"])
     kinds = {row["kind"] for row in saved}
     # 대안은 저장한 유형뿐 아니라 다른 급매·찐매물도 비교한다. 비소유자에게는 절대 읽지 않는다.
-    if kinds & watch.PRIVATE and deps.personal_listings_allowed(request):
+    if kinds & watch.PRIVATE and private_allowed:
         kinds |= watch.PRIVATE
-    current = app_api._build_listings(kinds, include_private=deps.personal_listings_allowed(request)) if kinds else []
+    current = app_api._build_listings(kinds, include_private=private_allowed) if kinds else []
+    if current:
+        from realty_signal.services.listing_inventory import collapse
+        from realty_signal.services.listing_prices import attach as attach_prices
+        current = collapse(current)
+        current = attach_prices(current, cohort_rows=current)
+    profile = db.profile_get(uid) or {}
+    from realty_signal import buying_power
+    from realty_signal.services import property_analysis
+    confirmed = buying_power.validated_confirmed_power(profile)
+    for row in current:
+        if row.get("유형") in watch.PRIVATE:
+            row["budget_fit"] = property_analysis.buyer_fit(
+                property_analysis.snapshot(row), profile, confirmed_power=confirmed)
     return {"items": watch.build(saved, current)}
 
 
