@@ -40,10 +40,20 @@ def same_region(a: dict, b: dict) -> bool:
 
 def public_fields(row: dict) -> dict:
     ref = row.get("ref") or {}
+    comparison = row.get("price_comparison") or {}
+    budget_fit = row.get("budget_fit") or {}
     return {"key": row.get("key"), "kind": row.get("유형"), "name": row.get("단지명"),
             "region": row.get("지역"), "region_sido": row.get("시도"),
             "region_code": row.get("지역코드"),
             "price": row.get("총액"), "pyeong": row.get("평형"),
+            "exclusive_m2": ref.get("전용면적") or row.get("전용면적"),
+            "dong": row.get("동"), "signal": row.get("시그널"),
+            "assessment_status": row.get("판정상태"),
+            "timing_score": row.get("기회도"),
+            "price_comparison": {k: comparison.get(k) for k in
+                                 ("상태", "이유", "표본수", "중앙값", "호가차이율")},
+            "budget_fit": {k: budget_fit.get(k) for k in
+                           ("status", "reason", "budget_manwon", "gap_manwon")},
             "dday": _dday(ref) if row.get("유형") == "청약" else ref.get("Dday"),
             "status": row.get("지표값") if row.get("유형") == "청약" else None,
             "stale": bool(row.get("stale")), "fetched_at": row.get("fetched_at")}
