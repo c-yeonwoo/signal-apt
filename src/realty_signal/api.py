@@ -3688,13 +3688,14 @@ def listings_all(request: Request, types: str = "경매,급매,청약", view: st
                              "no_favorite_complexes": True}
         elif failed or limited:
             general_scope = {"failed_regions": failed, "page_limited_regions": limited}
+    age = _data_age_days()
     return {
         "listings": public_rows,
         "asof": asof,
         "meta": {
             "source": "kb_weekly",
             "timing_version": TIMING_VERSION,
-            "data_age_days": round(_data_age_days() or 0, 1),
+            "data_age_days": round(age, 1) if age is not None else None,
             "engagement_boost": bool(scores),
             "private_access": private_access,
             "general_refresh_failed": general_refresh.get("ok") is False,
