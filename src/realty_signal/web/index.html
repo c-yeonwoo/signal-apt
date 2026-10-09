@@ -862,7 +862,7 @@
           <option value="인천">인천</option>
           <option value="지방·광역">지방 · 광역</option>
         </select>
-        <button id="filterToggle" class="side-filter-btn" type="button" aria-controls="filterPanel" aria-expanded="false" onclick="toggleFilters()">신호·급지 <span id="filterCaret">▾</span></button>
+        <button id="filterToggle" class="side-filter-btn" type="button" aria-controls="filterPanel" aria-expanded="false" onclick="toggleFilters()">신호·지역 가격대 <span id="filterCaret">▾</span></button>
         <div id="filterPanel" style="display:none;flex-direction:column;gap:8px">
           <div class="filters" id="filters"></div>
         </div>
@@ -1020,10 +1020,10 @@
 <div id="view-undervalued" style="display:none">
   <div class="sec">
     <h2 class="page-head">지역 가격 비교</h2>
-    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지도 색은 평단가 급지이며, 지역·단지의 적정가나 매수 신호는 아닙니다.</p>
+    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지도 색은 지역 평단가 가격대이며, 지역·단지의 적정가나 매수 신호는 아닙니다.</p>
     <div id="sigMapWrap">
-      <div id="sigMap" role="img" aria-label="시군구 가격 급지 지도"></div>
-      <div id="sigMapLegend">평단가 급지입니다. 진한 색일수록 비싼 급지이고, 회색은 급지 자료가 없습니다. 매수 추천이 아닙니다.</div>
+      <div id="sigMap" role="img" aria-label="시군구 지역 가격대 지도"></div>
+      <div id="sigMapLegend">지역 평단가 가격대입니다. 진한 색일수록 비싼 지역이고, 회색은 자료가 없습니다. 매수 추천이 아닙니다.</div>
     </div>
     <div class="rpc-controls">
       <label>전용면적대 <select id="rpcArea" class="ctrl" onchange="renderRegionPriceComparison()"><option value="84">84㎡ ±5㎡</option><option value="59">59㎡ ±5㎡</option></select></label>
@@ -1806,21 +1806,6 @@
   <div id="alertsBody" style="max-height:60vh;overflow:auto"></div>
 </dialog>
 
-<dialog id="imjangDlg" style="width:620px;max-width:96vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <h3 style="margin:0;font-size:19px">임장 코스</h3>
-    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('imjangDlg').close()">✕</span>
-  </div>
-  <p class="page-sub" style="margin-bottom:12px">후보 3곳 반나절 일정</p>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px">
-    <label>날짜 <input type="date" id="imjDate" style="padding:4px 8px"></label>
-    <label>출발 <input type="time" id="imjStart" value="10:00" style="padding:4px 8px"></label>
-    <label>단지당 <input type="number" id="imjStay" value="50" min="20" max="180" step="10" style="width:62px;padding:4px 8px">분</label>
-    <span class="btn" style="padding:4px 11px" onclick="openImjang(true)">다시 짜기</span>
-  </div>
-  <div id="imjBody" style="max-height:64vh;overflow:auto"></div>
-</dialog>
-
 <dialog id="scoreDlg" style="box-sizing:border-box;width:560px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
     <h3 style="margin:0;font-size:19px">과거 시그널 비교</h3>
@@ -2003,22 +1988,24 @@ function uvPill(uv, extra){
   return `<span class="uv-pill" style="background:${v.color}18;color:${v.color};border:1px solid ${v.color}44"
     title="${v.phrase}">${v.label}</span>${extra||''}`;
 }
-// 단지단위 급지(지역 내 평단가 순위) 1=최상급~5=하급
+// 화면에는 지역(A~E)과 단지(1~5)를 같은 다섯 가격대 말로 표시한다.
+// 비교 모집단이 다르므로 '지역'/'단지(지역 내)'를 반드시 함께 적는다.
+const _GRADE_NAMES=['상','중상','중','중하','하'];
+const _REGION_GRADE = {A:{label:'지역 가격대 상',col:'#ca8a04'}, B:{label:'지역 가격대 중상',col:'#16a34a'},
+                       C:{label:'지역 가격대 중',col:'#0891b2'}, D:{label:'지역 가격대 중하',col:'#64748b'},
+                       E:{label:'지역 가격대 하',col:'#94a3b8'}};
+function regionGradeText(g){ return _REGION_GRADE[g]?.label||'지역 가격대 미산정'; }
 function gradeBadge(g, top){
-  if(!g) return '–';
-  const col = {1:'#ca8a04',2:'#16a34a',3:'#94a3b8',4:'#ea580c',5:'#dc2626'}[g];
-  const t = top!=null ? ` <span style="color:var(--dim);font-size:10px">상위${top}%</span>` : '';
-  return `<span title="지역 내 평단가 순위" style="color:${col};font-weight:700">${g}급지</span>${t}`;
+  const n=Number(g), name=_GRADE_NAMES[n-1]; if(!name) return '–';
+  const col = _REGION_GRADE['ABCDE'[n-1]].col;
+  const t = top!=null ? ` <span style="color:var(--dim);font-size:10px">지역 내 상위 ${top}%</span>` : '';
+  return `<span title="해당 시군구 안의 단지 평단가 5단계" style="color:${col};font-weight:700">단지 가격대 ${name}</span>${t}`;
 }
-// 시군구 급지(수도권 평단가 5분위 A~E) → 직관 라벨
-const _REGION_GRADE = {A:{label:'상급지',col:'#ca8a04'}, B:{label:'중상급지',col:'#16a34a'},
-                       C:{label:'중급지',col:'#0891b2'}, D:{label:'중하급지',col:'#64748b'},
-                       E:{label:'하급지',col:'#94a3b8'}};
 function regionGradeBadge(g, pyeong){
   if(!g) return '–';
-  const gd = _REGION_GRADE[g] || {label:g+'급지', col:'#94a3b8'};
+  const gd = _REGION_GRADE[g]; if(!gd) return '–';
   const p = pyeong ? ` <span style="color:var(--dim);font-size:10px">${pyeong}만/평</span>` : '';
-  return `<span title="수도권 시군구 평단가 5분위(A~E)" style="color:${gd.col};font-weight:700">${gd.label}</span>${p}`;
+  return `<span title="수도권 시군구 평단가 5단계. 투자 가치나 적정가가 아닙니다" style="color:${gd.col};font-weight:700">${gd.label}</span>${p}`;
 }
 
 // ===== 매물 공통 카드 요소(경매·급매·청약 표준화) =====
@@ -2080,7 +2067,7 @@ function renderMtFilter(hostId, rerender){
   const chip=(code,lbl)=>`<span class="chip${_mtGradeSet.has(code)?' on':''}"${big?'':` style="font-size:11px"`} data-g="${code}">${lbl}</span>`;
   const lblStyle=big?'':'style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px"';
   el.innerHTML=`<label ${lblStyle}><input type="checkbox" ${_mtBuyOnly?'checked':''} class="mt-buy"> 매수신호만</label>`
-    + `<span class="${big?'mt-label':''}" style="${big?'':'font-size:11px;color:var(--dim);margin-left:6px'}">급지</span>`
+    + `<span class="${big?'mt-label':''}" style="${big?'':'font-size:11px;color:var(--dim);margin-left:6px'}">지역 가격대</span>`
     + [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].map(([c,l])=>chip(c,l)).join('')
     + `<label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;margin-left:6px">지역
       <select class="mt-region" aria-label="지역·도시 선택" style="width:min(210px,65vw);max-width:100%;min-width:0;box-sizing:border-box;padding:5px 8px">
@@ -2249,43 +2236,43 @@ function _regimeEvidenceHtml(rg, compact){
   if(compact){
     if(ladder.length){
       return `<div style="color:var(--dim);margin-top:3px;line-height:1.4;overflow-wrap:anywhere">${
-        ladder.map(t=>`${t['급지']}${_regimeRise(t.avg_rise)}`).join(' → ')
+        ladder.map(t=>`${regionGradeText(t['급지'])} ${_regimeRise(t.avg_rise)}`).join(' → ')
       }</div>`;
     }
     return '';
   }
   let h='';
   if(ladder.length){
-    h+=`<div style="font-size:13px;color:var(--dim);line-height:1.55">급지 계단(최근 ${w}주)<div style="margin-top:6px;color:var(--txt);font-weight:600">`
-      + ladder.map(t=>`${t['급지']} ${_regimeRise(t.avg_rise)}`).join(' → ')
+    h+=`<div style="font-size:13px;color:var(--dim);line-height:1.55">지역 가격대별 변화(최근 ${w}주)<div style="margin-top:6px;color:var(--txt);font-weight:600">`
+      + ladder.map(t=>`${regionGradeText(t['급지'])} ${_regimeRise(t.avg_rise)}`).join(' → ')
       +`</div></div>`;
   }
   if(lo!=null||hi!=null){
-    h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.55">최하급(D·E) ${_regimeRise(lo)} · 상급(A·B) ${_regimeRise(hi)}`
+    h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.55">지역 가격대 중하·하 ${_regimeRise(lo)} · 상·중상 ${_regimeRise(hi)}`
       +(rg.ascents!=null?` · 상승계단 ${rg.ascents}`:'')
       +(rg.descents!=null?` · 하락계단 ${rg.descents}`:'')
       +`</div>`;
   }
   h+=`<div style="font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.5;padding:8px 10px;background:#f8fafc;border-radius:8px">지역 <b style="color:var(--txt)">BUY/매도</b>는 동네 수급 정본, 이 국면은 수도권 유동성 경고입니다.</div>`;
   if(drivers.length){
-    h+=`<div style="font-size:12px;font-weight:600;color:var(--dim);margin:12px 0 4px">상승 주도 · D·E급</div>`;
+    h+=`<div style="font-size:12px;font-weight:600;color:var(--dim);margin:12px 0 4px">상승 주도 · 지역 가격대 중하·하</div>`;
     h+=drivers.map(d=>{
       const col=d.rise>=0?'#b91c1c':'#15803d';
       return `<div style="display:flex;align-items:baseline;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)">`
         +`<b style="min-width:4.5em">${d.region}</b>`
-        +`<span style="color:var(--dim)">${d['급지']}급</span>`
+        +`<span style="color:var(--dim)">${regionGradeText(d['급지'])}</span>`
         +(d['막차']?`<span style="font-size:11px;color:#b91c1c;font-weight:600">막차</span>`:'')
         +`<span style="margin-left:auto;font-weight:600;color:${col}">${_regimeRise(d.rise)}</span></div>`;
     }).join('');
   }
   const anchors=ev['상급지참고']||[];
   if(anchors.length){
-    h+=`<div style="font-size:12px;font-weight:600;color:var(--dim);margin:12px 0 4px">상급지(A) 참고</div>`;
+    h+=`<div style="font-size:12px;font-weight:600;color:var(--dim);margin:12px 0 4px">지역 가격대 상 참고</div>`;
     h+=anchors.map(d=>{
       const col=d.rise>=0?'#b91c1c':'#15803d';
       return `<div style="display:flex;align-items:baseline;gap:8px;font-size:12.5px;padding:4px 0;color:var(--dim)">`
         +`<span style="min-width:4.5em;color:var(--txt)">${d.region}</span>`
-        +`<span>${d['급지']}급</span>`
+        +`<span>${regionGradeText(d['급지'])}</span>`
         +`<span style="margin-left:auto;font-weight:600;color:${col}">${_regimeRise(d.rise)}</span></div>`;
     }).join('');
   }
@@ -2328,14 +2315,14 @@ async function loadDashboard(){
     if(rg&&rg.phase){ const C={green:'#15803d',yellow:'#b45309',orange:'#c2410c',red:'#b91c1c'}[rg.color]||'#6b7280';
       const skewed=rg.quality==='skewed' || String(rg.phase).includes('표본');
       const blurb=skewed
-        ? (rg.quality_note || '급지 표본이 찌그러져 끝물 판정을 보류합니다.')
+        ? (rg.quality_note || '지역 가격대별 표본이 불균형해 국면 판단을 보류합니다.')
         : (String(rg.phase).includes('끝물')
           ? (String(rg.phase).includes('주의')
-            ? '하급지 상승이 커지기 시작 — 유동성 주의.'
-            : '최하급지가 더 오르는 유동성 끝물.')
+            ? '지역 가격대 하의 상승이 커지기 시작 — 유동성 주의.'
+            : '지역 가격대 하가 더 오르는 유동성 확산 구간.')
           : (rg.phase==='상급지 주도'
-            ? '비싼 급지가 더 오르는 정상 상승.'
-            : '급지별 상승률이 섞인 확산 구간.'));
+            ? '지역 가격대 상의 상승이 주도합니다.'
+            : '가격대별 상승률이 섞인 확산 구간.'));
       const warn=skewed
         ? `<div style="margin-top:10px;padding:10px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;font-size:13px;color:#92400e;line-height:1.5">영통·노원이 최하급으로 보이면 데이터가 비정상입니다. 외곽 시군구 캐시를 갱신해야 해요.</div>`
         : '';
@@ -2672,7 +2659,6 @@ async function _loadWeekly(){
 // ===== 다음 할 일 — 텔레그램 브리핑과 같은 판단(briefing.actions) =====
 function _planGo(key, tab, region){
   if(key==='confirm_power'){ openBuyingPower(); return; }
-  if(key==='imjang'||key==='imjang_compare'){ openImjang(); return; }
   if(key==='no_budget'||key==='no_job'){ acctGo('profile'); return; }
   if(key==='asks'){ if(region) focusListings(region); else switchTab('all'); return; }
   if(key==='levers'){ switchTab('all'); return; }
@@ -3095,110 +3081,6 @@ async function _loadLevers(){
     +form+_renderLevers(d));
 }
 
-// ===== 임장 코스 — 후보 3곳을 시각이 박힌 반나절 일정으로 =====
-let _imj=null, _imjMarks={};
-const _IMJ_GRADE=[{v:0,t:'나쁨',c:'#dc2626'},{v:1,t:'보통',c:'var(--dim)'},{v:2,t:'좋음',c:'#16a34a'}];
-async function openImjang(rebuild){
-  const dlg=document.getElementById('imjangDlg');
-  const body=document.getElementById('imjBody');
-  if(!rebuild && !dlg.open) dlg.showModal();
-  body.innerHTML='<div style="color:var(--dim);font-size:13px;padding:8px 0">동선을 짜는 중…</div>';
-  const q=new URLSearchParams();
-  const dt=document.getElementById('imjDate').value; if(dt) q.set('on',dt);
-  const st=document.getElementById('imjStart').value; if(st) q.set('start',st);
-  const sm=document.getElementById('imjStay').value; if(sm) q.set('stop_min',sm);
-  let d; try{ d=await (await fetch('/api/imjang/course?'+q)).json(); }catch(e){ body.innerHTML='<div style="color:var(--dim)">코스를 만들지 못했습니다.</div>'; return; }
-  _imj=d; _imjMarks={};
-  if(!d.ready){ body.innerHTML=`<div style="color:var(--dim);font-size:13px">${d.message||'후보가 있어야 코스를 짤 수 있어요.'}</div>`; return; }
-  if(!dt) document.getElementById('imjDate').value=d['날짜'];
-  _renderImjang();
-  _loadImjangVisits();
-}
-function _renderImjang(){
-  const d=_imj; if(!d) return;
-  const head=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px">
-    ${d['날짜']} · ${d['출발']} 출발 → ${d['종료']} 종료 <span style="color:var(--txt)">(총 ${Math.floor(d['총소요']/60)}시간 ${d['총소요']%60}분)</span>
-    · 이동 ${d['이동합']}분 · 단지당 ${d['체류']}분${d['집기준']?' · 거주지 시군구 중심 출발':d['거주지확인필요']
-      ?' · <span>거주지 위치 미확인: 내 조건에서 주소 검색 결과를 다시 선택해 주세요.</span>'
-      :' · <span>내 조건에서 거주지를 선택하면 시군구 중심 기준으로 순서를 짭니다.</span>'}</div>
-    <div style="font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:10px">방문 순서와 시각은 표시 좌표·대중교통 조회 또는 직선거리 추정으로 만든 참고안입니다. 실제 집 위치·단지 출입구·출발 시간대에 따라 달라질 수 있습니다.</div>`;
-  const stops=d.stops.map((s,i)=>{
-    const move=s['이동']?`<div style="font-size:11px;color:var(--dim);margin:8px 0 8px 8px">↓ 이동 ${s['이동']}분</div>`:'';
-    const seen=s['방문일']?`<span style="font-size:11px;color:#16a34a">· ${s['방문일']} 방문함</span>`:'';
-    return move+`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);font-weight:700">${s['도착']}–${s['출발']}</span>
-        <b style="font-size:15px">${s['단지']}</b>
-        <span style="font-size:12px;color:var(--dim)">${s['region']}${s['급지']?` · 급지${s['급지']}`:''}</span>${seen}
-        <span style="margin-left:auto;font-size:13px"><b>${_eok(s['예상가'])}</b></span>
-      </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:5px">${s['근거']||''}</div>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-        <a class="btn" style="padding:4px 11px;font-size:12px;text-decoration:none" href="${s['지도']}" target="_blank" rel="noopener">지도</a>
-        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="openComplex('${(s['단지']||'').replace(/'/g,'')}','${s['region']}')">단지</span>
-        <span class="btn" style="padding:4px 11px;font-size:12px" onclick="_imjToggle(${i})">현장 체크 ▾</span>
-      </div>
-      <div id="imjChk${i}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"></div>
-    </div>`;
-  }).join('');
-  const kit=`<div style="margin-top:12px;font-size:11px;color:var(--dim)">준비물 · ${d['준비물'].join(' / ')}</div>`;
-  document.getElementById('imjBody').innerHTML=head+stops+kit+'<div id="imjVisits" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)"></div>';
-}
-function _imjToggle(i){
-  const box=document.getElementById('imjChk'+i); if(!box) return;
-  if(box.style.display!=='none'){ box.style.display='none'; return; }
-  box.style.display='block';
-  if(!_imjMarks[i]) _imjMarks[i]={};
-  box.innerHTML=_imj.checks.map(c=>`<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:600">${c.label}</div>
-        <div style="font-size:11px;color:var(--dim)">${c.hint}</div></div>
-      <div id="imjG${i}_${c.id}" style="display:flex;gap:3px;flex-shrink:0">
-        ${_IMJ_GRADE.map(g=>`<span class="btn" style="padding:3px 8px;font-size:11px" onclick="_imjMark(${i},'${c.id}',${g.v})">${g.t}</span>`).join('')}
-      </div></div>`).join('')
-    +`<textarea id="imjMemo${i}" placeholder="현장 메모 — 중개사가 한 말, 실제로 본 것" style="width:100%;margin-top:8px;padding:8px;min-height:60px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--txt);font-size:12px"></textarea>
-     <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-       <span style="font-size:11px;color:var(--dim)">판정</span>
-       ${['계속','보류','제외'].map(v=>`<span class="btn" id="imjV${i}_${v}" style="padding:4px 10px;font-size:11px" onclick="_imjVerdict(${i},'${v}')">${v}</span>`).join('')}
-       <span class="btn primary" style="padding:5px 13px;font-size:12px;margin-left:auto" onclick="imjSave(${i})">기록 저장</span>
-     </div>`;
-}
-function _imjMark(i,id,v){
-  _imjMarks[i]=_imjMarks[i]||{}; _imjMarks[i][id]=v;
-  const row=document.getElementById(`imjG${i}_${id}`); if(!row) return;
-  [...row.children].forEach((el,k)=>{ el.classList.toggle('primary', _IMJ_GRADE[k].v===v); });
-}
-function _imjVerdict(i,v){
-  _imjMarks[i]=_imjMarks[i]||{}; _imjMarks[i]._verdict=v;
-  ['계속','보류','제외'].forEach(x=>{ const el=document.getElementById(`imjV${i}_${x}`); if(el) el.classList.toggle('primary', x===v); });
-}
-async function imjSave(i){
-  const s=_imj.stops[i]; const m={..._imjMarks[i]}; const verdict=m._verdict||''; delete m._verdict;
-  const body={region:s['region'], 단지:s['단지'], 방문일:_imj['날짜'],
-    checks:m, verdict, memo:(document.getElementById('imjMemo'+i)||{}).value||''};
-  let r={}; try{ r=await (await fetch('/api/imjang/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json(); }catch(e){}
-  if(!r.ok){ toast(r.error||'저장에 실패했습니다.'); return; }
-  track(EVENTS.IMJANG_VISIT_SAVE);
-  toast(r['점수']?`${s['단지']} 기록 저장 · ${r['점수']['점수']}점`:`${s['단지']} 기록 저장`);
-  _loadImjangVisits();
-}
-async function _loadImjangVisits(){
-  const box=document.getElementById('imjVisits'); if(!box) return;
-  let d={}; try{ d=await (await fetch('/api/imjang/visits?limit=20')).json(); }catch(e){ return; }
-  const vs=d.visits||[];
-  if(!vs.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim)">아직 임장 기록이 없습니다. 현장에서 체크하면 여기에 쌓입니다.</div>'; return; }
-  box.innerHTML=`<div style="font-weight:700;font-size:12px;margin-bottom:8px">내 임장 기록 <span style="color:var(--dim);font-weight:400">${vs.length}건</span></div>`
-    +vs.map(v=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px">
-        <b>${v['단지']}</b><span style="color:var(--dim)">${v.region} · ${v['방문일']}</span>
-        ${v.verdict?`<span style="font-size:11px;color:${v.verdict==='제외'?'#dc2626':(v.verdict==='계속'?'#16a34a':'var(--dim)')}">${v.verdict}</span>`:''}
-        ${v['약점']&&v['약점'].length?`<span style="font-size:11px;color:#ea580c">${v['약점'].join('·')} 약점</span>`:''}
-        <span style="margin-left:auto;font-weight:700">${v.score!=null?v.score+'점':'–'}</span>
-        <span class="btn" style="padding:2px 8px;font-size:11px" onclick="imjDelete(${v.id})">삭제</span></div>`).join('');
-}
-async function imjDelete(id){
-  try{ await fetch('/api/imjang/visit/'+id,{method:'DELETE'}); }catch(e){}
-  _loadImjangVisits();
-}
 // 내 예산 맞춤(aha) — 실거주 매수 타깃: 가용자본→매수가능가→예산내 BUY+ 지역 top
 async function _loadDashBudget(){
   const el=document.getElementById('dashBudget'); if(!el) return;
@@ -3301,7 +3183,7 @@ function renderTradeup(d){
   const c=d.current||{}, gcol=((typeof _REGION_GRADE!=='undefined'&&_REGION_GRADE[c['급지']])||{}).col||'#94a3b8';
   const sm=document.getElementById('tuSummary'); sm.style.display='';
   sm.innerHTML=
-    `현재 <b>${c.region}</b>(<span style="color:${gcol};font-weight:700">${c['급지']||'-'}급지</span>) 시세 <b>${_won(c['시세'])}</b>`
+    `현재 <b>${c.region}</b>(<span style="color:${gcol};font-weight:700">${regionGradeText(c['급지'])}</span>) 시세 <b>${_won(c['시세'])}</b>`
     + (c['대출잔액']?` · 대출잔액 ${_won(c['대출잔액'])}`:'')
     + ` → 순자산 <b>${_won(c['순자산'])}</b>`
     + (d.extra_cash?` + 추가현금 ${_won(d.extra_cash)}`:'')
@@ -3320,7 +3202,7 @@ function renderTradeup(d){
         <span style="font-size:11px;font-weight:700;color:${moveCol}">${x['이동']}${x['급지상향']>0?' ▲':''}</span>
       </div>
       <div style="display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:8px">
-        <span style="color:${col};font-weight:700">${x['지역급지']||'-'}급지</span>
+        <span style="color:${col};font-weight:700">${regionGradeText(x['지역급지'])}</span>
         ${_tuSigBadge(safeMarketSignal(x.region))}
         ${x['저평가도']?uvPill(x['저평가도']):''}
       </div>
@@ -3342,7 +3224,7 @@ function renderTradeup(d){
           <b style="font-size:14px">${x['단지명']||'-'}</b>
           <span style="font-size:10px;font-weight:700;color:#fff;background:${col};padding:2px 7px;border-radius:6px">${x['유형']}</span>
         </div>
-        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${x['지역']} <span style="color:${gcol};font-weight:700">${x['지역급지']||''}</span>${x['급지상향']>0?' <span style="color:#15803d;font-weight:700">▲상급지</span>':''} ${_tuSigBadge(safeMarketSignal(x['지역']))}</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${x['지역']} <span style="color:${gcol};font-weight:700">${regionGradeText(x['지역급지'])}</span>${x['급지상향']>0?' <span style="color:#15803d;font-weight:700">▲상급지</span>':''} ${_tuSigBadge(safeMarketSignal(x['지역']))}</div>
         <div style="font-size:13px">총액 <b>${_won(x['총액'])}</b> <span style="color:#15803d;font-size:11px">· 예산 여유 ${_won(x['여유'])}</span></div>
         <div style="font-size:11px;color:var(--dim);margin-top:5px">시장 참고점수 <b style="color:var(--txt)">${x['기회도']}</b> · ${x['기회도근거']||''}</div>
       </div>`;
@@ -3417,7 +3299,7 @@ const _GLOSSARY=[
   ["전세수급지수","전세 수요/공급(100 기준). 높으면 전세난→매매 전이 압력.","앱"],
   ["주택구매력지수","KB 전국 아파트 기준. 중위소득 가구의 중간가 주택 구입 능력이며 높을수록 구매력이 큽니다. 지역별 투자 수익률이나 개인의 대출 가능액은 아닙니다.","앱"],
   ["입지 모형 가격 차이","내부 호환 이름은 저평가도이지만 제한적 입지 회귀모형의 가격 잔차입니다. 통근 추정·교육업종 점포·환경 대리변수만 사용하며 학교 배정·단지/주택 조건은 반영하지 않습니다. 할인율·적정가 판정이 아닙니다.","앱"],
-  ["급지","지역/단지 등급(입지·시세 순위). 시군구는 수도권 평단가 A~E, 단지는 지역 내 1~5.","앱"],
+  ["가격대","지역은 수도권 시군구 평단가, 단지는 해당 지역 내 단지 평단가를 각각 5단계로 나눕니다. 서로 직접 비교하거나 투자 가치로 해석하지 마세요.","앱"],
   ["경기 국면","KB 주간 매매증감률 26주 흐름을 회복·상승·후퇴·침체·관망으로 분류한 후행 지표.","앱"],
   ["입주물량","향후 입주 예정 물량. 많으면 공급과잉(가격 압력).","앱"],
 ]],
@@ -4153,7 +4035,7 @@ function renderAllListings(){
   _laRenderHoldSummary(rows);
   document.getElementById('laEmpty').textContent = rows.length?'':_laAccessDenied?
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
-    '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
+    '조건에 맞는 매물이 없습니다. 유형·지역 가격대·가격 조건을 넓혀 보세요.';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
   const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${x['시그널']&&x['시그널']!=='HELD'?regionSignalBadge(x['시그널']):''}`;
   mapSplit('laList','laMap',rows,{
@@ -4624,7 +4506,7 @@ async function _toggleGtx(map, button){
 function attachOverlayControl(map, initial, onClick){
   const ctl=L.control({position:'topright'});
   ctl.onAdd=function(){ const d=L.DomUtil.create('div','ov-ctl');
-    d.innerHTML='<button data-m="grade">급지색</button><button data-m="reg">규제</button><button data-m="">끄기</button><button data-gtx="1" aria-label="GTX 교통 근거 지도 켜기" aria-pressed="false" title="GTX 노선·역 근거 보기">GTX</button>';
+    d.innerHTML='<button data-m="grade">지역 가격대</button><button data-m="reg">규제</button><button data-m="">끄기</button><button data-gtx="1" aria-label="GTX 교통 근거 지도 켜기" aria-pressed="false" title="GTX 노선·역 근거 보기">GTX</button>';
     L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
     d.querySelectorAll('button[data-m]').forEach(b=>{ if((b.dataset.m||null)===(initial||null)) b.classList.add('on');
       b.onclick=()=>{ setOverlay(map, b.dataset.m||null, onClick);
@@ -5186,7 +5068,7 @@ async function expandCandidates(region, el){
     .sort((a,b)=> a['급지']-b['급지'] || b['평단가']-a['평단가'])
     .slice(0,12);
   if(!cands.length){ wrap.innerHTML='<div style="color:var(--dim);font-size:12px;padding:6px 0">예산 내 실거래 단지가 없습니다(시군구 단위만 지원).</div>'; return; }
-  wrap.innerHTML = `<div style="color:var(--dim);font-size:11px;margin:8px 0 4px">예산(${eok(_ccBudget)})까지 · 전용 ${_ccPyeong}평 · 급지 높은 순</div>`
+  wrap.innerHTML = `<div style="color:var(--dim);font-size:11px;margin:8px 0 4px">예산(${eok(_ccBudget)})까지 · 전용 ${_ccPyeong}평 · 단지 가격대 상부터</div>`
     + cands.map(c=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-bottom:1px solid var(--line)">
         <span>${gradeBadge(c['급지'])} ${c['단지']}</span>
         <span><b>${eok(c.예상가)}</b> <span style="color:var(--dim)">${c['평단가']}만/평</span></span></div>`).join('');
@@ -5388,7 +5270,7 @@ async function loadLegacyUndervalued(){
   d.listings.forEach(r=> window._uv[r.region]=r);
   // 급지별 근거 통계 — 평단가 범위 + 대표(중앙) 입지점수
   _uvGradeStats={};
-  ['A','B','C','D'].forEach(g=>{
+  ['A','B','C','D','E'].forEach(g=>{
     const arr=d.listings.filter(r=>r['급지']===g); if(!arr.length) return;
     const ps=arr.map(r=>r.price).filter(Boolean).sort((a,b)=>a-b);
     const is=arr.map(r=>r['입지점수']).filter(x=>x!=null).sort((a,b)=>a-b);
@@ -5411,8 +5293,8 @@ async function drawUvMap(){
   } else { setOverlay(uvMap, uvMap._ovMode||'grade', onClick); }
   const G=(typeof _REGION_GRADE!=='undefined')?_REGION_GRADE:{};
   const lg=document.getElementById('uvMapLegend');
-  if(lg) lg.innerHTML='<b style="font-size:11px">급지</b> '
-    + ['A','B','C','D'].map(g=>`<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:${G[g].col};display:inline-block;border-radius:2px"></span>${G[g].label}</span>`).join(' ')
+  if(lg) lg.innerHTML='<b style="font-size:11px">지역 가격대</b> '
+    + ['A','B','C','D','E'].map(g=>`<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:${_GRADE_FILL[g]};display:inline-block;border-radius:2px"></span>${G[g].label}</span>`).join(' ')
     + '<br><b style="font-size:11px">규제</b> <span style="color:#dc2626">투기과열</span>·<span style="color:#ea580c">조정</span>·<span style="color:#7c3aed">토허</span>'
     + `<br><span style="font-size:9px;color:var(--dim)">규제 ${_REGULATION.asof}</span>`;
   setTimeout(()=>uvMap.invalidateSize(),90);
@@ -5440,14 +5322,14 @@ function clearUvHighlight(){
 }
 let _uvGradeStats={};
 const _UV_PYEONG = 25.7;                    // 84㎡(34평) 전용 → 분양평형 환산 기준. 앱 공통값.
-const _uvOpen = {A:true, B:false, C:false, D:false, 기타:false};   // 급지 접기 상태(상급지만 펼친 채 시작)
+const _uvOpen = {A:true, B:false, C:false, D:false, E:false, 기타:false};   // 지역 가격대별 접기 상태
 function toggleUvGrade(g){ _uvOpen[g] = !_uvOpen[g]; renderUvGroups(); }
 // 지역 가격대별 그룹 → 제한된 모형값 대비 낮은 순의 탐색용 정렬.
 function renderUvGroups(){
   const host=document.getElementById('uvGroups'); if(!host) return;
   const buyOnly=document.getElementById('uvBuyOnly')?.checked;
   const G=(typeof _REGION_GRADE!=='undefined')?_REGION_GRADE:{};
-  const order=['A','B','C','D'];
+  const order=['A','B','C','D','E'];
   const groups={}; [...order,'기타'].forEach(g=>groups[g]=[]);
   (_uvList||[]).forEach(r=>{ if(buyOnly && !['STRONG_BUY','BUY'].includes(safeMarketSignal(r.region))) return;
     groups[order.includes(r['급지'])?r['급지']:'기타'].push(r); });
@@ -5455,7 +5337,7 @@ function renderUvGroups(){
   for(const g of [...order,'기타']){
     const arr=(groups[g]||[]).sort((a,b)=>b['저평가도']-a['저평가도']);
     if(!arr.length) continue;
-    const gd=G[g]||{label:g==='기타'?'급지 미산정':g,col:'#94a3b8'};
+    const gd=G[g]||{label:'지역 가격대 미산정',col:'#94a3b8'};
     const st=_uvGradeStats[g];
     // 초보자용: '분위' 대신 이 급지가 실제로 얼마짜리 동네인지 금액으로 말한다
     const meta = (g==='기타'||!st) ? '가격대를 아직 계산하지 못한 지역'
@@ -5674,7 +5556,7 @@ function updateFilterToggleLabel(){
   const btn=document.getElementById('filterToggle'); if(!btn) return;
   const off = SIGNALS.length - active.size + (5 - (typeof activeGrade!=='undefined'?activeGrade.size:5));
   const cnt = off>0 ? ` <span style="color:var(--accent)">· 제외 ${off}개</span>` : '';
-  btn.innerHTML = `신호·급지${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
+  btn.innerHTML = `신호·지역 가격대${cnt} <span id="filterCaret">${_filtersOpen?'▴':'▾'}</span>`;
   btn.setAttribute('aria-expanded',String(_filtersOpen));
 }
 function renderFilters(){
@@ -5691,7 +5573,7 @@ function renderFilters(){
   // 지역 급지 필터 (상~하급지)
   const g = document.createElement('div');
   g.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;align-items:center';
-  g.innerHTML = '<span style="font-size:14px;font-weight:700;color:var(--dim);align-self:center">급지</span>';
+  g.innerHTML = '<span style="font-size:14px;font-weight:700;color:var(--dim);align-self:center">지역 가격대</span>';
   [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].forEach(([code,lbl]) => {
     const el = document.createElement('button'); el.type='button';
     el.className = 'chip' + (activeGrade.has(code)?' on':''); el.textContent = lbl;
@@ -5769,7 +5651,7 @@ function renderList(){
   if(!rows.length){
     const empty=document.createElement('p');
     empty.className='v2-muted'; empty.style.padding='16px';
-    empty.textContent='조건에 맞는 지역이 없습니다. 지역 이름이나 신호·급지 조건을 바꿔보세요.';
+    empty.textContent='조건에 맞는 지역이 없습니다. 지역 이름이나 신호·지역 가격대 조건을 바꿔보세요.';
     list.appendChild(empty); return;
   }
   if(favs.length){ list.appendChild(miniHead('★ 관심 지역')); favs.forEach(r=>list.appendChild(rowEl(r,0))); }
@@ -5917,10 +5799,10 @@ async function drawSigMap(){
     const gradeRows=_gradeLut();
     const matched=mapReady&&_uvGeo?_uvGeo.features.filter(f=>_geoRow(gradeRows,f.properties?.name,f.properties?.code)).length:0;
     const status=!mapReady?_uvGeoError
-      :matched===0?'현재 급지 자료와 지도 지역을 연결하지 못했습니다. 아래 거래 비교는 그대로 확인할 수 있습니다.'
-      :`지도 연결 ${matched}곳 · 회색은 급지 자료가 없는 지역입니다.`;
-    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">수도권 시군구 · 평단가 급지</div><div>${chips}</div>
-      <div style="color:var(--dim);margin-top:2px">진한 파랑일수록 비싼 급지입니다. 구를 누르면 아래 비교 지역으로 들어갑니다. 매수 추천이 아닙니다.</div>
+      :matched===0?'현재 지역 가격대 자료와 지도 지역을 연결하지 못했습니다. 아래 거래 비교는 그대로 확인할 수 있습니다.'
+      :`지도 연결 ${matched}곳 · 회색은 가격대 자료가 없는 지역입니다.`;
+    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">수도권 시군구 · 평단가 가격대</div><div>${chips}</div>
+      <div style="color:var(--dim);margin-top:2px">진한 파랑일수록 비싼 지역입니다. 구를 누르면 아래 비교 지역으로 들어갑니다. 매수 추천이 아닙니다.</div>
       <div role="status" aria-live="polite" style="margin-top:6px;color:${mapReady&&matched?'var(--dim)':'var(--sig-watch)'}">${status}</div>`;
   }
   setTimeout(()=>{ try{sigMap.invalidateSize();}catch(e){} }, 80);
@@ -6422,7 +6304,7 @@ function renderNbhd(d){
   // 1차: 요약 · 가격(+거래량비 1개) · 매물만
   h+=_nbSec('요약',
     `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">${badge(safeMarketSignal(_nbhdCur))}
-      ${d['급지']?`<span class="pill">급지 ${d['급지']}</span>`:''}${d['국면']&&d['국면'].phase?`<span class="pill">국면 ${d['국면'].phase}</span>`:''}
+      ${d['급지']?`<span class="pill">${regionGradeText(d['급지'])}</span>`:''}${d['국면']&&d['국면'].phase?`<span class="pill">국면 ${d['국면'].phase}</span>`:''}
       ${d['규제검증상태']==='verified'?(d['규제지역']||[]).map(x=>`<span class="pill" style="border-color:var(--danger);color:var(--danger)">${x}</span>`).join('')
         :'<span class="pill">규제 지정 최신성 미확인 · 계약 전 공식 고시 확인</span>'}</div>
      ${d['해설']?`<div style="font-size:12.5px;line-height:1.55;color:var(--txt)">${(d['해설']||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>`:''}`);
@@ -6494,7 +6376,7 @@ async function nbhdCompare(){
   catch(e){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교를 불러오지 못했습니다.</div>'; return; }
   if(!d.ok){ body.innerHTML='<div style="color:var(--dim);padding:12px">비교할 지역을 찾지 못했습니다.</div>'; return; }
   const money=v=>v==null?'–':(typeof v==='number'&&v>=100?(v>=10000?(v/10000).toFixed(1)+'억':v.toLocaleString()+'만'):v);
-  const lab={시그널:'시그널',급지:'급지',평단가:'평단가',저평가도:'입지 대비 가격',입지점수:'입지 대리점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
+  const lab={시그널:'시그널',급지:'지역 가격대',평단가:'평단가',저평가도:'입지 대비 가격',입지점수:'입지 대리점수',전세수급:'전세수급',매수우위지수:'매수우위',매매모멘텀:'매매모멘텀',공급압력:'입주물량',급매:'급매',청약:'청약',국면:'국면',거래량비:'거래량비'};
   const rows=(d.rows||[]).map(r=>{
     const va=r.key==='시그널'?badge(r.a):(r.key==='평단가'?money(r.a):(r.a??'–'));
     const vb=r.key==='시그널'?badge(r.b):(r.key==='평단가'?money(r.b):(r.b??'–'));
@@ -6654,7 +6536,7 @@ function updateCmpFab(){
   btn.disabled=!n; btn.style.opacity=n?'':'.5';
   btn.textContent = !n? '비교하기' : (pend? `비교하기 ${pend}` : '비교 완료');
 }
-function _cmpGradeTag(g){ const G=(typeof _REGION_GRADE!=='undefined')?_REGION_GRADE[g]:null; return G?`<span style="color:${G.col};font-weight:800">${g}</span>`:(g||null); }
+function _cmpGradeTag(g){ return g&&_REGION_GRADE[g]?regionGradeBadge(g):null; }
 function _cmpSigTag(s){ return s? _tuSigBadge(s)||s : null; }
 function renderCompareTable(){
   const host=document.getElementById('mmCompareTable'); if(!host) return;
@@ -6673,7 +6555,7 @@ function renderCompareTable(){
   // rows: 급지·시그널(맥락) → 평단가 → 추세 → 전세가율 → 갭 → 주력평형 → 최근매매 → 총거래
   const rows=[
     {crit:null, label:'단지 시그널', get:d=>{ const cs=d&&d['단지시그널']; return cs?`${badge(cs['등급'])}${cs['점수']==null?'':` <b>${cs['점수']}</b>`}`:null; }},
-    {crit:null, label:'지역 급지', get:d=>_cmpGradeTag(d&&d['급지'])},
+    {crit:null, label:'지역 가격대', get:d=>_cmpGradeTag(d&&d['급지'])},
     {crit:null, label:'시그널', get:d=>_cmpSigTag(d&&d['시그널'])},
     {crit:'가격', label:'최근 평단가', val:d=>d&&d['최근평단가'], get:d=>d&&d['최근평단가']?d['최근평단가'].toLocaleString()+'만':null},
     {crit:'가격변화', label:'2년 관측 변화', val:d=>d&&d['추세pct'], get:d=>d&&d['추세pct']!=null?`<span style="color:${d['추세pct']>=0?'var(--sig-buy)':'var(--danger)'}">${d['추세pct']>0?'+':''}${d['추세pct']}%</span>`:null},
@@ -7114,7 +6996,7 @@ function openSources(){
     ['전국 아파트 주택구매력지수','KB부동산 데이터허브 (높을수록 구매력 증가)','월간'],
     ['주택담보대출금리','KB부동산 데이터허브 (주택구매력 통계의 금리)','월간'],
     ['입주물량 (공급압력)','KB 데이터허브 공급 통계','월·연'],
-    ['입지 모형 가격 차이·대리점수·가격 급지','자체 산출 (제한된 회귀모형 + 국토부 실거래; 적정가 아님)','실거래 갱신 시'],
+    ['입지 모형 가격 차이·대리점수·지역 가격대','자체 산출 (제한된 회귀모형 + 국토부 실거래; 적정가 아님)','실거래 갱신 시'],
     ['정비구역·재건축 단계','서울 열린데이터광장 (정비사업 현황·추진경과)','부정기 (지자체 고시)'],
     ['단지 전세가율·갭','국토부 실거래 (매매+전세)','수시'],
   ];
