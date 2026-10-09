@@ -2021,7 +2021,8 @@ function _mtRowsForFilter(hostId){
   if(hostId==='aucMtFilter') return _auctionFilterRows||[];
   return [];
 }
-function _mtPass(signal, grade, row, hostId){
+function _mtPass(signal, grade){
+  const row=arguments[2], hostId=arguments[3];
   // 급지 미산정 지역은 급지 선택과 무관하게 계속 노출한다.
   if(grade && _mtGradeSet.size!==5 && !_mtGradeSet.has(grade)) return false;
   if(_mtBuyOnly && !['STRONG_BUY','BUY'].includes(signal)) return false;
