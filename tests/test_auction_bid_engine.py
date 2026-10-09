@@ -45,6 +45,22 @@ def test_missing_rights_does_not_convert_unknown_to_zero():
     assert any("인수보증금" in reason for reason in result["missing"])
 
 
+def test_self_reported_rights_only_make_an_assumption_ceiling():
+    obj = listing()
+    obj.인수보증금 = None
+    obj.권리분석 = {}
+    payload = inputs(assumed_inherited_cost=300, rights_reviewed=True,
+                     court_documents_checked=True, tax_checked=True, costs_checked=True)
+    result = evaluate(obj, payload)
+    assert result["status"] == "assumption_only"
+    assert result["scenario_ceiling"] is not None and result["review_ceiling"] is None
+    assert result["scenario"]["인수보증금"] == 300
+    assert "사용자 가정" in " ".join(result["missing"])
+    assert obj.인수보증금 is None and obj.권리분석 == {}
+    unreviewed = evaluate(obj, {**payload, "rights_reviewed": False})
+    assert unreviewed["status"] == "needs_review" and unreviewed["scenario"] is None
+
+
 def test_missing_exclusive_area_holds_even_with_manual_market():
     obj = listing()
     obj.전용면적 = 0

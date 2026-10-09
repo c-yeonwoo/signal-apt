@@ -247,6 +247,37 @@ def test_scenario_api_requires_rights_and_keeps_manual_market_as_assumption(clie
     assert client.post(url, json={**payload, "tax_rate": -1}).status_code == 422
 
 
+def test_hank_list_candidate_can_run_only_self_reported_scenario(client, monkeypatch):
+    from realty_signal.ingest import external
+
+    card = {"id": "hank:1479397", "사건번호": "2026타경12", "단지명": "목록단지",
+            "region": "수지구", "최저매각가": 6400, "감정가": 10000,
+            "건물면적": 79.5, "입찰기일": "2026-11-11"}
+    monkeypatch.setattr(external, "read_hank_cards", lambda: [card])
+    info = client.get("/api/auction/calc/hank:1479397")
+    assert info.status_code == 200
+    assert info.json()["source"] == "hank" and info.json()["rights_ready"] is False
+    assert info.json()["listing"]["전용면적"] == 0
+    assert info.json()["recommend"]["입찰가"] is None
+    payload = {"purpose": "owner", "bid": 7000, "market_low": 12000,
+               "court_deposit": 640, "cash_budget": 12000, "tax_rate": .011,
+               "buy_broker_rate": .005, "eviction_cost": 200, "min_saving": 1000,
+               "exclusive_m2": 59, "assumed_inherited_cost": 0,
+               "court_documents_checked": True, "tax_checked": True, "costs_checked": True}
+    url = "/api/auction/scenario/hank:1479397"
+    pending = client.post(url, json=payload).json()
+    assert pending["status"] == "needs_review" and pending["scenario_ceiling"] is None
+    result = client.post(url, json={**payload, "rights_reviewed": True}).json()
+    assert result["status"] == "assumption_only" and result["listing_source"] == "hank"
+    assert result["scenario_ceiling"] is not None and result["review_ceiling"] is None
+    assert result["scenario"]["최대필요현금"] > 0
+    assert "사용자 입력" in " ".join(result["missing"])
+    assert client.post(url, json={**payload, "rights_reviewed": True,
+                                  "exclusive_m2": 1201}).status_code == 422
+    assert client.get("/api/auction/calc/hank:absent").status_code == 404
+    assert auction.get("hank:1479397") is None
+
+
 def test_single_listing_trade_refresh_does_not_refresh_all(client, monkeypatch, tmp_path):
     from realty_signal import config
 

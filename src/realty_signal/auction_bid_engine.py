@@ -112,9 +112,18 @@ def evaluate(lst: Listing, data: dict) -> dict:
         required.append("동일 면적 보수적 시세")
     rights = lst.권리분석 or {}
     analysis = rights.get("분석") or {}
-    if (lst.인수보증금 is None or not rights.get("조사완료")
-            or analysis.get("확인필요", True) or analysis.get("인수합계") is None
-            or lst.인수보증금 != analysis.get("인수합계")):
+    stored_rights_ready = (lst.인수보증금 is not None and rights.get("조사완료") is True
+                           and analysis.get("확인필요") is False
+                           and analysis.get("인수합계") is not None
+                           and lst.인수보증금 == analysis.get("인수합계"))
+    # 자동 수집 목록에는 권리 원문이 없다. 사용자가 넣은 금액은 저장된 분석이나
+    # 법원 확인으로 승격하지 않고 끝까지 가정 시뮬레이션으로만 취급한다.
+    assumed_rights = _number(data, "assumed_inherited_cost")
+    use_rights_assumption = assumed_rights is not None and data.get("rights_reviewed") is True
+    inherited = assumed_rights if use_rights_assumption else None
+    if inherited is None and stored_rights_ready:
+        inherited = lst.인수보증금
+    if inherited is None:
         required.append("권리·점유·인수보증금 확인")
     if tax_rate is None or tax_rate > 1:
         required.append("개인 조건에 맞는 취득 관련 세율")
@@ -163,21 +172,21 @@ def evaluate(lst: Listing, data: dict) -> dict:
         tax = price * (tax_rate or 0)
         carry = credit * (loan_rate or 0) * (hold_months or 0) / 12
         known_cost = (tax + (legal or 0) + (eviction or 0) + (management or 0)
-                      + (repair or 0) + (contingency or 0) + lst.인수보증금)
+                      + (repair or 0) + (contingency or 0) + inherited)
         total = price + known_cost + carry
         # 보증금→잔금→명도/수리 순서. 미래 임대보증금은 잔금 자금에 선반영하지 않는다.
         peak_cash = max(court_deposit or 0,
-                        price - credit + tax + (legal or 0) + lst.인수보증금,
+                        price - credit + tax + (legal or 0) + inherited,
                         total - credit)
         result = {"입찰가": _round(price), "취득세가정": _round(tax),
                   "확인대출반영": _round(credit), "보유이자": _round(carry),
                   "경매총비용": _round(total), "최대필요현금": _round(peak_cash),
-                  "인수보증금": _round(lst.인수보증금),
+                  "인수보증금": _round(inherited),
                   "현금단계": [
                       {"단계": "입찰", "유출": _round(court_deposit)},
                       {"단계": "잔금·취득", "유출": _round(
                           price - (court_deposit or 0) - credit + tax + (legal or 0)
-                          + lst.인수보증금)},
+                          + inherited)},
                       {"단계": "명도·수리", "유출": _round(
                           (eviction or 0) + (management or 0) + (repair or 0)
                           + (contingency or 0))},
@@ -252,6 +261,8 @@ def evaluate(lst: Listing, data: dict) -> dict:
         pending.append("금융기관 대출 실행액·금리 확인")
     if not market_verified:
         pending.append("동일 면적 국토부 실거래 3건 갱신")
+    if use_rights_assumption:
+        pending.append("인수금액은 사용자 가정 · 법원 원본과 권리 재확인")
     if contingency <= 0:
         pending.append("예비비 입력")
     checked = not pending

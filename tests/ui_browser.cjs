@@ -35,6 +35,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       if(url.pathname==='/api/auction/calc/auction-1') return route.fulfill({json:{listing:{
         id:'auction-1','단지명':'검증단지','최저매각가':6400,'시세':12000,'인수보증금':null,
         '미납관리비':0,'수리비':0,'월임대료':0,'임대보증금':0},recommend:{},table:[]}});
+      if(decodeURIComponent(url.pathname)==='/api/auction/calc/hank:1479397')
+        return route.fulfill({json:{source:'hank',rights_ready:false,listing:{
+          id:'hank:1479397','단지명':'목록단지','사건번호':'2026타경12',region:'수지구',
+          '최저매각가':6400,'전용면적':0,'입찰기일':'2026-11-11'},recommend:{'입찰가':null},table:[]}});
       if(url.pathname==='/api/auction/scenario/auction-1'){
         const spec=route.request().postDataJSON(); auctionScenarioPayloads.push(spec);
         if(!spec.court_deposit || !spec.tax_rate) return route.fulfill({json:{status:'needs_review',
@@ -45,6 +49,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           scenario:{'입찰가':spec.bid,'목표충족':true,'자금충족':true,
             '경매총비용':7600,'최대필요현금':7600,'확인대출반영':0,
             '절약액':4500,'연간순현금흐름':300,'현금수익률':5.2}}});
+      }
+      if(decodeURIComponent(url.pathname)==='/api/auction/scenario/hank:1479397'){
+        const spec=route.request().postDataJSON(); auctionScenarioPayloads.push(spec);
+        if(!spec.exclusive_m2 || !spec.rights_reviewed || spec.assumed_inherited_cost==null)
+          return route.fulfill({json:{status:'needs_review',missing:['전용면적 확인','권리·점유·인수보증금 확인'],market_notes:[]}});
+        return route.fulfill({json:{status:'assumption_only',purpose:'owner',scenario_ceiling:7100,
+          review_ceiling:null,missing:['인수금액은 사용자 가정'],market_notes:['시세는 사용자 가정입니다.'],
+          scenario:{'입찰가':6400,'목표충족':true,'자금충족':true,'경매총비용':7000,
+            '최대필요현금':7000,'확인대출반영':0,'절약액':4000}}});
       }
       if(url.pathname==='/api/events'){
         eventPayloads.push(route.request().postDataJSON());
@@ -1981,6 +1994,46 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#aucPurpose').selectOption('rent');
     assert.equal(await page.locator('#aucRentFields').isVisible(),true);
     assert.equal(await page.locator('#aucOwnerFields').isVisible(),false);
+    await page.evaluate(()=>{
+      document.getElementById('calcDlg').close();
+      _mtBuyOnly=false; _mtGradeSet=new Set(['A','B','C','D','E']); _focusRegion=null;
+      _laData=[{유형:'경매',key:'경매:hank:1479397',source:'hank',단지명:'목록단지',지역:'수지구',
+        시그널:'HELD',총액:6400,기회도:0,사건번호:'2026타경12',lat:37.3,lng:127.1,
+        ref:{id:'hank:1479397',건물면적:79.5}}];
+      renderAllListings();
+      selectMsRow('laMap',0);
+    });
+    const hankButton=page.locator('#laList .ms-detail button[data-auction-id="hank:1479397"]');
+    assert.equal(await hankButton.count(),1,'통합 매물의 경매 상세에 계산 진입점이 있어야 한다');
+    await hankButton.evaluate(el=>el.click());
+    await page.locator('#aucContext').getByText('목록 최저매각가').waitFor();
+    assert.match(await page.locator('#aucContext').textContent(),/2026타경12/);
+    assert.equal(await page.locator('#aucMissingFacts').isVisible(),true);
+    assert.equal(await page.locator('#aucArea').inputValue(),'');
+    assert.equal(await page.locator('#aucAssumedRights').inputValue(),'');
+    await page.evaluate(()=>runAuctionScenario());
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/아직 입찰가를 계산할 수 없어요/);
+    await page.locator('#aucArea').fill('59');
+    await page.locator('#aucAssumedRights').fill('0');
+    await page.locator('#aucRightsReviewed').check();
+    await page.locator('#aucMarket').fill('12000');
+    await page.locator('#aucCash').fill('12000');
+    await page.locator('#aucDeposit').fill('640');
+    await page.locator('#aucTax').fill('1.1');
+    await page.locator('#aucEviction').fill('200');
+    await page.locator('#aucSaving').fill('1000');
+    await page.locator('#aucBuyBroker').fill('0.5');
+    await page.evaluate(()=>runAuctionScenario());
+    assert.match(await page.locator('#aucScenarioResult').textContent(),/가정상 상한/);
+    assert.doesNotMatch(await page.locator('#aucScenarioResult').textContent(),/사용자 확인 기준 · 검토용 상한/);
+    assert.equal(auctionScenarioPayloads.at(-1).exclusive_m2,59);
+    assert.equal(auctionScenarioPayloads.at(-1).assumed_inherited_cost,0);
+    assert.equal(auctionScenarioPayloads.at(-1).rights_reviewed,true);
+    await page.evaluate(()=>renderAuction([{id:'hank:1479397',source:'hank',단지명:'목록단지',
+      region:'수지구',lat:37.3,lng:127.1,최저매각가:6400}]));
+    await page.evaluate(()=>selectMsRow('auctionMap',0));
+    assert.equal(await page.locator('#auctionList .ms-detail button[data-auction-id="hank:1479397"]').count(),1,
+      '경매 전용 화면에서도 자동 수집 후보의 계산 진입점이 있어야 한다');
     await page.setViewportSize({width:180,height:800});
     const auctionLayout=await page.evaluate(()=>({viewport:innerWidth,
       dialog:document.getElementById('calcDlg').getBoundingClientRect().right,
