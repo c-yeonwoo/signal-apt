@@ -3674,6 +3674,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약", view: st
     from realty_signal.services import property_analysis
     profile = db.profile_get(uid) or {} if uid else {}
     confirmed = buying_power.validated_confirmed_power(profile)
+    has_confirmed_budget = bool(confirmed and (profile.get("매수지역코드")
+        or ((profile.get("매수력") or {}).get("가정") or {}).get("지역코드")))
     for row in out:
         if row.get("유형") in {"일반매물", "급매", "찐매물"}:
             row["budget_fit"] = property_analysis.buyer_fit(
@@ -3717,8 +3719,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약", view: st
             "source_record_count": source_record_count,
             "duplicate_records_collapsed": source_record_count - len(out),
             "signal_hold_reasons": hold_reasons,
-            "confirmed_budget": bool(confirmed and (profile.get("매수지역코드")
-                or ((profile.get("매수력") or {}).get("가정") or {}).get("지역코드"))),
+            "confirmed_budget": has_confirmed_budget,
+            "budget_manwon": confirmed[0] if has_confirmed_budget else None,
         },
         "counts": {k: sum(1 for x in out if x["유형"] == k) for k in kinds},
     }

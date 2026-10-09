@@ -917,6 +917,34 @@ test('listing price filter and budget sort require server-validated buyer fit', 
   assert.match(html, /onclick="switchTab\('signal'\)"[^>]*>시그널</);
 });
 
+test('budget quick range is exact, survives renewal and can be cleared without reapplying', () => {
+  const elements={};
+  const ctx=vm.createContext({document:{getElementById:id=>elements[id]??= {style:{},value:'',textContent:''}},
+    _SALE_TYPES:['일반매물','급매','찐매물'],_laSel:new Set(['일반매물']),_laCurrentTypes:'일반매물',
+    _laBudgetManwon:70000,_laPrice:null,_laPriceChoices:new Map(),
+    _laData:[{유형:'일반매물',총액:50000}],renderAllListings:()=>{}});
+  vm.runInContext(extract('function _laBudgetRange(', 'async function loadAllListings('),ctx);
+  vm.runInContext(extract('function _laAsk(', 'function renderAllListings('),ctx);
+  ctx.initLaPriceFilter();
+  assert.equal(ctx._laPrice.min,63000); assert.equal(ctx._laPrice.max,77000);
+  for(const [price,expected] of [[62999,false],[63000,true],[77000,true],[77001,false],[null,false]])
+    assert.equal(ctx._laPricePass({유형:'일반매물',총액:price}),expected);
+  assert.equal(ctx._laPricePass({유형:'청약',총액:null}),true,'sale defaults must not hide unpriced subscriptions');
+  ctx._laBudgetManwon=200000; ctx.initLaPriceFilter();
+  assert.equal(ctx._laPrice.max,220000);
+  assert.equal(ctx._laPricePass({유형:'일반매물',총액:220001}),false,'upper endpoint is not infinity for the budget preset');
+  ctx.resetLaPrice(); ctx.initLaPriceFilter();
+  assert.equal(ctx._laPrice.active,false);
+  ctx.resetLaBudget();
+  elements.laPriceMin.value='43210'; elements.laPriceMax.value='76543'; ctx.onLaPrice();
+  ctx._laData=[]; ctx.initLaPriceFilter();
+  assert.equal(ctx._laPrice.min,43210); assert.equal(ctx._laPrice.max,76543);
+  ctx._laCurrentTypes='급매'; ctx.initLaPriceFilter(); assert.equal(ctx._laPrice.mode,'budget');
+  ctx._laCurrentTypes='일반매물'; ctx.initLaPriceFilter(); assert.equal(ctx._laPrice.min,43210);
+  ctx._laBudgetManwon=null; ctx._laPriceChoices.clear(); ctx._laData=[{총액:50000}]; ctx.initLaPriceFilter();
+  assert.equal(ctx._laPrice.active,false,'no invented budget for users without a confirmed amount');
+});
+
 test('sale navigation groups sources while supplier flags filter independently', () => {
   const ctx=vm.createContext({_SALE_TYPES:['일반매물','급매','찐매물'],
     document:{getElementById:()=>({value:''})},switchTab:()=>{}});
