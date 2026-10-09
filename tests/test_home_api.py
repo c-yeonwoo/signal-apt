@@ -517,13 +517,13 @@ def test_home_renders_the_three_new_cards():
     assert "dashChangesWrap" not in html
 
 
-def test_market_navigation_keeps_grade_and_regional_price_exploration_discoverable():
+def test_market_navigation_keeps_regional_price_comparison_discoverable():
     html = INDEX.read_text(encoding="utf-8")
     assert "market:   ['signal','undervalued']" in html
     assert "signal:{l:'가격·수급'" in html
     assert "undervalued:{l:'지역 가격 비교'" in html
     assert "undervalued:'signal'" not in html
-    assert "setOverlay(sigMap, 'grade'" in html
+    assert "setOverlay(sigMap, 'compare'" in html
     assert 'id="signalModeMap"' not in html
     price = html.split('id="view-undervalued"', 1)[1].split('id="view-presale"', 1)[0]
     signal = html.split('id="view-signal"', 1)[1].split('id="view-all"', 1)[0]

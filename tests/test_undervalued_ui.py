@@ -52,7 +52,8 @@ def test_region_price_view_uses_observed_trades_in_matching_area_bands(html):
     assert 'id="rpcCards"' in html and 'class="rpc-grid"' in html
     assert '.rpc-grid { grid-template-columns:minmax(0,1fr); }' in html
     assert '국토교통부 아파트 매매 실거래' in html
-    assert '지역·단지의 적정가나 매수 신호는 아닙니다' in html
+    assert '적정가나 매수 신호는 아닙니다' in html
+    assert '선택한 두 지역의 거래 표본만 표시합니다' in html
 
 
 def test_grade_groups_collapse_and_drill_down_to_complexes(html):
