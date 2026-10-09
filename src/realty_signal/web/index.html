@@ -636,9 +636,9 @@
   .watch-table .watch-detail-content { padding-top:10px; }
   .watch-reason { color:var(--dim); font-size:12px; line-height:1.45; margin-top:4px; }
   @media (max-width:600px) {
-    .watch-table { min-width:0; }
+    .watch-table, .watch-table tbody { display:block; width:100%; min-width:0; }
     .watch-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
-    .watch-table tbody tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:8px 0; }
+    .watch-table tbody tr { display:grid; width:100%; box-sizing:border-box; grid-template-columns:repeat(2,minmax(0,1fr)); padding:8px 0; }
     .watch-table tbody tr.watch-card { padding:8px 0; margin:0; }
     .watch-table tbody tr+tr { border-top:1px solid var(--line); }
     .watch-table tbody td { display:flex; flex-direction:column; min-width:0; gap:2px; border:0; padding:8px 12px; }
