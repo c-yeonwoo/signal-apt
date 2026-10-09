@@ -7,6 +7,18 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
 const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/signal-v2.js'), 'utf8');
 const extract = (start, end) => html.slice(html.indexOf(start), html.indexOf(end));
 
+test('region and complex price tiers share one five-step wording with explicit scope', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('const _GRADE_NAMES=', '// ===== 매물 공통 카드 요소'),ctx);
+  for(const [code,rank,name] of [['A',1,'상'],['B',2,'중상'],['C',3,'중'],['D',4,'중하'],['E',5,'하']]){
+    assert.match(ctx.regionGradeBadge(code),new RegExp(`지역 가격대 ${name}(?![가-힣])`));
+    assert.match(ctx.gradeBadge(rank),new RegExp(`단지 가격대 ${name}(?![가-힣])`));
+  }
+  assert.equal(ctx.regionGradeBadge('X'),'–');
+  assert.equal(ctx.gradeBadge(6),'–');
+  assert.doesNotMatch(html,/id="imjangDlg"|openImjang\(/);
+});
+
 test('Nick chat entry points and free-form question composer are absent while reports remain', () => {
   assert.doesNotMatch(html, /askNick|nickCxBtn|advFab|advChatTab|advInput|advSend|닉에게|Nick에게|닉과 대화|\/api\/advisor\/stream/);
   assert.doesNotMatch(signalV2, /Nick 호출|v2ExplainQuestion|이 리포트에 질문하기/);
@@ -117,7 +129,7 @@ test('grade map reports when regional boundaries or price-grade joins are unavai
   vm.runInContext(extract("let _uvGeoError=''", 'function _geoRow('), valid);
   assert.deepEqual(JSON.parse(JSON.stringify(await valid._ensureGeo())),{type:'FeatureCollection',features:[]});
   assert.equal(vm.runInContext('_uvGeoError',valid),'');
-  assert.match(html,/현재 급지 자료와 지도 지역을 연결하지 못했습니다/);
+  assert.match(html,/현재 지역 가격대 자료와 지도 지역을 연결하지 못했습니다/);
 });
 
 test('optional Telegram opt-in is compact and keeps notification details expandable', async () => {

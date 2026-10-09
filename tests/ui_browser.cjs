@@ -474,7 +474,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.getByRole('button',{name:/지역 가격 비교/}).getAttribute('class').then(c=>c.includes('on')),true);
     assert.equal(await page.locator('#view-undervalued #sigMap').count(),1);
     assert.equal(await page.locator('#view-signal #sigMap').count(),0);
-    assert.match(await page.locator('#sigMapLegend').textContent(),/평단가 급지/);
+    assert.match(await page.locator('#sigMapLegend').textContent(),/지역 평단가 가격대/);
     assert.match(await page.locator('#sigMapLegend').textContent(),/매수 추천이 아닙니다/);
     await page.locator('#rpcCards').getByText('8.0억').waitFor();
     assert.match(await page.locator('#rpcCards').textContent(),/서울 테스트구[\s\S]*8건.*2026-04~2026-09/);
@@ -1953,17 +1953,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         `my map panel overflows at ${width}px: ${JSON.stringify(layout)}`);
     }
     await page.evaluate(()=>{document.getElementById('view-mymap').style.display='none';});
-    const locationCopy=await page.evaluate(()=>{
-      _imj={날짜:'2026-10-10',출발:'10:00',종료:'12:00',총소요:120,이동합:20,체류:50,
-        집기준:true,stops:[],준비물:[]};
-      _renderImjang();
-      const course=document.getElementById('imjBody').textContent;
-      const legend=document.querySelector('#view-mymap aside').textContent;
-      return {course,legend};
-    });
-    assert.match(locationCopy.course,/거주지 시군구 중심 출발/);
-    assert.match(locationCopy.course,/실제 집 위치.*달라질 수 있습니다/);
-    assert.match(locationCopy.legend,/거주지 시군구 중심/);
+    const locationCopy=await page.evaluate(()=>document.querySelector('#view-mymap aside').textContent);
+    assert.match(locationCopy,/거주지 시군구 중심/);
+    assert.equal(await page.locator('#imjangDlg').count(),0);
     const stationOverlay=await page.evaluate(()=>{
       const oldL=window.L, oldMap=_ms.laMap;
       const drawn=[];

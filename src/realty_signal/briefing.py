@@ -194,18 +194,7 @@ def actions(diff: dict, sigs: list[dict], qs: list[dict], cands: list[dict],
                         "이번 주 새로 후보에 들어온 단지입니다", "dashboard", "단지 상세 →",
                         region=c.get("region")))
 
-    if cands:
-        seen = visited or {}
-        todo = [c for c in cands if f"{c['region']}|{c['단지']}" not in seen]
-        if todo:
-            out.append(_act("imjang", f"{todo[0]['단지']} 임장 잡기",
-                            "현장에서만 알 수 있는 것들이 있습니다 — 코스를 짜 드립니다",
-                            "dashboard", "임장 코스 짜기 →", region=todo[0].get("region")))
-        else:
-            out.append(_act("imjang_compare", "임장 기록 비교해서 1곳으로 좁히기",
-                            "후보를 다 봤습니다 — 점수를 나란히 놓고 고를 차례입니다",
-                            "dashboard", "임장 기록 →", region=cands[0].get("region")))
-    elif not p.get("_favs"):
+    if not cands and not p.get("_favs"):
         # ★가 있는데 후보만 없는 경우는 예산 문제라 위에서 이미 말했다 — 두 번 시키지 않는다
         out.append(_act("no_favorite", "관심 지역 ★ 추가하기",
                         "★가 있어야 주간 변화와 후보 추천이 내 것으로 좁혀집니다",
@@ -286,7 +275,7 @@ def plan(uid: int) -> dict:
     wk = weekly.for_user(watch)
     prev = db.kv_get(SNAP_KEY.format(uid=uid)) or {}
     diff = _diff_candidates(cands, prev.get("candidates") or {}) if prev else {"new": [], "dropped": [], "moved": []}
-    acts = actions(diff, _safe_weekly_changes(wk), qs, cands, db.imjang_latest(uid), _auction_alerts(),
+    acts = actions(diff, _safe_weekly_changes(wk), qs, cands, None, _auction_alerts(),
                    profile=profile, confirmed=confirmed, budget=float(budget or 0), asks=asks)
     return {"actions": acts, "budget": round(float(budget)) if budget else 0,
             "confirmed": confirmed, "candidates": len(cands), "asks": len(asks),
@@ -333,7 +322,7 @@ def build(uid: int, *, force: bool = False) -> dict:
         return {"send": False, "reason": "no_news", "snapshot": snapshot}
 
     text = _render(profile, data, diff, sigs, qs, qs_new, first=first,
-                   visited=db.imjang_latest(uid), auctions=auctions,
+                   auctions=auctions,
                    asks=asks)
     return {"send": True, "text": text, "snapshot": snapshot, "news": news,
             "first": first, "candidates": cands}

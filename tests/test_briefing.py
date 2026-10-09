@@ -68,6 +68,15 @@ def test_action_plan_carries_the_region_for_a_property_task():
     assert acts[0]["region"] == "서울 노원구 상계동"
 
 
+def test_action_plan_does_not_suggest_visit_route_for_existing_candidates():
+    candidates = [{"region": "노원구", "단지": "상계주공7"}]
+    actions = briefing.actions({}, [], [], candidates,
+                               visited={"노원구|상계주공7": "2026-10-01"},
+                               profile={"_favs": ["노원구"]}, budget=60000)
+    assert not any(action["key"].startswith("imjang") for action in actions)
+    assert not any("임장 코스" in action["title"] + action["cta"] for action in actions)
+
+
 def test_unchanged_day_is_not_sent(uid):
     first = briefing.build(uid)
     db.kv_set(briefing.SNAP_KEY.format(uid=uid), first["snapshot"])
