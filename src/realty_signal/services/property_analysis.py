@@ -108,6 +108,7 @@ def snapshot(row: dict) -> dict:
         "published_at": row.get("published_at") or ref.get("등록일"),
         "collected_at": _date(row.get("fetched_at")), "stale": bool(row.get("stale")),
         "refresh_due": bool(row.get("refresh_due")),
+        "refresh_failed": bool(row.get("refresh_failed")),
         "coordinate": coords,
         "location_quality": "listing_point_unverified_entrance" if coords else "unknown",
         "complex_source_id": ref.get("hanbang_complex_id") or ref.get("complex_no"),

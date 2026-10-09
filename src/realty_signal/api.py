@@ -3478,17 +3478,23 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             import time
             path = QUICKSALE_FILE if kind == "급매" else CERTIFIED_FILE
             fetched = raw.get("fetched_at") or path.stat().st_mtime
+            # A preserved-row marker describes renewal, not quote age. Keep the
+            # original observation timestamp; never rewrite history as a new quote.
             row.update(source="baroezip", fetched_at=fetched,
-                       stale=bool(raw.get("stale") or radar_failed.get(kind) or time.time()-fetched > _LISTING_PRICE_MAX_AGE),
-                       refresh_due=time.time()-fetched >= _RADAR_MAX_AGE,
-                       degraded=bool(raw.get("degraded") or radar_failed.get(kind)), price_kind="asking",
+                       stale=not 0 <= time.time()-fetched <= _LISTING_PRICE_MAX_AGE,
+                       refresh_due=bool(raw.get("stale") or radar_failed.get(kind)
+                                        or time.time()-fetched >= _RADAR_MAX_AGE),
+                       refresh_failed=bool(radar_failed.get(kind)),
+                       degraded=bool(raw.get("degraded")), price_kind="asking",
                        published_at=None, spatial_grain="listing")
         if kind == "일반매물":
             import time
             fetched = raw.get("fetched_at") or HANBANG_FILE.stat().st_mtime
             row.update(source="hanbang", fetched_at=fetched,
-                       stale=bool(raw.get("stale") or time.time()-fetched > _LISTING_PRICE_MAX_AGE),
-                       refresh_due=time.time()-fetched >= _RADAR_MAX_AGE,
+                       stale=not 0 <= time.time()-fetched <= _LISTING_PRICE_MAX_AGE,
+                       refresh_due=bool(raw.get("stale") or source_failed
+                                        or time.time()-fetched >= _RADAR_MAX_AGE),
+                       refresh_failed=source_failed,
                        price_kind="asking", published_at=raw.get("등록일"),
                        spatial_grain="listing")
         out.append(row)
@@ -3532,8 +3538,6 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
     if "일반매물" in want and HANBANG_FILE.exists():
         source_failed = _radar_refresh_status(HANBANG_FILE).get("ok") is False
         for m in _hanbang_verified_rows():
-            if source_failed:
-                m = {**m, "stale": True}
             add("일반매물", m.get("단지명"), m.get("지역"), m.get("시그널"),
                 "등록일", m.get("등록일"), "", m, m.get("lat"), m.get("lng"),
                 {"hanbang_id": m.get("hanbang_id"), "hanbang_complex_id": m.get("hanbang_complex_id"),

@@ -242,17 +242,23 @@ def test_discovery_reports_partial_coverage_without_hiding_good_source(monkeypat
     assert len(result["groups"]["matched"]) == 1
 
 
-def test_discovery_marks_failed_refresh_cache_as_verify(monkeypatch):
+@pytest.mark.parametrize("expired", [False, True])
+def test_discovery_uses_quote_age_despite_failed_refresh(monkeypatch, expired):
     from realty_signal import api
     monkeypatch.setattr(reports_v2.deps, "personal_listings_allowed", lambda _request: True)
     monkeypatch.setattr(api, "hanbang", lambda: {"state": "stale_failed", "regions": ["노원구"]})
     monkeypatch.setattr(api, "quicksale", lambda: {"state": "never_scanned"})
     monkeypatch.setattr(api, "certified", lambda: {"state": "never_scanned"})
     monkeypatch.setattr(api, "_build_listings", lambda kinds, **_: [
-        listing_row("old", price=50000, area=70)] if "일반매물" in kinds else [])
+        {**listing_row("old", price=50000, area=70), "stale": expired,
+         "refresh_failed": True}] if "일반매물" in kinds else [])
     result = json.loads(reports_v2.discovery(None, {"max_price_manwon": 60000}).body)
-    assert not result["groups"]["matched"]
-    assert result["groups"]["verify"][0]["constraints"][0]["status"] == "unknown"
+    assert result["sources"][0]["state"] == "stale_failed"
+    if expired:
+        assert not result["groups"]["matched"]
+        assert result["groups"]["verify"][0]["constraints"][0]["status"] == "unknown"
+    else:
+        assert len(result["groups"]["matched"]) == 1
 
 
 def test_discovery_recovers_other_source_when_combined_read_fails(monkeypatch):
