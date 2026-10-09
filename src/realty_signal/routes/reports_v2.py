@@ -344,6 +344,8 @@ def discovery(request: Request, data: dict = Body(...)):
     allowed = deps.personal_listings_allowed(request)
     rows, sources = [], []
     if allowed:
+        from realty_signal.services import listing_refresh
+        listing_refresh.schedule({"일반매물", "급매", "찐매물"}, private_allowed=True)
         for kind, read_cache in (("일반매물", app_api.hanbang),
                                  ("급매", app_api.quicksale),
                                  ("찐매물", app_api.certified)):

@@ -24,6 +24,8 @@ def resolve(key: str, *, private_allowed: bool) -> dict:
         raise PermissionError("personal_listing")
     from realty_signal import api
     if kind in PRIVATE:
+        from realty_signal.services import listing_refresh
+        listing_refresh.schedule({kind}, private_allowed=private_allowed)
         from realty_signal.services.listing_inventory import collapse
         from realty_signal.services.listing_prices import attach as attach_prices
         try:
@@ -105,6 +107,7 @@ def snapshot(row: dict) -> dict:
         "source": row.get("source") or kind,
         "published_at": row.get("published_at") or ref.get("등록일"),
         "collected_at": _date(row.get("fetched_at")), "stale": bool(row.get("stale")),
+        "refresh_due": bool(row.get("refresh_due")),
         "coordinate": coords,
         "location_quality": "listing_point_unverified_entrance" if coords else "unknown",
         "complex_source_id": ref.get("hanbang_complex_id") or ref.get("complex_no"),

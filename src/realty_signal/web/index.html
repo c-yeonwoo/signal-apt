@@ -3617,9 +3617,9 @@ const _eok = n => (n==null||n<=0)?'–':(n/10000).toFixed(1)+'억';
 function _priceLabel(L, fmt){
   const f = fmt || _eok;
   const v = L && (L['추정가'] ?? L['총액']);
-  if (L && L['예산확인필요']) return '가격 미정';
+  if (!(Number(v)>0)) return '호가 확인';
   const s = f(v);
-  return (L && L['가격출처']==='지역평단추정') ? `${s} <span style="font-size:10px;opacity:.75">(지역평균 추정)</span>` : s;
+  return ['지역평단추정','단지평단추정'].includes(L?.['가격출처']) ? `${s} (참고가격)` : s;
 }
 function qsAreaLabel(m){
   const area=Number(m['전용면적']);
@@ -4898,26 +4898,27 @@ function _buyerFour(L, eok){
   const z=L['자금']||{};
   const kind=L['유형']||'';
   const src=L['가격출처']||'';
-  const modeled=src==='지역평단추정'||src==='단지평단추정';
+  const asking=['급매','찐매물','일반매물'].includes(kind)&&(L.price_kind==='asking'||src==='매물가');
+  const modeled=!asking&&(src==='지역평단추정'||src==='단지평단추정');
   const ask=(L['총액']!=null&&+L['총액']>0)?+L['총액']:null;
   let cash;
   if(z['필요현금']!=null){
     const month=z['총월상환']!=null?z['총월상환']:z['월상환'];
-    const state=z['확인필요']?'확인이 필요합니다':z['가능']===false?'가진 돈으로 안 됩니다':modeled?'짐작한 가격입니다. 매물 가격은 모릅니다':'계산상 됩니다';
+    const state=z['확인필요']?'확인이 필요합니다':z['가능']===false?'가진 돈으로 안 됩니다':modeled?'참고가격 기준 계산':'계산상 됩니다';
     cash=`필요한 돈 ${money(z['필요현금'])}${month!=null?` · 매달 ${Number(month).toLocaleString()}만`:''} · ${state}`;
   }else if(kind==='경매'&&L['입찰상태']&&L['입찰상태']!=='conditional_bid'){
     cash='아직 입찰하지 않습니다. 필요한 돈은 계산 전입니다';
   }else if(L['예산내']){
     cash='예산 안 가격입니다. 세금과 중개비는 따로입니다';
   }else if(ask==null){
-    cash='가격이 없어 필요한 돈을 계산하지 못했습니다';
+    cash='호가를 확인하면 필요현금과 월 부담을 계산합니다';
   }else{
     cash='살 수 있는 가격을 저장하면 필요한 돈을 계산합니다';
   }
   const price=kind==='경매'?'최저 입찰가입니다. 세금과 비용은 따로입니다'
-    :src==='매물가'?'매물에 적힌 가격입니다. 아직 팔리는지는 모릅니다'
-    :modeled?'동네 평균으로 짐작한 가격입니다. 매물 가격이 아닙니다'
-    :(L['추정가']??L['총액']??L['예상가'])?'이 가격이 어디서 온 것인지 확인이 필요합니다':'가격을 모릅니다';
+    :asking?'수집된 매도 호가 · 계약 가능 여부는 중개사 확인'
+    :modeled?(src==='지역평단추정'?'지역 실거래 기반 참고가격':'단지 실거래 기반 참고가격')
+    :(L['추정가']??L['총액']??L['예상가'])?'가격 출처 확인 필요':'현재 매물에서 호가 확인';
   const unknown=(d.unknowns&&d.unknowns.length)?d.unknowns.slice(0,2).join(' · ')
     :(d.blocking_reasons&&d.blocking_reasons[0])||'매물 가격, 권리, 은행 대출';
   const next=d.next_action||(kind==='경매'&&L['입찰상태']&&L['입찰상태']!=='conditional_bid'
@@ -4927,7 +4928,9 @@ function _buyerFour(L, eok){
 function _buyerFourHtml(L, eok){
   const f=_buyerFour(L, eok);
   const row=(k,v)=>`<div style="font-size:16px;line-height:1.6"><span style="color:var(--dim);font-weight:700">${k}</span> ${esc(v)}</div>`;
-  return row('돈',f.cash)+row('가격',f.price)+row('아직',f.unknown)+row('다음',f.next);
+  const priceAction=(['지역평단추정','단지평단추정'].includes(L['가격출처'])||!(L['추정가']??L['총액']??L['예상가']))&&L['지역']
+    ?`<button type="button" class="btn" onclick="event.preventDefault();event.stopPropagation();focusListings(decodeURIComponent('${encodeURIComponent(L['지역']).replace(/'/g,'%27')}'))">이 지역 매물 호가 보기</button>`:'';
+  return row('돈',f.cash)+row('가격',f.price)+row('아직',f.unknown)+row('다음',f.next)+priceAction;
 }
 function _ccListingCard(L, eok){
   const kind=L['유형']||'';
@@ -4940,7 +4943,7 @@ function _ccListingCard(L, eok){
   const d=L['decision']||{};
   const held=kind==='경매'&&L['입찰상태']!=='conditional_bid';
   const status=held?'아직 입찰하지 않음':d.feasibility==='infeasible'?'가진 돈으로 안 됨':L['예산내']?'예산 안 · 확인 필요':L['예산확인필요']?'가격과 돈을 확인해야 함':'조건이 맞지 않음';
-  const priceLabel=kind==='경매'?'최저 입찰가입니다. 세금과 비용은 따로입니다':L['가격출처']==='매물가'?'매물에 적힌 가격입니다. 아직 팔리는지는 모릅니다':L['가격출처']==='지역평단추정'?'동네 평균으로 짐작한 가격입니다. 매물 가격이 아닙니다':'가격 확인이 필요합니다';
+  const priceLabel=_buyerFour({...L,budget_fit:null,lines:null},eok).price;
   const issues=[...(d.blocking_reasons||[]),...(d.unknowns||[])].slice(0,5);
   return `<details class="cc-listing" style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff">
     <summary style="cursor:pointer;list-style:none">

@@ -884,7 +884,8 @@ test('buyer candidate card distinguishes inquiry from infeasibility and expands 
     추정가: 60000, 가격출처: '지역평단추정', 예산확인필요: true,
     decision: {feasibility: 'unknown', unknowns: ['현장 확인']}}, eok);
   assert.match(estimated, /가격과 돈을 확인해야 함/);
-  assert.match(estimated, /동네 평균으로 짐작한 가격입니다/);
+  assert.match(estimated, /지역 실거래 기반 참고가격/);
+  assert.match(estimated, /이 지역 매물 호가 보기/);
   assert.match(estimated, /&lt;가짜>/);
   const lined = ctx._ccListingCard({유형:'급매', 단지명:'선', 지역:'노원구', 총액:10000,
     lines:{cash:'서버현금', price:'서버가격', unknown:'서버미확인', next:'서버다음'}}, eok);

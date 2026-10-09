@@ -1932,7 +1932,8 @@ HANBANG_FILE = store.CACHE_DIR / "hanbang_general.json"
 _QUICKSALE_SCAN_VER = 6   # 6=2026-07 행정구역 경계·시군구 코드
 _CERTIFIED_SCAN_VER = 4   # 4=2026-07 행정구역 경계·시군구 코드
 _HANBANG_SCAN_VER = 2   # 2=원천 시도·시군구와 목록 행의 지역을 함께 검증
-_RADAR_MAX_AGE = 86400     # 급매·찐매물 캐시 TTL(1일)
+_RADAR_MAX_AGE = 86400     # 재수집 주기: 하루
+_LISTING_PRICE_MAX_AGE = 7 * 86400  # 정상 수집 호가의 비교 유효기간: 7일
 
 
 def _radar_cache_stale(path, min_ver: int) -> bool:
@@ -1989,7 +1990,9 @@ def _radar_cached_response(path, min_ver: int) -> dict:
                 return {"ready": False, "state": "identity_unverified", "listings": [],
                         "regions": out.get("regions") or [], "last_success_at": path.stat().st_mtime,
                         "refresh": refresh}
-            stale = _radar_cache_stale(path, min_ver)
+            refresh_due = _radar_cache_stale(path, min_ver)
+            stale = (time.time() - path.stat().st_mtime > _LISTING_PRICE_MAX_AGE
+                     or out.get("_scan_ver", 0) < min_ver)
             count = len(out.get("listings") or [])
             if refresh.get("ok") is False:
                 state = "stale_failed"
@@ -2002,6 +2005,7 @@ def _radar_cached_response(path, min_ver: int) -> dict:
             else:
                 state = "ready" if count else "empty"
             out["stale"] = stale
+            out["refresh_due"] = refresh_due
             out["state"] = state
             out["last_success_at"] = path.stat().st_mtime
             out["refresh"] = refresh
@@ -3473,14 +3477,16 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             path = QUICKSALE_FILE if kind == "급매" else CERTIFIED_FILE
             fetched = raw.get("fetched_at") or path.stat().st_mtime
             row.update(source="baroezip", fetched_at=fetched,
-                       stale=bool(raw.get("stale") or radar_failed.get(kind) or time.time()-fetched > 86400),
+                       stale=bool(raw.get("stale") or radar_failed.get(kind) or time.time()-fetched > _LISTING_PRICE_MAX_AGE),
+                       refresh_due=time.time()-fetched >= _RADAR_MAX_AGE,
                        degraded=bool(raw.get("degraded") or radar_failed.get(kind)), price_kind="asking",
                        published_at=None, spatial_grain="listing")
         if kind == "일반매물":
             import time
             fetched = raw.get("fetched_at") or HANBANG_FILE.stat().st_mtime
             row.update(source="hanbang", fetched_at=fetched,
-                       stale=bool(raw.get("stale") or time.time()-fetched > 86400),
+                       stale=bool(raw.get("stale") or time.time()-fetched > _LISTING_PRICE_MAX_AGE),
+                       refresh_due=time.time()-fetched >= _RADAR_MAX_AGE,
                        price_kind="asking", published_at=raw.get("등록일"),
                        spatial_grain="listing")
         out.append(row)
@@ -3634,6 +3640,8 @@ def listings_all(request: Request, types: str = "경매,급매,청약", view: st
 
     private_access = _personal_listings_allowed(request=request)
     requested_types = set(t for t in types.split(",") if t)
+    from realty_signal.services import listing_refresh
+    listing_refresh.schedule(requested_types, private_allowed=private_access)
     if "경매" in requested_types:
         from realty_signal.ingest import external
         external.schedule_hank_refresh()
