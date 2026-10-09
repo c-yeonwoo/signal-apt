@@ -904,6 +904,41 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(scopedSignals.default.auction.html,/지역 신호 · 판단 보류/);
     assert.deepEqual(scopedSignals.buyOnly,{presale:0,auction:0});
     assert.deepEqual(scopedSignals.gradeOnly,{presale:1,auction:1});
+    const regionFilter=await page.evaluate(()=>{
+      const original=mapSplit, oldList=_presaleList, oldGrades=_mtGradeSet;
+      const oldBuyOnly=_mtBuyOnly, oldFocus=_focusRegion;
+      const hadChoice=Object.hasOwn(_mtRegionChoice,'psMtFilter');
+      const oldChoice=_mtRegionChoice.psMtFilter, seen=[];
+      try{
+        mapSplit=(listId,_mapId,rows)=>{if(listId==='psList') seen.push(rows.map(row=>row['단지명']));};
+        _presaleList=[
+          {단지명:'서울 중구 청약',시도:'서울',지역:'중구',상태:'접수중',시그널:'HELD'},
+          {단지명:'인천 중구 청약',시도:'인천',지역:'중구',상태:'접수예정',시그널:'HELD'},
+        ];
+        _mtGradeSet=new Set(['A','B','C','D','E']); _mtBuyOnly=false; _focusRegion=null;
+        delete _mtRegionChoice.psMtFilter;
+        renderPresale();
+        const options=[...document.querySelector('#psMtFilter .mt-region').options].map(option=>option.textContent.trim());
+        const select=document.querySelector('#psMtFilter .mt-region');
+        select.value=JSON.stringify(['서울','중구']);
+        select.dispatchEvent(new Event('change'));
+        renderPresale();
+        const retained=document.querySelector('#psMtFilter .mt-region').value;
+        return {options,seen,retained};
+      }finally{
+        mapSplit=original; _presaleList=oldList; _mtGradeSet=oldGrades;
+        _mtBuyOnly=oldBuyOnly; _focusRegion=oldFocus;
+        if(hadChoice) _mtRegionChoice.psMtFilter=oldChoice;
+        else delete _mtRegionChoice.psMtFilter;
+      }
+    });
+    assert.deepEqual(regionFilter.options,['전체 지역','서울 중구','인천 중구']);
+    assert.deepEqual(regionFilter.seen,[
+      ['서울 중구 청약','인천 중구 청약'],
+      ['서울 중구 청약'],
+      ['서울 중구 청약'],
+    ]);
+    assert.equal(regionFilter.retained,JSON.stringify(['서울','중구']));
     assert.equal(await page.locator('#psShowPast').isChecked(),false);
     const presaleLifecycle=await page.evaluate(()=>{
       const original=mapSplit, oldList=_presaleList, oldBuyOnly=_mtBuyOnly, oldGrades=_mtGradeSet, oldFocus=_focusRegion;
