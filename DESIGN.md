@@ -5,7 +5,7 @@
 
 ## 1. 브랜드
 - **아이덴티티 / 대외 한 문장**: **"내 조건으로 비교하는 주택 구매."** — 조건·근거·다음 확인.
-- **브랜드 컬러 = 로열블루 `#2563eb`** (`--accent`). 로고(막대+상승선 차트)와 통일. ⚠️ 오션블루 `#0ea5e9`·청록은 폐기.
+- **브랜드 컬러 = 차분한 딥블루 `#315bb5`** (`--accent`). 행동 요소에 절제해 사용한다. ⚠️ 오션블루 `#0ea5e9`·청록은 폐기.
 - **로고 그라디언트**: `#1e3a8a → #2563eb`. 워드마크 `Signal APT`. 부제·로그인 카피도 동일 한 문장.
 
 ## 1.5 보이스 & 톤 (신규 UI·카피 작성 시 필수 준수)
@@ -40,11 +40,11 @@
 > `tests/test_design_tokens.py` 가 이 표와 `:root` 를 대조한다.
 
 ```
-표면   --bg #f4f5f7 · --panel #ffffff · --line #e6e8ec · --txt #111827 · --dim #5f6875
-브랜드 --accent #1d4ed8 · --accent-ink #ffffff · --accent-weak rgba(29,78,216,.08) · --ring rgba(29,78,216,.18)
+표면   --bg #f7f8f6 · --panel #ffffff · --line #e6e8e5 · --txt #202a35 · --dim #586574
+브랜드 --accent #315bb5 · --accent-ink #ffffff · --accent-weak rgba(49,91,181,.08) · --ring rgba(49,91,181,.2)
 시그널 --sig-strong #166534 · --sig-buy #15803d · --sig-watch #b45309 · --sig-neutral #5f6875 · --sig-sell #b91c1c
 의미   --quick #c2410c(급매) · --success #15803d · --danger #b91c1c · --warn #b45309
-형태   --r-sm 8 · --r-md 12 · --r-lg 16 · --space 8
+형태   --r-sm 6 · --r-md 10 · --r-lg 12 · --space 8
 ```
 - **색은 반드시 토큰 사용.** hex 하드코딩 금지 (특히 브랜드색 = `var(--accent)`).
   구 브랜드색 `#2563eb` 잔재가 아직 10곳 남아 있다(진단 N9).
