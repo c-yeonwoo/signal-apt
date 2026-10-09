@@ -23,6 +23,7 @@ def test_primary_signal_api_keeps_raw_for_audit_but_displays_held(monkeypatch):
     md.assessed_signal_labels.cache_clear()
     labels = md.assessed_signal_labels(date(2026, 10, 3).isoformat())
     assert labels["중구"]["display_signal"] == "HELD"
+    assert "price_direction_conflict" in labels["중구"]["risk_flags"]
     result = market.signals()
     assert result[0]["signal"] == "BUY"
     assert result[0]["display_signal"] == "HELD"
@@ -131,13 +132,15 @@ def test_listing_cards_and_timing_use_guarded_region_signal(monkeypatch):
          "시그널": "BUY", "상태": "접수예정", "관리번호": "2"},
     ])
     monkeypatch.setattr(md, "assessed_signal_labels", lambda today: {
-        "보류구": {"display_signal": "HELD", "assessment_status": "held"},
+        "보류구": {"display_signal": "HELD", "assessment_status": "held",
+                   "risk_flags": ["source_stale", "sale_weeks_incomplete"]},
         "확인구": {"display_signal": "BUY", "assessment_status": "ready"},
     })
 
     rows = {row["지역"]: row for row in api._build_listings({"청약"})}
     assert rows["보류구"]["원시시그널"] == "BUY"
     assert rows["보류구"]["시그널"] == "HELD"
+    assert rows["보류구"]["지역신호보류사유"] == "source_stale"
     assert rows["확인구"]["시그널"] == "BUY"
     assert rows["확인구"]["기회도"] > rows["보류구"]["기회도"]
 
@@ -188,6 +191,7 @@ def test_public_listing_response_drops_audit_only_raw_grade(monkeypatch):
     monkeypatch.setattr(ranking, "engagement_scores", lambda **_kwargs: {})
     result = api.listings_all(None, "청약")
     assert result["listings"][0]["시그널"] == "HELD"
+    assert result["meta"]["signal_hold_reasons"] == {"assessment_unavailable": 1}
     assert "원시시그널" not in result["listings"][0]
     assert internal[0]["원시시그널"] == "STRONG_BUY"
 
@@ -207,3 +211,4 @@ def test_integrated_listing_does_not_borrow_same_named_other_province_signal(mon
     row = api._build_listings({"급매"}, include_private=True)[0]
     assert row["원시시그널"] == "STRONG_BUY"
     assert row["시도"] == "인천" and row["시그널"] == "HELD"
+    assert row["지역신호보류사유"] == "region_identity_unverified"

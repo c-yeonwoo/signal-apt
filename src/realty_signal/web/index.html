@@ -28,7 +28,7 @@
     --quick:#c2410c; --success:#15803d; --danger:#b91c1c; --warn:#b45309;
     /* 라운드·그림자 (스케일) */
     --r-sm:8px; --r-md:12px; --r-lg:16px; --shadow:0 1px 2px rgba(17,24,39,.04), 0 10px 28px rgba(17,24,39,.06);
-    --space:8px;
+    --space:8px; --space-xs:4px; --space-sm:8px; --space-md:12px; --space-lg:16px; --space-xl:24px;
   }
   * { box-sizing:border-box; }
   /* 통일 컨트롤: 셀렉트·인풋·필터바 */
@@ -41,13 +41,16 @@
     box-shadow:0 1px 2px rgba(2,32,71,.04); }
   .bigsearch:focus { box-shadow:0 0 0 3px var(--ring); }
   .page-head { font-size:20px; font-weight:600; letter-spacing:-0.02em; margin:0 0 6px; color:var(--txt); }
-  .page-sub { color:var(--dim); font-size:16px; margin:0 0 18px; line-height:1.55; max-width:40em; }
+  .page-sub { color:var(--dim); font-size:14px; margin:0 0 var(--space-lg); line-height:1.5; max-width:54em; }
   .dash-layout { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr) minmax(230px,.75fr);
     grid-template-areas:"complex market actions"; gap:18px 20px; align-items:start; }
   .dash-col-me { grid-area:complex; }
   .dash-col-market { grid-area:market; }
   .dash-actions { grid-area:actions; }
-  .dash-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .dash-col { display:flex; flex-direction:column; gap:var(--space-lg); min-width:0; }
+  .dash-card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:var(--space-lg); }
+  .dash-card > :last-child { margin-bottom:0; }
+  .dash-card-title { font-size:17px; font-weight:700; color:var(--txt); margin-bottom:var(--space-sm); letter-spacing:-0.01em; }
   .dash-col-label { font-size:17px; font-weight:700; color:var(--txt); letter-spacing:-0.02em;
     margin:2px 0 4px; }
   .dash-actions .dash-col-label { margin-bottom:8px; }
@@ -66,8 +69,8 @@
     border-radius:12px; background:var(--panel); }
   .dash-notify-optin-copy { flex:1 1 240px; min-width:0; }
   .dash-notify-optin-copy b { font-size:13px; }
-  .dash-notify-optin-copy p { margin:3px 0 0; color:var(--dim); font-size:12px; line-height:1.45; }
-  .dash-notify-optin details { flex-basis:100%; color:var(--dim); font-size:12px; }
+  .dash-notify-optin-copy p { margin:3px 0 0; color:var(--dim); font-size:13px; line-height:1.45; }
+  .dash-notify-optin details { flex-basis:100%; color:var(--dim); font-size:13px; }
   .dash-notify-optin summary { min-height:36px; display:flex; align-items:center; cursor:pointer; }
   @media (min-width:761px) and (max-width:1080px) {
     .dash-layout { grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr);
@@ -83,11 +86,15 @@
     border:1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius:12px;
     font-size:14px; line-height:1.55; color:var(--txt); }
   .ps-elig .pill { font-size:13px; padding:4px 10px; border-radius:999px; font-weight:600; }
-  .la-toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .la-toolbar { display:flex; gap:var(--space-sm) var(--space-md); align-items:center; flex-wrap:wrap; margin-bottom:var(--space-sm); }
+  #laStatus { order:3; flex:1 0 100%; font-size:13px !important; margin-left:0 !important; }
+  .la-signal-note { margin:0 0 var(--space-md); padding:10px 12px; background:#f8fafc; border:1px solid var(--line); border-radius:10px; color:var(--txt); font-size:13px; line-height:1.45; }
+  .la-signal-note summary { cursor:pointer; font-weight:650; }
+  .la-signal-note p { margin:var(--space-sm) 0 0; color:var(--dim); }
   .la-more { display:none; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;
     padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
   .la-more.open { display:flex; }
-  #laSaleFilterLabel { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:10px; max-width:100%; }
+  #laSaleFilterLabel { display:flex; flex-wrap:wrap; align-items:center; gap:6px; max-width:100%; }
   #laSaleFilter { min-width:0; max-width:100%; box-sizing:border-box; }
   /* 가격대 듀얼 레인지 — 트랙 투명, 썸만 조작 */
   #laPriceFilter input[type=range]{ height:22px; }
@@ -411,11 +418,15 @@
   #laList .la-watch .btn { min-height:36px; font-size:12px; white-space:nowrap; }
   #laList .ms-caret { align-self:center; }
   #laList .ms-row.sel { background:#f0f5fb; box-shadow:inset 3px 0 0 var(--accent); border-bottom-color:transparent; }
-  #laList .ms-detail { margin:0 8px 10px; padding:14px; border:1px solid #cbd9eb; border-left:3px solid var(--accent); border-radius:0 0 12px 12px; background:#f8fbff; box-shadow:0 8px 20px rgba(15,23,42,.07); font-size:13px; line-height:1.5; }
-  #laList .la-detail-title { font-size:13px; font-weight:700; color:var(--txt); }
-  #laList .la-detail-hint { color:var(--dim); font-size:12px; margin-top:3px; }
-  #laList .la-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+  #laList .ms-detail { margin:0 8px var(--space-md); padding:var(--space-lg); border:1px solid #cbd9eb; border-left:3px solid var(--accent); border-radius:0 0 12px 12px; background:#f8fbff; box-shadow:0 8px 20px rgba(15,23,42,.07); font-size:13px; line-height:1.5; }
+  #laList .la-detail-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-md); }
+  #laList .la-detail-fact { min-width:0; border-radius:10px; background:#fff; border:1px solid var(--line); padding:10px 12px; }
+  #laList .la-detail-fact b { display:block; color:var(--dim); font-size:13px; font-weight:600; margin-bottom:3px; }
+  #laList .la-detail-fact span { color:var(--txt); font-size:14px; line-height:1.45; }
+  #laList .la-detail-hint { color:var(--dim); font-size:13px; margin-top:var(--space-sm); }
+  #laList .la-detail-actions { display:flex; flex-wrap:wrap; gap:var(--space-sm); margin-top:var(--space-md); }
   #laList .la-detail-actions .btn { min-height:38px; font-size:13px; }
+  @media (max-width:560px) { #laList .la-detail-facts { grid-template-columns:1fr; } }
   #laList .tx-costs .tx-note { font-size:12px; }
   .ms-caret { color:var(--dim); font-size:13px; transition:transform .15s; }
   .ms-row.sel .ms-caret { transform:rotate(180deg); }
@@ -905,11 +916,11 @@
 <div id="view-all" style="display:none">
   <div style="padding:20px 20px 0">
     <h2 class="page-head">매물 찾기</h2>
-    <p class="page-sub">여러 공급사의 매매 매물을 한곳에서 비교하세요. 공급사 급매·인증 표시는 가격 우위나 현재 판매를 보증하지 않습니다.</p>
+    <p class="page-sub">매물과 지도에서 후보를 찾고, 가격 근거는 리포트에서 확인하세요.</p>
     <div id="listingFocus" role="status" aria-live="polite" style="font-size:12px;color:var(--dim);display:none;margin-bottom:10px"></div>
     <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
-      <span id="laStatus" style="font-size:12px;color:var(--dim);margin-left:auto"></span>
+      <span id="laStatus" style="color:var(--dim)"></span>
       <button type="button" class="chip" onclick="SignalV2.openDiscovery()">내 조건으로 찾기</button>
       <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
     </div>
@@ -918,13 +929,14 @@
       <button type="button" class="btn" id="laGeneralRetry" onclick="retryGeneralFromAll()">일반매물 다시 수집</button>
     </div>
     <div id="laSourceScope" role="status" style="display:none;margin:7px 0 9px;padding:8px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;color:var(--txt);font-size:13px;font-weight:600;line-height:1.45"></div>
-    <div id="laBudgetNote" style="display:none;font-size:12px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
-      <label id="laSaleFilterLabel" style="font-size:12px">매매 표시
+    <div id="laHoldSummary" role="status" style="display:none"></div>
+    <div id="laBudgetNote" style="display:none;font-size:13px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
+    <div id="laMoreFilters" class="la-more">
+      <label id="laSaleFilterLabel" style="font-size:13px">매매 표시
         <select id="laSaleFilter" class="ctrl" onchange="_laSaleFilter=this.value;renderAllListings()">
           <option value="all">전체 매매</option><option value="certified">공급사 인증 표시</option><option value="urgent">공급사 급매 표시</option>
         </select>
       </label>
-    <div id="laMoreFilters" class="la-more">
       <span id="laMtFilter" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--dim)">정렬
         <select id="laSort" class="ctrl" onchange="onLaSort()" title="확인된 같은 면적 실거래 비교가 있는 매물을 먼저 정렬합니다. 근거가 부족한 매물은 뒤에 표시합니다." style="font-size:12px;padding:3px 6px">
@@ -1788,10 +1800,9 @@
 
 <dialog id="alertsDlg" style="width:480px;max-width:94vw;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--txt)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <h3 style="margin:0;font-size:19px">알림 — 즐겨찾기 시그널 변동</h3>
-    <span class="btn" style="padding:2px 11px" onclick="document.getElementById('alertsDlg').close()">✕</span>
+    <h3 style="margin:0;font-size:19px">알림</h3>
+    <button type="button" class="btn" aria-label="알림 닫기" onclick="document.getElementById('alertsDlg').close()">✕</button>
   </div>
-  <p class="page-sub" style="margin-bottom:14px">관심지역 시그널 변화</p>
   <div id="alertsBody" style="max-height:60vh;overflow:auto"></div>
 </dialog>
 
@@ -2196,8 +2207,8 @@ function routeFromHash(){
 }
 // ===== 대시보드 홈 — 좌:할 일·후보 / 우:주간 동향 =====
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-const _dashCard=(inner,extra='')=>`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;${extra}">${inner}</div>`;
-const _dashH=t=>`<div style="font-size:17px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:-0.01em">${t}</div>`;
+const _dashCard=(inner,extra='')=>`<div class="dash-card"${extra?` style="${extra}"`:''}>${inner}</div>`;
+const _dashH=t=>`<div class="dash-card-title">${t}</div>`;
 // 요청 성공만으로 '읽음' 처리하면 모바일에서 화면 아래에 있던 변화가 사라진다.
 // 실제로 뷰포트에 들어온 카드만 다음 비교 기준점으로 확정한다.
 const _deliveryAcked=new Set(), _deliveryAckPending=new Set();
@@ -2568,7 +2579,7 @@ async function _loadNotifyStatus(){
     el.innerHTML=`<section class="dash-notify-optin" role="status" aria-label="텔레그램 알림 연결 안내">
       <div class="dash-notify-optin-copy"><b>브리핑·관심단지·찜한 매물·청약 알림을 받아보세요</b>
         <p>선택 사항입니다. 연결하면 아침 브리핑과 저장한 항목의 확인된 변화를 보냅니다.</p></div>
-      <button type="button" class="btn" onclick="switchTab('mypage')">알림 연결</button>
+      <button type="button" class="btn" onclick="openTelegramConnect()">텔레그램 연결</button>
       <details><summary>알림 내용 자세히</summary><p>${esc(channel.reason||'텔레그램이 아직 연결되지 않았습니다.')}
         ${channel.how?` · ${esc(channel.how)}`:''}</p><p>${esc(d.note||'알림은 원할 때 언제든 끌 수 있습니다.')}</p></details>
     </section>`;
@@ -2586,7 +2597,7 @@ async function _loadNotifyStatus(){
     <div style="font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.55">${c.reason||''}
       ${c.how?`<br><span style="color:var(--accent)">${c.how}</span>`:''}</div>
     ${c.channel==='telegram'&&c.available&&!c.linked
-      ? `<div style="margin-top:7px"><span class="btn" style="padding:5px 12px;font-size:12px" onclick="switchTab('mypage')">텔레그램 연결하기 →</span></div>` : ''}
+      ? `<div style="margin-top:7px"><button type="button" class="btn" onclick="openTelegramConnect()">텔레그램 연결</button></div>` : ''}
   </div>`;
 
   el.innerHTML=_dashCard(
@@ -3791,6 +3802,28 @@ let _laSel=null, _laData=[], _laPrice=null, _laAccessDenied=false;   // _laPrice
 let _laConfirmedBudget=false;
 const _laCache=new Map(), _laRevalidating=new Set();
 let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
+const _LA_HOLD_REASONS={
+  region_identity_unverified:'지역 식별 미확인', region_identity_ambiguous:'동명 지역 구분 불가',
+  region_boundary_obsolete:'행정구역 개편 전 자료', source_stale:'KB 관측 지연',
+  market_inputs_missing:'수급 자료 없음', market_inputs_stale:'수급 기준일 불일치',
+  sale_weeks_incomplete:'최근 4주 가격 자료 부족', price_direction_conflict:'가격 방향과 매수 신호 충돌',
+  assessment_unavailable:'판정 자료 확인 불가'
+};
+function _laHoldLabel(code){ return _LA_HOLD_REASONS[code]||_LA_HOLD_REASONS.assessment_unavailable; }
+function _laRenderHoldSummary(info){
+  const el=document.getElementById('laHoldSummary'); if(!el) return;
+  const counts=info.signal_hold_reasons||_laData.reduce((acc,row)=>{
+    if(row['시그널']==='HELD'){
+      const reason=row['지역신호보류사유']||'assessment_unavailable';
+      acc[reason]=(acc[reason]||0)+1;
+    }
+    return acc;
+  },{});
+  const total=Object.values(counts).reduce((sum,count)=>sum+(Number(count)||0),0);
+  el.style.display=total?'block':'none';
+  el.innerHTML=total?`<details class="la-signal-note"><summary>지역 신호 확인 전 ${total}건 · 이유 보기</summary>
+    <p>${Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([code,count])=>`${esc(_laHoldLabel(code))} ${Number(count)}건`).join(' · ')}<br>가격 근거가 없는 매물은 리포트에서 확인 전으로 표시합니다.</p></details>`:'';
+}
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
 function _laViewKey(types){
   return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_mtRegionChoice.laMtFilter,_laSort,
@@ -3805,12 +3838,13 @@ function _laApplyResponse(types,d,preservePrice=false){
   const hasAsking=(_laData||[]).some(x=>['일반매물','급매','찐매물'].includes(x['유형']));
   if(note){
     note.style.display=_laConfirmedBudget||!hasAsking?'none':'block';
-    note.innerHTML=_laConfirmedBudget||!hasAsking?'':`매수력 확정 가정·지역이 없거나 바뀌었습니다. 표시 가격이 낮은 순으로 보여 드리며 예산 적합성은 보류합니다. <button type="button" class="btn" onclick="openBuyingPower()" style="padding:2px 8px;font-size:11px">매수력 확인</button>`;
+    note.innerHTML=_laConfirmedBudget||!hasAsking?'':`내 예산과 비교하려면 매수력을 확인해 주세요. <button type="button" class="btn" onclick="openBuyingPower()">매수력 확인</button>`;
   }
   const budgetOption=document.querySelector('#laSort option[value="budget"]');
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
-  document.getElementById('laStatus').textContent=`수집 매물 ${_laData.length}건${info.duplicate_records_collapsed?` · 같은 원천 중복 ${info.duplicate_records_collapsed}건 통합`:''}${_laAccessDenied?' · 외부 매물은 지정된 개인 계정만':''} · KB 관측 ${d.asof||'–'}${info.data_age_days!=null?` · 관측 ${info.data_age_days}일 경과`:''} · 수집 범위 내 결과`;
+  document.getElementById('laStatus').textContent=`수집 범위 ${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` (${info.data_age_days}일 전)`:''}${_laAccessDenied?' · 개인 매물은 지정된 개인 계정만':''}`;
+  _laRenderHoldSummary(info);
   const sourceWarning=document.getElementById('laSourceWarning');
   sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
   document.getElementById('laSourceWarningText').textContent='일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.';
@@ -3843,7 +3877,7 @@ function _laRevalidate(types,old){
   if(_laRevalidating.has(types)) return;
   const epoch=_laCacheEpoch;
   _laRevalidating.add(types);
-  fetch('/api/listings/all?types='+encodeURIComponent(types)).then(r=>{
+  fetch('/api/listings/all?view=card&types='+encodeURIComponent(types)).then(r=>{
     if(!r.ok) throw new Error('매물 재검증 실패'); return r.json();
   }).then(d=>{
     if(epoch!==_laCacheEpoch) return;
@@ -3924,8 +3958,9 @@ async function loadAllListings(){
   document.getElementById('laStatus').textContent='불러오는 중…';
   document.getElementById('laSourceWarning').style.display='none';
   document.getElementById('laSourceScope').style.display='none';
-  document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">매물을 불러오는 중입니다…<br><span style="font-size:11px">저장된 목록을 모으고 있습니다.</span></div>';
-  try{ const r=await fetch('/api/listings/all?types='+encodeURIComponent(types));
+  document.getElementById('laHoldSummary').style.display='none';
+  document.getElementById('laList').innerHTML='<div style="padding:24px;text-align:center;color:var(--dim);font-size:14px">매물을 불러오는 중…</div>';
+  try{ const r=await fetch('/api/listings/all?view=card&types='+encodeURIComponent(types));
     if(!r.ok) throw new Error('매물 조회 실패');
     const d=await r.json(); if(gen!==_laRequestGen || epoch!==_laCacheEpoch) return;
     _laCache.set(types,{at:Date.now(),data:d}); _laApplyResponse(types,d);
@@ -3933,6 +3968,7 @@ async function loadAllListings(){
     _laData=[]; _laCurrentTypes=''; document.getElementById('laStatus').textContent='불러오기 실패';
     document.getElementById('laSourceWarning').style.display='none';
     document.getElementById('laSourceScope').style.display='none';
+    document.getElementById('laHoldSummary').style.display='none';
     initLaPriceFilter(); renderAllListings(); }
 }
 async function retryGeneralFromAll(){
@@ -4119,7 +4155,7 @@ function renderAllListings(){
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
     '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
-  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${regionSignalBadge(x['시그널']||'HELD')}`;
+  const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${x['시그널']&&x['시그널']!=='HELD'?regionSignalBadge(x['시그널']):''}`;
   mapSplit('laList','laMap',rows,{
     summary:x=>({nm:`${esc(x['단지명']||'–')} ${rowBadge(x)}`,
       right:_laRowPrice(x),
@@ -4133,13 +4169,20 @@ function renderAllListings(){
         ? `<button type="button" class="btn" onclick="event.stopPropagation();openTypedList('청약')">청약 목록에서 확인</button>`
         : x['유형']==='경매' ? auctionCalc+report
         : report||'<span class="la-detail-hint">현재 수집분의 매물 식별자를 확인할 수 없어 리포트를 열 수 없습니다.</span>';
-      const hint=x['유형']==='청약'?'공고의 청약 조건과 일정을 확인하세요.':
-        _SALE_TYPES.includes(x['유형'])?'가격·실거래·단지 참고 신호·비용을 한 리포트에서 확인하세요.':
-        x['유형']==='경매'?'최저가를 출발점으로 내 자금과 비용을 시험하세요. 권리·점유는 법원 서류로 직접 확인해야 합니다.':
-        '현재 확인된 자료를 검토하고 원천에서 상태를 다시 확인하세요.';
+      const fact=(label,value)=>`<div class="la-detail-fact"><b>${label}</b><span>${esc(value)}</span></div>`;
+      const fit=x.budget_fit||{};
+      const budget=fit.status==='within'?'호가가 확정 상한 이내':fit.status==='above'?'호가가 확정 상한 초과':
+        ({unconfirmed_power:'매수력 확인 전',asking_missing:'호가 확인 전',asking_stale:'지난 호가 · 재확인 필요',
+          power_changed:'매수력 다시 확인',region_mismatch:'확정 지역과 달라 비교 제외'})[fit.reason_code]||'내 조건 확인 전';
+      const price=listingPriceLine(x.price_comparison)||x.price_comparison?.['이유']||'같은 면적 실거래 근거 확인 전';
+      const market=x['시그널']==='HELD'?`지역 신호 확인 전 · ${_laHoldLabel(x['지역신호보류사유'])}`:
+        `지역 신호 ${SIG_KO[x['시그널']]||'확인 전'}`;
       const caseNo=x['유형']==='경매'&&x['사건번호']?`<div class="la-detail-hint">물건번호 ${esc(x['사건번호'])}</div>`:'';
-      return `<div class="la-detail-title">선택한 매물 확인</div>
-        <div class="la-detail-hint">${hint}</div>
+      const facts=_SALE_TYPES.includes(x['유형'])?`<div class="la-detail-facts">${fact('가격 근거',price)}${fact('내 예산',budget)}</div>`:
+        `<div class="la-detail-facts">${fact('지역 흐름',market)}${fact(x['유형']==='경매'?'입찰 판단':'다음 확인',
+          x['유형']==='경매'?'권리·점유 확인 전에는 입찰가 확정 불가':'일정·자격은 원 공고에서 확인')}</div>`;
+      return `${facts}
+        ${x['시그널']==='HELD'&&_SALE_TYPES.includes(x['유형'])?`<div class="la-detail-hint">${esc(market)} · 가격 비교와는 별개</div>`:''}
         ${caseNo}
         <div class="la-detail-actions">${action}</div>`;
     },
@@ -4161,7 +4204,7 @@ function renderAllListings(){
         .filter(v=>Number.isFinite(v)&&v>0).map(v=>Math.round(v)))].sort((a,b)=>a-b);
       const area=areas.length===1?`전용 ${areas[0]}㎡`:areas.length>1?`전용 ${areas[0]}~${areas.at(-1)}㎡`:'전용면적 확인 필요';
       const sameSignal=group.every(x=>x['시그널']===first['시그널']);
-      return {nm:`${esc(first['단지명']||'–')} <span class="ms-group-count">${group.length}건</span> ${sameSignal?regionSignalBadge(first['시그널']||'HELD'):''}`,
+      return {nm:`${esc(first['단지명']||'–')} <span class="ms-group-count">${group.length}건</span> ${sameSignal&&first['시그널']&&first['시그널']!=='HELD'?regionSignalBadge(first['시그널']):''}`,
         right:`<span class="la-price"><b>${amount}</b><span>${area}</span></span>`,
         sub:`<span class="la-address">${esc(_laAddress(first))}</span>`};
     },
@@ -4203,7 +4246,7 @@ function renderMsList(mapId, indices){
   st.openGroupKeys=st.openGroupKeys||new Set();
   listEl.innerHTML='';
   const hint=document.createElement('div'); hint.className='ms-viewport-hint';
-  hint.textContent=`지도 영역 ${indices.length}건${opt.groupKey?` · ${groups.length}개 묶음`:''}`;
+  hint.textContent=`${st.locating?'매물':'지도 영역'} ${indices.length}건${opt.groupKey?` · ${groups.length}개 묶음`:''}${st.locating?' · 위치 표시 중':''}`;
   listEl.appendChild(hint);
   if(!indices.length){
     const empty=document.createElement('div');
@@ -4359,9 +4402,17 @@ async function mapSplit(listId, mapId, items, opt){
   st.listId=listId; st.items=items; st.opt=opt; st._mapSplitGen=(st._mapSplitGen||0)+1;
   const gen=st._mapSplitGen;
   bindMapViewport(mapId, listId);
+  // 새 목록을 먼저 보여 주는 동안 이전 검색의 핀이 남아 있으면 잘못된 매물처럼 보인다.
+  if(st.clusterLayer){ st.map.removeLayer(st.clusterLayer); st.clusterLayer=null; }
+  else new Set(Object.values(st.markers||{})).forEach(mk=>st.map.removeLayer(mk));
+  st.markers={};
   const coords={}, need=[], fb=new Set(); opt._fb=fb;
   items.forEach((it,i)=>{ const c=opt.coord&&opt.coord(it); if(c&&c[0]) coords[i]=c;
     else if(opt.geoq){ const q=opt.geoq(it); if(q) need.push({i,q}); } });
+  // 목록은 저장된 매물만으로 먼저 그린다. 지역 중심 좌표/지오코딩 응답은
+  // 지도 핀을 개선하는 후속 작업이며 첫 카드 표시를 막아서는 안 된다.
+  st.coords=coords; st.locating=!!need.length;
+  renderMsList(mapId, items.map((_,i)=>i));
   // 1) 지역중심 폴백 먼저 — 모든 단지에 즉시 핀(클릭/포커스 보장). 지오코딩(느림) 기다리지 않음.
   if(opt.regionOf && need.length){
     const miss=[...new Set(need.map(n=>opt.regionOf(items[n.i])).filter(Boolean))];
@@ -4376,6 +4427,7 @@ async function mapSplit(listId, mapId, items, opt){
     }
   }
   if(gen!==_ms[mapId]._mapSplitGen) return;
+  st.locating=false;
   plotPins(mapId, items, coords, opt, {keepView});   // 즉시 표시 (실좌표 + 폴백핀)
   applyViewportFilter(mapId);
   // 2) 단지 정밀 지오코딩 — 백그라운드. 성공한 단지만 폴백→실좌표로 업그레이드.
@@ -8256,8 +8308,8 @@ function renderAlerts(d){
     html += `<div style="color:var(--dim);font-size:12px;margin-top:14px">시그널 탭에서 지역을 ★ 즐겨찾기하면 변동을 추적합니다.</div>`;
   }
   const p=d.prefs||{};
-  html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--dim)">
-    <div style="font-weight:700;color:var(--txt);margin-bottom:6px;font-size:12px">알림 규칙</div>
+  html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)">
+    <div style="font-weight:700;color:var(--txt);margin-bottom:6px;font-size:14px">알림 규칙</div>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apSig" ${p.signal_upgrade!==false?'checked':''}> 시그널 승급</label>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apTim" ${p.high_timing!==false?'checked':''}> 고타이밍 매물 (≥${p.timing_min??70}점)</label>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apNbhd" ${p.nbhd_change!==false?'checked':''}> 동네 리포트 변화</label>
@@ -8266,7 +8318,7 @@ function renderAlerts(d){
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apNewAlternative" ${p.new_alternative!==false?'checked':''}> 찜한 매물의 새 대안</label>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apRegionEvidence" ${p.region_evidence!==false?'checked':''}> 관심지역의 발행 근거 변화</label>
     <label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer"><input type="checkbox" id="apPresaleDeadline" ${p.presale_deadline!==false?'checked':''}> 찜한 청약의 다음 일정 D-0</label>
-    <span class="btn" style="padding:4px 10px;font-size:11px;margin-top:6px;display:inline-block" onclick="saveAlertPrefs()">저장</span></div>`;
+    <button type="button" class="btn" style="margin-top:8px" onclick="saveAlertPrefs()">규칙 저장</button></div>`;
   html += `<div id="tgBox" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"></div>`;
   document.getElementById('alertsBody').innerHTML=html;
   _loadTelegram();
@@ -8277,16 +8329,16 @@ async function _loadTelegram(){
   try{ s=await (await fetch('/api/telegram/status')).json(); }catch(e){ box.innerHTML=''; return; }
   // '준비 중' 이라고 하면 기다리면 된다는 뜻으로 읽힌다. 실제로는 서버 설정이 없는 것이고,
   // 사용자가 취할 행동이 다르다.
-  if(!s.available){ box.innerHTML=`<div style="font-size:11px;color:var(--dim);line-height:1.5">
+  if(!s.available){ box.innerHTML=`<div style="font-size:13px;color:var(--dim);line-height:1.5">
     텔레그램 브리핑이 꺼져 있습니다 — 서버에 봇 토큰이 설정되지 않았습니다.</div>`; return; }
-  const head=`<div style="font-weight:700;font-size:12px;margin-bottom:6px">텔레그램 브리핑·관심 소식</div>`;
+  const head=`<div style="font-weight:700;font-size:14px;margin-bottom:6px">텔레그램 브리핑·관심 소식</div>`;
   if(s.linked){
-    box.innerHTML=head+`<div style="font-size:12px;color:var(--dim);margin-bottom:8px">오전 ${s.hour??8}시에는 변화가 있는 날과 월요일에 브리핑을 보내고, 관심단지·찜한 매물·청약 일정의 확인된 변화는 별도 알립니다.${s.username?` · @${esc(s.username)}`:''}</div>
+    box.innerHTML=head+`<div style="font-size:13px;color:var(--dim);margin-bottom:8px">오전 ${s.hour??8}시에는 변화가 있는 날과 월요일에 브리핑을 보내고, 관심단지·찜한 매물·청약 일정의 확인된 변화는 별도 알립니다.${s.username?` · @${esc(s.username)}`:''}</div>
       <span class="btn" style="padding:4px 10px;font-size:11px" onclick="tgTest()">지금 한 통 받기</span>
       <span class="btn" style="padding:4px 10px;font-size:11px;margin-left:6px" onclick="tgUnlink()">연결 해제</span>`;
   }else{
-    box.innerHTML=head+`<div style="font-size:12px;color:var(--dim);margin-bottom:8px">아침 브리핑과 관심단지·찜한 매물·청약 일정의 확인된 변화를 보냅니다.</div>
-      <span class="btn" style="padding:4px 10px;font-size:11px" onclick="tgLink()">텔레그램 연결</span>
+    box.innerHTML=head+`<div style="font-size:13px;color:var(--dim);margin-bottom:8px">아침 브리핑과 관심단지·찜한 매물·청약 일정의 확인된 변화를 보냅니다.</div>
+      <button type="button" class="btn" onclick="tgLink()">텔레그램 연결</button>
       <div id="tgHint" style="font-size:11px;color:var(--dim);margin-top:6px"></div>`;
   }
 }
@@ -8334,11 +8386,22 @@ async function saveAlertPrefs(){
   }catch(e){ toast('저장 실패'); }
 }
 async function openAlerts(){
+  const dialog=document.getElementById('alertsDlg');
+  document.getElementById('alertsBody').innerHTML='<div role="status" style="padding:16px;color:var(--dim)">알림을 불러오는 중…</div>';
+  if(!dialog.open) dialog.showModal();
   await Promise.all([loadAlerts(), loadAlertsTrackRecord()]);
+  if(!dialog.open) return;
   renderAlerts(_alerts);
-  document.getElementById('alertsDlg').showModal();
   try{ await fetch('/api/alerts/seen',{method:'POST'}); }catch(e){}
   const b=document.getElementById('alertBadge'); if(b) b.style.display='none';
+}
+async function openTelegramConnect(){
+  await openAlerts();
+  if(!document.getElementById('alertsDlg').open) return;
+  await _loadTelegram();
+  const box=document.getElementById('tgBox');
+  box?.scrollIntoView({block:'nearest'});
+  box?.querySelector('button, .btn')?.focus();
 }
 function applyProfileDefaults(){
   // 프로필·확정 매수력 → 결론 자본·평수 선반영

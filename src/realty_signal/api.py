@@ -3432,6 +3432,16 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
             safe_signal = "HELD"
         if safe_signal not in {"STRONG_BUY", "BUY", "WATCH", "NEUTRAL", "SELL_RISK", "HELD"}:
             safe_signal = "HELD"
+        hold_reason = None
+        if safe_signal == "HELD":
+            flags = assessment.get("risk_flags") or []
+            hold_reason = ("region_identity_unverified" if not identity_ok else
+                           next((flag for flag in (
+                               "region_boundary_obsolete", "source_stale",
+                               "region_identity_ambiguous", "market_inputs_missing",
+                               "market_inputs_stale", "sale_weeks_incomplete",
+                               "price_direction_conflict") if flag in flags),
+                                "assessment_unavailable"))
         safe_grade = grade.get(region) if identity_ok else None
         identity_status = ("held" if not identity_ok else
                            "not_applicable" if kind not in {"일반매물", "급매", "찐매물"} else
@@ -3441,6 +3451,7 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                "동": raw.get("동") if kind == "경매" or (identity_ok and kind == "일반매물") else None,
                "지역코드": source_code, "시그널": safe_signal,
                "원시시그널": signal or "", "판정상태": (assessment.get("assessment_status") or "held") if identity_ok else "held",
+               "지역신호보류사유": hold_reason,
                "지역식별상태": identity_status,
                "지역급지": safe_grade, "지표라벨": mlabel, "지표값": mval, "지표단위": munit,
                "총액": total, "평형": _listing_pyeong(kind, raw, ref),
@@ -3616,7 +3627,7 @@ def _assembled_listings(types: set[str], include_private: bool) -> tuple[list[di
     return rows, count
 
 
-def listings_all(request: Request, types: str = "경매,급매,청약"):
+def listings_all(request: Request, types: str = "경매,급매,청약", view: str = "full"):
     """통합 매물 — 경매·급매·찐매물·청약을 공통 스키마로 정규화 + 타이밍점수(기회도 호환)."""
     from realty_signal.brain import ranking as eng_rank
     from realty_signal.signals.timing import VERSION as TIMING_VERSION
@@ -3642,7 +3653,10 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     if scores:
         out = eng_rank.apply_engagement_bonus(out, scores)
     out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
-    out = _attach_card_lines(out, uid)
+    # 통합 목록은 가격·예산·지도 필드만 사용한다. 상세 판단/근거 문서는 리포트에서
+    # 계산하므로 목록마다 생성·전송하지 않아도 된다. 기존 API 기본 응답은 유지한다.
+    if view != "card":
+        out = _attach_card_lines(out, uid)
     from realty_signal.services import property_analysis
     profile = db.profile_get(uid) or {} if uid else {}
     confirmed = buying_power.validated_confirmed_power(profile)
@@ -3654,6 +3668,11 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
     # 다른 화면이 원시 BUY를 현재 추천으로 재사용할 수 있다.
     public_rows = [{key: value for key, value in row.items() if key != "원시시그널"}
                    for row in out]
+    hold_reasons = {}
+    for row in public_rows:
+        if row.get("시그널") == "HELD":
+            reason = row.get("지역신호보류사유") or "assessment_unavailable"
+            hold_reasons[reason] = hold_reasons.get(reason, 0) + 1
     asof = _timing_asof()
     kinds = ("경매", "급매", "찐매물", "일반매물", "청약", "재건축")
     general_refresh = (_radar_refresh_status(HANBANG_FILE)
@@ -3682,6 +3701,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약"):
             "general_scope": general_scope,
             "source_record_count": source_record_count,
             "duplicate_records_collapsed": source_record_count - len(out),
+            "signal_hold_reasons": hold_reasons,
             "confirmed_budget": bool(confirmed and (profile.get("매수지역코드")
                 or ((profile.get("매수력") or {}).get("가정") or {}).get("지역코드"))),
         },

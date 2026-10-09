@@ -120,15 +120,19 @@ def buyer_fit(listing: dict, profile: dict | None = None, *, confirmed_power=_UN
     saved = profile.get("매수력") or {}
     asking = _number(listing.get("asking_manwon"))
     if _number(saved.get("최대매수가")) is None or not saved.get("가정버전"):
-        return {"status": "unknown", "reason": "검증 가능한 확정 매수력이 없어 예산 적합성을 판단하지 않았습니다."}
+        return {"status": "unknown", "reason_code": "unconfirmed_power",
+                "reason": "검증 가능한 확정 매수력이 없어 예산 적합성을 판단하지 않았습니다."}
     if asking is None:
-        return {"status": "unknown", "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
+        return {"status": "unknown", "reason_code": "asking_missing",
+                "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
     if listing.get("stale"):
-        return {"status": "unknown", "reason": "지난 수집 호가라 현재 예산 적합성을 판단하지 않았습니다."}
+        return {"status": "unknown", "reason_code": "asking_stale",
+                "reason": "지난 수집 호가라 현재 예산 적합성을 판단하지 않았습니다."}
     confirmed = (buying_power.validated_confirmed_power(profile)
                  if confirmed_power is _UNSET else confirmed_power)
     if confirmed is None:
-        return {"status": "unknown", "reason": "저장한 자금·지역 가정이 현재 조건과 달라 매수력을 다시 확정해야 합니다."}
+        return {"status": "unknown", "reason_code": "power_changed",
+                "reason": "저장한 자금·지역 가정이 현재 조건과 달라 매수력을 다시 확정해야 합니다."}
     budget, params = confirmed
     saved_code = profile.get("매수지역코드") or (saved.get("가정") or {}).get("지역코드")
     if (
@@ -137,7 +141,8 @@ def buyer_fit(listing: dict, profile: dict | None = None, *, confirmed_power=_UN
         or listing.get("region") != params.region
         or (listing.get("region_sido") and listing["region_sido"] != params.sido)
     ):
-        return {"status": "unknown", "reason": "매수력을 확정한 지역과 이 매물의 지역 코드가 다르거나 확인되지 않았습니다."}
+        return {"status": "unknown", "reason_code": "region_mismatch",
+                "reason": "매수력을 확정한 지역과 이 매물의 지역 코드가 다르거나 확인되지 않았습니다."}
     return {"status": "within" if asking <= budget else "above", "budget_manwon": budget,
             "asking_manwon": asking, "gap_manwon": round(budget - asking),
             "note": "호가와 확정 매수력만 비교합니다. 취득세·수리비·대출 승인·월 부담은 별도로 확인해야 합니다."}

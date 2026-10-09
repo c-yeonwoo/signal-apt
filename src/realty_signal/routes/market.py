@@ -308,9 +308,9 @@ def series(region: str):
 
 
 @router.get("/api/listings/all")
-def listings_all(request: Request, types: str = "경매,급매,청약"):
+def listings_all(request: Request, types: str = "경매,급매,청약", view: str = "full"):
     from realty_signal import api as app_api
-    return app_api.listings_all(request, types)
+    return app_api.listings_all(request, types, view)
 
 
 @router.get("/api/listing-analysis")

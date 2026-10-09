@@ -183,6 +183,17 @@ def test_current_asking_comparison_is_same_provider_verified_complex_and_exact_a
     assert result["price_kind"] == "source_asking_sample"
 
 
+def test_asking_comparison_excludes_exact_source_identity_when_prices_repeat():
+    target = asking_row("target", 50000)
+    peers = [asking_row("a", 50000), asking_row("b", 50000),
+             asking_row("c", 55000), asking_row("d", 60000)]
+    result = listing_prices._attach_asking_comparison([target], [target, *peers])[0]["asking_comparison"]
+    assert result["상태"] == "관측비교"
+    assert result["표본수"] == 4
+    assert result["중앙값"] == 52500
+    assert result["호가차이율"] == -4.8
+
+
 @pytest.mark.parametrize("target_update", [
     {"지역식별상태": "held"}, {"source_conflict": True}, {"stale": True},
     {"degraded": True}, {"지역코드": ""}, {"price_kind": "unknown"},
