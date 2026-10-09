@@ -903,7 +903,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(scopedSignals.default.presale.html,/지역 신호 · 판단 보류/);
     assert.match(scopedSignals.default.auction.html,/지역 신호 · 판단 보류/);
     assert.deepEqual(scopedSignals.buyOnly,{presale:0,auction:0});
-    assert.deepEqual(scopedSignals.gradeOnly,{presale:0,auction:0});
+    assert.deepEqual(scopedSignals.gradeOnly,{presale:1,auction:1});
     assert.equal(await page.locator('#psShowPast').isChecked(),false);
     const presaleLifecycle=await page.evaluate(()=>{
       const original=mapSplit, oldList=_presaleList, oldBuyOnly=_mtBuyOnly, oldGrades=_mtGradeSet, oldFocus=_focusRegion;
