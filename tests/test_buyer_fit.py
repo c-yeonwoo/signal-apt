@@ -29,7 +29,7 @@ def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypat
     monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
         codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
     listing = property_analysis.snapshot(_row("일반매물:a"))
-    assert property_analysis.buyer_fit(listing, {})["status"] == "unknown"
+    assert property_analysis.buyer_fit(listing, {})["reason_code"] == "unconfirmed_power"
     assert property_analysis.buyer_fit(listing, {"가용자본": 80000})["status"] == "unknown"
     assert property_analysis.buyer_fit(listing, {"매수력": {"최대매수가": 52000}})["status"] == "unknown"
     profile = {"가용자본": 50000, "연소득": 9000, "매수지역": "노원구",
@@ -44,7 +44,7 @@ def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypat
     above = property_analysis.buyer_fit(listing, profile)
     assert above["status"] == "above" and above["gap_manwon"] == -2000
     listing["region_code"] = "11680"
-    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    assert property_analysis.buyer_fit(listing, profile)["reason_code"] == "region_mismatch"
     listing["region_code"] = None
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
     listing["region_code"] = "11350"
@@ -52,13 +52,13 @@ def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypat
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
     listing["region_sido"] = "서울"
     listing["stale"] = True
-    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    assert property_analysis.buyer_fit(listing, profile)["reason_code"] == "asking_stale"
     listing["stale"] = False
     no_region = {"가용자본": 50000, "연소득": 9000}
     no_region["매수력"] = buying_power.statement(buying_power.params_from_profile(no_region))
     assert property_analysis.buyer_fit(listing, no_region)["status"] == "unknown"
     profile["가용자본"] = 51000
-    assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
+    assert property_analysis.buyer_fit(listing, profile)["reason_code"] == "power_changed"
     profile["가용자본"] = 50000
     profile["매수력"]["최대매수가"] += 10000
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"

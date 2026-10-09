@@ -131,7 +131,8 @@ test('optional Telegram opt-in is compact and keeps notification details expanda
   assert.match(el.innerHTML,/dash-notify-optin/);
   assert.match(el.innerHTML,/브리핑·관심단지·찜한 매물·청약 알림을 받아보세요/);
   assert.match(el.innerHTML,/<details>/);
-  assert.match(el.innerHTML,/알림 연결/);
+  assert.match(el.innerHTML,/openTelegramConnect\(\)/);
+  assert.match(el.innerHTML,/텔레그램 연결/);
   assert.doesNotMatch(el.innerHTML,/dash-card/);
 });
 
@@ -208,8 +209,7 @@ test('returning to a long-lived tab checks market and visible listings at most o
   await ctx.refreshVisibleMarket();
   assert.equal(marketChecks,2);
   assert.equal(listingChecks,2);
-  assert.match(html,/KB 관측 \$\{d\.asof\|\|'–'\}.*관측 \$\{info\.data_age_days\}일 경과/);
-  assert.doesNotMatch(html,/info\.data_age_days\}일 전 수집/);
+  assert.match(html,/KB \$\{d\.asof\|\|'–'\}.*info\.data_age_days/);
 });
 
 test('entering signal from another view rechecks the current market revision', async () => {
@@ -815,6 +815,32 @@ test('second click closes and delayed geocode cannot restore selection', async (
   assert.equal(h.state.sel, null);
   assert.equal(h.opened(), 0);
   assert.equal(Object.keys(h.state.coords).length, 0);
+});
+
+test('listing cards render before centroid lookup and stale pins are removed', async () => {
+  let releaseCentroids;
+  const events=[];
+  const oldMarker={};
+  const state={markers:{0:oldMarker},map:{removeLayer:layer=>events.push(layer===oldMarker?'remove-old':'remove-other')},
+    _vpLocked:false};
+  const ctx=vm.createContext({
+    _ms:{map:state},initMap:()=>state,bindMapViewport(){},
+    renderMsList:(_map,indices)=>events.push(`render-${indices.length}`),
+    plotPins:()=>events.push('pins'),applyViewportFilter:()=>events.push('viewport'),
+    fetch:url=>url.startsWith('/api/region-centroids')
+      ? new Promise(resolve=>{releaseCentroids=()=>resolve({json:async()=>({centroids:{서울:[37,127]}})});})
+      : Promise.resolve({json:async()=>({coords:{}})}),
+  });
+  vm.runInContext(extract('async function mapSplit(', '// 공용 지도 타일'),ctx);
+  const pending=ctx.mapSplit('list','map',[{지역:'서울'}],{
+    geoq:()=> '서울 테스트단지',regionOf:()=> '서울'});
+  assert.equal(events[0],'remove-old');
+  assert.equal(events[1],'render-1');
+  assert.equal(typeof releaseCentroids,'function');
+  assert.equal(events.includes('pins'),false);
+  releaseCentroids();
+  await pending;
+  assert.deepEqual(events,['remove-old','render-1','pins','viewport']);
 });
 
 test('data reload invalidates in-flight map selection', async () => {

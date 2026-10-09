@@ -26,6 +26,8 @@ def test_benchmark_reports_only_aggregate_source_counts_and_never_credentials_or
                       "groups": {"matched": [{"key": "private:item"}, {"key": "private:item2"}]},
                       "sources": [{"kind": "일반매물", "state": "ready", "count": 2,
                                    "regions": ["노원구", "도봉구"]}]}
+        elif "/api/listings/all" in url:
+            result = {"meta": {"private_access": True}, "listings": [{"key": "private:item"}]}
         else:
             result = {"subject": {"key": "private:item", "region": "노원구"}}
         return result, 25.0
@@ -33,7 +35,8 @@ def test_benchmark_reports_only_aggregate_source_counts_and_never_credentials_or
     result = benchmark.run("https://example.test", "rsm_session=secret-cookie",
                            "급매:private-listing-id", {}, runs=30, warmups=1)
     serialized = json.dumps(result, ensure_ascii=False)
-    assert len(calls) == 64  # discovery and report each have one initial, one warmup, and 30 samples
+    assert len(calls) == 96  # discovery, listings, report: initial + warmup + 30 samples each
+    assert [entry["label"] for entry in result["results"]] == ["discovery", "listings", "listing_report"]
     assert result["results"][0]["p50_ms"] == 25
     assert result["results"][0]["initial_source_summary"] == {
         "private_access": True, "candidate_count": 2,

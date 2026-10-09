@@ -72,6 +72,25 @@ def test_presale_and_redev_lists_are_rebuilt_every_read(monkeypatch):
         api._listing_assembly_cache.clear()
 
 
+def test_card_view_skips_unused_decision_envelope_without_changing_default(monkeypatch):
+    _quiet(monkeypatch, lambda *_args, **_kwargs: [_row()])
+    calls = []
+
+    def annotate(rows, _uid):
+        calls.append(1)
+        return [{**row, "decision": {"id": "detail"}, "lines": {"cash": "detail"}}
+                for row in rows]
+
+    monkeypatch.setattr(api, "_attach_card_lines", annotate)
+    compact = api.listings_all(None, "경매", view="card")["listings"][0]
+    full = api.listings_all(None, "경매")["listings"][0]
+    assert calls == [1]
+    assert "decision" not in compact and "lines" not in compact
+    assert compact["시그널"] == full["시그널"] == "HELD"
+    assert compact["key"] == full["key"]
+    assert full["decision"]["id"] == "detail"
+
+
 def test_hank_refresh_stays_off_the_listing_response(monkeypatch):
     called = []
     monkeypatch.setattr(external, "hank_due", lambda path=None: True)

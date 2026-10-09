@@ -120,6 +120,7 @@ def assessed_signal_labels(today: str) -> dict[str, dict]:
             "assessment_status": assessment["assessment_status"],
             "assessment_id": assessment["assessment_id"],
             "region_id": assessment["region_id"],
+            "risk_flags": assessment["risk_flags"],
         }
     return labels
 

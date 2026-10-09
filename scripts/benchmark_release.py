@@ -26,6 +26,7 @@ BASE_URL_ENV = "SIGNAL_APT_BASE_URL"
 SPEC_FILE_ENV = "SIGNAL_APT_BENCH_SPEC_FILE"
 DISCOVERY_P95_TARGET_MS = 500
 REPORT_P95_TARGET_MS = 800
+LISTINGS_P95_TARGET_MS = 800
 MAX_RESPONSE_BYTES = 50 * 1024 * 1024
 
 
@@ -96,7 +97,9 @@ def _request_json(url: str, cookie: str, payload: dict | None) -> tuple[dict, fl
 def _sample(label: str, url: str, cookie: str, payload: dict | None,
             warmups: int, runs: int, *, require_personal: bool = False) -> dict:
     initial, initial_ms = _request_json(url, cookie, payload)
-    if require_personal and initial.get("private_access") is not True:
+    if require_personal and (initial.get("private_access")
+                             if "private_access" in initial else
+                             (initial.get("meta") or {}).get("private_access")) is not True:
         raise BenchmarkError("personal_listing_access_not_confirmed")
     for _ in range(warmups):
         _request_json(url, cookie, payload)
@@ -149,14 +152,17 @@ def run(base_url: str, cookie: str, listing_key: str, spec: dict,
     base_url = _base_url(base_url)
     discovery = _sample("discovery", f"{base_url}/api/v2/discovery", cookie, spec,
                         warmups, runs, require_personal=True)
+    listings = _sample("listings", f"{base_url}/api/listings/all?{urlencode({'view': 'card', 'types': '일반매물,급매,찐매물'})}",
+                       cookie, None, warmups, runs, require_personal=True)
     report_url = f"{base_url}/api/v2/listings/report?{urlencode({'key': listing_key})}"
     report = _sample("listing_report", report_url, cookie, None, warmups, runs)
     return {"schema_version": 1, "measured_at": datetime.now(timezone.utc).isoformat(),
             "host": urlsplit(base_url).netloc, "python": platform.python_version(),
             "method": "sequential_client_elapsed_ms; one initial request, then warmups and steady samples",
             "cache_policy": "read-only; no cache clearing or source refresh",
-            "results": [discovery, report],
+            "results": [discovery, listings, report],
             "targets": {"discovery_p95_ms": DISCOVERY_P95_TARGET_MS,
+                        "listings_p95_ms": LISTINGS_P95_TARGET_MS,
                         "listing_report_p95_ms": REPORT_P95_TARGET_MS}}
 
 

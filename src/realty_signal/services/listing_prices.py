@@ -1,5 +1,6 @@
 """Cached same-area evidence for listing cards; no source I/O or LLM calls."""
 
+from bisect import bisect_left
 from math import isfinite
 
 from realty_signal import db
@@ -56,6 +57,7 @@ def _attach_asking_comparison(rows: list[dict], cohort_rows: list[dict]) -> list
         if group and identity and price is not None:
             # collapse() has already selected one current record for each proven source ID.
             cohorts.setdefault(group, {})[identity] = price
+    ordered_cohorts = {group: sorted(prices.values()) for group, prices in cohorts.items()}
     result = []
     for row in rows:
         group, identity, price = _asking_group(row), _asking_identity(row), _asking_price(row)
@@ -63,12 +65,18 @@ def _attach_asking_comparison(rows: list[dict], cohort_rows: list[dict]) -> list
                     "price_kind": "source_asking_sample", "scope": "same_provider_complex_area",
                     "공급사": row.get("source")}
         if group and identity and price is not None:
-            peers = [v for peer_id, v in cohorts.get(group, {}).items() if peer_id != identity]
-            if len(peers) >= 3:
-                ordered = sorted(peers)
-                mid = len(ordered) // 2
-                median = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
-                evidence.update({"상태": "관측비교", "표본수": len(peers), "중앙값": median,
+            ordered = ordered_cohorts.get(group, [])
+            excluded = cohorts.get(group, {}).get(identity)
+            count = len(ordered) - (excluded is not None)
+            if count >= 3:
+                # One current source identity is excluded, including when another listing
+                # has the same asking price. The sorted cohort is built only once.
+                cut = bisect_left(ordered, excluded) if excluded is not None else len(ordered)
+                def peer_at(index):
+                    return ordered[index + (index >= cut)] if excluded is not None else ordered[index]
+                mid = count // 2
+                median = peer_at(mid) if count % 2 else (peer_at(mid - 1) + peer_at(mid)) / 2
+                evidence.update({"상태": "관측비교", "표본수": count, "중앙값": median,
                                  "호가차이율": round((price - median) / median * 100, 1)})
         result.append({**row, "asking_comparison": evidence})
     return result
