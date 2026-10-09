@@ -196,6 +196,19 @@ def test_public_listing_response_drops_audit_only_raw_grade(monkeypatch):
     assert internal[0]["원시시그널"] == "STRONG_BUY"
 
 
+def test_unknown_kb_age_is_not_reported_as_fresh(monkeypatch):
+    from realty_signal.brain import ranking
+
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(api, "_attach_card_lines", lambda rows, uid: rows)
+    monkeypatch.setattr(api, "_uid", lambda request: None)
+    monkeypatch.setattr(api, "_personal_listings_allowed", lambda **_kwargs: False)
+    monkeypatch.setattr(api, "_timing_asof", lambda: None)
+    monkeypatch.setattr(api, "_data_age_days", lambda: None)
+    monkeypatch.setattr(ranking, "engagement_scores", lambda **_kwargs: {})
+    assert api.listings_all(None, "청약")["meta"]["data_age_days"] is None
+
+
 def test_integrated_listing_does_not_borrow_same_named_other_province_signal(monkeypatch, tmp_path):
     cache = tmp_path / "quicksale.json"
     cache.write_text(json.dumps({"_scan_ver": api._QUICKSALE_SCAN_VER,

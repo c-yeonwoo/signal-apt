@@ -907,6 +907,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#laHoldSummary').textContent(),/지역 신호 확인 전 2건/);
     assert.doesNotMatch(await page.evaluate(()=>_ms.laMap.opt.groupSummary(_laData).nm),/판단 보류/,
       '묶음 행에도 보류 배지를 다시 표시하지 않는다');
+    await page.evaluate(()=>{_laSaleFilter='certified';renderAllListings();});
+    assert.match(await page.locator('#laHoldSummary').textContent(),/지역 신호 확인 전 1건/,
+      '필터 뒤 요약 건수는 현재 표시 목록과 같아야 한다');
+    await page.evaluate(()=>{_laSaleFilter='all';renderAllListings();});
     const scopedSignals=await page.evaluate(()=>{
       const original=mapSplit, originalSignal=safeMarketSignal, oldPresale=_presaleList;
       const oldBuyOnly=_mtBuyOnly, oldGrades=_mtGradeSet;

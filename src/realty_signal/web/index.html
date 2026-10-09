@@ -3810,9 +3810,9 @@ const _LA_HOLD_REASONS={
   assessment_unavailable:'판정 자료 확인 불가'
 };
 function _laHoldLabel(code){ return _LA_HOLD_REASONS[code]||_LA_HOLD_REASONS.assessment_unavailable; }
-function _laRenderHoldSummary(info){
+function _laRenderHoldSummary(rows){
   const el=document.getElementById('laHoldSummary'); if(!el) return;
-  const counts=info.signal_hold_reasons||_laData.reduce((acc,row)=>{
+  const counts=rows.reduce((acc,row)=>{
     if(row['시그널']==='HELD'){
       const reason=row['지역신호보류사유']||'assessment_unavailable';
       acc[reason]=(acc[reason]||0)+1;
@@ -3821,7 +3821,7 @@ function _laRenderHoldSummary(info){
   },{});
   const total=Object.values(counts).reduce((sum,count)=>sum+(Number(count)||0),0);
   el.style.display=total?'block':'none';
-  el.innerHTML=total?`<details class="la-signal-note"><summary>지역 신호 확인 전 ${total}건 · 이유 보기</summary>
+  el.innerHTML=total?`<details class="la-signal-note"><summary>표시 중인 매물 · 지역 신호 확인 전 ${total}건</summary>
     <p>${Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([code,count])=>`${esc(_laHoldLabel(code))} ${Number(count)}건`).join(' · ')}<br>가격 근거가 없는 매물은 리포트에서 확인 전으로 표시합니다.</p></details>`:'';
 }
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
@@ -3844,7 +3844,6 @@ function _laApplyResponse(types,d,preservePrice=false){
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
   document.getElementById('laStatus').textContent=`수집 범위 ${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` (${info.data_age_days}일 전)`:''}${_laAccessDenied?' · 개인 매물은 지정된 개인 계정만':''}`;
-  _laRenderHoldSummary(info);
   const sourceWarning=document.getElementById('laSourceWarning');
   sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
   document.getElementById('laSourceWarningText').textContent='일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.';
@@ -4151,6 +4150,7 @@ function renderAllListings(){
     if(pb==null) return -1;
     return pa-pb || opp(b)-opp(a);
   });
+  _laRenderHoldSummary(rows);
   document.getElementById('laEmpty').textContent = rows.length?'':_laAccessDenied?
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
     '조건에 맞는 매물이 없습니다. 유형·급지·가격 조건을 넓혀 보세요.';
