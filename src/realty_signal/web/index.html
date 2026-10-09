@@ -1172,7 +1172,7 @@
       <button type="button" class="chip" id="laMoreBtn" aria-expanded="false" aria-controls="laMoreFilters" onclick="toggleLaMore()">필터</button>
     </div>
     <div id="laSourceWarning" role="status" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;font-size:13px;line-height:1.5">
-      <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신이 안 됐어요. 목록에 이전 자료가 포함될 수 있습니다.</span>
+      <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신 실패. 현재 목록은 전체가 아니며, 이전 자료가 포함될 수 있습니다.</span>
       <button type="button" class="btn" id="laGeneralRetry" onclick="retryGeneralFromAll()">일반매물 다시 수집</button>
     </div>
     <div id="laSourceScope" role="status" style="display:none;margin:7px 0 9px;padding:8px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;color:var(--txt);font-size:13px;font-weight:600;line-height:1.45"></div>
@@ -3979,7 +3979,7 @@ function _laApplyResponse(types,d){
   document.getElementById('laStatus').textContent=`매물 ${_laData.length.toLocaleString()}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전`:''}${_laAccessDenied?' · 지정된 개인 계정만 이용 가능':''}`;
   const sourceWarning=document.getElementById('laSourceWarning');
   sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
-  document.getElementById('laSourceWarningText').textContent='일반매물 갱신이 안 됐어요. 목록에 이전 자료가 포함될 수 있습니다.';
+  document.getElementById('laSourceWarningText').textContent='일반매물 갱신 실패. 현재 목록은 전체가 아니며, 이전 자료가 포함될 수 있습니다.';
   const scopeNote=document.getElementById('laSourceScope'), scope=info.general_scope||{};
   const scopeCount=n=>Number.isInteger(n)&&n>0&&n<=8?n:0;
   const scopeReasons=[];
