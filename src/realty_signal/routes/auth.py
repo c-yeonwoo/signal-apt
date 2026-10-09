@@ -102,7 +102,10 @@ def profile_get(request: Request):
 
 @router.put("/api/profile")
 def profile_put(request: Request, data: dict = Body(...)):
-    db.profile_set(deps.uid(request), data)
+    uid = deps.uid(request)
+    if not uid:
+        return JSONResponse({"ok": False, "reason": "login_required"}, status_code=401)
+    db.profile_set_from_client(uid, data)
     return {"ok": True}
 
 

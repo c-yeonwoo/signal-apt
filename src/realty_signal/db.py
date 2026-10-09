@@ -384,6 +384,44 @@ def profile_set(uid: int, data: dict) -> None:
     c.close()
 
 
+_SERVER_PROFILE_FIELDS = frozenset({"telegram", "tos_accepted_at", "tos_version", "cohort", "invite_code"})
+
+
+def profile_set_from_client(uid: int, data: dict) -> None:
+    """Replace editable profile fields without trusting or deleting server-owned state."""
+    c = conn()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT data FROM profile WHERE uid=?", (uid,)).fetchone()
+        current = json.loads(row[0]) if row and row[0] else {}
+        saved = {k: v for k, v in data.items() if k not in _SERVER_PROFILE_FIELDS}
+        saved.update({k: current[k] for k in _SERVER_PROFILE_FIELDS if k in current})
+        c.execute("INSERT OR REPLACE INTO profile(uid,data) VALUES(?,?)",
+                  (uid, json.dumps(saved, ensure_ascii=False)))
+        c.commit()
+    finally:
+        c.close()
+
+
+def profile_patch(uid: int, changes: dict | None = None, *, remove: tuple[str, ...] = ()) -> dict:
+    """Atomically change server-owned fields; return the previous profile."""
+    c = conn()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT data FROM profile WHERE uid=?", (uid,)).fetchone()
+        before = json.loads(row[0]) if row and row[0] else {}
+        updated = dict(before)
+        updated.update(changes or {})
+        for key in remove:
+            updated.pop(key, None)
+        c.execute("INSERT OR REPLACE INTO profile(uid,data) VALUES(?,?)",
+                  (uid, json.dumps(updated, ensure_ascii=False)))
+        c.commit()
+        return before
+    finally:
+        c.close()
+
+
 # ---------- favorites ----------
 def fav_list(uid: int) -> list[dict]:
     c = conn()

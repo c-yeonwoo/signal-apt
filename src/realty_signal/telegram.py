@@ -92,23 +92,17 @@ def issue_link_code(uid: int) -> dict:
 
 
 def _attach(uid: int, chat_id: int, msg: dict) -> None:
-    profile = db.profile_get(uid) or {}
     frm = msg.get("from") or {}
-    profile["telegram"] = {
+    db.profile_patch(uid, {"telegram": {
         "chat_id": chat_id,
         "username": frm.get("username"),
         "linked_at": int(time.time()),
-    }
-    db.profile_set(uid, profile)
+    }})
 
 
 def unlink(uid: int) -> bool:
-    profile = db.profile_get(uid) or {}
-    if not profile.get("telegram"):
-        return False
-    profile.pop("telegram", None)
-    db.profile_set(uid, profile)
-    return True
+    before = db.profile_patch(uid, remove=("telegram",))
+    return bool(before.get("telegram"))
 
 
 def poll_updates(limit: int = 50) -> dict:
