@@ -8880,7 +8880,7 @@ function renderListingWatch(){
     const alternatives=(w.alternatives||[]).map(a=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:12px">
       <span><b>${esc(a.name||'매물')}</b> · ${esc(a.kind)} · ${esc(a.region||'')} ${a.price!=null?'· '+amount(a.price):''}<br><small style="color:var(--dim)">${esc(a.reason)}</small></span>
       <button class="btn" type="button" data-kind="${esc(a.kind)}" onclick="goWatchCandidate(this)">보기</button></div>`).join('');
-    return `<tr>
+    return `<tr class="watch-card">
       <td class="watch-property" data-label="매물·추천 근거"><span class="pill">${esc(w.kind)}</span><strong>${esc(w.name||'단지명 미확인')}</strong><span>${esc([w.region_sido,w.region,w.dong].filter(Boolean).join(' ' )||'지역 미확인')}</span><span class="watch-reason">${index===0&&mode==='recommended'?'추천 1순위 · ':''}${esc(recommendation)}</span></td>
       <td data-label="전용면적">${c?.exclusive_m2!=null?`${c.exclusive_m2}㎡${c.pyeong!=null?` · ${c.pyeong}평`:''}`:'–'}</td>
       <td data-label="호가·변화"><span class="watch-price">${c?.price!=null?amount(c.price):'확인 필요'}</span><span class="watch-note">${esc(update)}</span></td>
@@ -8888,12 +8888,12 @@ function renderListingWatch(){
       <td data-label="내 예산"><span>${esc(budget)}</span></td>
       <td data-label="지역 신호">${c?.signal?regionSignalBadge(c.signal):'<span class="watch-note">지역 신호 미확인</span>'}</td>
       <td data-label="바로가기"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <button type="button" class="btn" style="padding:7px 10px;min-height:36px;font-size:12px" data-watch-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-available="${!!c}" onclick="openWatchItem(this)">${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'리포트'}</button>
+        <button type="button" class="btn" style="padding:7px 10px;min-height:36px;font-size:12px" aria-label="${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'매물 확인'}" data-watch-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-available="${!!c}" onclick="openWatchItem(this)">${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'리포트'}</button>
         <details class="watch-card-more" data-watch-key="${esc(w.key)}" ${expanded.has(w.key)?'open':''}><summary>알림·찜 관리</summary><div class="watch-detail-content">
-          <span class="watch-card-status">${esc(now)} · ${savedPriceLabel} ${amount(w.saved_price)}</span>
+          <div class="watch-card-detail-line"><span>${savedPriceLabel}</span><b>${amount(w.saved_price)}</b></div><span class="watch-card-status">${esc(now)}</span>
           ${isAsking?`<div class="watch-card-target" style="margin-top:8px"><label>목표 호가(만원) <input class="ctrl" type="number" min="1" max="999999999" step="1" inputmode="numeric" value="${esc(w.target_price??'')}" placeholder="예: 50000"></label>
           <button type="button" class="btn" data-watch-key="${esc(w.key)}" onclick="saveWatchPriceTarget(this)">목표 저장·해제</button></div>`:''}
-          ${alternatives?`<div class="watch-alternatives"><b style="font-size:13px">같은 단지·비슷한 매물</b>${alternatives}</div>`:''}
+          ${alternatives?`<div class="watch-alternatives"><b style="font-size:13px">같은 단지의 다른 매물·비슷한 후보</b>${alternatives}</div>`:''}
           <button type="button" class="btn watch-btn" style="margin-top:8px" data-watch-key="${esc(w.key)}" data-watch-context="candidate" aria-pressed="true" onclick="toggleListingWatch(this)">찜 해제</button>
         </div></details></div></td></tr>`;
   }).join('');
