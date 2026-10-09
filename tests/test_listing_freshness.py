@@ -65,3 +65,24 @@ def test_collected_asking_is_not_described_as_unknown_or_modeled():
     modeled = buyer_decision.card_lines({"유형": "단지", "가격출처": "단지평단추정", "추정가": 50000,
                                         "자금": {"필요현금": 30000}}, {})
     assert "참고가격" in modeled["price"] and "참고가격" in modeled["cash"]
+
+
+def test_market_read_refresh_uses_same_kb_job_and_does_not_wait(monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr(listing_refresh, "_running", set())
+    monkeypatch.setattr(listing_refresh, "_checked", {})
+    monkeypatch.setattr(api, "_kb_due_now", lambda: True)
+    threads, jobs_called, refreshed = [], [], []
+    monkeypatch.setattr(api, "_refresh_kb_if_due", lambda: refreshed.append(True))
+    monkeypatch.setattr(listing_refresh.threading, "Thread", lambda **kw:
+                        SimpleNamespace(start=lambda: threads.append(kw["target"])))
+    def run(name, fn, **kw):
+        jobs_called.append((name, kw))
+        fn()
+    monkeypatch.setattr(jobs, "run", run)
+    listing_refresh.schedule_market()
+    listing_refresh.schedule_market()
+    assert len(threads) == 1 and not refreshed
+    threads[0]()
+    assert refreshed == [True]
+    assert jobs_called == [("kb", {"interval": 21600, "retry": 3600, "expedite": True})]

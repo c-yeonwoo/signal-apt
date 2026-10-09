@@ -67,10 +67,11 @@ def test_scheduler_expedites_unverified_hanbang_rescan(monkeypatch):
     assert calls["hanbang"]["expedite"] is True
 
 
-def test_kb_refresh_checks_stale_observation_daily():
+def test_kb_refresh_checks_delayed_observations_every_six_hours():
     day = 86400
     now = 100 * day
-    assert not api._kb_refresh_due(now - day + 1, 12, now)
+    assert not api._kb_refresh_due(now - day / 4 + 1, 12, now)
+    assert api._kb_refresh_due(now - day / 4, 12, now)
     assert api._kb_refresh_due(now - day, 12, now)
     assert not api._kb_refresh_due(now - day, 7.9, now)
     assert api._kb_refresh_due(now - 7 * day, 7.9, now)
