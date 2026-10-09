@@ -15,6 +15,26 @@ def _asdict(lst):
     return asdict(lst)
 
 
+def _scenario_listing(listing_id: str):
+    """저장 매물 또는 이미 수집된 행크 목록 카드. 상세 페이지를 새로 수집하지 않는다."""
+    lst = auction.get(listing_id)
+    if lst is not None:
+        return lst, "manual"
+    if not listing_id.startswith("hank:"):
+        return None, None
+    from realty_signal.ingest import external
+
+    card = next((item for item in external.read_hank_cards() if item.get("id") == listing_id), None)
+    if card is None:
+        return None, None
+    return auction.Listing(
+        id=listing_id, 사건번호=card.get("사건번호") or "",
+        단지명=card.get("단지명") or "경매 물건", region=card.get("region") or "",
+        감정가=card.get("감정가") or 0, 최저매각가=card.get("최저매각가"),
+        입찰기일=card.get("입찰기일") or "", 전용면적=0,
+    ), "hank"
+
+
 @router.get("/api/auction/buy-regions")
 def buy_regions():
     from realty_signal import api as app_api
@@ -56,11 +76,18 @@ def auction_listings():
 
 @router.get("/api/auction/calc/{listing_id}")
 def auction_calc(listing_id: str):
-    lst = next((x for x in auction.load() if x.id == listing_id), None)
+    lst, source = _scenario_listing(listing_id)
     if lst is None:
         raise HTTPException(404, "listing not found")
+    rights = lst.권리분석 or {}
+    analysis = rights.get("분석") or {}
+    rights_ready = (lst.인수보증금 is not None and rights.get("조사완료") is True
+                    and analysis.get("확인필요") is False
+                    and analysis.get("인수합계") == lst.인수보증금)
     return {
         "listing": auction.public_fields(lst),
+        "source": source,
+        "rights_ready": rights_ready,
         "recommend": {"상태": "needs_review", "입찰가": None,
                       "사유": ["목적별 입찰 시뮬레이터에서 현금·세금·권리 근거를 입력하세요."]},
         "table": [],
@@ -72,11 +99,27 @@ def auction_scenario(listing_id: str, data: dict = Body(...)):
     """저장 없는 목적별 계산. 사용자 가정은 검증된 정책·대출로 승격하지 않는다."""
     from realty_signal.auction_bid_engine import evaluate
 
-    lst = auction.get(listing_id)
+    lst, source = _scenario_listing(listing_id)
     if lst is None:
         raise HTTPException(404, "listing not found")
     try:
-        return evaluate(lst, data)
+        if lst.전용면적 <= 0:
+            from realty_signal.auction_bid_engine import _number
+
+            area = _number(data, "exclusive_m2")
+            if area is not None and area > 1000:
+                raise ValueError("exclusive_m2: 전용면적을 다시 확인해 주세요")
+            lst.전용면적 = area or 0
+        result = evaluate(lst, data)
+        result["listing_source"] = source
+        if data.get("exclusive_m2") not in (None, ""):
+            # 입력한 면적은 공식 표본·저장 매물의 검증 정보가 아니다.
+            result["review_ceiling"] = None
+            if result["status"] == "conditional_ceiling":
+                result["status"] = "assumption_only"
+            if result["scenario_ceiling"] is not None:
+                result["missing"].append("전용면적은 사용자 입력 · 법원 서류와 재확인")
+        return result
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
