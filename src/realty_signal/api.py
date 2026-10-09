@@ -49,7 +49,7 @@ def _personal_listings_allowed(*, request: Request | None = None, uid: int | Non
 
 
 _REFRESH_EVERY_DAYS = 7   # 관측이 신선할 때의 KB 점검 간격
-_STALE_REFRESH_EVERY_DAYS = 1  # 관측이 지연되면 새 공표분을 매일 확인
+_STALE_REFRESH_EVERY_DAYS = 0.25  # 관측이 지연되면 6시간마다 새 공표분 확인
 _REFRESH_RETRY_HOURS = 6  # 수집 실패 시 하루를 기다리지 않고 이만큼 뒤 재시도
 
 # 수집 상태 kv 키 — **실패를 화면에서 볼 수 있게 하는 것이 목적이다.**
@@ -84,7 +84,7 @@ def _data_age_days() -> float | None:
 
 
 def _kb_refresh_due(last_fetch: float, data_age_days: float | None, now: float) -> bool:
-    """관측이 8일 넘게 지연되면, 성공 수집 후에도 하루마다 새 공표분을 확인한다."""
+    """관측이 8일 넘게 지연되면, 새 공표분이 나왔는지 6시간마다 확인한다."""
     interval = (_STALE_REFRESH_EVERY_DAYS if data_age_days is None or data_age_days > 8
                 else _REFRESH_EVERY_DAYS)
     return now - last_fetch >= interval * 86400
@@ -201,25 +201,27 @@ def _scheduled_backup():
         raise backup.BackupUploadFailed()
 
 
+def _refresh_kb_if_due():
+    """Shared by scheduled and read-triggered refreshes under the KB job lease."""
+    if not _kb_due_now():
+        return
+    db.kv_set(_KB_LAST_ATTEMPT, time.time())
+    try:
+        result = _do_refresh()
+        db.kv_set(_KB_LAST_ERROR, None)
+        return result
+    except Exception as exc:
+        prev = db.kv_get(_KB_LAST_ERROR) or {}
+        db.kv_set(_KB_LAST_ERROR, {"ts": time.time(), "message": type(exc).__name__,
+                                  "consecutive": int(prev.get("consecutive") or 0)+1})
+        raise
+
+
 async def _auto_refresh_loop():
     """Independent due times: a failing source never delays other source jobs."""
     from realty_signal import jobs
     import asyncio
     import time
-
-    def kb_job():
-        if not _kb_due_now():
-            return
-        db.kv_set(_KB_LAST_ATTEMPT, time.time())
-        try:
-            result = _do_refresh()
-            db.kv_set(_KB_LAST_ERROR, None)
-            return result
-        except Exception as exc:
-            prev = db.kv_get(_KB_LAST_ERROR) or {}
-            db.kv_set(_KB_LAST_ERROR, {"ts": time.time(), "message": type(exc).__name__,
-                                      "consecutive": int(prev.get("consecutive") or 0)+1})
-            raise
 
     def locality_job():
         if (config.public_data_key() and config.odsay_analysis_approved()
@@ -255,7 +257,7 @@ async def _auto_refresh_loop():
         return external.hank_due()
 
     specs = [
-        ("kb", kb_job, 6*3600),
+        ("kb", _refresh_kb_if_due, 6*3600),
         ("quicksale", lambda: quicksale_refresh({}) if _quicksale_stale() else None, 3600),
         ("certified", lambda: certified_refresh({}) if _certified_stale() else None, 3600),
         ("hanbang", lambda: hanbang_refresh({})

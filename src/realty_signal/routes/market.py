@@ -107,6 +107,8 @@ def backtest():
 
 @router.get("/api/meta")
 def meta():
+    from realty_signal.services import listing_refresh
+    listing_refresh.schedule_market()
     kb = md.kb()
     c = md.signal_config()
     from realty_signal.brain.config_store import active_meta
@@ -154,7 +156,7 @@ def freshness(request: Request):
     auction_ts = max((ts for ts in (hank_ts, manual_ts) if ts is not None), default=None)
     sources = [
         {"key": "signal", "label": "시장 시그널 (KB 매매·전세·수급)", "asof": last_date,
-         "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동 · 관측 지연 시 매일 확인",
+         "ts": db.kv_ts("last_kb_fetch"), "cycle": "주 1회 자동 · 관측 지연 시 6시간마다 확인",
          "note": "KB국민은행 주간 시계열로 전세수급·매수우위·매매모멘텀·국면을 산출. 기준일이 곧 분석 기준입니다."},
         {"key": "trade", "label": "국토부 실거래", "ts": db.kv_max_ts("complex:"),
          "cycle": "조회 시 · 14일 캐시", "note": "단지 조회 시 국토부 실거래를 수집(14일 캐시), 관심단지는 주 1회 자동 프리페치."},
