@@ -1993,6 +1993,8 @@ function _mtMetric(label, valHtml){   // 우측 핵심지표 — 라벨+값 통�
   return `<div style="text-align:right;line-height:1.15"><div style="font-size:9px;color:var(--dim)">${label}</div>${valHtml}</div>`; }
 // 공통 필터 상태(급지·BUY+) — 매물 3탭 공통
 let _mtGradeSet=new Set(['A','B','C','D','E']), _mtBuyOnly=false;
+const _mtRegionChoice=Object.create(null);
+let _auctionFilterRows=[];
 function _mtRegionGrade(region){ const s=(allSignals||[]).find(x=>x.region===region); return s?s['급지']:null; }
 function safeMarketSignal(region){
   const row=(allSignals||[]).find(x=>x.region===region);
@@ -2002,20 +2004,53 @@ function safeRadarSignal(listing){
   // 수집기가 시·도 출처와 KB 지역의 불일치를 발견하면 원시 신호를 비운다.
   return listing?.['시그널'] ? safeMarketSignal(listing['지역']) : 'HELD';
 }
-function _mtPass(signal, grade){
-  if(_mtGradeSet.size!==5 && (!grade || !_mtGradeSet.has(grade))) return false;
+function _mtRegionKey(row){
+  const region=String(row?.['지역']??row?.region??'').trim();
+  const sido=String(row?.['시도']??row?.sido??'').trim();
+  return region ? JSON.stringify([sido,region]) : '';
+}
+function _mtRegionLabel(row){
+  const region=String(row?.['지역']??row?.region??'').trim();
+  const sido=String(row?.['시도']??row?.sido??'').trim();
+  return sido && !region.startsWith(sido) ? `${sido} ${region}` : region;
+}
+function _mtRowsForFilter(hostId){
+  if(hostId==='psMtFilter') return _presaleList||[];
+  if(hostId==='qsMtFilter') return (_qsMode==='찐매물'?_qsCertList:_qsList)||[];
+  if(hostId==='laMtFilter') return _laData||[];
+  if(hostId==='aucMtFilter') return _auctionFilterRows||[];
+  return [];
+}
+function _mtPass(signal, grade, row, hostId){
+  // 급지 미산정 지역은 급지 선택과 무관하게 계속 노출한다.
+  if(grade && _mtGradeSet.size!==5 && !_mtGradeSet.has(grade)) return false;
   if(_mtBuyOnly && !['STRONG_BUY','BUY'].includes(signal)) return false;
+  const selectedRegion=_mtRegionChoice[hostId]||'';
+  if(selectedRegion && _mtRegionKey(row)!==selectedRegion) return false;
   return true;
 }
 function renderMtFilter(hostId, rerender){
   const el=document.getElementById(hostId); if(!el) return;
   const big=!!el.closest('.ps-toolbar');
+  const regionOptions=new Map();
+  _mtRowsForFilter(hostId).forEach(row=>{
+    const key=_mtRegionKey(row), label=_mtRegionLabel(row);
+    if(key&&label&&!regionOptions.has(key)) regionOptions.set(key,label);
+  });
+  const regions=[...regionOptions.entries()].sort((a,b)=>a[1].localeCompare(b[1],'ko'));
+  const selectedRegion=_mtRegionChoice[hostId]||'';
   const chip=(code,lbl)=>`<span class="chip${_mtGradeSet.has(code)?' on':''}"${big?'':` style="font-size:11px"`} data-g="${code}">${lbl}</span>`;
   const lblStyle=big?'':'style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px"';
   el.innerHTML=`<label ${lblStyle}><input type="checkbox" ${_mtBuyOnly?'checked':''} class="mt-buy"> 매수신호만</label>`
     + `<span class="${big?'mt-label':''}" style="${big?'':'font-size:11px;color:var(--dim);margin-left:6px'}">급지</span>`
-    + [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].map(([c,l])=>chip(c,l)).join('');
+    + [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].map(([c,l])=>chip(c,l)).join('')
+    + `<label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;margin-left:6px">지역
+      <select class="mt-region" aria-label="지역·도시 선택" style="max-width:210px;padding:5px 8px">
+        <option value="">전체 지역</option>${selectedRegion&&!regionOptions.has(selectedRegion)?`<option value="${esc(selectedRegion)}" selected>선택 지역</option>`:''}
+        ${regions.map(([key,label])=>`<option value="${esc(key)}"${key===selectedRegion?' selected':''}>${esc(label)}</option>`).join('')}
+      </select></label>`;
   el.querySelector('.mt-buy').onchange=e=>{ _mtBuyOnly=e.target.checked; rerender(); };
+  el.querySelector('.mt-region').onchange=e=>{ _mtRegionChoice[hostId]=e.target.value; rerender(); };
   el.querySelectorAll('[data-g]').forEach(c=>c.onclick=()=>{ const g=c.dataset.g;
     if(_mtGradeSet.has(g)) _mtGradeSet.delete(g); else _mtGradeSet.add(g);
     renderMtFilter(hostId, rerender); rerender(); });
@@ -3580,7 +3615,7 @@ async function refreshGeneralListings(){
   btn.disabled=false;
 }
 let _qsList=[], _qsCertList=[], _qsMode='급매', _qsData={급매:null,찐매물:null}, _qsLoadedAt=0, _qsRenderedKey='';
-function _qsViewKey(){ return JSON.stringify([_qsMode,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort()]); }
+function _qsViewKey(){ return JSON.stringify([_qsMode,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_mtRegionChoice.qsMtFilter]); }
 function qsStatusText(data){
   const n=(data?.listings||[]).length, refresh=data?.refresh||{};
   const state=data?.state||(!data?.ready?'never_scanned':'unverified');
@@ -3672,11 +3707,11 @@ function qsAreaLabel(m){
 }
 function renderQuicksale(){
   _qsRenderedKey=_qsViewKey();
-  renderMtFilter('qsMtFilter', renderQuicksale);
   const src = _qsMode==='찐매물' ? _qsCertList.slice() : _qsList.slice();
+  renderMtFilter('qsMtFilter', renderQuicksale);
   const source=_qsData[_qsMode]||{};
   const rows = src.filter(m=>{
-    return inFocus(m['지역']||'') && _mtPass(safeRadarSignal(m),m['시그널']?_mtRegionGrade(m['지역']):null);
+    return inFocus(m['지역']||'') && _mtPass(safeRadarSignal(m),m['시그널']?_mtRegionGrade(m['지역']):null,m,'qsMtFilter');
   });
   const kind=_qsMode==='찐매물'?'찐매물':'급매';
   const state=source.state;
@@ -3731,7 +3766,7 @@ const _laCache=new Map(), _laRevalidating=new Set();
 let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
 function _laViewKey(types){
-  return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_laSort,
+  return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_mtRegionChoice.laMtFilter,_laSort,
     _laPrice?.min,_laPrice?.max,_laPrice?.active,_laSaleFilter]);
 }
 function _laApplyResponse(types,d,preservePrice=false){
@@ -4031,7 +4066,8 @@ function _laCompareEvidenceOverlap(a,b){
 }
 function renderAllListings(){
   _laRenderedKey=_laViewKey(_laCurrentTypes);
-  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['시그널']||'HELD',x['지역급지']||null) &&
+  renderMtFilter('laMtFilter',renderAllListings);
+  let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['시그널']||'HELD',x['지역급지']||null,x,'laMtFilter') &&
     _laPricePass(x) && _laSalePass(x));
   const opp=x=>x['기회도']??-1, tot=x=>_laAsk(x);
   const sr=x=>_SIGRANK[x['시그널']]??9;
@@ -5114,7 +5150,7 @@ function renderPresale(){
   const statusOrder = {'접수중':0,'접수예정':1,'발표대기':2,'계약중':3,'완료':4,'공고':5};
   const rows = _presaleList
     .filter(r => showPast || ['접수중','접수예정'].includes(r['상태']))
-    .filter(r => inFocus(r['지역']||'') && _mtPass(r['시그널']||'HELD',r['지역급지']||null))
+    .filter(r => inFocus(r['지역']||'') && _mtPass(r['시그널']||'HELD',r['지역급지']||null,r,'psMtFilter'))
     .sort((a,b)=>(statusOrder[a['상태']]??6)-(statusOrder[b['상태']]??6));
   document.getElementById('psEmpty').textContent = rows.length ? '' : '해당 조건의 청약 단지가 없습니다.';
   mapSplit('psList','psMap',rows,{
@@ -7241,11 +7277,12 @@ function prefillRegion(r){ switchTab('auction'); openAdd(); document.getElementB
 function daysTo(d){ if(!d) return null; return Math.ceil((new Date(d) - new Date())/86400000); }
 
 function renderAuction(rows){
-  renderMtFilter('aucMtFilter', ()=>loadAuction());
+  _auctionFilterRows=Array.isArray(rows)?rows.slice():[];
+  renderMtFilter('aucMtFilter', ()=>renderAuction(_auctionFilterRows));
   const cov=document.getElementById('aucCoverage');
   const hankN=(rows||[]).filter(r=>r.source==='hank').length;
   if(cov) cov.textContent = `· 행크 목록 ${hankN}건 · 직접 등록 ${(rows||[]).length-hankN}건 · 목록만으로는 입찰가를 만들지 않습니다`;
-  rows = rows.filter(r=>inFocus(r['region']||'') && _mtPass(r['지역시그널']||'HELD',r['지역급지']||null));
+  rows = rows.filter(r=>inFocus(r['region']||'') && _mtPass(r['지역시그널']||'HELD',r['지역급지']||null,r,'aucMtFilter'));
   const sz = document.getElementById('fSize').value, ag = document.getElementById('fAge').value;
   if(sz) rows = rows.filter(r=>{const a=r['전용면적']; if(!a) return false; return sz==='s'?a<=60:sz==='m'?(a>60&&a<=85):a>85;});
   if(ag) rows = rows.filter(r=>{ if(!r['건축년도']) return false; const y=2026-r['건축년도'];
