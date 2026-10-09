@@ -639,10 +639,13 @@
     .watch-table { min-width:0; }
     .watch-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
     .watch-table tbody tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:8px 0; }
+    .watch-table tbody tr.watch-card { padding:8px 0; margin:0; }
     .watch-table tbody tr+tr { border-top:1px solid var(--line); }
     .watch-table tbody td { display:flex; flex-direction:column; min-width:0; gap:2px; border:0; padding:8px 12px; }
     .watch-table tbody td::before { content:attr(data-label); color:var(--dim); font-size:11px; font-weight:650; }
     .watch-table tbody td:first-child, .watch-table tbody td:last-child { grid-column:1/-1; }
+    .watch-table .watch-property { min-width:0; }
+    .watch-table .watch-property > * { max-width:100%; overflow-wrap:anywhere; }
     .watch-table .watch-property strong { margin-top:2px; }
   }
   .watch-records > summary, .watch-card-more > summary { cursor:pointer; color:var(--accent); font-weight:700; min-height:44px; display:flex; align-items:center; }
