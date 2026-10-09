@@ -16,9 +16,9 @@
   :root {
     /* 표면·텍스트 — 차분한 잉크 톤 */
     /* --dim 은 #6b7280 이었는데 --bg 대비 4.43:1 로 WCAG AA(4.5:1) 미달이었다 → 5.17:1 */
-    --bg:#f4f5f7; --panel:#ffffff; --line:#e6e8ec; --txt:#111827; --dim:#5f6875;
+    --bg:#f7f8f6; --panel:#ffffff; --line:#e6e8e5; --txt:#202a35; --dim:#586574;
     /* 브랜드 — 딥 블루 */
-    --accent:#1d4ed8; --accent-ink:#ffffff; --accent-weak:rgba(29,78,216,.08); --ring:rgba(29,78,216,.18);
+    --accent:#315bb5; --accent-ink:#ffffff; --accent-weak:rgba(49,91,181,.08); --ring:rgba(49,91,181,.2);
     /* 시그널·의미 색 (단일 소스) */
     /* 램프 방향: 강한 신호일수록 **진하게**. 예전엔 거꾸로였다 —
        STRONG_BUY #15803d(대비 4.60:1) 가 BUY #166534(6.54:1) 보다 밝아서
@@ -27,7 +27,7 @@
     --sig-strong:#166534; --sig-buy:#15803d; --sig-watch:#b45309; --sig-neutral:#5f6875; --sig-sell:#b91c1c;
     --quick:#c2410c; --success:#15803d; --danger:#b91c1c; --warn:#b45309;
     /* 라운드·그림자 (스케일) */
-    --r-sm:8px; --r-md:12px; --r-lg:16px; --shadow:0 1px 2px rgba(17,24,39,.04), 0 10px 28px rgba(17,24,39,.06);
+    --r-sm:6px; --r-md:10px; --r-lg:12px; --shadow:0 8px 24px rgba(24,34,48,.10);
     --space:8px; --space-xs:4px; --space-sm:8px; --space-md:12px; --space-lg:16px; --space-xl:24px;
   }
   * { box-sizing:border-box; }
@@ -72,6 +72,125 @@
   .dash-notify-optin-copy p { margin:3px 0 0; color:var(--dim); font-size:13px; line-height:1.45; }
   .dash-notify-optin details { flex-basis:100%; color:var(--dim); font-size:13px; }
   .dash-notify-optin summary { min-height:36px; display:flex; align-items:center; cursor:pointer; }
+  /* Signal APT visual system: quiet surfaces, one clear action, stable reading rhythm. */
+  body { line-height:1.55; }
+  select, input[type=number], input[type=text], input[type=password], .ctrl,
+  .bigsearch { border-radius:8px !important; box-shadow:none; }
+  .bigsearch { font-size:15px; }
+  .page-head { font-size:24px; letter-spacing:-.035em; margin-bottom:8px; }
+  .page-sub { font-size:14px; margin-bottom:20px; }
+  header { min-height:64px; gap:12px; padding:10px 24px; }
+  header h1 { font-size:17px; }
+  .tabs { gap:6px; }
+  .tab { border-radius:7px; padding:8px 12px; font-size:15px; font-weight:500; }
+  .tab:hover { background:var(--bg); }
+  .tab.on { color:var(--accent); background:transparent; box-shadow:inset 0 -2px var(--accent); }
+  .navlink { font-weight:500; font-size:14px; }
+  .btn { border-radius:7px; font-size:14px; font-weight:500; padding:9px 13px; }
+  .btn.primary { background:#315bb5; border-color:#315bb5; }
+  .chip { border-radius:7px; font-size:13px; font-weight:500; }
+  .chip.on { color:var(--accent); border-color:color-mix(in srgb,var(--accent) 30%,var(--line)); background:var(--accent-weak); }
+  .badge,.pill { border-radius:5px; font-size:12px; font-weight:500; }
+  .dash-layout { grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr); grid-template-areas:"complex market" "actions actions"; gap:24px 32px; }
+  .dash-col { gap:12px; }
+  .dash-card { border-radius:8px; padding:18px 20px; }
+  .dash-card-title,.dash-col-label { font-size:16px; font-weight:600; letter-spacing:-.02em; }
+  .dash-col-label { margin:0 0 2px; }
+  .dash-more > summary { font-size:14px; font-weight:500; color:var(--dim); }
+  .dash-complex-link { font-weight:500; }
+  .la-toolbar { gap:8px; margin:0 0 12px; }
+  .la-signal-note { border:0; border-left:2px solid var(--line); border-radius:0; background:transparent; padding:6px 10px; }
+  #laSourceWarning { border-radius:7px !important; }
+  .ms-row { padding:14px 16px; }
+  .ms-row .nm { font-size:15px; font-weight:500; }
+  .ms-row .sub { color:var(--dim); font-size:13px; }
+  #laList .ms-row .r1,#laList .ms-group-head .r1 { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:4px 12px; }
+  #laList .ms-row .nm,#laList .ms-group-head .nm { min-width:0; flex:initial; }
+  #laList .ms-row .r1 > span:last-child,#laList .ms-group-head .r1 > span:last-child { text-align:right; }
+  #laList .la-price { justify-content:flex-end; font-variant-numeric:tabular-nums; font-size:13px; }
+  #laList .la-price b { font-size:16px; font-weight:600; white-space:nowrap; }
+  #laList .ms-row .sub,#laList .ms-group-head .sub { font-size:12px; line-height:1.45; }
+  #laList .ms-group-head { background:var(--panel); }
+  #laList .ms-group-head[aria-expanded="true"] { background:var(--accent-weak); }
+  #laList .ms-group-count { border-radius:4px; background:var(--bg); color:var(--dim); }
+  #laList .ms-group-body { border-left:2px solid var(--line); background:var(--bg); }
+  #laList .ms-detail { margin:0 12px 10px; border:1px solid var(--line); border-left:2px solid var(--accent); border-radius:0 0 8px 8px; background:var(--panel); box-shadow:none; }
+  #laList .la-detail-fact { border:0; border-bottom:1px solid var(--line); border-radius:0; padding:8px 0; background:transparent; }
+  #laList .la-detail-facts { gap:8px 20px; }
+  #laList .la-detail-fact b { font-weight:400; font-size:12px; }
+  #laList .la-detail-fact span { font-size:14px; font-weight:500; }
+  .subnav { padding:8px 20px; gap:8px; }
+  .mtabs { border:0; border-bottom:1px solid var(--line); border-radius:0; gap:12px; background:transparent; }
+  .mtabs .subtab { border:0; min-height:44px; padding:8px 12px; font-size:14px; font-weight:500; }
+  .mtabs .subtab.on { background:transparent; color:var(--accent); box-shadow:inset 0 -2px var(--accent); }
+  .mtabs .subtab.on small { color:var(--dim); }
+  .mtabs .subtab small { font-size:11px; font-weight:400; }
+  .signal-hero { padding:12px 20px; }
+  .signal-hero-title h2 { font-size:21px; font-weight:600; }
+  .signal-assessment { border-radius:8px; box-shadow:none; }
+  .signal-evidence-details > summary { color:var(--dim); font-weight:500; font-size:13px; }
+  #v2ReportDlg { width:min(480px,42vw); border-radius:0 10px 10px 0; box-shadow:8px 0 24px rgba(24,34,48,.12); }
+  #v2ReportDlg::backdrop { background:rgba(15,23,42,.24); }
+  #v2ReportDlg .v2-top { min-height:56px; padding:7px 14px; }
+  #v2ReportDlg .v2-top b { font-size:14px; font-weight:500; }
+  #v2ReportDlg .v2-panel { padding:22px 24px; line-height:1.6; }
+  #v2ReportDlg .v2-panel h2 { font-size:24px; font-weight:600; letter-spacing:-.035em; }
+  #v2ReportDlg .v2-panel h3 { font-size:16px; font-weight:600; margin:0 0 10px; }
+  #v2ReportDlg .v2-panel p { margin:6px 0; }
+  #v2ReportDlg .v2-panel .v2-muted { font-size:14px; }
+  #v2ReportDlg .v2-report-price { font-size:30px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.04em; }
+  #v2ReportDlg .v2-report-summary { background:transparent; border:0; border-top:1px solid var(--line); border-radius:0; padding:18px 0; margin:8px 0; }
+  #v2ReportDlg .v2-answer-grid { grid-template-columns:1fr; gap:0; }
+  #v2ReportDlg .v2-answer-grid .v2-answer { border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; padding:12px 0; }
+  #v2ReportDlg .v2-answer-label { color:var(--dim); font-size:12px; font-weight:500; letter-spacing:0; }
+  #v2ReportDlg .v2-answer h4 { font-size:14px; font-weight:400; margin-bottom:4px; }
+  #v2ReportDlg .v2-report-number { display:none; }
+  #v2ReportDlg .v2-report-section { padding:20px 0; }
+  #v2ReportDlg .v2-report-section-title h3 { font-size:17px; }
+  #v2ReportDlg .v2-report-location,#v2ReportDlg .v2-report-checklist,#v2ReportDlg .v2-report-evidence { border:0; border-top:1px solid var(--line); border-radius:0; padding:16px 0; margin:8px 0; background:transparent; }
+  #v2ReportDlg .v2-field-link { min-height:44px; border:0; border-radius:0; padding:10px 0; background:transparent; }
+  #v2ReportDlg .v2-field-link small { font-size:13px; }
+  #v2ReportDlg .v2-fact-grid > div { border:0; border-radius:0; border-bottom:1px solid var(--line); padding:8px 0; background:transparent; }
+  #v2ReportDlg .v2-report-more > summary { font-size:14px; font-weight:500; }
+  footer { gap:10px 16px !important; }
+  @media (min-width:761px) and (max-width:1080px) {
+    .dash-layout { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"complex market" "actions actions"; }
+  }
+  @media (max-width:760px) {
+    header { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 8px; padding:8px 12px; }
+    header h1 { grid-column:1; grid-row:1; font-size:16px; }
+    header h1 svg { width:26px; height:26px; }
+    header .tabs { grid-column:1 / -1; grid-row:2; width:100%; order:0; }
+    header .tab { flex:1; min-height:40px; padding:7px 4px; font-size:13px; }
+    header .right { grid-column:2; grid-row:1; width:auto; margin:0; gap:2px; flex-wrap:nowrap; order:0; }
+    header .right .navlink { min-height:38px; padding:5px 7px; font-size:12px; }
+    header .right .navlink:first-child,#date { display:none; }
+    .dash-layout { grid-template-columns:minmax(0,1fr); grid-template-areas:"market" "complex" "actions"; gap:22px; }
+    .dash-card { padding:15px 16px; }
+    #view-all { padding-bottom:12px; }
+    #view-all > div:first-child { padding:16px 14px 0 !important; }
+    #view-all .page-sub { margin-bottom:12px; }
+    .la-toolbar { gap:6px; margin-bottom:8px; }
+    #laTypeChips { flex-basis:100%; }
+    #laTypeChips .chip { min-height:38px; padding:7px 10px; }
+    #laUrgentQuick,#laPriceQuickLabel { min-height:38px; }
+    #laStatus { font-size:12px !important; }
+    .mapsplit { flex-direction:column; height:auto; min-height:0; }
+    .ms-list { max-height:none !important; }
+    .ms-map { min-height:45vh; height:45vh; }
+    #laList .ms-row,#laList .ms-group-head { padding:12px 14px; }
+    #laList .ms-row .nm,#laList .ms-group-head .nm { flex:initial; }
+    #laList .la-price b { font-size:15px; }
+    #v2ReportDlg { inset:0; width:100vw; height:100dvh; max-height:100dvh; border-radius:0; box-shadow:none; }
+    #v2ReportDlg::backdrop { background:rgba(15,23,42,.12); }
+    #v2ReportDlg .v2-panel { padding:20px 18px 28px; }
+    #v2ReportDlg .v2-top { padding:8px 12px; }
+    #v2MapSpace { display:none !important; }
+    body.v2-report-map #laMap { position:relative !important; inset:auto !important; width:100% !important; height:45vh !important; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.001ms !important; transition-duration:.001ms !important; }
+  }
   @media (min-width:761px) and (max-width:1080px) {
     .dash-layout { grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr);
       grid-template-areas:"complex market" "actions actions"; }
@@ -793,6 +912,125 @@
     .signal-assessment-fact b { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
     .signal-assessment-fact span { text-align:left; }
   }
+  /* Product-wide final pass. Keep these rules last so screen-specific legacy styles
+     cannot reintroduce competing radii, filled tabs, or tiny report copy. */
+  body { line-height:1.55; }
+  select,input[type=number],input[type=text],input[type=password],.ctrl,.bigsearch { border-radius:8px !important; box-shadow:none; }
+  .bigsearch { font-size:15px; }
+  header { min-height:64px; gap:12px; padding:10px 24px; }
+  .tabs { gap:6px; }
+  .tab { border-radius:7px; padding:8px 12px; font-size:15px; font-weight:500; }
+  .tab:hover { background:var(--bg); }
+  .tab.on { color:var(--accent); background:transparent; box-shadow:inset 0 -2px var(--accent); }
+  .navlink { font-weight:500; font-size:14px; }
+  .btn { border-radius:7px; font-size:14px; font-weight:500; padding:9px 13px; }
+  .btn.primary { background:#315bb5; border-color:#315bb5; }
+  .chip { border-radius:7px; font-size:13px; font-weight:500; }
+  .chip.on { color:var(--accent); border-color:color-mix(in srgb,var(--accent) 30%,var(--line)); background:var(--accent-weak); }
+  .badge,.pill { border-radius:5px; font-size:12px; font-weight:500; }
+  .page-head { font-size:24px; letter-spacing:-.035em; margin-bottom:8px; }
+  .page-sub { font-size:14px; margin-bottom:20px; }
+  .dash-layout { grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr); grid-template-areas:"complex market" "actions actions"; gap:24px 32px; }
+  .dash-col { gap:12px; }
+  .dash-card { border-radius:8px; padding:18px 20px; }
+  .dash-card-title,.dash-col-label { font-size:16px; font-weight:600; letter-spacing:-.02em; }
+  .dash-col-label { margin:0 0 2px; }
+  .dash-more > summary,.dash-complex-link { font-size:14px; font-weight:500; color:var(--dim); }
+  .la-toolbar { gap:8px; margin:0 0 12px; }
+  .la-signal-note { border:0; border-left:2px solid var(--line); border-radius:0; background:transparent; padding:6px 10px; }
+  #laSourceWarning { border-radius:7px !important; }
+  .ms-row { padding:14px 16px; }
+  .ms-row .nm { font-size:15px; font-weight:500; }
+  .ms-row .sub { color:var(--dim); font-size:13px; }
+  #laList .ms-row .r1,#laList .ms-group-head .r1 { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:4px 12px; }
+  #laList .ms-row .nm,#laList .ms-group-head .nm { min-width:0; flex:initial; }
+  #laList .ms-row .r1 > span:last-child,#laList .ms-group-head .r1 > span:last-child { text-align:right; }
+  #laList .la-price { justify-content:flex-end; font-variant-numeric:tabular-nums; font-size:13px; }
+  #laList .la-price b { font-size:16px; font-weight:600; white-space:nowrap; }
+  #laList .ms-row .sub,#laList .ms-group-head .sub { font-size:12px; line-height:1.45; }
+  #laList .ms-group-head { background:var(--panel); }
+  #laList .ms-group-head[aria-expanded="true"] { background:var(--accent-weak); }
+  #laList .ms-group-count { border-radius:4px; background:var(--bg); color:var(--dim); }
+  #laList .ms-group-body { border-left:2px solid var(--line); background:var(--bg); }
+  #laList .ms-detail { margin:0 12px 10px; border:1px solid var(--line); border-left:2px solid var(--accent); border-radius:0 0 8px 8px; background:var(--panel); box-shadow:none; }
+  #laList .la-detail-fact { border:0; border-bottom:1px solid var(--line); border-radius:0; padding:8px 0; background:transparent; }
+  #laList .la-detail-facts { gap:8px 20px; }
+  #laList .la-detail-fact b { font-weight:400; font-size:12px; }
+  #laList .la-detail-fact span { font-size:14px; font-weight:500; }
+  .subnav { padding:8px 20px; gap:8px; }
+  .mtabs { border:0; border-bottom:1px solid var(--line); border-radius:0; gap:12px; background:transparent; }
+  .mtabs .subtab { border:0; min-height:44px; padding:8px 12px; font-size:14px; font-weight:500; }
+  .mtabs .subtab.on { background:transparent; color:var(--accent); box-shadow:inset 0 -2px var(--accent); }
+  .mtabs .subtab.on small { color:var(--dim); }
+  .mtabs .subtab small { font-size:11px; font-weight:400; }
+  .signal-hero { padding:12px 20px; }
+  .signal-hero-title h2 { font-size:21px; font-weight:600; }
+  .signal-assessment { border-radius:8px; box-shadow:none; }
+  .signal-evidence-details > summary { color:var(--dim); font-weight:500; font-size:13px; }
+  #v2ReportDlg { width:min(480px,42vw); border-radius:0 10px 10px 0; box-shadow:8px 0 24px rgba(24,34,48,.12); }
+  #v2ReportDlg::backdrop { background:rgba(15,23,42,.24); }
+  #v2ReportDlg .v2-top { min-height:56px; padding:7px 14px; }
+  #v2ReportDlg .v2-top b { font-size:14px; font-weight:500; }
+  #v2ReportDlg .v2-panel { padding:22px 24px; line-height:1.6; }
+  #v2ReportDlg .v2-panel h2 { font-size:24px; font-weight:600; letter-spacing:-.035em; }
+  #v2ReportDlg .v2-panel h3 { font-size:16px; font-weight:600; margin:0 0 10px; }
+  #v2ReportDlg .v2-panel p { margin:6px 0; }
+  #v2ReportDlg .v2-panel .v2-muted { font-size:14px; }
+  #v2ReportDlg .v2-report-price { font-size:30px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.04em; }
+  #v2ReportDlg .v2-report-summary { background:transparent; border:0; border-top:1px solid var(--line); border-radius:0; padding:18px 0; margin:8px 0; }
+  #v2ReportDlg .v2-answer-grid { grid-template-columns:1fr; gap:0; }
+  #v2ReportDlg .v2-answer-grid .v2-answer { border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; padding:12px 0; }
+  #v2ReportDlg .v2-answer-label { color:var(--dim); font-size:12px; font-weight:500; letter-spacing:0; }
+  #v2ReportDlg .v2-answer h4 { font-size:14px; font-weight:400; margin-bottom:4px; }
+  #v2ReportDlg .v2-report-number { display:none; }
+  #v2ReportDlg .v2-report-section { padding:20px 0; }
+  #v2ReportDlg .v2-report-section-title h3 { font-size:17px; }
+  #v2ReportDlg .v2-report-location,#v2ReportDlg .v2-report-checklist,#v2ReportDlg .v2-report-evidence { border:0; border-top:1px solid var(--line); border-radius:0; padding:16px 0; margin:8px 0; background:transparent; }
+  #v2ReportDlg .v2-field-link { min-height:44px; border:0; border-radius:0; padding:10px 0; background:transparent; }
+  #v2ReportDlg .v2-field-link small { font-size:13px; }
+  #v2ReportDlg .v2-fact-grid > div { border:0; border-radius:0; border-bottom:1px solid var(--line); padding:8px 0; background:transparent; }
+  #v2ReportDlg .v2-report-more > summary { font-size:14px; font-weight:500; }
+  footer { gap:10px 16px !important; }
+  .leaflet-tile-pane { filter:saturate(.78) contrast(.97); }
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip { box-shadow:0 5px 18px rgba(24,34,48,.16); }
+  .analysis-body { font-size:14px; }
+  .analysis-muted { color:var(--dim); font-size:13px; }
+  .analysis-card { border:0; border-top:1px solid var(--line); border-radius:0; padding:16px 0; margin:10px 0; background:transparent; }
+  .analysis-card h3,.analysis-card summary { font-size:16px; font-weight:600; }
+  @media (min-width:761px) and (max-width:1080px) {
+    .dash-layout { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"complex market" "actions actions"; }
+  }
+  @media (max-width:760px) {
+    header { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 8px; padding:8px 12px; }
+    header h1 { grid-column:1; grid-row:1; font-size:16px; }
+    header h1 svg { width:26px; height:26px; }
+    header .tabs { grid-column:1 / -1; grid-row:2; width:100%; order:0; }
+    header .tab { flex:1; min-height:40px; padding:7px 4px; font-size:13px; }
+    header .right { grid-column:2; grid-row:1; width:auto; margin:0; gap:2px; flex-wrap:nowrap; order:0; }
+    header .right .navlink { min-height:38px; padding:5px 7px; font-size:12px; }
+    header .right .navlink:first-child,#date { display:none; }
+    .dash-layout { grid-template-columns:minmax(0,1fr); grid-template-areas:"market" "complex" "actions"; gap:22px; }
+    .dash-card { padding:15px 16px; }
+    #view-all > div:first-child { padding:16px 14px 0 !important; }
+    #view-all .page-sub { margin-bottom:12px; }
+    .la-toolbar { gap:6px; margin-bottom:8px; }
+    #laTypeChips { flex-basis:100%; }
+    #laTypeChips .chip,#laUrgentQuick,#laPriceQuickLabel { min-height:38px; padding:7px 10px; }
+    #laStatus { font-size:12px !important; }
+    #view-all .mapsplit { flex-direction:column; height:auto; min-height:0; }
+    #view-all .ms-list { width:100% !important; max-height:none !important; }
+    #view-all .ms-map { min-height:45vh; height:45vh; margin-left:0; }
+    #laList .ms-row,#laList .ms-group-head { padding:12px 14px; }
+    #laList .la-price b { font-size:15px; }
+    #v2ReportDlg { inset:0; width:100vw; height:100dvh; max-height:100dvh; border-radius:0; box-shadow:none; }
+    #v2ReportDlg::backdrop { background:rgba(15,23,42,.12); }
+    #v2ReportDlg .v2-panel { padding:20px 18px 28px; }
+    #v2ReportDlg .v2-top { padding:8px 12px; }
+    #v2MapSpace { display:none !important; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.001ms !important; transition-duration:.001ms !important; }
+  }
 </style>
 </head>
 <body class="tab-signal">
@@ -844,7 +1082,7 @@
 <!-- 대시보드 홈 -->
 <div id="view-dashboard" style="display:none;padding:24px 28px 48px;max-width:1440px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto;box-sizing:border-box;width:100%">
   <div id="dashHello" style="font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-bottom:6px"></div>
-  <div id="dashSub" class="page-sub" style="margin-bottom:20px">이번 주 할 일과 예산 범위 후보</div>
+  <div id="dashSub" class="page-sub" style="margin-bottom:20px">관심 지역과 단지의 이번 주 변화</div>
   <div id="dashBody"></div>
 </div>
 
@@ -918,7 +1156,7 @@
 <div id="view-all" style="display:none">
   <div style="padding:20px 20px 0">
     <h2 class="page-head">매물 찾기</h2>
-    <p class="page-sub">매물과 지도에서 후보를 찾고, 가격 근거는 리포트에서 확인하세요.</p>
+    <p class="page-sub">예산에 맞는 집을 찾고, 같은 면적 거래와 비교하세요.</p>
     <div id="listingFocus" role="status" aria-live="polite" style="font-size:12px;color:var(--dim);display:none;margin-bottom:10px"></div>
     <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
@@ -932,7 +1170,7 @@
       <button type="button" class="chip" id="laMoreBtn" aria-expanded="false" aria-controls="laMoreFilters" onclick="toggleLaMore()">필터</button>
     </div>
     <div id="laSourceWarning" role="status" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;font-size:13px;line-height:1.5">
-      <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.</span>
+      <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신이 안 됐어요. 목록에 이전 자료가 포함될 수 있습니다.</span>
       <button type="button" class="btn" id="laGeneralRetry" onclick="retryGeneralFromAll()">일반매물 다시 수집</button>
     </div>
     <div id="laSourceScope" role="status" style="display:none;margin:7px 0 9px;padding:8px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;color:var(--txt);font-size:13px;font-weight:600;line-height:1.45"></div>
@@ -3736,23 +3974,23 @@ function _laApplyResponse(types,d){
   const budgetOption=document.querySelector('#laSort option[value="budget"]');
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
-  document.getElementById('laStatus').textContent=`수집 범위 ${_laData.length}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` (${info.data_age_days}일 전)`:''}${_laAccessDenied?' · 개인 매물은 지정된 개인 계정만':''}`;
+  document.getElementById('laStatus').textContent=`매물 ${_laData.length.toLocaleString()}건 · 시세 기준 ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전`:''}${_laAccessDenied?' · 개인 매물은 지정된 계정에서만':''}`;
   const sourceWarning=document.getElementById('laSourceWarning');
   sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
-  document.getElementById('laSourceWarningText').textContent='일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.';
+  document.getElementById('laSourceWarningText').textContent='일반매물 갱신이 안 됐어요. 목록에 이전 자료가 포함될 수 있습니다.';
   const scopeNote=document.getElementById('laSourceScope'), scope=info.general_scope||{};
   const scopeCount=n=>Number.isInteger(n)&&n>0&&n<=8?n:0;
   const scopeReasons=[];
   if(info.private_access===true && info.general_refresh_failed!==true && scope.no_favorite_complexes){
     scopeNote.style.display='block';
-    scopeNote.textContent='관심단지가 없어 일반매물을 받아 두지 않았습니다. 단지를 ★로 등록하면 그 단지만 하루 한 번 받아 둡니다.';
+    scopeNote.textContent='관심단지의 매물만 하루 한 번 확인합니다. 관심단지를 등록하면 목록에 나타납니다.';
   }else{
   if(info.private_access===true && info.general_refresh_failed!==true){
     if(scopeCount(scope.failed_regions)) scopeReasons.push(`${scope.failed_regions}곳 조회 실패`);
     if(scopeCount(scope.page_limited_regions)) scopeReasons.push(`${scope.page_limited_regions}곳 페이지 제한`);
   }
   scopeNote.style.display=scopeReasons.length?'block':'none';
-  scopeNote.textContent=scopeReasons.length?`마지막 일반매물 수집은 일부만 확인됐습니다 · ${scopeReasons.join(' · ')}. 관심단지가 그 페이지 밖에 있으면 빠집니다.`:'';
+  scopeNote.textContent=scopeReasons.length?`일부 지역의 매물만 확인됐어요 · ${scopeReasons.join(' · ')}. 목록에 없는 단지가 있을 수 있습니다.`:'';
   }
   initLaPriceFilter();
   renderAllListings();
@@ -3883,7 +4121,7 @@ async function loadAllListings(){
 async function retryGeneralFromAll(){
   const button=document.getElementById('laGeneralRetry');
   const message=document.getElementById('laSourceWarningText');
-  button.disabled=true; message.textContent='일반매물을 다시 수집하고 있습니다. 관심단지가 있는 지역을 확인합니다…';
+  button.disabled=true; message.textContent='등록한 관심단지의 매물을 다시 확인하고 있습니다…';
   try{
     const response=await fetch('/api/general-listings/refresh',{
       method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -5878,8 +6116,8 @@ function reasonGraphic(region, sig){
 }
 function drawChart(region, m, sig){
   const signalMeta=meta||{zones:{},last_date:new Date().toISOString().slice(0,10)};
-  const colors = {jeonse_supply:"#0284c7", buyer_superiority:"#7c3aed", buyer_demand:"#db2777",
-                  sale_change:"#d97706", jeonse_change:"#059669", price_index:"#2563eb"};
+  const colors = {jeonse_supply:"#2f8077", buyer_superiority:"#786b9a", buyer_demand:"#a56b7a",
+                  sale_change:"#b18145", jeonse_change:"#668e75", price_index:"#315bb5"};
   const series = [];
   const mk = (k, axis, extra={}) => { if(!m[k]) return;
     series.push({ name:m[k].label, type:'line', yAxisIndex:axis, showSymbol:false,
@@ -5933,8 +6171,16 @@ function drawChart(region, m, sig){
   const last = signalMeta.last_date, start = new Date(last); start.setFullYear(start.getFullYear()-3);
   // 차트 리드로우 시 기본 표시기간은 항상 최근 3년(오버레이는 전체기간 렌더되나 뷰는 3년, 줌아웃 시 확장)
   const z0 = start.toISOString().slice(0,10);
+  const previousLegend=chart.getOption()?.legend?.[0]?.selected||{};
+  const legendSelected={...previousLegend};
+  // 가격 흐름과 전세 수급을 먼저 읽도록 두 심리 지표는 처음에 접어 둔다.
+  // 사용자가 켠 상태는 차트를 다시 그려도 유지한다.
+  ["buyer_superiority","buyer_demand"].forEach(k=>{
+    const name=m[k]?.label;
+    if(name && legendSelected[name]==null) legendSelected[name]=false;
+  });
   chart.setOption({ tooltip:{trigger:'axis'},
-    legend:{type:'scroll', top:6, left:46, right:70, textStyle:{fontSize:11}},
+    legend:{type:'scroll', top:6, left:46, right:70, selected:legendSelected, textStyle:{fontSize:12,color:'#586574'}},
     grid:{left:48, right:62, top:52, bottom:64}, xAxis:{type:'time'},
     yAxis:[{name:'지수', min:0, max:200, splitLine:{lineStyle:{opacity:.12}}, nameGap:12},
            {name:SEC.name, position:'right', min:SEC.min, splitLine:{show:false},
@@ -8652,7 +8898,7 @@ async function startApp(needOnboard){
 </div>
 <button type="button" id="analysisPickCancel" class="btn" onclick="_analysisStopPick()" style="display:none;position:fixed;top:12px;right:12px;z-index:1450;background:var(--panel)">출입구 지정 취소</button>
 <dialog id="v2ReportDlg" aria-label="매물 분석 리포트">
-  <div class="v2-top"><b>매물 확인 리포트</b><button type="button" class="btn" id="v2BackToDiscovery" hidden>후보 목록으로</button><button type="button" class="btn" id="v2MapSpace" aria-pressed="false">지도 크게</button><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
+  <div class="v2-top"><b>매물 리포트</b><button type="button" class="btn" id="v2BackToDiscovery" hidden>후보 목록으로</button><button type="button" class="btn" id="v2MapSpace" aria-pressed="false">지도 크게</button><button type="button" class="btn" onclick="document.getElementById('v2ReportDlg').close()" aria-label="리포트 닫기">닫기 ✕</button></div>
   <div id="v2ReportBody" class="v2-panel" aria-live="polite"></div>
 </dialog>
 <dialog id="v2DiscoverDlg" aria-label="내 조건으로 매물 찾기">
