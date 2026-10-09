@@ -592,6 +592,31 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.deepEqual(priceUi.filtered,['low']);
     assert.deepEqual(priceUi.restored,priceUi.all);
     assert.match(priceUi.note,/가격 미상 1건 제외/);
+    await page.evaluate(()=>{
+      _laPriceChoices.clear(); _laSel=new Set(_SALE_TYPES); toggleLaMore(false);
+      const base={유형:'일반매물',단지명:'예산범위',지역:'테스트구',시도:'서울',기회도:10};
+      window.__budgetRangeData={listings:[62999,63000,77000,77001,null].map((price,i)=>({...base,key:String(i),총액:price})),
+        asof:'2026-10-05',meta:{confirmed_budget:true,budget_manwon:70000,private_access:true}};
+      _laApplyResponse(_SALE_TYPES.join(','),window.__budgetRangeData);
+    });
+    assert.deepEqual(await page.evaluate(()=>window.__budgetItems.map(x=>x.key)),['1','2']);
+    assert.equal(await page.locator('#laMoreFilters').isVisible(),false);
+    assert.equal(await page.locator('#laPriceQuick').isVisible(),true);
+    assert.match(await page.locator('#laPriceQuickLabel').textContent(),/매매 예산 ±10% · 6.3억 ~ 7.7억/);
+    for(const width of [180,360,620,1280]){
+      await page.setViewportSize({width,height:800});
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`budget chip must fit ${width}px`);
+    }
+    await page.setViewportSize({width:360,height:800});
+    await page.locator('#laPriceQuick').getByRole('button',{name:'가격 필터 해제',exact:true}).click();
+    await page.evaluate(()=>_laApplyResponse(_SALE_TYPES.join(','),window.__budgetRangeData));
+    assert.equal(await page.evaluate(()=>window.__budgetItems.length),5,'cleared price filter survives refresh');
+    await page.locator('#laMoreBtn').click();
+    await page.locator('#laBudgetReset').click();
+    assert.equal(await page.evaluate(()=>window.__budgetItems.length),2);
+    assert.equal(await page.locator('#laPriceMin').inputValue(),'63000');
+    assert.equal(await page.locator('#laPriceMax').inputValue(),'77000');
+    await page.evaluate(()=>{_laPriceChoices.clear(); toggleLaMore(false);});
     const priceEvidenceUi=await page.evaluate(()=>{
       const base={유형:'일반매물',지역:'테스트구',시도:'서울',총액:50000,기회도:10,지역식별상태:'matched',
         ref:{전용면적:59,hanbang_id:'sample',hanbang_complex_id:'complex'},source:'hanbang'};
@@ -1001,6 +1026,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#laList').textContent(),/같은 전용면적·인근 층 실거래 중앙값 대비 차이 없음/);
     assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'매매',exact:true}).getAttribute('aria-pressed'),'true');
     assert.equal(await page.locator('#laTypeChips').getByRole('button',{name:'찐매물',exact:true}).count(),0);
+    assert.equal(await page.locator('#laMoreFilters').isVisible(),false);
+    await page.locator('#laUrgentQuick').click();
+    assert.equal(await page.locator('#laUrgentQuick').getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('#laList .ms-row').count(),1);
+    assert.match(await page.locator('#laList').textContent(),/통합인증단지/);
+    await page.locator('#laUrgentQuick').press('Enter');
+    assert.equal(await page.locator('#laUrgentQuick').getAttribute('aria-pressed'),'false');
+    assert.equal(await page.locator('#laList .ms-row').count(),2);
     await page.locator('#laMoreBtn').click();
     await page.locator('#laSaleFilter').selectOption('certified');
     assert.equal(await page.locator('#laList .ms-row').count(),1);

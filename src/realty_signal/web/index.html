@@ -88,6 +88,8 @@
   .ps-elig .pill { font-size:13px; padding:4px 10px; border-radius:999px; font-weight:600; }
   .la-toolbar { display:flex; gap:var(--space-sm) var(--space-md); align-items:center; flex-wrap:wrap; margin-bottom:var(--space-sm); }
   #laStatus { order:3; flex:1 0 100%; font-size:13px !important; margin-left:0 !important; }
+  #laPriceQuickLabel { min-width:0; white-space:normal; overflow-wrap:anywhere; text-align:left; }
+  #laPriceQuick > button:last-child { flex-shrink:0; }
   .la-signal-note { margin:0 0 var(--space-md); padding:10px 12px; background:#f8fafc; border:1px solid var(--line); border-radius:10px; color:var(--txt); font-size:13px; line-height:1.45; }
   .la-signal-note summary { cursor:pointer; font-weight:650; }
   .la-signal-note p { margin:var(--space-sm) 0 0; color:var(--dim); }
@@ -921,8 +923,13 @@
     <div class="la-toolbar">
       <span id="laTypeChips" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
       <span id="laStatus" style="color:var(--dim)"></span>
+      <button type="button" class="chip" id="laUrgentQuick" aria-pressed="false" title="공급사가 급매로 표시한 매물만 봅니다. 가격 우위 판정은 리포트에서 확인하세요." onclick="setLaSaleFilter(_laSaleFilter==='urgent'?'all':'urgent')">급매</button>
+      <span id="laPriceQuick" style="display:none;align-items:center;gap:4px;max-width:100%">
+        <button type="button" class="chip on" id="laPriceQuickLabel" onclick="toggleLaMore(true)"></button>
+        <button type="button" class="chip" aria-label="가격 필터 해제" onclick="resetLaPrice()">×</button>
+      </span>
       <button type="button" class="chip" onclick="SignalV2.openDiscovery()">내 조건으로 찾기</button>
-      <span class="chip" id="laMoreBtn" onclick="toggleLaMore()" style="font-size:12px;white-space:nowrap">필터</span>
+      <button type="button" class="chip" id="laMoreBtn" aria-expanded="false" aria-controls="laMoreFilters" onclick="toggleLaMore()">필터</button>
     </div>
     <div id="laSourceWarning" role="status" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;font-size:13px;line-height:1.5">
       <span id="laSourceWarningText" style="flex:1 1 260px">일반매물 갱신 실패 · 현재 목록은 전체가 아니며 일반매물은 지난 결과이거나 빠져 있습니다.</span>
@@ -933,7 +940,7 @@
     <div id="laBudgetNote" style="display:none;font-size:13px;color:var(--warn);line-height:1.5;margin:6px 0 10px"></div>
     <div id="laMoreFilters" class="la-more">
       <label id="laSaleFilterLabel" style="font-size:13px">매매 표시
-        <select id="laSaleFilter" class="ctrl" onchange="_laSaleFilter=this.value;renderAllListings()">
+        <select id="laSaleFilter" class="ctrl" onchange="setLaSaleFilter(this.value)">
           <option value="all">전체 매매</option><option value="certified">공급사 인증 표시</option><option value="urgent">공급사 급매 표시</option>
         </select>
       </label>
@@ -955,11 +962,12 @@
         <div style="position:relative;flex:1;min-width:180px;height:22px">
           <div style="position:absolute;top:9px;left:0;right:0;height:4px;background:var(--line);border-radius:2px"></div>
           <div id="laPriceFill" style="position:absolute;top:9px;height:4px;background:var(--accent);border-radius:2px"></div>
-          <input id="laPriceMin" type="range" min="0" max="100" value="0" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
-          <input id="laPriceMax" type="range" min="0" max="100" value="100" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+          <input id="laPriceMin" aria-label="최소 가격 (만원)" type="range" min="0" max="100" value="0" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
+          <input id="laPriceMax" aria-label="최대 가격 (만원)" type="range" min="0" max="100" value="100" oninput="onLaPrice()" style="position:absolute;width:100%;top:0;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none">
         </div>
         <span id="laPriceNote" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
         <button type="button" class="btn" id="laPriceReset" onclick="resetLaPrice()" style="display:none;padding:3px 8px;font-size:11px">가격 필터 해제</button>
+        <button type="button" class="btn" id="laBudgetReset" onclick="resetLaBudget()" style="display:none">내 예산 ±10% 적용</button>
       </div>
     </div>
   </div>
@@ -3682,6 +3690,8 @@ let _laSaleFilter='all';
 const _LA_COLOR={일반매물:'#2563eb', 경매:'#4f46e5', 급매:'#c2410c', 찐매물:'#0f766e', 청약:'#0e7490', 재건축:'#15803d'};
 let _laSel=null, _laData=[], _laPrice=null, _laAccessDenied=false;   // _laPrice={lo,hi,min,max} 만원, null=미적용
 let _laConfirmedBudget=false;
+let _laBudgetManwon=null;
+const _laPriceChoices=new Map(); // User choices survive data refreshes and type round-trips in this session.
 const _laCache=new Map(), _laRevalidating=new Set();
 let _laCurrentTypes='', _laRenderedKey='', _laRequestGen=0, _laCacheEpoch=0;
 const _LA_HOLD_REASONS={
@@ -3709,13 +3719,14 @@ function _laRenderHoldSummary(rows){
 function _laInvalidateCache(){ _laCacheEpoch++; _laCache.clear(); }
 function _laViewKey(types){
   return JSON.stringify([types,_focusRegion,_mtBuyOnly,[..._mtGradeSet].sort(),_mtRegionChoice.laMtFilter,_laSort,
-    _laPrice?.min,_laPrice?.max,_laPrice?.active,_laSaleFilter]);
+    _laPrice?.min,_laPrice?.max,_laPrice?.active,_laPrice?.unbounded,_laPrice?.mode,_laSaleFilter]);
 }
-function _laApplyResponse(types,d,preservePrice=false){
-  const price=preservePrice && _laPrice ? {..._laPrice} : null;
+function _laApplyResponse(types,d){
   _laCurrentTypes=types; _laData=d.listings||[];
   const info=d.meta||{};
   _laConfirmedBudget=info.confirmed_budget===true;
+  _laBudgetManwon=_laConfirmedBudget && Number.isFinite(info.budget_manwon) && info.budget_manwon>0
+    ? info.budget_manwon : null;
   const note=document.getElementById('laBudgetNote');
   const hasAsking=(_laData||[]).some(x=>['일반매물','급매','찐매물'].includes(x['유형']));
   if(note){
@@ -3744,14 +3755,6 @@ function _laApplyResponse(types,d,preservePrice=false){
   scopeNote.textContent=scopeReasons.length?`마지막 일반매물 수집은 일부만 확인됐습니다 · ${scopeReasons.join(' · ')}. 관심단지가 그 페이지 밖에 있으면 빠집니다.`:'';
   }
   initLaPriceFilter();
-  if(price && _laPrice){
-    _laPrice.active=!!price.active;
-    _laPrice.min=_laPrice.active?Math.min(price.min,_laPrice.hi):_laPrice.lo;
-    _laPrice.max=_laPrice.active?Math.min(Math.max(price.max,_laPrice.min),_laPrice.hi):_laPrice.hi;
-    document.getElementById('laPriceMin').value=_laPrice.min;
-    document.getElementById('laPriceMax').value=_laPrice.max;
-    drawLaPrice();
-  }
   renderAllListings();
 }
 function _laRevalidate(types,old){
@@ -3765,34 +3768,44 @@ function _laRevalidate(types,old){
     _laCache.set(types,{at:Date.now(),data:d});
     const changed=JSON.stringify(d.listings)!==JSON.stringify(old.listings) || d.asof!==old.asof ||
       d.meta?.private_access!==old.meta?.private_access ||
+      d.meta?.confirmed_budget!==old.meta?.confirmed_budget || d.meta?.budget_manwon!==old.meta?.budget_manwon ||
       d.meta?.general_refresh_failed!==old.meta?.general_refresh_failed ||
       JSON.stringify(d.meta?.general_scope)!==JSON.stringify(old.meta?.general_scope);
     if(changed && _laCurrentTypes===types && [..._laSel].join(',')===types && location.hash.slice(1)==='all')
-      _laApplyResponse(types,d,true);
+      _laApplyResponse(types,d);
   }).catch(()=>{}).finally(()=>_laRevalidating.delete(types));
 }
 let _laSort='budget';       // 기본: 확정 매수 상한 안 → 가격 미상 → 상한 초과
 function onLaSort(){ _laSort=document.getElementById('laSort').value; renderAllListings(); }
-function toggleLaMore(){
+function toggleLaMore(force){
   const box=document.getElementById('laMoreFilters'), btn=document.getElementById('laMoreBtn');
   if(!box) return;
-  const open=box.classList.toggle('open');
-  if(btn){ btn.classList.toggle('on', open); btn.textContent=open?'필터 닫기':'필터'; }
+  const open=typeof force==='boolean'?box.classList.toggle('open',force):box.classList.toggle('open');
+  if(btn){ btn.classList.toggle('on', open); btn.textContent=open?'필터 닫기':'필터'; btn.setAttribute('aria-expanded',String(open)); }
 }
 function _laInitSel(){ if(_laSel) return; _laSel=new Set(_SALE_TYPES); }
+function _laBudgetRange(){
+  return _laBudgetManwon && _SALE_TYPES.some(t=>_laSel?.has(t))
+    ? {min:Math.round(_laBudgetManwon*0.9),max:Math.round(_laBudgetManwon*1.1)} : null;
+}
+function _laPriceChoiceKey(){ return _laCurrentTypes.split(',').sort().join(','); }
 function initLaPriceFilter(){
   const box=document.getElementById('laPriceFilter');
-  const priced=_laData.map(x=>x['총액']).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
-  if(priced.length<2){ box.style.display='none'; _laPrice=null; return; }
+  const priced=_laData.map(x=>Number(x['총액'])).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+  const budget=_laBudgetRange(), choice=_laPriceChoices.get(_laPriceChoiceKey());
+  if(!priced.length && !budget && !choice){
+    box.style.display='none'; document.getElementById('laPriceQuick').style.display='none'; _laPrice=null; return;
+  }
   const CAP=150000;                                              // 기본 상한 15억(만원)
   const p95=priced[Math.min(priced.length-1, Math.floor(priced.length*0.95))];
   const lo=0;
-  const hi=Math.max(p95, CAP, 10000);                            // 트랙은 데이터·15억 중 큰 쪽
-  const step=Math.max(1000, Math.round(hi/100/1000)*1000);       // ~100틱, 1000만원 단위
-  _laPrice={lo,hi,min:lo,max:hi,active:false,unknownCount:_laData.length-priced.length};
+  const hi=Math.ceil(Math.max(p95||0, CAP, budget?.max||0, choice?.max||0)/1000)*1000;
+  _laPrice={lo,hi,min:lo,max:hi,active:false,unbounded:true,mode:'off',unknownCount:_laData.length-priced.length};
+  if(choice) Object.assign(_laPrice,choice,{max:choice.unbounded?hi:choice.max});
+  else if(budget) Object.assign(_laPrice,budget,{active:true,unbounded:false,mode:'budget'});
   const mn=document.getElementById('laPriceMin'), mx=document.getElementById('laPriceMax');
-  [mn,mx].forEach(r=>{ r.min=lo; r.max=hi; r.step=step; });
-  mn.value=lo; mx.value=hi;
+  [mn,mx].forEach(r=>{ r.min=lo; r.max=hi; r.step=1; });
+  mn.value=_laPrice.min; mx.value=_laPrice.max;
   box.style.display='flex';
   drawLaPrice();
 }
@@ -3801,26 +3814,41 @@ function onLaPrice(){
   const a=+document.getElementById('laPriceMin').value, b=+document.getElementById('laPriceMax').value;
   _laPrice.min=Math.min(a,b); _laPrice.max=Math.max(a,b);
   _laPrice.active=_laPrice.min>_laPrice.lo || _laPrice.max<_laPrice.hi;
+  _laPrice.unbounded=_laPrice.max>=_laPrice.hi; _laPrice.mode='manual';
+  saveLaPriceChoice();
   drawLaPrice(); renderAllListings();
 }
 function resetLaPrice(){
   if(!_laPrice) return;
   _laPrice.min=_laPrice.lo; _laPrice.max=_laPrice.hi; _laPrice.active=false;
+  _laPrice.unbounded=true; _laPrice.mode='off'; saveLaPriceChoice();
   document.getElementById('laPriceMin').value=_laPrice.lo;
   document.getElementById('laPriceMax').value=_laPrice.hi;
   drawLaPrice(); renderAllListings();
+}
+function saveLaPriceChoice(){
+  const {min,max,active,unbounded,mode}=_laPrice;
+  _laPriceChoices.set(_laPriceChoiceKey(),{min,max,active,unbounded,mode});
+}
+function resetLaBudget(){
+  _laPriceChoices.delete(_laPriceChoiceKey()); initLaPriceFilter(); renderAllListings();
 }
 function drawLaPrice(){
   if(!_laPrice) return;
   const {lo,hi,min,max}=_laPrice, span=hi>lo?hi-lo:1;
   const fill=document.getElementById('laPriceFill');
   fill.style.left=(min-lo)/span*100+'%'; fill.style.width=(max-min)/span*100+'%';
-  const eok=v=>(v/10000).toFixed(1)+'억';
-  const top = max>=hi ? `${(hi/10000).toFixed(1)}억+` : eok(max);   // 상한 끝이면 '이상'
+  const eok=v=>(v/10000).toLocaleString('ko-KR',{maximumFractionDigits:4})+'억';
+  const top = _laPrice.unbounded ? `${eok(hi)}+` : eok(max);
+  _laPrice.unknownCount=_laData.filter(x=>(_laPrice.mode!=='budget'||_SALE_TYPES.includes(x['유형']))
+    && !(Number.isFinite(Number(x['총액']))&&Number(x['총액'])>0)).length;
   document.getElementById('laPriceLabel').textContent=_laPrice.active?`${eok(min)} ~ ${top}`:'전체 가격';
   document.getElementById('laPriceNote').textContent=_laPrice.unknownCount?
     `가격 미상 ${_laPrice.unknownCount}건 ${_laPrice.active?'제외':'포함'}`:'';
   document.getElementById('laPriceReset').style.display=_laPrice.active?'inline-block':'none';
+  document.getElementById('laBudgetReset').style.display=_laBudgetRange() && _laPrice.mode!=='budget'?'inline-block':'none';
+  document.getElementById('laPriceQuick').style.display=_laPrice.active?'inline-flex':'none';
+  document.getElementById('laPriceQuickLabel').textContent=`${_laPrice.mode==='budget'?'매매 예산 ±10%':'가격'} · ${eok(min)} ~ ${top}`;
 }
 async function loadAllListings(){
   _laInitSel(); renderLaTypeChips(); renderMtFilter('laMtFilter', renderAllListings);
@@ -3881,6 +3909,19 @@ function renderLaTypeChips(){
     loadAllListings(); });
   const label=document.getElementById('laSaleFilterLabel');
   if(label) label.style.display=selected('매매')?'':'none';
+  syncLaSaleFilter();
+}
+function setLaSaleFilter(value){
+  _laSaleFilter=value; renderAllListings();
+}
+function syncLaSaleFilter(){
+  const button=document.getElementById('laUrgentQuick'), filter=document.getElementById('laSaleFilter');
+  if(filter) filter.value=_laSaleFilter;
+  if(button){
+    button.style.display=_SALE_TYPES.some(t=>_laSel?.has(t))?'':'none';
+    button.classList.toggle('on',_laSaleFilter==='urgent');
+    button.setAttribute('aria-pressed',String(_laSaleFilter==='urgent'));
+  }
 }
 function _laSalePass(x){
   if(!_SALE_TYPES.includes(x['유형'])||_laSaleFilter==='all') return true;
@@ -3942,9 +3983,10 @@ function _laBudgetLabel(x){
 }
 function _laPricePass(x){
   if(!_laPrice||!_laPrice.active) return true;
+  if(_laPrice.mode==='budget'&&!_SALE_TYPES.includes(x['유형'])) return true;
   const v=_laAsk(x);
   if(v==null) return false;
-  const cap = _laPrice.max>=_laPrice.hi ? Infinity : _laPrice.max;  // 상한 끝 = 그 이상 전부 포함
+  const cap = _laPrice.unbounded ? Infinity : _laPrice.max;
   return v>=_laPrice.min && v<=cap;
 }
 function _laTradePriceEvidence(row){
@@ -4009,6 +4051,7 @@ function _laCompareEvidenceOverlap(a,b){
   return (b['기회도']??-1)-(a['기회도']??-1);
 }
 function renderAllListings(){
+  syncLaSaleFilter();
   _laRenderedKey=_laViewKey(_laCurrentTypes);
   renderMtFilter('laMtFilter',renderAllListings);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['시그널']||'HELD',x['지역급지']||null,x,'laMtFilter') &&

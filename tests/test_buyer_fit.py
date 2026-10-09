@@ -88,12 +88,14 @@ def test_integrated_list_budget_uses_only_validated_same_region_asking(monkeypat
     result = api.listings_all(None, "일반매물")
     by_key = {item["key"]: item["budget_fit"]["status"] for item in result["listings"]}
     assert result["meta"]["confirmed_budget"] is True
+    assert result["meta"]["budget_manwon"] == ceiling
     assert by_key == {"일반매물:within": "within", "일반매물:above": "above",
                       "일반매물:other": "unknown", "일반매물:stale": "unknown"}
 
     profile["가용자본"] += 1000
     result = api.listings_all(None, "일반매물")
     assert result["meta"]["confirmed_budget"] is False
+    assert result["meta"]["budget_manwon"] is None
     assert all(item["budget_fit"]["status"] == "unknown" for item in result["listings"])
 
 
