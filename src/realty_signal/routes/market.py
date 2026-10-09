@@ -570,7 +570,12 @@ def listing_watch_get(request: Request):
     # 대안은 저장한 유형뿐 아니라 다른 급매·찐매물도 비교한다. 비소유자에게는 절대 읽지 않는다.
     if kinds & watch.PRIVATE and private_allowed:
         kinds |= watch.PRIVATE
-    current, _ = app_api._assembled_listings(kinds, private_allowed) if kinds else ([], 0)
+    current = app_api._build_listings(kinds, include_private=private_allowed) if kinds else []
+    if current:
+        from realty_signal.services.listing_inventory import collapse
+        from realty_signal.services.listing_prices import attach as attach_prices
+        current = collapse(current)
+        current = attach_prices(current, cohort_rows=current)
     profile = db.profile_get(uid) or {}
     from realty_signal import buying_power
     from realty_signal.services import property_analysis
