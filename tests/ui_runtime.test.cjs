@@ -78,10 +78,12 @@ test('KB freshness uses the Korean date at midnight rather than elapsed UTC hour
   vm.runInContext(extract('function _relTime(', 'async function openHistModal('),ctx);
   await ctx.loadFreshness();
   assert.doesNotMatch(box.innerHTML,/시그널 판단 보류/);
+  assert.match(box.innerHTML,/관측 8일 전/);
   assert.match(box.innerHTML,/background:#16a34a/);
   data.now=Date.parse('2026-10-08T15:00:00Z')/1000;
   await ctx.loadFreshness();
   assert.match(box.innerHTML,/9일 전/);
+  assert.match(box.innerHTML,/관측 9일 전 · 시그널 판단 보류/);
   assert.match(box.innerHTML,/시그널 판단 보류/);
   assert.match(box.innerHTML,/background:#dc2626/);
   data.sources[0].asof='2026-10-10';
