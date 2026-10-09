@@ -2046,7 +2046,7 @@ function renderMtFilter(hostId, rerender){
     + `<span class="${big?'mt-label':''}" style="${big?'':'font-size:11px;color:var(--dim);margin-left:6px'}">급지</span>`
     + [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].map(([c,l])=>chip(c,l)).join('')
     + `<label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;margin-left:6px">지역
-      <select class="mt-region" aria-label="지역·도시 선택" style="max-width:210px;padding:5px 8px">
+      <select class="mt-region" aria-label="지역·도시 선택" style="width:min(210px,65vw);max-width:100%;min-width:0;box-sizing:border-box;padding:5px 8px">
         <option value="">전체 지역</option>${selectedRegion&&!regionOptions.has(selectedRegion)?`<option value="${esc(selectedRegion)}" selected>선택 지역</option>`:''}
         ${regions.map(([key,label])=>`<option value="${esc(key)}"${key===selectedRegion?' selected':''}>${esc(label)}</option>`).join('')}
       </select></label>`;
