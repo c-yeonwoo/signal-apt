@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
-from realty_signal import auth, db, telegram
+from realty_signal import api, auth, db, telegram
 
 
 @pytest.fixture
@@ -54,6 +55,46 @@ def test_link_code_binds_chat_id(uid, monkeypatch):
     assert stats["linked"] == 1
     assert telegram.chat_id_of(db.profile_get(uid)) == 777
     assert sent and "연결됐습니다" in sent[0][1]
+
+
+def test_profile_save_after_link_does_not_disconnect_or_spoof(uid, monkeypatch):
+    stale_profile = db.profile_get(uid)
+    token, err = auth.login("brief@test.io", "secret1")
+    assert err is None
+    client = TestClient(api.app)
+    client.cookies.set(auth.COOKIE, token)
+
+    _fake_calls(monkeypatch, [])
+    code = telegram.issue_link_code(uid)["code"]
+    _fake_calls(monkeypatch, [_start(code)])
+    assert telegram.poll_updates()["linked"] == 1
+
+    # A profile opened before /start does not include telegram. Saving it must
+    # preserve the newer server-side link and the signup consent metadata.
+    stale_profile["거주지"] = "별내동"
+    response = client.put("/api/profile", json=stale_profile)
+    assert response.status_code == 200
+    db._migrated[0] = False  # reopen the DB as a fresh process would
+    profile = client.get("/api/auth/me").json()["profile"]
+    assert profile["거주지"] == "별내동"
+    assert profile["tos_version"] == "2026-07"
+    assert telegram.chat_id_of(profile) == 777
+    assert client.get("/api/telegram/status").json()["linked"] is True
+
+    response = client.put("/api/profile", json={"거주지": "강남구", "telegram": {"chat_id": 999}})
+    assert response.status_code == 200
+    assert telegram.chat_id_of(db.profile_get(uid)) == 777
+
+    assert telegram.unlink(uid)
+    response = client.put("/api/profile", json=profile)
+    assert response.status_code == 200
+    assert client.get("/api/telegram/status").json()["linked"] is False
+
+
+def test_profile_save_requires_login(uid):
+    response = TestClient(api.app).put("/api/profile", json={"telegram": {"chat_id": 999}})
+    assert response.status_code == 401
+    assert telegram.chat_id_of(db.profile_get(uid)) is None
 
 
 def test_group_chat_cannot_receive_personal_alerts(uid, monkeypatch):
