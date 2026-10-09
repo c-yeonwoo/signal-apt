@@ -95,10 +95,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         subject:{region:'테스트구',region_id:'kb:1114000000'},asof:'2026-09-28',
         assessment:{display_grade:'매수',assessment_status:'ready',scope_note:'테스트 권역 자료',
           summary:'지역 신호만 보여 줍니다. 개별 매물의 가격 판단은 별도입니다.',raw_grade:'BUY',
-          reasons:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
+          reasons:[
+            {reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true,inherited:true,source_region:'강북14개구'},
+            {reason_id:'buyer_interest',label:'매수심리 관찰선',value:80,threshold:70,unit:'지수',role:'driver',passing:true,inherited:true,source_region:'강북14개구'},
+            {reason_id:'sale_momentum',label:'최근 4주 주간 매매변동률 평균',value:0.01,threshold:0.03,unit:'%/주',role:'driver',passing:false,source_region:'테스트구'}],
           change:{type:'first_observation',changed_reasons:[]}},
         positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,previous_value:180,threshold:170,unit:'지수',role:'driver',passing:true}],
-        cautions:[{reason_id:'buyer_interest',label:'매수심리 관찰선 미충족',value:68,previous_value:66,threshold:70,unit:'지수',role:'driver',passing:false}],
+        cautions:[{reason_id:'sale_momentum',label:'매매 상승 관찰선 미충족',value:0.01,threshold:0.03,unit:'%/주',role:'driver',passing:false},
+          {reason_id:'buyer_balance',label:'KB 응답 균형선 100 미만',value:80,previous_value:66,threshold:100,unit:'지수',role:'limitation',passing:false}],
         unknowns:[]};
       if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) regionReport=data;
       if(decoded==='/api/series/테스트구') data={metrics:{},volume:null};
@@ -474,8 +478,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(await page.getByRole('button',{name:/지역 가격 비교/}).getAttribute('class').then(c=>c.includes('on')),true);
     assert.equal(await page.locator('#view-undervalued #sigMap').count(),1);
     assert.equal(await page.locator('#view-signal #sigMap').count(),0);
-    assert.match(await page.locator('#sigMapLegend').textContent(),/지역 평단가 가격대/);
-    assert.match(await page.locator('#sigMapLegend').textContent(),/매수 추천이 아닙니다/);
+    assert.match(await page.locator('#sigMapLegend').textContent(),/선택 지역/);
+    assert.match(await page.locator('#sigMapLegend').textContent(),/적정가 판정은 아닙니다/);
     await page.locator('#rpcCards').getByText('8.0억').waitFor();
     assert.match(await page.locator('#rpcCards').textContent(),/서울 테스트구[\s\S]*8건.*2026-04~2026-09/);
     assert.equal(await page.locator('#rpcRegionA option[value="kb:2811000000"]').textContent(),'인천 중구');
@@ -932,6 +936,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#laHoldSummary').textContent(),/지역 신호 확인 전 2건/);
     assert.doesNotMatch(await page.evaluate(()=>_ms.laMap.opt.groupSummary(_laData).nm),/판단 보류/,
       '묶음 행에도 보류 배지를 다시 표시하지 않는다');
+    await page.evaluate(()=>{_ms.laMap.coords={0:[37.56,126.99],1:[37.56,126.99]};renderMsList('laMap',[]);});
+    assert.match(await page.locator('#laList').textContent(),/현재 지도 범위에는 조건에 맞는 매물이 없습니다/);
+    assert.equal(await page.locator('#laList button').filter({hasText:'조건에 맞는 전체 2건 지도에서 보기'}).count(),1);
+    await page.evaluate(()=>renderAllListings());
     await page.evaluate(()=>{_laSaleFilter='certified';renderAllListings();});
     assert.match(await page.locator('#laHoldSummary').textContent(),/지역 신호 확인 전 1건/,
       '필터 뒤 요약 건수는 현재 표시 목록과 같아야 한다');
@@ -1336,7 +1344,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         전세수급:180,매수우위지수:68}];
     });
     await page.locator('#alertsBody [data-alert-region="테스트구"]').click();
-    await page.locator('#haesolPanel').getByText(/지역 신호만 보여 줍니다/).waitFor();
+    await page.locator('#haesolPanel').getByText(/세 조건 중 2개 충족/).waitFor();
     await page.evaluate(()=>document.getElementById('alertsDlg').showModal());
     await page.locator('#alertsBody [data-alert-listing]').click();
     await page.locator('#v2ReportBody').getByText('한방테스트단지',{exact:false}).waitFor();
@@ -1399,12 +1407,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       allSignals=[{region:'테스트구',region_id:'kb:1114000000',group:'서울',signal:'BUY',display_signal:'BUY',assessment_status:'ready',급지:'B',전세수급:180,매수우위지수:68}];
       switchTab('signal'); renderList(); selectRegion('테스트구');
     });
-    await page.getByText('지역 신호만 보여 줍니다.',{exact:false}).waitFor();
+    await page.locator('#haesolPanel').getByText(/세 조건 중 2개 충족/).waitFor();
     assert.equal(await page.locator('.signal-evidence-details').getAttribute('open'),null);
     assert.equal(await page.locator('.signal-evidence-details .v2-row').first().isVisible(),false);
     assert.equal(await page.locator('.signal-assessment-highlight').count(),2);
-    assert.match(await page.locator('.signal-assessment-highlights').textContent(),/전세수급 압력/);
-    assert.match(await page.locator('.signal-assessment-highlights').textContent(),/매수심리 관찰선 미충족/);
+    assert.match(await page.locator('.signal-assessment-highlights').textContent(),/전세수급/);
+    assert.match(await page.locator('.signal-assessment-highlights').textContent(),/최근 4주 매매 흐름/);
+    assert.match(await page.locator('.signal-assessment').textContent(),/강북14개구.*테스트구 자체의 최근 4주 매매 흐름/);
+    assert.match(await page.locator('.signal-assessment .v2-report-lead').textContent(),/세 조건 중 2개 충족/);
     assert.match(await page.locator('.signal-assessment-highlights').textContent(),/이전 66/);
     const mobileCard=await page.locator('.signal-assessment').boundingBox();
     const mobilePanel=await page.locator('#haesolPanel').evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth}));
@@ -1451,7 +1461,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       const held={type:'region',asof:'2026-09-28',subject:{region:'테스트구',region_id:'kb:1114000000'},
         assessment:{assessment_status:'held',raw_grade:'BUY',
           summary:'행정구역 개편 전 자료라 현재 판정을 보류합니다.',scope_note:'인천 권역 자료',
-          change:{type:'method_change',changed_reasons:[]},reasons:[]},
+          change:{type:'method_change',changed_reasons:[]},reasons:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:183.9,
+            threshold:170,unit:'지수',role:'driver',passing:true,source_region:'인천'}]},
         positive:[{reason_id:'jeonse_pressure',label:'전세수급 압력',value:183.9,
           threshold:170,unit:'지수',role:'driver',passing:true}],cautions:[],
         unknowns:['sale_weeks_incomplete','region_boundary_obsolete','__proto__']};
@@ -1475,8 +1486,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('.signal-evidence-details > summary').click();
     const heldReason=await page.locator('.signal-evidence-details').textContent();
     assert.match(heldReason,/행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다/);
-    assert.match(heldReason,/기본 규칙의 충족 조건 · 현재 판정 아님/);
-    assert.match(heldReason,/전세수급 압력/);
+    assert.match(heldReason,/기본 규칙의 세 조건 · 현재 판정 아님/);
+    assert.match(heldReason,/전세수급/);
     assert.match(heldReason,/확인되지 않은 보류 사유가 있습니다/);
     assert.doesNotMatch(heldReason,/region_boundary_obsolete|__proto__|\[object Object\]/);
     await page.locator('.signal-evidence-details').getByText('기존 규칙 산출값').click();

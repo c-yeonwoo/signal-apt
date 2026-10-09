@@ -66,6 +66,25 @@
     return `<div class="signal-assessment-fact"><b>${esc(item.label)}</b><span>${value}${threshold}${prior}${status ? ` · ${status}` : ''}</span></div>`;
   }
 
+  const driverNames={jeonse_pressure:'전세수급',buyer_interest:'매수심리',sale_momentum:'최근 4주 매매 흐름'};
+  const driverMeaning={
+    jeonse_pressure:'전세를 찾는 수요에 비해 매물이 빠듯한지 보는 지표입니다. 매매 수요로 옮겨왔다는 뜻은 아닙니다.',
+    buyer_interest:'KB 매수우위지수의 앱 관찰선입니다. KB 응답 균형선 100과는 다른 기준입니다.',
+    sale_momentum:'이 지역 자체의 최근 4개 주간 매매변동률 평균입니다. 권역 공통 수급 숫자가 같아도 이 값에 따라 등급이 달라집니다.',
+  };
+  function driverFact(item) {
+    const unit=item.unit==='%/주'?'%/주':item.unit?` ${esc(item.unit)}`:'';
+    const value=item.value==null?'자료 미확인':`${esc(item.value)}${unit}`;
+    const threshold=item.threshold==null?'기준 미확인':`${esc(item.threshold)}${unit} 이상`;
+    return `<div class="signal-assessment-fact ${item.passing?'is-met':'is-unmet'}"><b>${item.passing?'✓':'—'} ${esc(driverNames[item.reason_id]||item.label)}</b><span>${value} · ${threshold}</span></div>`;
+  }
+  function driverDetail(item) {
+    const source=item.inherited?`${esc(item.source_region)} 권역 공통 자료`:`${esc(item.source_region)} 지역 자료`;
+    return `<div class="v2-row"><b>${item.passing?'충족':'미충족'} · ${esc(driverNames[item.reason_id]||item.label)}</b>
+      <p>${esc(driverMeaning[item.reason_id]||'현재 지표와 관찰선을 비교합니다.')}</p>
+      <p class="v2-muted">${esc(item.value??'자료 미확인')}${item.unit==='%/주'?'%/주':item.unit?` ${esc(item.unit)}`:''} · 관찰선 ${esc(item.threshold??'미확인')}${item.unit==='%/주'?'%/주':''} · ${source}</p></div>`;
+  }
+
   function listingQuickAnswer(report, question) {
     const lines = report.lines || {};
     if (question === 'price') return {
@@ -289,34 +308,47 @@
         changed === 'market_change' || changed === 'source_revision'
           ? `이전 ${esc(a.change.previous_grade || '판정')}에서 ${changedLabels.map(esc).join(' · ')} 근거가 달라졌습니다.${changed === 'source_revision' ? ' 같은 기준일의 원천 수정입니다.' : ''}` :
           '이전 발행 판정에서 확인된 근거 변화가 없습니다.';
-      const cautionLead = report.cautions?.[0];
+      const cautionLead = report.cautions?.find(item=>item.role!=='driver') || report.cautions?.[0];
       const held = a.assessment_status === 'held';
       const heldReasons = report.unknowns.length
         ? report.unknowns.slice(0,2).map(riskLabel).join(' · ') +
           (report.unknowns.length > 2 ? ` · 그 밖의 사유 ${report.unknowns.length - 2}건` : '')
         : '자료와 지역 기준을 확인하기 전까지 판정을 보류합니다.';
+      const drivers=(a.reasons||[]).filter(item=>item.role==='driver');
+      const met=drivers.filter(item=>item.passing).length;
+      const gradedBuy=!held&&['BUY','STRONG_BUY'].includes(a.raw_grade)&&drivers.length===3;
+      const inherited=drivers.find(item=>item.reason_id==='jeonse_pressure')?.inherited;
+      const priceDriver=drivers.find(item=>item.reason_id==='sale_momentum');
+      const commonMet=drivers.filter(item=>item.reason_id!=='sale_momentum').every(item=>item.passing);
+      const why=gradedBuy
+        ? inherited&&commonMet
+          ? `${drivers[0].source_region}의 전세수급·매수심리는 해당 권역 지역들이 공유합니다. ${region} 자체의 최근 4주 매매 흐름이 ${priceDriver?.passing?'상승 조건을 충족해 강력매수':'상승 조건에 못 미쳐 매수'}로 갈랐습니다.`
+          : `전세수급·매수심리·최근 4주 매매 흐름 중 ${met}개가 앱의 강세 관찰선을 넘었습니다.`
+        : '';
+      const limits=(report.cautions||[]).filter(item=>item.role!=='driver');
       target.innerHTML = `<section class="signal-assessment" aria-label="지역 시그널 요약과 근거">
         <div class="signal-assessment-heading">
-          <p class="v2-report-lead">${esc(a.summary)}</p>
-          <p class="v2-muted">KB ${esc(report.asof)} 기준 · ${esc(a.scope_note)}</p>
+          <div><p class="v2-report-lead">${gradedBuy?`${esc(a.display_grade)} · 세 조건 중 ${met}개 충족`:esc(a.summary)}</p>
+            ${why?`<p class="signal-assessment-why">${esc(why)}</p>`:''}</div>
+          <p class="v2-muted">KB ${esc(report.asof)} 기준 · 지역 시장 신호</p>
         </div>
         <div class="signal-assessment-highlights">
-          <section class="signal-assessment-highlight"><h3>${held ? '판단 보류 이유' : '판정 이유'}</h3>
-            ${held ? `<p>${esc(heldReasons)}</p>` : report.positive.length ? report.positive.slice(0,2).map(item => briefReason(item)).join('') : '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
+          <section class="signal-assessment-highlight"><h3>${held ? '판단 보류 이유' : '판정에 쓴 세 조건'}</h3>
+            ${held ? `<p>${esc(heldReasons)}</p>` : drivers.length ? drivers.map(driverFact).join('') : '<p>조건 자료를 확인할 수 없습니다.</p>'}
           </section>
           <section class="signal-assessment-highlight signal-assessment-caution"><h3>${held ? '추가로 확인할 지표' : '함께 확인할 점'}</h3>
             ${cautionLead ? briefReason(cautionLead, true) : '<p>연결된 지표에서 별도 반대 근거를 찾지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
           </section>
         </div>
-        <details class="signal-evidence-details"><summary>판정 근거와 한계 보기</summary>
-          <h3>${held ? '기본 규칙의 충족 조건 · 현재 판정 아님' : '이번 판정의 근거'}</h3>${report.positive.length ? report.positive.slice(0,3).map(reason).join('') :
-            '<p>충족된 강세 조건이 없거나 자료가 부족합니다.</p>'}
-          <h3>반대 근거와 한계</h3>${report.cautions.length ? report.cautions.map(reason).join('') :
+        <details class="signal-evidence-details"><summary>세 조건의 뜻과 판단 한계</summary>
+          <h3>${held ? '기본 규칙의 세 조건 · 현재 판정 아님' : '세 조건을 어떻게 읽나요?'}</h3>${drivers.length ? drivers.map(driverDetail).join('') :
+            '<p>조건 자료를 확인할 수 없습니다.</p>'}
+          <h3>같이 볼 위험과 한계</h3>${limits.length ? limits.map(reason).join('') :
             '<p>현재 연결된 지표에서 별도 반대 근거를 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
           ${report.unknowns.length ? `<p class="v2-row v2-caution">판단 보류 이유: ${report.unknowns.map(x => esc(riskLabel(x))).join(' · ')}</p>` : ''}
           <p class="v2-muted">${esc(change)}</p>
           ${a.assessment_status === 'held' ? `<details><summary>기존 규칙 산출값</summary><p>${esc(historicalGradeLabel(a.raw_grade))} · 검증되지 않아 현재 판정으로 쓰지 않습니다.</p></details>` : ''}
-          <p class="v2-muted">매수우위지수 100은 KB의 응답 균형선입니다. 앱의 강세 조건 70은 별도 관찰 기준입니다.</p>
+          <p class="v2-muted">${esc(a.scope_note)} 매수우위지수 100은 KB의 응답 균형선이고, 앱의 강세 관찰선은 별도 기준입니다. 지역 신호는 개별 매물 가격·수익을 보장하지 않습니다.</p>
           ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>더 쉽게 이해하기</b><p class="v2-muted">요청할 때만 AI 설명을 만듭니다. 판정과 숫자는 위 리포트 그대로이며 비용 제한·오류 시 기본 설명을 보여 줍니다.</p>
             <button type="button" class="btn" id="v2RegionExplain">쉽게 설명</button>
             <button type="button" class="btn" id="v2RegionCounter">반대 근거 보기</button>

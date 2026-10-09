@@ -120,7 +120,7 @@ test('unverified regulation is not drawn or labeled as a current designation', (
   assert.doesNotMatch(rendered,/>규제지역<|>비규제</);
 });
 
-test('grade map reports when regional boundaries or price-grade joins are unavailable', async () => {
+test('comparison map reports unavailable boundaries without claiming unobserved price tiers', async () => {
   const ctx = vm.createContext({_uvGeo:null, fetch:async()=>({ok:false,json:async()=>({})})});
   vm.runInContext(extract("let _uvGeoError=''", 'function _geoRow('), ctx);
   assert.equal(await ctx._ensureGeo(), null);
@@ -129,7 +129,8 @@ test('grade map reports when regional boundaries or price-grade joins are unavai
   vm.runInContext(extract("let _uvGeoError=''", 'function _geoRow('), valid);
   assert.deepEqual(JSON.parse(JSON.stringify(await valid._ensureGeo())),{type:'FeatureCollection',features:[]});
   assert.equal(vm.runInContext('_uvGeoError',valid),'');
-  assert.match(html,/현재 지역 가격대 자료와 지도 지역을 연결하지 못했습니다/);
+  assert.match(html,/선택한 지역의 같은 면적 거래 중앙값만 표시합니다/);
+  assert.doesNotMatch(html.split('id="view-undervalued"')[1].split('id="view-presale"')[0],/지도 색은 지역 평단가 가격대/);
 });
 
 test('optional Telegram opt-in is compact and keeps notification details expandable', async () => {
@@ -391,7 +392,7 @@ test('stale budget watch shows a reconfirm action instead of disappearing', asyn
   assert.match(wrap.innerHTML,/openBuyingPower\(\)/);
 });
 
-test('grade choropleth sits above tiles and uses a darker-is-higher price scale', () => {
+test('price comparison colors only verified selected area samples, independent of locality grades', () => {
   assert.match(html, /pane\.style\.zIndex='350'/);
   assert.match(html, /choroplethPane/);
   assert.doesNotMatch(html, /pane:mode==='signal'\?'overlayPane':'tilePane'/);
@@ -401,7 +402,9 @@ test('grade choropleth sits above tiles and uses a darker-is-higher price scale'
   assert.match(price, /id="sigMap"/);
   assert.doesNotMatch(signal, /id="sigMap"/);
   const ctx=vm.createContext({
-    document:{getElementById:()=>null},
+    document:{getElementById:id=>({rpcRegionA:{value:'kb:1168000000'},rpcRegionB:{value:'kb:1126000000'}}[id]||null)},
+    _rpcMapPrices:{'kb:1168000000':{status:'ready',count:8,median_manwon:80000,area:84},
+      'kb:1126000000':{status:'insufficient_sample',count:2,area:84}},
     _geoRow:(lut,name,code)=>{
       const row=lut&&lut[name];
       return row&&code&&row.region_id===`kb:${code}00000`?row:null;
@@ -416,6 +419,13 @@ test('grade choropleth sits above tiles and uses a darker-is-higher price scale'
   assert.notEqual(expensive.fillColor, cheap.fillColor);
   assert.equal(missing.fillColor, '#e2e8f0');
   assert.ok(expensive.fillOpacity>=0.7);
+  const selected=ctx._choStyle('compare','강남',{},'11',null,'11680');
+  const thin=ctx._choStyle('compare','중랑',{},'11',null,'11260');
+  const other=ctx._choStyle('compare','마포',{},'11',null,'11440');
+  assert.equal(selected.fillColor,'#1d4ed8');
+  assert.equal(thin.fillColor,'#e2e8f0');
+  assert.equal(thin.weight,3,'selected but insufficient sample stays outlined');
+  assert.equal(other.fillColor,'#e2e8f0');
 });
 
 test('all maps use an attributed keyless fallback instead of watermarked CARTO tiles', () => {
@@ -460,6 +470,23 @@ test('grouped map pins keep per-listing selection and one marker per group', () 
     {label:x=>x.단지명,popupKind:'일반매물',popupPrice:x=>x.호가},{keepView:true});
   assert.match(st.markers[0].popup,/일반매물 · 75000 · 25.7평/);
   assert.doesNotMatch(st.markers[0].popup,/가격 미확인/);
+});
+
+test('first listing map fit settles before viewport filtering', () => {
+  const layers=new Set(), events=[];
+  const map={removeLayer:m=>layers.delete(m),hasLayer:m=>layers.has(m),
+    invalidateSize:opts=>events.push(['size',opts]),
+    fitBounds:(_bounds,opts)=>events.push(['fit',opts])};
+  const st={map,markers:{},sel:null};
+  const ctx=vm.createContext({_ms:{test:st},initMap:()=>st,setTimeout(){},esc:String,_eok:String,
+    selectMsRow(){},L:{divIcon:o=>o,DomEvent:{stopPropagation(){}},
+      featureGroup:()=>({getBounds:()=>({pad(){return this;}})}),
+      marker:()=>({bindPopup(){return this;},on(){return this;},addTo(){layers.add(this);return this;}})}});
+  vm.runInContext(extract('function _pinGroups(', '// 핀 포커스:'),ctx);
+  ctx.plotPins('test',[{단지명:'테스트',지역:'서울 중구'}],{0:[37.56,126.99]},
+    {label:x=>x.단지명});
+  assert.deepEqual(events.map(row=>row[0]),['size','fit']);
+  assert.equal(events[1][1].animate,false);
 });
 
 test('dense listing maps cluster nearby pins without breaking viewport filtering or row focus', async () => {

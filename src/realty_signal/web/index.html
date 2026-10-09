@@ -851,9 +851,15 @@
   .signal-assessment-highlights { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:10px; margin-top:10px; }
   .signal-assessment-highlight { min-width:0; padding:9px 11px; border-radius:9px; background:var(--bg); }
   .signal-assessment-highlight h3 { margin:0 0 5px; font-size:12px; line-height:1.4; color:var(--dim); }
-  .signal-assessment-fact { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:2px 0; font-size:13px; line-height:1.45; }
+  .signal-assessment-fact { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:5px 0; font-size:13px; line-height:1.45; border-top:1px solid var(--line); }
+  .signal-assessment-fact:first-of-type { border-top:0; }
   .signal-assessment-fact b { flex:0 0 auto; color:var(--txt); }
   .signal-assessment-fact span { min-width:0; color:var(--dim); text-align:right; }
+  .signal-assessment-fact.is-met b { color:#166534; }
+  .signal-assessment-fact.is-unmet b { color:#9a3412; }
+  .signal-assessment-why { margin:6px 0 0; font-size:13px; line-height:1.5; color:var(--txt); }
+  .signal-evidence-details h3 { margin:14px 0 7px; font-size:14px; }
+  .signal-evidence-details .v2-row { margin:6px 0; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); font-size:13px; line-height:1.5; }
   .signal-assessment-caution { background:#fff7ed; color:#9a3412; }
   .signal-assessment-caution .signal-assessment-fact b,
   .signal-assessment-caution .signal-assessment-fact span { color:#9a3412; }
@@ -1261,10 +1267,10 @@
 <div id="view-undervalued" style="display:none">
   <div class="sec">
     <h2 class="page-head">지역 가격 비교</h2>
-    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지도 색은 지역 평단가 가격대이며, 지역·단지의 적정가나 매수 신호는 아닙니다.</p>
+    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지도에는 선택한 두 지역의 거래 표본만 표시합니다. 적정가나 매수 신호는 아닙니다.</p>
     <div id="sigMapWrap">
-      <div id="sigMap" role="img" aria-label="시군구 지역 가격대 지도"></div>
-      <div id="sigMapLegend">지역 평단가 가격대입니다. 진한 색일수록 비싼 지역이고, 회색은 자료가 없습니다. 매수 추천이 아닙니다.</div>
+      <div id="sigMap" role="img" aria-label="선택한 시군구 실거래 비교 지도"></div>
+      <div id="sigMapLegend">선택 지역의 같은 면적 거래 표본을 지도에 표시합니다. 적정가 판정은 아닙니다.</div>
     </div>
     <div class="rpc-controls">
       <label>전용면적대 <select id="rpcArea" class="ctrl" onchange="renderRegionPriceComparison()"><option value="84">84㎡ ±5㎡</option><option value="59">59㎡ ±5㎡</option></select></label>
@@ -4409,7 +4415,17 @@ function renderMsList(mapId, indices){
   if(!indices.length){
     const empty=document.createElement('div');
     empty.style.cssText='padding:16px;color:var(--dim);font-size:13px;line-height:1.5';
-    empty.textContent='이 구역에 표시된 매물이 없습니다. 지도를 옮긴 뒤 「이 지역 매물 다시 찾기」를 눌러보세요.';
+    empty.textContent=items.length&&Object.keys(st.coords||{}).length
+      ? '현재 지도 범위에는 조건에 맞는 매물이 없습니다.'
+      : '표시할 매물의 위치를 확인하고 있습니다.';
+    if(items.length&&Object.keys(st.coords||{}).length){
+      const reset=document.createElement('button'); reset.type='button'; reset.className='btn';
+      reset.style.cssText='display:block;margin-top:10px';
+      reset.textContent=`조건에 맞는 전체 ${items.length.toLocaleString('ko-KR')}건 지도에서 보기`;
+      reset.onclick=()=>{ st._vpLocked=false; st.viewIndices=null;
+        plotPins(mapId,st.items,st.coords,st.opt,{keepView:false}); applyViewportFilter(mapId); };
+      empty.appendChild(reset);
+    }
     listEl.appendChild(empty); return;
   }
   const appendRow=(i,parent)=>{
@@ -4653,6 +4669,13 @@ function _geoRow(lut, name, code){
 }
 const _GRADE_FILL={A:'#1e3a8a',B:'#1d4ed8',C:'#3b82f6',D:'#93c5fd',E:'#dbeafe'};
 function _choStyle(mode, name, gl, sido, sl, code){
+  if(mode==='compare'){
+    const id=code&&`kb:${code}00000`, a=document.getElementById('rpcRegionA')?.value;
+    const b=document.getElementById('rpcRegionB')?.value, selected=id&&(id===a||id===b);
+    const sample=id&&_rpcMapPrices[id], priced=sample?.status==='ready'&&sample.count>=5;
+    const fill=priced?(id===a?'#1d4ed8':'#ea580c'):'#e2e8f0';
+    return {color:selected?'#0f172a':'#fff',weight:selected?3:1,fillColor:fill,fillOpacity:priced?0.78:0.25};
+  }
   if(mode==='signal'){
     const row=_geoRow(sl,name,code), col=row&&_SIG_COLOR[displaySignal(row)];
     const on=selected&&_onorm(selected)===_onorm(name);
@@ -4669,6 +4692,12 @@ function _choStyle(mode, name, gl, sido, sl, code){
   return {color:'#fff',weight:1,fillColor:c||(note?'#fbbf24':'#e2e8f0'),fillOpacity:c?0.5:(note?0.35:0.08)};
 }
 function _choTip(mode, name, gl, sido, sl, code){
+  if(mode==='compare'){
+    const sample=code&&_rpcMapPrices[`kb:${code}00000`];
+    return sample?.status==='ready'&&sample.count>=5
+      ? `${name} · 전용 ${sample.area}㎡ 거래 중앙값 ${_eok(sample.median_manwon)} · ${sample.count}건`
+      : `${name} · 지도 비교 표본 없음`;
+  }
   if(mode==='signal'){
     const row=_geoRow(sl,name,code);
     const ko=row?(SIG_KO[displaySignal(row)]||displaySignal(row)):'자료 없음';
@@ -4696,7 +4725,7 @@ async function setOverlay(map, mode, onClick){
   map._ovLayer=L.geoJSON(_uvGeo,{ pane:mode==='signal'?'overlayPane':'choroplethPane',
     style:f=>_choStyle(mode,f.properties.name,gl,f.properties.sido,sl,f.properties.code),
     onEachFeature:(f,l)=>{ l.bindTooltip(_choTip(mode,f.properties.name,gl,f.properties.sido,sl,f.properties.code),{sticky:true});
-      if(onClick) l.on('click',()=>onClick(f.properties.name)); }
+      if(onClick) l.on('click',()=>onClick(f.properties.name,f.properties.code)); }
   }).addTo(map);
   return true;
 }
@@ -4866,7 +4895,8 @@ function plotPins(mapId, items, coords, opt, opts){
   const ms=st.clusterLayer?visibleMarkers:[...new Set(Object.values(st.markers))].filter(mk=>st.map.hasLayer(mk));
   const skipFit=opts.keepView || st._vpLocked;
   if(ms.length && !skipFit){ st._suppressCtaUntil=Date.now()+900;
-    const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13}); }
+    st.map.invalidateSize({pan:false,animate:false});
+    const g=L.featureGroup(ms); st.map.fitBounds(g.getBounds().pad(0.18),{maxZoom:13,animate:false}); }
   setTimeout(()=>st.map.invalidateSize(),150);
 }
 // 핀 포커스: 핀 없으면 즉시 지오코딩→생성 후, 지도 중앙 + 반경 ~2.5km(zoom 14)
@@ -5433,7 +5463,7 @@ async function loadPsTypes(no, elId){
     <th class="l">주택형</th><th>분양가</th><th>평단가</th><th>시세대비</th><th class="l">특별공급</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-let _rpcGeneration=0;
+let _rpcGeneration=0, _rpcMapPrices={};
 function _rpcRegionLabel(row){
   const region=String(row.region||'').trim(), group=String(row.group||'').trim();
   return group&&region&&!region.startsWith(group+' ')?`${group} ${region}`:region||group;
@@ -5500,8 +5530,8 @@ async function renderRegionPriceComparison(){
   const area=Number(document.getElementById('rpcArea').value);
   const status=document.getElementById('rpcStatus'), cards=document.getElementById('rpcCards');
   const compare=document.getElementById('rpcCompare');
-  if(!a){ queueGradeMap(); return; }
-  if(a===b){ status.textContent='서로 다른 두 지역을 선택해 주세요.'; cards.innerHTML=''; compare.textContent=''; queueGradeMap(); return; }
+  if(!a){ _rpcMapPrices={}; queueGradeMap(); return; }
+  if(a===b){ _rpcMapPrices={}; status.textContent='서로 다른 두 지역을 선택해 주세요.'; cards.innerHTML=''; compare.textContent=''; queueGradeMap(); return; }
   status.textContent='국토부 실거래 표본을 불러오는 중입니다. 첫 조회는 다소 걸릴 수 있습니다.';
   cards.innerHTML=''; compare.textContent='';
   const refs=b?[a,b]:[a];
@@ -5511,12 +5541,13 @@ async function renderRegionPriceComparison(){
     try{
       const response=await fetch('/api/region-trade-prices/'+encodeURIComponent(ref)+'?area='+area);
       if(!response.ok) throw new Error('source unavailable');
-      return {...await response.json(),region_label:regionLabel};
+      return {...await response.json(),region_id:ref,region_label:regionLabel};
     }catch(_error){
-      return {status:'source_unavailable',region_label:regionLabel};
+      return {status:'source_unavailable',region_id:ref,region_label:regionLabel};
     }
   }));
   if(generation!==_rpcGeneration) return;
+  _rpcMapPrices=Object.fromEntries(data.filter(row=>row.region_id).map(row=>[row.region_id,row]));
   const maxPrice=Math.max(...data.map(row=>Number(row.median_manwon)||0));
   cards.innerHTML=data.map(row=>_rpcCard(row,maxPrice)).join('')+(b?'':
     '<article class="rpc-card"><h3>다른 지역과 비교</h3><p class="rpc-note">위에서 비교할 지역을 선택하면 같은 면적대의 거래 표본을 나란히 보여 줍니다.</p></article>');
@@ -6064,8 +6095,8 @@ async function drawSigMap(){
     sigMap=L.map(el,{attributionControl:true, scrollWheelZoom:true, zoomControl:true}).setView([37.55,127.02],9);
     _mapTile().addTo(sigMap);
   }
-  const mapReady=await setOverlay(sigMap, 'grade', name=>{
-    const row=(allSignals||[]).find(s=>_onorm(s.region)===_onorm(name));
+  const mapReady=await setOverlay(sigMap, 'compare', (name,code)=>{
+    const row=(allSignals||[]).find(s=>s.region_id===`kb:${code}00000`);
     const a=document.getElementById('rpcRegionA'), b=document.getElementById('rpcRegionB');
     if(!row||!row.region_id||!a||!b||a.value===row.region_id) return;
     if(![...b.options].some(o=>o.value===row.region_id)) return;
@@ -6074,15 +6105,14 @@ async function drawSigMap(){
   });
   const lg=document.getElementById('sigMapLegend');
   if(lg){
-    const chips=['A','B','C','D','E'].map(g=>`<span style="display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${_GRADE_FILL[g]};display:inline-block"></span>${_REGION_GRADE[g].label}</span>`).join('');
-    const gradeRows=_gradeLut();
-    const matched=mapReady&&_uvGeo?_uvGeo.features.filter(f=>_geoRow(gradeRows,f.properties?.name,f.properties?.code)).length:0;
-    const status=!mapReady?_uvGeoError
-      :matched===0?'현재 지역 가격대 자료와 지도 지역을 연결하지 못했습니다. 아래 거래 비교는 그대로 확인할 수 있습니다.'
-      :`지도 연결 ${matched}곳 · 회색은 가격대 자료가 없는 지역입니다.`;
-    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">수도권 시군구 · 평단가 가격대</div><div>${chips}</div>
-      <div style="color:var(--dim);margin-top:2px">진한 파랑일수록 비싼 지역입니다. 구를 누르면 아래 비교 지역으로 들어갑니다. 매수 추천이 아닙니다.</div>
-      <div role="status" aria-live="polite" style="margin-top:6px;color:${mapReady&&matched?'var(--dim)':'var(--sig-watch)'}">${status}</div>`;
+    const a=document.getElementById('rpcRegionA')?.value, b=document.getElementById('rpcRegionB')?.value;
+    const label=(id,title,color)=>{const row=id&&_rpcMapPrices[id], ready=row?.status==='ready'&&row.count>=5;
+      const name=[...document.getElementById('rpcRegionA').options].find(option=>option.value===id)?.textContent||title;
+      return `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 12px 4px 0"><span style="width:14px;height:14px;border-radius:3px;background:${ready?color:'#e2e8f0'};display:inline-block"></span>${esc(name)} · ${ready?_eok(row.median_manwon):'비교 표본 확인 전'}</span>`;};
+    const status=!mapReady?_uvGeoError:'선택한 지역의 같은 면적 거래 중앙값만 표시합니다. 회색 지역은 아직 비교하지 않았습니다.';
+    lg.innerHTML=`<div style="font-weight:700;margin-bottom:4px">선택 지역 · 전용 ${esc(document.getElementById('rpcArea').value)}㎡ ±5㎡</div>
+      <div>${label(a,'첫 지역','#1d4ed8')}${b?label(b,'비교 지역','#ea580c'):''}</div>
+      <div role="status" aria-live="polite" style="margin-top:4px;color:var(--dim)">${esc(status)} 지도의 다른 구를 누르면 비교 지역으로 선택합니다. 적정가 판정은 아닙니다.</div>`;
   }
   setTimeout(()=>{ try{sigMap.invalidateSize();}catch(e){} }, 80);
 }
