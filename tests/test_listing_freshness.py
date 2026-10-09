@@ -7,23 +7,27 @@ from types import SimpleNamespace
 import pytest
 
 from realty_signal import api, jobs
-from realty_signal.services import buyer_decision, listing_refresh, property_analysis
+from realty_signal.services import buyer_decision, listing_refresh, property_analysis, quote_check
+from realty_signal.time_kst import today_kst
 
 
 @pytest.mark.parametrize("kind", ["일반매물", "급매", "찐매물"])
 @pytest.mark.parametrize("age,expired", [(2, False), (7, False), (7.01, True)])
-def test_daily_refresh_and_weekly_price_validity_are_independent(tmp_path, monkeypatch, kind, age, expired):
+@pytest.mark.parametrize("renewal", ["success", "preserved", "failed"])
+def test_daily_refresh_and_weekly_price_validity_are_independent(tmp_path, monkeypatch, kind, age, expired, renewal):
     now = 1_800_000_000
     monkeypatch.setattr(api.time, "time", lambda: now)
     stamp = now - age * 86400
     path = tmp_path / "listings.json"
     row = {"단지명": "테스트", "지역": "노원구", "시도": "서울", "지역코드": "11350",
            "호가": 50000, "전용면적": 59, "fetched_at": stamp, "hanbang_id": "1", "naver_id": "1"}
+    if renewal == "preserved":
+        row["stale"] = True  # Raw history marker: not observed again in this partial scan.
     path.write_text(json.dumps({"_scan_ver": 99, "listings": [row]}))
     os.utime(path, (stamp, stamp))
     for field in ("HANBANG_FILE", "QUICKSALE_FILE", "CERTIFIED_FILE"):
         monkeypatch.setattr(api, field, path)
-    monkeypatch.setattr(api, "_radar_refresh_status", lambda _path: {"ok": True})
+    monkeypatch.setattr(api, "_radar_refresh_status", lambda _path: {"ok": renewal != "failed"})
     monkeypatch.setattr(api, "_radar_verified_rows", lambda *_args: [row])
     monkeypatch.setattr(api, "_hanbang_verified_rows", lambda: [row])
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
@@ -37,7 +41,22 @@ def test_daily_refresh_and_weekly_price_validity_are_independent(tmp_path, monke
     assert listing["총액"] == 50000
     assert listing["stale"] is expired
     assert listing["refresh_due"] is True
+    assert listing["refresh_failed"] is (renewal == "failed")
+    assert not listing.get("degraded")
+    assert listing["fetched_at"] == stamp
+    assert row.get("stale", False) is (renewal == "preserved")
     assert property_analysis.snapshot(listing)["asking_manwon"] == 50000
+    snapshot = property_analysis.snapshot(listing)
+    detail = {"identity_status": "single_observed", "평형별": [{"전용㎡": 59,
+              "비교거래": {"상태": "관측", "건수": 3, "기준일": today_kst().isoformat(),
+                       "중앙값": 50000, "최저": 49000, "최고": 51000, "거래월범위": "최근 6개월"}}]}
+    comparison = quote_check.assess_listing(detail, snapshot)
+    assert comparison["상태"] == ("보류" if expired else "관측비교")
+    assert comparison["호가차이율"] == (None if expired else 0)
+    fit = property_analysis.buyer_fit(snapshot,
+        {"매수력": {"최대매수가": 60000, "가정버전": 1}, "매수지역코드": "kb:1135000000"},
+        confirmed_power=(60000, SimpleNamespace(region="노원구", sido="서울")))
+    assert fit["status"] == ("unknown" if expired else "within")
 
 
 def test_read_refresh_is_private_nonblocking_and_uses_scheduler_lease(monkeypatch):

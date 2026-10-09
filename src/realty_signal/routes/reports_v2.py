@@ -377,7 +377,9 @@ def discovery(request: Request, data: dict = Body(...)):
             source_rows = by_kind.get(kind, []) if state != "failed" else []
             if source["expected_count"] and not source_rows:
                 state = source["state"] = "failed"
-            if state in {"stale", "stale_failed", "unverified"}:
+            # Failed renewal does not invalidate a quote observed within seven days.
+            # Per-listing age comes from _build_listings, not the whole feed's state.
+            if state == "unverified":
                 source_rows = [{**row, "stale": True} for row in source_rows]
             rows.extend(source_rows)
             source["count"] = len(source_rows)
