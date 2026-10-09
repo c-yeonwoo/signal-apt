@@ -3974,7 +3974,7 @@ function _laApplyResponse(types,d){
   const budgetOption=document.querySelector('#laSort option[value="budget"]');
   if(budgetOption) budgetOption.textContent=_laConfirmedBudget?'내 예산 순':'가격 낮은순 · 예산 미확정';
   _laAccessDenied=info.private_access===false && [..._laSel].some(t=>['일반매물','급매','찐매물'].includes(t));
-      document.getElementById('laStatus').textContent=`매물 ${_laData.length.toLocaleString()}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전`:''}${_laAccessDenied?' · 개인 매물은 지정된 계정에서만':''}`;
+  document.getElementById('laStatus').textContent=`매물 ${_laData.length.toLocaleString()}건 · KB ${d.asof||'–'}${info.data_age_days!=null?` · ${info.data_age_days}일 전`:''}${_laAccessDenied?' · 개인 매물은 지정된 계정에서만':''}`;
   const sourceWarning=document.getElementById('laSourceWarning');
   sourceWarning.style.display=info.private_access===true && info.general_refresh_failed===true?'flex':'none';
   document.getElementById('laSourceWarningText').textContent='일반매물 갱신이 안 됐어요. 목록에 이전 자료가 포함될 수 있습니다.';
