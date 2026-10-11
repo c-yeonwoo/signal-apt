@@ -1010,32 +1010,50 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     });
     assert.deepEqual(regionFilter.options,['전체 지역','서울 중구','인천 중구']);
     assert.deepEqual(regionFilter.seen,[
-      ['서울 중구 청약','인천 중구 청약'],
-      ['서울 중구 청약'],
-      ['서울 중구 청약'],
+      ['인천 중구 청약'],
+      [],
+      [],
     ]);
     assert.equal(regionFilter.retained,JSON.stringify(['서울','중구']));
     assert.equal(await page.locator('#psShowPast').isChecked(),false);
+    assert.equal(await page.locator('#psShowPast').getAttribute('role'),'switch');
+    assert.equal(await page.locator('#psShowPast').getAttribute('aria-checked'),'false');
+    const presaleToggle=await page.locator('.ps-past-toggle').evaluate(el=>{
+      const view=document.getElementById('view-presale'), previous=view.style.display;
+      view.style.display='block';
+      const result={width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height,
+        switchWidth:el.querySelector('input').getBoundingClientRect().width};
+      view.style.display=previous;
+      return result;
+    });
+    assert(presaleToggle.height>=44 && presaleToggle.switchWidth>=40,
+      `presale toggle touch target is too small: ${JSON.stringify(presaleToggle)}`);
     const presaleLifecycle=await page.evaluate(()=>{
       const original=mapSplit, oldList=_presaleList, oldBuyOnly=_mtBuyOnly, oldGrades=_mtGradeSet, oldFocus=_focusRegion;
+      const hadChoice=Object.hasOwn(_mtRegionChoice,'psMtFilter'), oldChoice=_mtRegionChoice.psMtFilter;
       const toggle=document.getElementById('psShowPast'), seen=[];
       try{
+        delete _mtRegionChoice.psMtFilter;
         mapSplit=(listId,_mapId,rows)=>{if(listId==='psList') seen.push(rows.map(row=>row['상태']));};
         _presaleList=['완료','접수예정','계약중','접수중','발표대기','공고'].map(status=>({
           단지명:status,지역:'테스트구',상태:status,시그널:'HELD'}));
         _mtBuyOnly=false; _mtGradeSet=new Set(['A','B','C','D','E']); _focusRegion=null;
         renderPresale();
-        toggle.checked=true; toggle.dispatchEvent(new Event('change'));
-        return seen;
+        toggle.checked=true; togglePresaleStatus(toggle);
+        const enabledAria=toggle.getAttribute('aria-checked');
+        toggle.checked=false; togglePresaleStatus(toggle);
+        return {seen,enabledAria,disabledAria:toggle.getAttribute('aria-checked')};
       }finally{
         mapSplit=original; _presaleList=oldList; _mtBuyOnly=oldBuyOnly;
         _mtGradeSet=oldGrades; _focusRegion=oldFocus; toggle.checked=false;
+        if(hadChoice) _mtRegionChoice.psMtFilter=oldChoice; else delete _mtRegionChoice.psMtFilter;
       }
     });
-    assert.deepEqual(presaleLifecycle,[
-      ['접수중','접수예정'],
-      ['접수중','접수예정','발표대기','계약중','완료','공고']
-    ]);
+    assert.deepEqual(presaleLifecycle,{seen:[
+      ['접수예정'],
+      ['접수중','접수예정','발표대기','계약중','완료'],
+      ['접수예정']
+    ],enabledAria:'true',disabledAria:'false'});
     assert.match(await page.locator('#laList').textContent(),/전용 59㎡/);
     assert.match(await page.locator('#laList').textContent(),/호가 5.0억.*전용 59㎡/);
     assert.match(await page.locator('#laList').textContent(),/서울 테스트구 상계동/);
