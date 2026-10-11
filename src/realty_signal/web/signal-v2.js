@@ -515,7 +515,10 @@
           explanationTarget, currentExplanation));
       body.querySelectorAll('[data-report-section]').forEach(button => button.onclick = () => {
         const section = body.querySelector(`#${button.dataset.reportSection}`);
-        section?.scrollIntoView({block:'start',behavior:'instant'});
+        if (!section) return;
+        const navHeight = body.querySelector('.lr-nav').getBoundingClientRect().height;
+        body.scrollTo({top:body.scrollTop + section.getBoundingClientRect().top
+          - body.getBoundingClientRect().top - navHeight - 16,behavior:'instant'});
         section?.focus({preventScroll:true});
       });
       body.querySelector('#v2ListingCompare').onclick = event => {

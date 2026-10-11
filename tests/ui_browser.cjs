@@ -1266,8 +1266,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         await page.keyboard.press('Enter');
         assert.equal(await page.evaluate(()=>document.activeElement.id),section);
         const position=await page.locator('#'+section).evaluate(el=>({top:el.getBoundingClientRect().top,
-          navBottom:document.querySelector('.lr-nav').getBoundingClientRect().bottom}));
+          navBottom:document.querySelector('.lr-nav').getBoundingClientRect().bottom,
+          dialogTop:document.querySelector('#v2ReportDlg').getBoundingClientRect().top,
+          toolbarTop:document.querySelector('#v2ReportDlg .v2-top').getBoundingClientRect().top,
+          dialogScroll:document.querySelector('#v2ReportDlg').scrollTop}));
         assert(position.top>=position.navBottom-1,`jump heading hidden by nav: ${JSON.stringify(position)}`);
+        assert.equal(position.dialogScroll,0,'only report body should scroll, never its close toolbar');
+        assert(position.toolbarTop>=position.dialogTop,`toolbar scrolled away: ${JSON.stringify(position)}`);
       }
       if (process.env.SIGNAL_REPORT_SCREENSHOTS && [360,1280].includes(width)) {
         fs.mkdirSync(process.env.SIGNAL_REPORT_SCREENSHOTS,{recursive:true});
