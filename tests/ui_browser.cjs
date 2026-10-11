@@ -230,7 +230,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       }
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:forbidden')
         return route.fulfill({status:403,json:{detail:'forbidden'}});
-      const naverMatched=url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='급매:naver-match';
+      const naverMatched=url.pathname==='/api/v2/listings/report' && ['급매:naver-match',
+        '일반매물:stale-report','일반매물:conflict-report','일반매물:thin-report','일반매물:above-report'].includes(url.searchParams.get('key'));
       const auctionReport=url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='경매:auction-1';
       if(url.pathname==='/api/v2/listings/report') data={type:'listing',report_id:'synthetic-report',
         subject:{key:url.searchParams.get('key'),name:'한방테스트단지',region:'테스트구',
@@ -239,7 +240,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           naver_complex_no:naverMatched?'12345':null,
           asking_comparison:naverMatched?{상태:'관측비교',표본수:4,중앙값:53000,호가차이율:-5.7}:null,
           price_reduction:naverMatched?{상태:'수집호가인하관측',차이율:-2}:null},
-        price:naverMatched?{'상태':'관측비교','표본수':3,'호가차이율':-5.2,'비교기준일':'2026-09-29',
+        price:naverMatched?{'상태':'관측비교','표본수':3,'호가차이율':-3.8,'비교기준일':'2026-09-29',
           '중앙값':52000,'범위':[49000,55000],'거래월범위':'2026-07~2026-09',
           '비교기준':'같은 단지·전용면적·입력 층 ±2층'}:
           {'상태':'관측비교','표본수':3},
@@ -257,6 +258,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       }
       if(url.pathname==='/api/v2/listings/report' && url.searchParams.get('key')==='일반매물:trade-missing' && !tradeEnriched)
         data.partial_failures=['trade_cache_unavailable'];
+      if(url.pathname==='/api/v2/listings/report') {
+        const key=url.searchParams.get('key');
+        if(key==='일반매물:stale-report') data.subject.stale=true;
+        if(key==='일반매물:conflict-report') data.subject.source_conflict=true;
+        if(key==='일반매물:thin-report') data.price.표본수=2;
+        if(key==='일반매물:above-report') data.buyer_fit={status:'above',gap_manwon:-2000};
+      }
       if(url.pathname==='/api/v2/listings/report') reportsByKey.set(url.searchParams.get('key'),data);
       if(/^\/api\/v2\/reports\/[^/]+\/explanations$/.test(url.pathname)) {
         const payload=route.request().postDataJSON(); explanationPayloads.push(payload);
@@ -892,7 +900,8 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       width:el.getBoundingClientRect().width}));
     assert.equal(behindMap.top,0);
     assert.equal(behindMap.width,360);
-    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/가격은 괜찮나요[\s\S]*비교 가능한 거래가 부족해 가격 판단을 보류해요[\s\S]*내 예산에 맞나요/);
+    assert.match(await page.locator('#lrPrice').textContent(),/호가, 최근 거래와 비교하면[\s\S]*가격 비교에 필요한 거래가 부족해요/);
+    assert.match(await page.locator('#lrBudget').textContent(),/내 예산에 맞나요[\s\S]*내 자금을 입력하고 비교/);
     assert.equal(await page.locator('#v2ReportBody .v2-report-more[open]').count(),0);
     assert.doesNotMatch(await page.locator('#v2ReportBody .v2-report-section').allTextContents().then(rows=>rows.join(' ')),/출입구가 검증되지|통학구역 자료를 연결하지/);
     const reportLayout=await page.evaluate(()=>({modal:document.getElementById('v2ReportDlg').matches(':modal'),
@@ -1139,13 +1148,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
-    await page.locator('#v2ReportBody').getByText('핵심 판단 빠르게 확인',{exact:true}).click();
-    await page.locator('#v2ReportBody').getByRole('button',{name:'가격이 싼가?'}).click();
-    assert.match(await page.locator('#v2QuickAnswer').textContent(),/동일 조건 실거래 3건과 비교/);
-    await page.locator('#v2ReportBody').getByRole('button',{name:'내 예산에 맞나?'}).click();
-    assert.match(await page.locator('#v2QuickAnswer').textContent(),/대출 승인·세금·수리비 확인 전/);
-    await page.locator('#v2ReportBody').getByRole('button',{name:'뭘 조심해야 하나?'}).click();
-    assert.match(await page.locator('#v2QuickAnswer').textContent(),/현재 판매 여부는 확인되지/);
+    assert.equal(await page.locator('[data-v2-quick-question]').count(),0);
+    assert.match(await page.locator('.lr-highlights').textContent(),/현재 판매 여부는 확인되지/);
+    await page.locator('#v2ReportBody .v2-report-evidence > summary').click();
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);
     await page.locator('#v2ReportBody').getByRole('button',{name:'쉽게 설명',exact:true}).click();
@@ -1215,10 +1220,10 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>SignalV2.openListing('일반매물:location-fail'));
     await page.locator('#v2ReportBody').getByRole('button',{name:'입지 다시 확인'}).click();
     await page.locator('#v2LocationResult').getByText(/자료를 불러오지 못했습니다/).waitFor();
-    assert.match(await page.locator('#v2ReportBody').textContent(),/국토부 동일 조건 거래/);
+    assert.match(await page.locator('#lrPrice').textContent(),/가격 비교에 필요한 거래가 부족해요/);
     await page.evaluate(()=>SignalV2.openListing('일반매물:profile-fail'));
     await page.locator('#v2ReportBody').getByText(/내 예산 정보를 지금 불러오지 못했어요/).waitFor();
-    assert.match(await page.locator('#v2ReportBody').textContent(),/국토부 동일 조건 거래/);
+    assert.match(await page.locator('#lrPrice').textContent(),/가격 비교에 필요한 거래가 부족해요/);
     await page.evaluate(()=>SignalV2.openListing('일반매물:trade-missing',true));
     await page.waitForFunction(()=>!document.querySelector('#v2RefreshTrades'));
     assert.equal(calls.filter(path=>path==='/api/v2/listings/report-enrich').length,1);
@@ -1239,16 +1244,62 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.locator('#v2ReportBody .v2-field-link').first().waitFor();
     assert.equal(await page.locator('#v2ReportBody .v2-field-link').first().getAttribute('href'),
       'https://new.land.naver.com/complexes/12345');
-    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/5.2% 낮아요/);
-    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/3,000만 원 남습니다/);
+    assert.match(await page.locator('#v2ReportBody .v2-report-section').first().textContent(),/3.8% 낮아요/);
+    assert.match(await page.locator('#lrBudget').textContent(),/3,000만 원 남습니다/);
+    assert.equal(await page.locator('#lrPrice .v2-fact-grid').isVisible(),true);
+    assert.match(await page.locator('#lrPrice').textContent(),/중앙값5\.20억/);
+    assert.equal(await page.locator('#lrPrice .lr-price-row').count(),2);
+    assert.equal(await page.locator('.lr-actions .watch-btn').count(),1);
+    assert.equal(await page.locator('#v2ReportBody .watch-btn').count(),1);
+    // Report hierarchy, keyboard jump links and widths are tested independently of the map.
+    for (const width of [180,360,768,1280]) {
+      await page.setViewportSize({width,height:900});
+      await page.locator('#v2ReportBody').evaluate(el=>el.scrollTop=0);
+      const layout=await page.locator('#v2ReportBody').evaluate(el=>({scroll:el.scrollWidth,width:el.clientWidth,
+        headingDisplay:getComputedStyle(el.querySelector('.v2-report-heading')).display,
+        textSize:parseFloat(getComputedStyle(el.querySelector('.v2-muted')).fontSize)}));
+      assert(layout.scroll<=layout.width,`report overflow at ${width}: ${JSON.stringify(layout)}`);
+      assert.equal(layout.headingDisplay,'block','report header must not inherit app navigation layout');
+      assert(layout.textSize>=14);
+      for (const section of ['lrPrice','lrBudget','lrLocation','lrChecklist']) {
+        await page.locator(`[data-report-section="${section}"]`).focus();
+        await page.keyboard.press('Enter');
+        assert.equal(await page.evaluate(()=>document.activeElement.id),section);
+        const position=await page.locator('#'+section).evaluate(el=>({top:el.getBoundingClientRect().top,
+          navBottom:document.querySelector('.lr-nav').getBoundingClientRect().bottom}));
+        assert(position.top>=position.navBottom-1,`jump heading hidden by nav: ${JSON.stringify(position)}`);
+      }
+      if (process.env.SIGNAL_REPORT_SCREENSHOTS && [360,1280].includes(width)) {
+        fs.mkdirSync(process.env.SIGNAL_REPORT_SCREENSHOTS,{recursive:true});
+        await page.locator('#v2ReportBody').evaluate(el=>el.scrollTop=0);
+        await page.screenshot({path:path.join(process.env.SIGNAL_REPORT_SCREENSHOTS,`report-${width}-top.png`)});
+        await page.locator('[data-report-section="lrPrice"]').click();
+        await page.screenshot({path:path.join(process.env.SIGNAL_REPORT_SCREENSHOTS,`report-${width}-price.png`)});
+        for (const section of ['lrBudget','lrLocation']) {
+          await page.locator(`[data-report-section="${section}"]`).click();
+          await page.screenshot({path:path.join(process.env.SIGNAL_REPORT_SCREENSHOTS,`report-${width}-${section}.png`)});
+        }
+      }
+    }
+    await page.setViewportSize({width:360,height:800});
     await page.locator('#v2ReportBody .v2-report-evidence > summary').click();
     const unifiedEvidence=await page.locator('#v2ReportBody .v2-report-more').first().textContent();
-    assert.match(unifiedEvidence,/국토부 동일 조건 거래/);
-    assert.match(unifiedEvidence,/중앙값5\.20억/);
     assert.match(unifiedEvidence,/같은 공급사의 현재 수집 호가 4건/);
     assert.match(unifiedEvidence,/같은 원천 매물의 수집 호가 변화/);
     assert.match(unifiedEvidence,/단지 참고 신호 · 판단 보류/);
     assert.match(unifiedEvidence,/지역 신호 매수와 별개/);
+    for (const [key,word] of [['stale-report','현재 호가를 먼저 확인'],['conflict-report','원천별 호가가 달라'],['thin-report','거래가 부족']]) {
+      await page.evaluate(key=>SignalV2.openListing('일반매물:'+key),key);
+      assert.match(await page.locator('#lrPrice').textContent(),new RegExp(word));
+      assert.equal(await page.locator('.lr-price-chart').count(),0);
+      assert.doesNotMatch(await page.locator('#lrPrice').textContent(),/3.8% 낮아요/);
+      if(key!=='thin-report') {
+        assert.equal(await page.locator('#lrBudget .tx-costs').count(),0);
+        assert.doesNotMatch(await page.locator('#lrBudget').textContent(),/예산 안에 들어와요/);
+      }
+    }
+    await page.evaluate(()=>SignalV2.openListing('일반매물:above-report'));
+    assert.match(await page.locator('#lrBudget').textContent(),/상한보다 2,000만 원 높습니다/);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#v2ReportDlg').evaluate(el=>el.open),false);
     const nickCallsBeforeLegacyReport=nickPayloads.length;
