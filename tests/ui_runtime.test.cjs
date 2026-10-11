@@ -7,6 +7,60 @@ const html = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/inde
 const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/signal-v2.js'), 'utf8');
 const extract = (start, end) => html.slice(html.indexOf(start), html.indexOf(end));
 
+function reportFunctions() {
+  const ctx=vm.createContext({});
+  vm.runInContext(signalV2.slice(signalV2.indexOf('const esc ='),signalV2.indexOf('const enabled =')) +
+    signalV2.slice(signalV2.indexOf('function listingPriceSummary('),signalV2.indexOf('function listingComplexContext(')) +
+    signalV2.slice(signalV2.indexOf('function listingBudgetSummary('),signalV2.indexOf('function showReportDrawer(')),ctx);
+  return ctx;
+}
+
+test('report price bars share a zero baseline and do not invent a recommendation', () => {
+  const ctx=reportFunctions();
+  const price={상태:'관측비교',표본수:3,중앙값:50000,호가차이율:-10};
+  const result=ctx.listingPriceChart({asking_manwon:45000},price);
+  assert.match(result,/width:90%/);
+  assert.match(result,/width:100%/);
+  assert.match(result,/이 매물 호가[\s\S]*4\.50억[\s\S]*실거래 중앙값[\s\S]*5\.00억/);
+  assert.match(result,/적정 매수가를 뜻하지 않습니다/);
+  for (const item of [{asking_manwon:45000,stale:true},{asking_manwon:45000,source_conflict:true},
+    {asking_manwon:null},{asking_manwon:NaN},{asking_manwon:-1}]) {
+    assert.equal(ctx.listingPriceChart(item,price),'');
+  }
+  for (const sample of [null,0,2,NaN,'not-a-number']) {
+    const insufficient={...price,표본수:sample};
+    assert.equal(ctx.listingPriceChart({asking_manwon:45000},insufficient),'');
+    assert.doesNotMatch(ctx.listingPriceSummary(insufficient,[],false),/10% 낮아요/);
+    assert.doesNotMatch(ctx.listingTradeFacts(insufficient),/v2-fact-grid/);
+  }
+});
+
+test('report price states retain uncertainty and escape source-provided text', () => {
+  const ctx=reportFunctions();
+  assert.match(ctx.listingPriceSummary({},['trade_cache_unavailable'],false),/id="v2RefreshTrades"/);
+  assert.doesNotMatch(ctx.listingPriceSummary({},['trade_cache_unavailable'],true),/id="v2RefreshTrades"/);
+  assert.match(ctx.listingPriceSummary({},[],true),/현재 호가를 먼저 확인/);
+  const result=ctx.listingTradeFacts({상태:'보류',이유:'<img src=x onerror=alert(1)>'});
+  assert.doesNotMatch(result,/<img/);
+  assert.match(result,/&lt;img/);
+});
+
+test('report budget distinguishes no headroom, excess and profile outage', () => {
+  const ctx=reportFunctions();
+  assert.match(ctx.listingBudgetSummary({status:'within',gap_manwon:0},[]),/<strong>0원<\/strong> 남습니다/);
+  assert.match(ctx.listingBudgetSummary({status:'above',gap_manwon:-2000},[]),/2,000만 원/);
+  assert.match(ctx.listingBudgetSummary({status:'within',gap_manwon:null},[]),/내 자금을 입력/);
+  assert.match(ctx.listingBudgetSummary({status:'within',gap_manwon:1000},['buyer_profile_unavailable']),/불러오지 못했어요/);
+});
+
+test('report highlights do not repeat price evidence and escape remaining observations', () => {
+  const ctx=reportFunctions();
+  const result=ctx.listingHighlights({positive:[{text:'repeated',evidence:'trades'}],
+    cautions:[{text:'<script>unsafe</script>',evidence:'listing'}]});
+  assert.doesNotMatch(result,/repeated|<script>/);
+  assert.match(result,/&lt;script&gt;/);
+});
+
 test('region and complex price tiers share one five-step wording with explicit scope', () => {
   const ctx=vm.createContext({});
   vm.runInContext(extract('const _GRADE_NAMES=', '// ===== 매물 공통 카드 요소'),ctx);
@@ -23,7 +77,8 @@ test('Nick chat entry points and free-form question composer are absent while re
   assert.doesNotMatch(html, /askNick|nickCxBtn|advFab|advChatTab|advInput|advSend|닉에게|Nick에게|닉과 대화|\/api\/advisor\/stream/);
   assert.doesNotMatch(signalV2, /Nick 호출|v2ExplainQuestion|이 리포트에 질문하기/);
   assert.match(html, /id="advReport"/); // read-only rollout fallback
-  assert.match(signalV2, /핵심 판단 빠르게 확인/);
+  assert.match(signalV2, /근거를 더 쉽게 읽기/);
+  assert.doesNotMatch(signalV2, /data-v2-quick-question/);
   assert.match(html, /id="listingCompareDlg"/);
 });
 

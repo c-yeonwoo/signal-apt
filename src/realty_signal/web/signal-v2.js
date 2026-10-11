@@ -85,32 +85,6 @@
       <p class="v2-muted">${esc(item.value??'자료 미확인')}${item.unit==='%/주'?'%/주':item.unit?` ${esc(item.unit)}`:''} · 관찰선 ${esc(item.threshold??'미확인')}${item.unit==='%/주'?'%/주':''} · ${source}</p></div>`;
   }
 
-  function listingQuickAnswer(report, question) {
-    const lines = report.lines || {};
-    if (question === 'price') return {
-      title:'가격이 싼가?',
-      answer: report.price?.['이유'] || lines.price ||
-        (report.price?.['상태'] === '관측비교' && Number(report.price?.['표본수']) > 0
-          ? `동일 조건 실거래 ${report.price['표본수']}건과 비교했습니다. 이 숫자만으로 싸다고 확정할 수 없습니다.`
-          : '비교 가능한 동일 조건 실거래가 부족해 싸다고 판단할 수 없습니다.'),
-      limit:'실거래 비교는 실제 계약 가격이나 현재 판매 가능 여부를 보증하지 않습니다.',
-    };
-    if (question === 'budget') return {
-      title:'내 예산에 맞나?',
-      answer:(report.partial_failures || []).includes('buyer_profile_unavailable')
-        ? '내 자금 프로필을 읽지 못해 예산 적합성을 보류했습니다.'
-        : lines.cash || report.buyer_fit?.reason || '저장된 자금 조건이 없어 비교할 수 없습니다.',
-      limit:'호가와 저장한 가정의 비교이며 대출 승인·세금·수리비 확인 전입니다.',
-    };
-    if (question === 'risk') return {
-      title:'뭘 조심해야 하나?',
-      answer:report.cautions?.[0]?.text || report.unknowns?.[0] ||
-        '이 자료에서 별도 주의 항목을 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.',
-      limit:'아래 주의할 점과 다음 확인 항목을 함께 살펴보세요.',
-    };
-    return null;
-  }
-
   function listingFieldLinks(item) {
     const query = [item.region, item.name].filter(Boolean).join(' ').trim();
     const auction = item.kind === '경매';
@@ -122,36 +96,60 @@
       search(`${query} 아파트 매매 네이버 부동산`);
     const link = (href, label, note) => `<a class="v2-field-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><b>${esc(label)} ↗</b><small>${esc(note)}</small></a>`;
     return `<section class="v2-field-check" aria-label="${auction ? '위치와 주변 환경 확인' : '사진 거리뷰 후기 현장 확인'}">
-      <h3>${auction ? '위치와 주변 환경 확인' : '실제 모습과 거주 경험 보기'}</h3>
+      <h3>${auction ? '위치와 주변 환경 확인' : '사진·거리뷰·후기 확인'}</h3>
       <div class="v2-field-grid">
-        ${link(naver, auction ? '네이버 지도 · 위치 확인' : naverNo ? '네이버 부동산 · 매물·사진' : '네이버에서 매물·사진 찾기', auction ? '주변 위치 참고 · 사건·권리 정보 아님' : naverNo ? '단지 페이지 · 같은 매물인지 다시 확인' : '단지명 검색 · 정확한 매물 연결은 미확인')}
-        ${!auction && query ? link(`https://map.naver.com/p/search/${encodeURIComponent(query)}`, '네이버 지도 · 거리뷰', '검색 결과에서 거리뷰를 선택 · 출입구 확인') : ''}
-        ${!auction && query ? link(`https://hogangnono.com/search?q=${encodeURIComponent(query)}`, '호갱노노 · 단지 검색', '호갱노노에서 직접 검색 · 단지를 선택해 후기 확인') : ''}
-        ${!auction && query ? link('https://www.asil.kr/asil/index.jsp', '아실 · 단지 찾기', '아실 지도에서 단지명 검색 · 단지톡 확인') : ''}
+        ${link(naver, auction ? '네이버 지도' : naverNo ? '네이버 부동산' : '네이버 검색', auction ? '위치 참고 · 사건·권리 정보 아님' : naverNo ? '단지 매물·사진' : '단지명으로 매물·사진 찾기')}
+        ${!auction && query ? link(`https://map.naver.com/p/search/${encodeURIComponent(query)}`, '네이버 지도', '거리뷰·주변 환경') : ''}
+        ${!auction && query ? link(`https://hogangnono.com/search?q=${encodeURIComponent(query)}`, '호갱노노', '단지 검색·거주 후기') : ''}
+        ${!auction && query ? link('https://www.asil.kr/asil/index.jsp', '아실', '지도로 이동 · 단지명 검색') : ''}
       </div>
       <p class="v2-muted">${auction ? '지도는 위치 참고용입니다. 법원 공고·사건 서류를 대신하지 않으며 권리·점유 판단에 사용하지 마세요.' : '외부 사이트에서 단지·동·호수가 같은지 확인하세요. 후기와 사진은 분석 점수에 넣지 않습니다.'}</p>
     </section>`;
   }
 
   function listingPriceSummary(price, failures, stale) {
-    if (stale) return '<b>현재 호가인지 먼저 확인하세요</b><p class="v2-muted">지난 수집분의 비교 결과는 아래 상세 근거에 남겨두었어요.</p>';
+    if (stale) return '<b>현재 호가를 먼저 확인해 주세요</b><p class="v2-muted">수집 후 시간이 지나 현재 가격과 다를 수 있습니다. 아래 거래 자료는 참고용입니다.</p>';
     const diff = Number(price?.['호가차이율']);
-    const count = Number(price?.['표본수']);
-    if (price?.['상태'] === '관측비교' && price['호가차이율'] != null && Number.isFinite(diff) && Number.isFinite(count) && count > 0) {
+    if (listingTradeSampleReady(price) && price['호가차이율'] != null && Number.isFinite(diff)) {
       const verdict = diff < 0 ? `비슷한 조건의 최근 거래보다 ${Math.abs(diff).toLocaleString('ko-KR',{maximumFractionDigits:1})}% 낮아요` :
         diff > 0 ? `비슷한 조건의 최근 거래보다 ${diff.toLocaleString('ko-KR',{maximumFractionDigits:1})}% 높아요` : '비슷한 조건의 최근 거래와 비슷해요';
-      return `<b>${esc(verdict)}</b><p class="v2-muted">같은 단지·전용면적 거래 ${esc(count)}건 기준${price['비교기준일'] ? ` · ${esc(price['비교기준일'])}` : ''}. 층 조건과 실제 계약가는 상세 근거에서 확인하세요.</p>`;
+      return `<b>${esc(verdict)}</b>`;
     }
     const loading = (failures || []).includes('trade_cache_unavailable');
-    return `<b>${loading ? '같은 면적 실거래를 확인하고 있어요' : '비교 가능한 거래가 부족해 가격 판단을 보류해요'}</b>
+    return `<b>${loading ? '같은 면적 실거래를 확인하고 있어요' : '가격 비교에 필요한 거래가 부족해요'}</b>
       <p class="v2-muted">${esc(loading ? '처음 조회한 단지는 공식 거래 자료를 확인한 뒤 결과를 갱신합니다.' : price?.['이유'] || '같은 단지·면적의 최근 거래가 확인되지 않았습니다.')}</p>
       ${loading ? '<button type="button" class="btn" id="v2RefreshTrades">실거래 다시 확인</button><p id="v2RefreshTradesStatus" class="v2-muted" role="status"></p>' : ''}`;
   }
 
+  function listingTradeSampleReady(price) {
+    return price?.['상태'] === '관측비교' && Number.isFinite(Number(price['중앙값']))
+      && Number(price['중앙값']) > 0 && Number.isFinite(Number(price['표본수'])) && Number(price['표본수']) >= 3;
+  }
+
+  // A price comparison is useful only when the same-condition sample is usable.
+  // Keep missing, stale and conflicting prices out of the visual comparison too.
+  function listingPriceChart(item, price) {
+    const asking = Number(item.asking_manwon), median = Number(price['중앙값']);
+    if (item.stale || item.source_conflict || !listingTradeSampleReady(price)
+        || !Number.isFinite(asking) || asking <= 0) return '';
+    const max = Math.max(asking, median);
+    const bar = (label, value, kind) => `<div class="lr-price-row"><div><span>${label}</span><b>${money(value)}</b></div>
+      <div class="lr-bar-track" aria-hidden="true"><span class="${kind}" style="width:${value / max * 100}%"></span></div></div>`;
+    return `<div class="lr-price-chart" aria-label="호가와 동일 조건 실거래 중앙값 비교">
+      ${bar('이 매물 호가', asking, 'lr-bar-asking')}${bar('실거래 중앙값', median, 'lr-bar-trade')}
+      <p class="v2-muted">중앙값은 비교 거래를 가격순으로 놓았을 때 가운데 값입니다. 적정 매수가를 뜻하지 않습니다.</p></div>`;
+  }
+
+  function listingHighlights(report) {
+    const group = (title, rows, kind) => rows?.length ? `<div class="lr-highlight ${kind}"><h4>${title}</h4>
+      <ul>${rows.map(row => `<li>${esc(row.text)}</li>`).join('')}</ul></div>` : '';
+    const extra = rows => (rows || []).filter(row => row.evidence !== 'trades');
+    const content = group('확인된 근거', extra(report.positive), 'lr-positive') + group('함께 볼 주의점', extra(report.cautions), 'lr-caution');
+    return content ? `<section class="lr-highlights" aria-label="매물의 근거와 주의점">${content}</section>` : '';
+  }
+
   function listingTradeFacts(price) {
-    if (price?.['상태'] !== '관측비교' || !Number.isFinite(Number(price['중앙값']))
-        || Number(price['중앙값']) <= 0
-        || Number(price['표본수']) < 3) {
+    if (!listingTradeSampleReady(price)) {
       return `<p class="v2-muted">${esc(price?.['이유'] || '같은 단지·전용면적의 최근 거래 근거가 부족합니다.')}</p>`;
     }
     const range = Array.isArray(price['범위']) && price['범위'].length === 2
@@ -161,7 +159,8 @@
       <div><small>비교 거래</small><b>${esc(price['표본수'])}건</b></div>
       <div><small>중앙값</small><b>${money(price['중앙값'])}</b></div>
       <div><small>관측 범위</small><b>${esc(range)}</b></div>
-    </div><p class="v2-muted">${esc(price['비교기준'] || '같은 단지·전용면적의 최근 신고 거래')} · ${esc(price['거래월범위'] || price['비교기준일'] || '기준일 미확인')}. 층·집 상태·시점 차이가 있어 가격 차이는 할인율이나 적정가가 아닙니다.</p>`;
+    </div><p class="v2-muted lr-comparison-basis">${esc(price['비교기준'] || '같은 단지·전용면적의 최근 신고 거래')} · ${esc(price['거래월범위'] || price['비교기준일'] || '기준일 미확인')}</p>
+    <p class="v2-muted">층·집 상태·거래 시점에 따라 달라집니다. 가격 차이를 할인율로 해석하지 마세요.</p>`;
   }
 
   function listingComplexContext(complex) {
@@ -202,10 +201,10 @@
       return '<b>내 예산 정보를 지금 불러오지 못했어요</b><p class="v2-muted">잠시 후 다시 열어 주세요. 가격 비교는 위에서 따로 확인할 수 있어요.</p>';
     const gap = Number(fit?.gap_manwon);
     if (fit?.status === 'within' && fit.gap_manwon != null && Number.isFinite(gap) && gap >= 0)
-      return `<b>저장한 매수력 상한 안이에요</b><p class="v2-muted">상한까지 ${esc(gapMoney(gap))} 남습니다. 취득세·수리비·대출 승인은 별도 확인이 필요해요.</p>`;
+      return `<b>내 매수 예산 안에 들어와요</b><p class="lr-budget-gap">상한까지 <strong>${esc(gapMoney(gap))}</strong> 남습니다.</p><p class="v2-muted">저장한 매수력과 호가의 차이입니다. 세금·수리비와 대출 승인은 별도 확인하세요.</p>`;
     if (fit?.status === 'above' && fit.gap_manwon != null && Number.isFinite(gap) && gap < 0)
-      return `<b>저장한 매수력 상한을 넘어요</b><p class="v2-muted">상한보다 ${esc(gapMoney(Math.abs(gap)))} 높습니다. 자금 계획을 다시 확인하세요.</p>`;
-    return `<b>확정한 매수력과 비교할 수 없어요</b><p class="v2-muted">${esc(fit?.reason || '자금 조건을 확정하면 현재 호가와 즉시 비교합니다.')}</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>`;
+      return `<b>내 매수 예산을 넘어가요</b><p class="lr-budget-gap">상한보다 <strong>${esc(gapMoney(Math.abs(gap)))}</strong> 높습니다.</p><p class="v2-muted">세금·수리비를 포함해 자금 계획을 다시 확인하세요.</p>`;
+    return `<b>내 자금을 입력하고 비교해 보세요</b><p class="v2-muted">${esc(fit?.reason || '현금과 대출 조건을 확정하면 이 호가가 예산 안에 드는지 비교합니다.')}</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>`;
   }
 
   function showReportDrawer() {
@@ -410,15 +409,13 @@
     const dialog = showReportDrawer();
     const body = document.getElementById('v2ReportBody');
     body.scrollTop = 0;
-    body.textContent = '매물 근거를 확인하고 있습니다…';
+    body.innerHTML = '<div class="lr-loading" role="status"><b>매물 리포트를 준비하고 있어요</b><p>가격·예산·입지 근거를 모으고 있습니다.</p><div aria-hidden="true"></div><div aria-hidden="true"></div></div>';
     try {
       const report = await json(`/api/v2/listings/report?key=${encodeURIComponent(key)}`);
       if (generation !== listingGeneration || !dialog.open) return;
       const item = report.subject;
       const price = report.price || {};
       const fit = report.buyer_fit || {};
-      const pros = (report.positive || []).map(x => `<div class="v2-row">${esc(x.text)}</div>`).join('');
-      const cautions = (report.cautions || []).map(x => `<div class="v2-row v2-caution">${esc(x.text)}</div>`).join('');
       const evidence = (report.evidence || []).map(x =>
         `${esc(x.label)} · ${esc(x.asof || '기준일 미확인')} · ${esc(x.status)}`).join('<br>');
       const costEligible = ['일반매물','급매','찐매물'].includes(item.kind)
@@ -434,10 +431,14 @@
             <b>${money(item.asking_manwon)}</b><p class="v2-muted">현재 표시된 최저매각가입니다. 감정가·시세·낙찰가나 가격 경쟁력을 뜻하지 않습니다.</p></div>
           <div class="v2-answer"><span class="v2-answer-label">02 · 권리·현금</span><h4>확인 전 판단 보류</h4>
             <p class="v2-muted">법원 서류와 점유·인수 권리, 잔금 자금 확인 전에는 권리 안전성·필요 현금·입찰가를 판단할 수 없습니다.</p></div></div></section>`
-        : `<section class="v2-report-section v2-report-summary" aria-label="궁금한 것에 대한 답"><h3>이 매물, 먼저 볼 두 가지</h3>
-          <div class="v2-answer-grid"><div class="v2-answer"><span class="v2-answer-label">01 · 가격 비교</span><h4>가격은 괜찮나요?</h4>
-          ${listingPriceSummary(price, report.partial_failures, item.stale)}</div>
-          <div class="v2-answer"><span class="v2-answer-label">02 · 내 자금</span><h4>내 예산에 맞나요?</h4>${listingBudgetSummary(fit, report.partial_failures)}</div></div></section>`;
+        : `<section id="lrPrice" class="v2-report-section lr-price-section" aria-label="가격 비교" tabindex="-1">
+          <p class="lr-kicker">01 · 가격</p><h3>호가, 최근 거래와 비교하면?</h3>
+          <div class="lr-verdict">${item.source_conflict
+            ? '<b>원천별 호가가 달라 확인이 필요해요</b><p class="v2-muted">현재 판매 가격을 확인하기 전에는 가격 차이를 계산하지 않습니다.</p>'
+            : listingPriceSummary(price, report.partial_failures, item.stale)}</div>
+          ${listingPriceChart(item, price)}
+          ${listingTradeSampleReady(price) ? `<h4 class="lr-data-title">${item.stale || item.source_conflict ? '참고 자료 · 현재 호가 비교 아님' : '국토부 동일 조건 거래'}</h4>${listingTradeFacts(price)}` : ''}
+          </section>`;
       const actionItems = isAuction ? [
         '법원 원문에서 사건번호·매각기일·최저매각가가 최신인지 확인',
         '매각물건명세서·현황조사서·감정평가서를 직접 확인',
@@ -449,49 +450,46 @@
           <h3>국토부 매매 실거래</h3>${listingTradeFacts(price)}
           <p class="v2-muted">일반 매매 신고 거래의 참고 자료입니다. 경매 물건의 감정가·최저매각가·낙찰가와 동일한 가격 비교가 아닙니다.</p>
           ${listingComplexContext(report.complex)}</details>`
-        : `<details class="v2-report-more v2-report-evidence"><summary><span class="v2-report-number">01</span><span><b>실거래와 단지 근거</b><small>가격 비교의 표본·시점·판단 한계</small></span></summary>
-          <h3>국토부 동일 조건 거래</h3>${listingTradeFacts(price)}
+        : `<details class="v2-report-more v2-report-evidence"><summary>가격 변화·단지 신호·출처 더 보기</summary>
           <h3>수집 호가와 가격 변화</h3>${listingSourcePriceFacts(item)}
           <h3>단지·지역 참고 신호</h3>${listingComplexContext(report.complex)}
-          ${pros ? `<h3>유리한 근거</h3>${pros}` : ''}
-          ${cautions ? `<h3>주의할 근거</h3>${cautions}` : ''}
-          ${(report.lines || {}).price ? `<p class="v2-muted">${esc(report.lines.price)}</p>` : ''}
-          ${(report.lines || {}).cash ? `<p class="v2-muted">${esc(report.lines.cash)}</p>` : ''}
-          <details><summary>근거와 기준일</summary><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p></details></details>`;
-      body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">${isAuction ? '경매 후보 · 법원 원문 확인 전' : '매물 확인 · 현장 검증 전'}</p>
-        <h2>${esc(item.name || '매물')}</h2><p class="v2-report-price">${isAuction ? `최저매각가 ${money(item.asking_manwon)}` : money(item.asking_manwon)}</p>
-        <p class="v2-muted">${esc(item.region)} · ${esc(item.kind)}${item.exclusive_m2 ? ` · 전용 ${esc(item.exclusive_m2)}㎡` : ''}${item.floor != null ? ` · ${esc(item.floor)}층` : ''}</p>
-        <p class="v2-muted">호가 수집 ${esc(item.collected_at || '날짜 확인 필요')}${item.stale ? ' · 최신 호가 재확인 필요' : item.refresh_due ? ' · 최근 수집 호가로 비교' : ''}</p></header>
+          <h3>근거와 기준일</h3><p class="v2-muted">${evidence || '근거 기준일을 확인할 수 없습니다.'}</p>
+          ${enabled('contextual_explanations_enabled') ? `<div class="lr-explanation"><h3>근거를 더 쉽게 읽기</h3>
+            <p class="v2-muted">위 자료만 풀어 설명합니다. 새로운 판정이나 예측은 아닙니다.</p>
+            <button type="button" class="btn" data-v2-explain="easy">쉽게 설명</button>
+            <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
+            <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}</details>`;
+      body.innerHTML = `<header class="v2-report-heading"><p class="v2-eyebrow">${isAuction ? '경매 후보 · 법원 원문 확인 전' : '매물 분석'}</p>
+        <h2>${esc(item.name || '매물')}</h2><p class="lr-address">${esc([item.region_sido, item.region].filter(Boolean).join(' ') || '지역 확인 필요')}</p>
+        <div class="lr-heading-price"><div><span>${isAuction ? '최저매각가' : item.stale ? '지난 수집 호가' : item.source_conflict ? '확인 필요한 수집 호가' : '매매 호가'}</span><p class="v2-report-price">${money(item.asking_manwon)}</p></div>
+          <div class="lr-property-facts">${item.exclusive_m2 ? `<b>전용 ${esc(item.exclusive_m2)}㎡</b><span>약 ${esc((Number(item.exclusive_m2) / 3.3058).toFixed(1))}평 · 전용 기준</span>` : ''}${item.floor != null ? `<span>${esc(item.floor)}층</span>` : ''}</div></div>
+        <p class="lr-updated">호가 수집 ${esc(item.collected_at || '날짜 확인 필요')}</p>
+        <div class="lr-actions">${watchAction(item)}<button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
+          <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button></div></header>
+        ${!isAuction ? `<nav class="lr-nav" aria-label="리포트 항목 바로가기">
+          <button type="button" data-report-section="lrPrice">가격 비교</button><button type="button" data-report-section="lrBudget">내 예산</button>
+          <button type="button" data-report-section="lrLocation">입지</button><button type="button" data-report-section="lrChecklist">체크리스트</button></nav>` : ''}
         ${summary}
-        ${listingFieldLinks(item)}
-        ${['일반매물','급매','찐매물'].includes(item.kind) ? `<section class="v2-report-section" aria-label="취득·부대비용 추정">
-          <h3>살 때 드는 돈은?</h3><p class="v2-muted">${costEligible
-            ? '현재 수집 호가 기준의 취득·이사·수리 비용 가정입니다. 세율·규제 적용과 실제 필요 현금은 계약 전 다시 확인해야 합니다.'
-            : '현재 호가·전용면적·지역 식별이 부족하거나 서로 충돌해 비용 추정을 보류합니다. 원천 자료를 먼저 확인하세요.'}</p>
-          ${costSlot}</section>` : ''}
+        ${!isAuction ? listingHighlights(report) : ''}
         ${evidenceSection}
-        <section class="v2-report-section v2-report-location" aria-label="교통 학교 생활권"><div class="v2-report-section-title"><span class="v2-report-number">02</span><div><h3>교통·학교·생활권</h3><small>매물 표시 좌표 기준 · 실제 출입구와는 다를 수 있어요</small></div></div>
-        <p class="v2-muted">표시 좌표 기준 참고 자료입니다. 출입구·통학 배정·실제 출퇴근 시간은 확인이 필요합니다.</p>
+        ${!isAuction ? `<section id="lrBudget" class="v2-report-section lr-budget-section" aria-label="내 예산과 부대비용" tabindex="-1">
+          <p class="lr-kicker">02 · 자금</p><h3>내 예산에 맞나요?</h3>
+          <div class="lr-budget-answer">${listingBudgetSummary(item.stale || item.source_conflict
+            ? {status:'unknown',reason:'현재 호가를 확인한 뒤 내 예산과 비교해 주세요.'} : fit, report.partial_failures)}</div>
+          ${['일반매물','급매','찐매물'].includes(item.kind) ? `<h4 class="lr-data-title">살 때 드는 돈은?</h4><p class="v2-muted">${costEligible
+            ? '세금·중개비·이사·수리비까지 펼쳐서 계산해 보세요.'
+            : '현재 호가·면적·지역을 먼저 확인해야 해 비용 추정을 보류합니다.'}</p>
+          ` : ''}
+          ${costSlot}</section>` : ''}
+        <section id="lrLocation" class="v2-report-section v2-report-location" aria-label="교통 학교 생활권" tabindex="-1"><p class="lr-kicker">${isAuction ? '주변 환경' : '03 · 입지'}</p><h3>교통·학교·생활권</h3>
+        <p class="v2-muted">매물 표시 좌표 기준입니다. 실제 출입구·통학 배정은 확인하세요.</p>
         <div id="v2LocationResult" aria-live="polite">가까운 역과 주변 시설을 확인하고 있습니다…</div>
-        <button type="button" class="btn" id="v2ListingLocation">입지 다시 확인</button></section>
-        <section class="v2-report-section v2-report-checklist" aria-label="${isAuction ? '경매 입찰 전 확인 사항' : '중개사 확인 사항'}"><div class="v2-report-section-title"><span class="v2-report-number">03</span><div><h3>${isAuction ? '입찰 전에 직접 확인할 것' : '중개사에게 확인할 것'}</h3><small>${isAuction ? '법원 원문과 권리·자금 검토가 필요합니다' : '계약 전에 답을 받아야 하는 질문'}</small></div></div>
+        <button type="button" class="btn" id="v2ListingLocation">입지 다시 확인</button>
+        ${listingFieldLinks(item)}</section>
+        <section id="lrChecklist" class="v2-report-section v2-report-checklist" aria-label="${isAuction ? '경매 입찰 전 확인 사항' : '중개사 확인 사항'}" tabindex="-1"><p class="lr-kicker">${isAuction ? '입찰 준비' : '04 · 계약 전'}</p><h3>${isAuction ? '입찰 전에 직접 확인할 것' : '중개사에게 확인할 것'}</h3>
           <ol>${actionItems.map(x => `<li>${esc(x)}</li>`).join('')}</ol>${isAuction ? '<p class="v2-muted">이 목록만으로 권리 안전성이나 입찰 적정성을 판단할 수 없습니다.</p>' : ''}</section>
-        ${!isAuction ? `<details class="v2-report-more"><summary>핵심 판단 빠르게 확인</summary>
-        <div class="v2-row" aria-label="핵심 판단 바로 확인"><b>먼저 궁금한 것부터 보세요</b>
-          <p class="v2-muted">현재 리포트의 가격·예산·주의 근거를 짧게 다시 보여 줍니다.</p>
-          <button type="button" class="btn" data-v2-quick-question="price">가격이 싼가?</button>
-          <button type="button" class="btn" data-v2-quick-question="budget">내 예산에 맞나?</button>
-          <button type="button" class="btn" data-v2-quick-question="risk">뭘 조심해야 하나?</button>
-          <div id="v2QuickAnswer" role="status" aria-live="polite"></div></div>
-        ${enabled('contextual_explanations_enabled') ? `<div class="v2-row"><b>이 리포트 더 쉽게 보기</b><p class="v2-muted">선택하면 AI가 현재 근거만 다시 풀어 설명합니다. 기본 리포트와 숫자는 바꾸지 않습니다.</p>
-          <button type="button" class="btn" data-v2-explain="easy">쉽게 설명</button>
-          <button type="button" class="btn" data-v2-explain="counterevidence">반대 근거</button>
-          <div id="v2ListingExplanation" role="status" aria-live="polite"></div></div>` : ''}</details>` : ''}
         <details class="v2-report-more"><summary>관심 기록·비교·리포트 저장</summary>
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
-        <button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
-        <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>
-        ${watchAction(item)}
         <button type="button" class="btn" id="v2SaveReport">이 리포트 저장</button>
         <button type="button" class="btn" id="v2SavedReports">저장본 보기</button>
         <p id="v2SaveReportStatus" class="v2-muted" role="status"></p>
@@ -515,14 +513,13 @@
       body.querySelectorAll('[data-v2-explain]').forEach(button => button.onclick = () =>
         askExplanation(report, {type:'listing',key,mode:button.dataset.v2Explain},
           explanationTarget, currentExplanation));
-      body.querySelectorAll('[data-v2-quick-question]').forEach(button => button.onclick = () => {
-        if (generation !== listingGeneration || !dialog.open) return;
-        const answer = listingQuickAnswer(report, button.dataset.v2QuickQuestion);
-        if (!answer) return;
-        body.querySelectorAll('[data-v2-quick-question]').forEach(choice =>
-          choice.setAttribute('aria-pressed', String(choice === button)));
-        body.querySelector('#v2QuickAnswer').innerHTML = `<p><b>${esc(answer.title)}</b> ${esc(answer.answer)}</p>
-          <p class="v2-muted">${esc(answer.limit)}</p>`;
+      body.querySelectorAll('[data-report-section]').forEach(button => button.onclick = () => {
+        const section = body.querySelector(`#${button.dataset.reportSection}`);
+        if (!section) return;
+        const navHeight = body.querySelector('.lr-nav').getBoundingClientRect().height;
+        body.scrollTo({top:body.scrollTop + section.getBoundingClientRect().top
+          - body.getBoundingClientRect().top - navHeight - 16,behavior:'instant'});
+        section?.focus({preventScroll:true});
       });
       body.querySelector('#v2ListingCompare').onclick = event => {
         event.currentTarget.textContent = addCompare(key);
@@ -589,7 +586,10 @@
       };
       body.querySelector('#v2SavedReports').onclick = () => openSavedReports(item.key);
     } catch (error) {
-      if (generation === listingGeneration) body.textContent = error.message;
+      if (generation === listingGeneration && dialog.open) {
+        body.innerHTML = `<div class="lr-loading" role="alert"><b>리포트를 불러오지 못했어요</b><p>${esc(error.message)}</p><button type="button" class="btn" id="v2ReportRetry">다시 불러오기</button></div>`;
+        body.querySelector('#v2ReportRetry').onclick = () => openListing(key, fromDiscovery);
+      }
     }
   }
 
