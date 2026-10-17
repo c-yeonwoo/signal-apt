@@ -25,6 +25,7 @@
   const historicalGradeLabel = code => Object.hasOwn(historicalGrades, code) ? historicalGrades[code] : '표시 불가';
   let listingGeneration = 0, regionGeneration = 0, discoveryGeneration = 0, discoveryRegionGeneration = 0;
   let discoveryReturn = null;
+  let reportReturnFocus = null;
   let noteSubject = null, editingNote = null, notesCache = [];
   let noteList = {generation:0, next_cursor:null, loading:false};
   let savedReportList = {key:null, items:[], next_cursor:null, policy:null};
@@ -207,14 +208,18 @@
     return `<b>내 자금을 입력하고 비교해 보세요</b><p class="v2-muted">${esc(fit?.reason || '현금과 대출 조건을 확정하면 이 호가가 예산 안에 드는지 비교합니다.')}</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>`;
   }
 
-  function showReportDrawer() {
+  function showReportDrawer(origin) {
     const legacyPanel = document.getElementById('advPanel');
     if (legacyPanel?.style.display === 'flex') {
       if (typeof window.clearListingReportContext === 'function') window.clearListingReportContext();
       legacyPanel.style.display = 'none';
     }
     const dialog = document.getElementById('v2ReportDlg');
-    if (!dialog.open) dialog.show();
+    if (!dialog.open) {
+      const active = origin?.isConnected ? origin : document.activeElement;
+      reportReturnFocus = !discoveryReturn && active !== document.body ? active : null;
+      dialog.show();
+    } else if (!discoveryReturn && origin?.isConnected && !dialog.contains(origin)) reportReturnFocus = origin;
     return dialog;
   }
 
@@ -396,7 +401,7 @@
     }
   }
 
-  async function openListing(key, fromDiscovery = false) {
+  async function openListing(key, fromDiscovery = false, origin = null) {
     if (!key) return;
     window.clearV2StationRoute?.();
     discoveryReturn = fromDiscovery ? {tab:location.hash.slice(1), key} : null;
@@ -406,7 +411,7 @@
       return;
     }
     const generation = ++listingGeneration;
-    const dialog = showReportDrawer();
+    const dialog = showReportDrawer(origin);
     const body = document.getElementById('v2ReportBody');
     body.scrollTop = 0;
     body.innerHTML = '<div class="lr-loading" role="status"><b>매물 리포트를 준비하고 있어요</b><p>가격·예산·입지 근거를 모으고 있습니다.</p><div aria-hidden="true"></div><div aria-hidden="true"></div></div>';
@@ -793,6 +798,8 @@
 
   document.getElementById('v2ReportDlg')?.addEventListener('close', () => {
     window.clearV2StationRoute?.();
+    const returnFocus = reportReturnFocus;
+    reportReturnFocus = null;
     discoveryReturn = null;
     document.getElementById('v2BackToDiscovery').hidden = true;
     const dialog = document.getElementById('v2ReportDlg');
@@ -801,6 +808,10 @@
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     const toggle = document.getElementById('v2MapSpace');
     if (toggle) { toggle.setAttribute('aria-pressed', 'false'); toggle.textContent = '지도 크게'; }
+    requestAnimationFrame(() => {
+      if (returnFocus?.isConnected && returnFocus.getClientRects().length)
+        returnFocus.focus({preventScroll:true});
+    });
     const url = new URL(location.href);
     if (!url.searchParams.has('listing')) return;
     url.searchParams.delete('listing');

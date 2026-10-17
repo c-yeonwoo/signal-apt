@@ -6701,7 +6701,7 @@ function naverBtn(cno){
 }
 function reportBtn(key,label='매물 리포트'){
   if(!key || !/^(일반매물|급매|찐매물|경매):/.test(key)) return '';
-  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();SignalV2.openListing(this.dataset.reportKey)">${esc(label)}</button>`;
+  return `<button type="button" class="btn" style="padding:3px 10px;background:var(--accent);color:#fff" data-report-key="${esc(key)}" onclick="event.stopPropagation();SignalV2.openListing(this.dataset.reportKey,false,this)">${esc(label)}</button>`;
 }
 // ===== 동네 리포트 (v2: 주간 스냅샷·diff·관심지역 비교) =====
 let _nbhdCur=null;
@@ -8925,7 +8925,7 @@ function goWatchCandidate(btn){
   if(kind==='찐매물') qsMode('찐매물');
 }
 function openWatchItem(btn){
-  if(btn.dataset.available==='true' && btn.dataset.kind!=='청약') SignalV2.openListing(btn.dataset.watchKey);
+  if(btn.dataset.available==='true' && btn.dataset.kind!=='청약') SignalV2.openListing(btn.dataset.watchKey,false,btn);
   else goWatchCandidate(btn);
 }
 async function loadListingWatch(){

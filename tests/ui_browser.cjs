@@ -1146,7 +1146,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       `watch action must not fill the list width: ${JSON.stringify(watchLayout)}`);
     assert.equal(await page.locator('#laList .la-address-edit').count(),0);
     assert.equal(calls.filter(x=>x==='/api/listing-locality').length,0);
-    await page.locator('#laList .ms-detail .la-detail-actions button').click();
+    const listScrollBeforeReport=await page.locator('#laList').evaluate(el=>el.scrollTop);
+    const selectedReportKey=await page.evaluate(()=>{
+      const button=[...document.querySelectorAll('#laList .ms-detail .la-detail-actions button')]
+        .find(el=>el.getClientRects().length);
+      if(!button) throw new Error('visible report action missing');
+      const key=button.dataset.reportKey;
+      button.click();
+      return key;
+    });
     await page.locator('#v2ReportBody').getByText('살 때 드는 돈은?',{exact:true}).waitFor();
     assert.equal(await page.locator('#v2ReportBody .tx-costs').evaluate(el=>el.open),false);
     assert.equal(calls.filter(x=>x==='/api/listing-costs').length,0);
@@ -1159,6 +1167,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.doesNotMatch(await page.locator('#v2ReportBody .tx-costs .tx-note').last().textContent(),/감면 반영|규제 기준일|생애최초/);
     assert.equal(calls.filter(x=>x==='/api/listing-costs').length,1);
     await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    await page.waitForTimeout(50);
+    const returnedReportKey=await page.evaluate(()=>document.activeElement?.dataset.reportKey);
+    assert.equal(returnedReportKey,selectedReportKey,
+      `report focus mismatch: expected ${selectedReportKey}, got ${returnedReportKey}`);
+    assert.equal(await page.locator('#laList').evaluate(el=>el.scrollTop),listScrollBeforeReport);
+    assert.equal(await firstSale.getAttribute('aria-expanded'),'true');
     costsVerified=true;
     await page.evaluate(()=>SignalV2.openListing('일반매물:synthetic-hb-1'));
     await page.locator('#v2ReportBody .tx-costs summary').click();
