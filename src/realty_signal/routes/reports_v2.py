@@ -87,6 +87,27 @@ def region_report(region: str):
     return JSONResponse(report, headers=PRIVATE)
 
 
+@router.get("/api/v2/regions/{region}/issued-history")
+def region_issued_history(region: str):
+    _require_feature("report_v2_enabled")
+    from realty_signal.services import signal_assessment
+
+    resolved = md.region_for_ref(region)
+    if resolved is None:
+        raise HTTPException(404, "지역을 찾지 못했습니다.")
+    kb = md.kb()
+    code = str((kb.codes or {}).get(resolved) or "")
+    matching_names = [name for name, value in (kb.codes or {}).items()
+                      if str(value) == code and name in kb.regions] if code else []
+    region_id = f"kb:{code}" if kb.identity_verified and matching_names == [resolved] else ""
+    records = signal_assessment.issued_history(region_id) if region_id else []
+    return JSONResponse({"region": resolved, "region_id": region_id or None,
+                         "status": "ready" if region_id else "identity_unverified",
+                         "records": records,
+                         "note": "실제로 저장된 발행 기록만 표시합니다. 과거 판정은 현재 신호나 미래 가격 예측이 아닙니다."},
+                        headers=PRIVATE)
+
+
 def _listing_report(request: Request, key: str, *, cache_only: bool) -> JSONResponse:
     _require_feature("report_v2_enabled")
     from realty_signal.routes.market import listing_analysis

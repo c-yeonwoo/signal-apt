@@ -99,6 +99,31 @@ def test_legacy_jung_gu_identity_is_held_and_issued_history_is_immutable():
         cdb.close()
 
 
+def test_issued_history_uses_actual_issuance_time_and_keeps_same_day_revision(monkeypatch):
+    stamps = iter([1_759_000_000_000_000_000, 1_759_000_060_000_000_000,
+                   1_759_000_120_000_000_000])
+    monkeypatch.setattr(sa.time, "time_ns", lambda: next(stamps))
+    first = sa.build(_kb(), _row("BUY"), SignalConfig(),
+                     asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    revised = sa.build(_kb((0.2,) * 4), _row("STRONG_BUY"), SignalConfig(),
+                       asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    stale = sa.build(_kb((0.2,) * 4), _row("STRONG_BUY"), SignalConfig(),
+                     asof=date(2026, 9, 28), today=date(2026, 10, 20))
+    assert sa.issue_many([first]) == 1
+    assert sa.issue_many([revised]) == 1
+    assert sa.issue_many([stale]) == 1
+    records = sa.issued_history(first["region_id"])
+    assert [record["grade"] for record in records] == ["판단 보류", "강력매수", "매수"]
+    assert records[0]["change"] == "safety_change"
+    assert records[1]["change"] == "source_revision"
+    assert {record["asof"] for record in records} == {"2026-09-28"}
+    assert records[0]["issued_at"].endswith("+09:00")
+    assert records[1]["drivers"][2]["passing"] is True
+    assert sa.issued_history(first["region_id"], limit=1)[0]["change"] == "safety_change"
+    assert sa.issued_history("ambiguous:중구") == []
+    assert sa.issued_history("kb:9999999999") == []
+
+
 def test_old_cache_with_seoul_code_does_not_prove_jung_gu_price_origin():
     old = sa.build(_kb(identity_verified=False), _row(), SignalConfig(),
                    asof=date(2026, 9, 28), today=date(2026, 9, 28))

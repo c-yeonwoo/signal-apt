@@ -106,6 +106,12 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
           {reason_id:'buyer_balance',label:'KB 응답 균형선 100 미만',value:80,previous_value:66,threshold:100,unit:'지수',role:'limitation',passing:false}],
         unknowns:[]};
       if(['/api/v2/regions/테스트구/report','/api/v2/regions/kb:1114000000/report'].includes(decoded)) regionReport=data;
+      if(decoded==='/api/v2/regions/kb:1114000000/issued-history') data={status:'ready',records:[
+        {grade:'매수',status:'ready',asof:'2026-09-28',issued_at:'2026-09-29T10:30+09:00',
+          change:'source_revision',drivers:[{label:'전세수급 압력',passing:true},{label:'매매 흐름',passing:false}],
+          cautions:['KB 응답 균형선 100 미만','<img src=x onerror=alert(1)>']},
+        {grade:'관망',status:'ready',asof:'2026-09-28',issued_at:'2026-09-28T10:30+09:00',
+          change:'first_record',drivers:[],cautions:[]}]};
       if(decoded==='/api/series/테스트구') data={metrics:{},volume:null};
       if(decoded==='/api/complex/테스트구/테스트단지') data={단지명:'테스트단지',identity_status:'single_observed',
         평형별:[{평형:26,'전용㎡':84.9,최근매매:50000,평단가:2000,매매건수:4,
@@ -1611,6 +1617,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     });
     await page.locator('#haesolPanel').getByText(/세 조건 중 2개 충족/).waitFor();
     assert.equal(await page.locator('.signal-evidence-details').getAttribute('open'),null);
+    assert.equal(await page.locator('#v2IssuedHistory').getAttribute('open'),null);
+    await page.locator('#v2IssuedHistory > summary').click();
+    await page.locator('#v2IssuedHistoryBody').getByText(/같은 관측일의 원천 수정/).waitFor();
+    assert.match(await page.locator('#v2IssuedHistoryBody').textContent(),/발행 2026-09-29 10:30 KST.*KB 2026-09-28/);
+    assert.match(await page.locator('#v2IssuedHistoryBody').textContent(),/과거 판정은 현재 신호나 미래 가격 예측이 아닙니다/);
+    assert.equal(await page.locator('#v2IssuedHistoryBody img').count(),0);
+    await page.locator('#v2IssuedHistory > summary').click();
     assert.equal(await page.locator('.signal-evidence-details .v2-row').first().isVisible(),false);
     assert.equal(await page.locator('.signal-assessment-highlight').count(),2);
     assert.match(await page.locator('.signal-assessment-highlights').textContent(),/전세수급/);
@@ -1643,7 +1656,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#v2RegionExplanation').textContent(),/검증된 추가 설명 대신 현재 리포트의 근거만 정리/);
     assert.equal(explanationPayloads.length,explanationCallsBeforeRegion+1);
     assert.deepEqual(explanationPayloads.at(-1),{type:'region',key:'kb:1114000000',mode:'counterevidence'});
-    await page.locator('#haesolPanel details').last().locator('summary').click();
+    await page.locator('.signal-evidence-details').getByText('이 판정 보관하기').click();
     await page.locator('#v2RegionSave').click();
     await page.locator('#v2RegionSaveStatus').getByText(/저장했습니다/).waitFor();
     await page.locator('#v2RegionSaved').click();
