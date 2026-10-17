@@ -159,6 +159,31 @@ test('KB freshness uses the Korean date at midnight rather than elapsed UTC hour
   assert.match(box.innerHTML,/background:#94a3b8/);
 });
 
+test('private listing freshness separates scan failure, limited scope and quote age', async () => {
+  const box={innerHTML:''};
+  const now=Date.parse('2026-10-17T00:00:00Z')/1000;
+  const data={now,기준일:'2026-10-12',sources:[
+    {key:'hanbang',label:'일반 아파트 매매',ts:now-2*86400,last_attempt_at:now-3600,
+      last_refresh_ok:false,failed_region_count:1,note:'관심단지만 수집',cycle:'하루 1회'},
+    {key:'quicksale',label:'급매',ts:now-8*86400,last_attempt_at:now-86400,
+      last_refresh_ok:true,note:'공급사 표시',cycle:'하루 1회'},
+    {key:'certified',label:'찐매물',ts:now-86400,last_attempt_at:now-3600,
+      last_refresh_ok:true,page_limited_region_count:1,note:'인증 매물',cycle:'하루 1회'},
+    {key:'hanbang',label:'오래된 일반 매물',ts:now-9*86400,last_attempt_at:now-3600,
+      last_refresh_ok:false,note:'이전 수집분',cycle:'하루 1회'},
+  ]};
+  const ctx=vm.createContext({document:{getElementById:id=>id==='freshBox'?box:null},
+    fetch:async()=>({json:async()=>data})});
+  vm.runInContext(extract('function _relTime(', 'async function openHistModal('),ctx);
+  await ctx.loadFreshness();
+  assert.match(box.innerHTML,/최근 갱신 실패 · 이전 수집분일 수 있음/);
+  assert.match(box.innerHTML,/마지막 수집 7일 초과 · 호가 재확인/);
+  assert.match(box.innerHTML,/일부 지역만 확인/);
+  assert.match(box.innerHTML,/갱신 실패 · 마지막 수집 7일 초과/);
+  assert.match(box.innerHTML,/마지막 갱신 시도/);
+  assert.doesNotMatch(box.innerHTML,/현재 호가 확인|가격 우위 확인/);
+});
+
 test('unverified regulation is not drawn or labeled as a current designation', () => {
   const map=vm.createContext({document:{querySelectorAll:()=>[]}});
   vm.runInContext(extract('let _REGULATION =', 'function initMap('),map);

@@ -5,6 +5,7 @@ import json
 from fastapi.testclient import TestClient
 
 from realty_signal import api, auth, briefing, config, db
+from realty_signal.routes import market
 
 
 def _client(email):
@@ -67,3 +68,30 @@ def test_radar_api_and_integrated_listing_do_not_leak_to_other_users(tmp_path, m
     db.nbhd_snap_save(guest_uid, "노원구", "2026-W39", {"급매": 2, "시그널": "WATCH"})
     diffs = api._user_nbhd_diffs(guest_uid, {"노원구"})["노원구"]
     assert all(change["key"] != "급매" for change in diffs)
+
+
+def test_private_freshness_exposes_scan_outcome_without_raw_failure_or_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("PERSONAL_LISTING_EMAIL", "freshness-owner@example.com")
+    paths = {}
+    for key, field in (("quicksale", "QUICKSALE_FILE"), ("certified", "CERTIFIED_FILE"),
+                       ("hanbang", "HANBANG_FILE")):
+        path = tmp_path / f"{key}.json"
+        path.write_text("{}", encoding="utf-8")
+        paths[key] = path
+        monkeypatch.setattr(api, field, path)
+    api._record_radar_refresh(paths["hanbang"], {
+        "attempted_at": 1_800_000_000.5, "ok": False, "failed_requests": 2,
+        "limited_regions": ["A"], "error": "private source error",
+    })
+    owner, _ = _client("freshness-owner@example.com")
+    guest, _ = _client("freshness-guest@example.com")
+    owner_source = {item["key"]: item for item in owner.get("/api/freshness").json()["sources"]}
+    guest_source = {item["key"]: item for item in guest.get("/api/freshness").json()["sources"]}
+    assert not set(paths) & set(guest_source)
+    assert owner_source["hanbang"]["last_attempt_at"] == 1_800_000_000
+    assert owner_source["hanbang"]["last_refresh_ok"] is False
+    assert owner_source["hanbang"]["failed_region_count"] == 2
+    assert owner_source["hanbang"]["page_limited_region_count"] == 1
+    assert "private source error" not in str(owner_source["hanbang"])
+    assert str(tmp_path) not in str(owner_source["hanbang"])
+    assert market._listing_refresh_summary(paths["quicksale"])["last_refresh_ok"] is None
