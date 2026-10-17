@@ -774,6 +774,47 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await Promise.all([page.waitForResponse(r=>r.url().includes('/api/listing-watch/price-target') && r.request().method()==='DELETE'),
       page.locator('#view-watch').getByRole('button',{name:'목표 저장·해제'}).click()]);
     assert.equal(watchTargets.size,0);
+    await page.setViewportSize({width:180,height:800});
+    const watchKinds=await page.evaluate(()=>{
+      const saved=_watchItems;
+      const sale=_watchItems[0];
+      _watchItems=[sale,
+        {...sale,key:'청약:watch-test',kind:'청약',name:'청약후보',current:{...sale.current,status:'접수예정',dday:4}},
+        {...sale,key:'청약:past-test',kind:'청약',name:'지난청약',current:{...sale.current,status:'마감',dday:-1}},
+        {...sale,key:'경매:watch-test',kind:'경매',name:'경매후보',current:{...sale.current,status:'매각예정',dday:7}}];
+      renderListingWatch();
+      const snapshot=()=>({status:document.getElementById('watchStatus').textContent,
+        tabs:document.getElementById('watchKinds').textContent,
+        rows:document.querySelectorAll('#watchList .watch-card').length,
+        text:document.getElementById('watchList').textContent,
+        columns:[...document.querySelectorAll('#watchList th')].map(el=>el.textContent),
+        note:document.getElementById('watchSortNote').textContent,
+        pageWidth:document.documentElement.scrollWidth,
+        budgetDisabled:document.querySelector('#watchSort [value="budget"]').disabled});
+      const result={sale:snapshot()};
+      document.querySelector('#watchKinds [data-watch-kind="presale"]').click();
+      result.presale=snapshot();
+      document.querySelector('#watchKinds [data-watch-kind="auction"]').click();
+      result.auction=snapshot();
+      _watchItems=saved;_watchKind='sale';_watchKindChosen=false;renderListingWatch();
+      return result;
+    });
+    assert.match(watchKinds.sale.status,/전체 4건 · 매매 1건/);
+    assert.match(watchKinds.sale.tabs,/청약 2.*경매 1/);
+    assert.match(watchKinds.sale.text,/매매 추천 1순위/);
+    assert.equal(watchKinds.presale.rows,2);
+    assert.equal(watchKinds.presale.columns.length,4);
+    assert.match(watchKinds.presale.text,/청약후보.*청약 자격·공고문 확인 필요/s);
+    assert(watchKinds.presale.text.indexOf('청약후보')<watchKinds.presale.text.indexOf('지난청약'));
+    assert.doesNotMatch(watchKinds.presale.text,/매매 추천|경매후보/);
+    assert.equal(watchKinds.presale.budgetDisabled,true);
+    assert.match(watchKinds.auction.note,/입찰 추천이 아닙니다/);
+    assert.equal(watchKinds.auction.columns.length,4);
+    assert.match(watchKinds.auction.text,/경매후보.*사건문서·권리·점유 확인 필요/s);
+    assert.doesNotMatch(watchKinds.auction.text,/매매 추천|청약후보/);
+    assert([watchKinds.sale,watchKinds.presale,watchKinds.auction].every(view=>view.pageWidth<=180),
+      `watch type views overflow at 180px: ${JSON.stringify(watchKinds)}`);
+    await page.setViewportSize({width:360,height:800});
     const generalCalls=calls.filter(x=>x==='/api/general-listings').length;
     await page.evaluate(()=>{_ms.hbMap={map:{invalidateSize(){}}}; switchTab('general');});
     assert.equal(calls.filter(x=>x==='/api/general-listings').length,generalCalls);
