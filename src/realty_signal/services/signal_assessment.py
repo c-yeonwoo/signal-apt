@@ -15,11 +15,12 @@ import pandas as pd
 from realty_signal import db
 from realty_signal.ingest.kb_weekly import KBWeekly
 from realty_signal.signals.engine import SignalConfig
+from realty_signal.signals.freshness import MAX_KB_OBSERVATION_AGE_DAYS
 from realty_signal.time_kst import today_kst
 
 VERSION = "signal-assessment-v1"
 GUARD_VERSION = "source-and-price-v5"
-MAX_OBSERVATION_AGE_DAYS = 8
+MAX_OBSERVATION_AGE_DAYS = MAX_KB_OBSERVATION_AGE_DAYS
 INCHEON_RETIRED_CODES = frozenset({"28110", "28140", "28170", "28260"})
 LABELS = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
           "NEUTRAL": "중립", "SELL_RISK": "매도주의"}

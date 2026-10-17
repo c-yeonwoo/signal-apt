@@ -6,20 +6,38 @@
 
 from __future__ import annotations
 
+from datetime import date
+
+from realty_signal.signals.freshness import MAX_KB_OBSERVATION_AGE_DAYS
+from realty_signal.time_kst import today_kst
+
 
 def _dir(mom: float, up: float = 0.03, down: float = -0.03) -> str:
     return "상승" if mom >= up else "하락" if mom <= down else "보합"
 
 
-def current_phase(kb, region: str = "서울") -> dict | None:
+def current_phase(kb, region: str = "서울", *, today: date | None = None) -> dict | None:
     sale = kb.series(region, "sale_change").dropna()
     if sale.empty:
         return None
     bands = cycle_history(kb, region)
     if not bands:
         return None
+    asof = sale.index[-1].date()
+    age_days = ((today or today_kst()) - asof).days
+    if not 0 <= age_days <= MAX_KB_OBSERVATION_AGE_DAYS:
+        return {"region": region, "phase": None, "status": "held",
+                "observed_phase": bands[-1]["phase"], "asof": asof.isoformat(),
+                "age_days": age_days,
+                "reason": (f"KB 매매 자료의 마지막 관측일이 {asof.isoformat()}입니다. "
+                           "새 주간 자료를 확인하기 전에는 현재 국면으로 표시하지 않습니다.")}
     bs = kb.series(region, "buyer_superiority").dropna()
     js = kb.series(region, "jeonse_supply").dropna()
+    # A companion metric from a different KB week is not a current observation.
+    if not bs.empty and bs.index[-1].date() != asof:
+        bs = bs.iloc[0:0]
+    if not js.empty and js.index[-1].date() != asof:
+        js = js.iloc[0:0]
 
     mom = float(sale.tail(8).mean())                     # 최근 8주 매매 모멘텀
     prev = float(sale.tail(16).head(8).mean()) if len(sale) >= 16 else mom
@@ -35,7 +53,7 @@ def current_phase(kb, region: str = "서울") -> dict | None:
     phase = bands[-1]["phase"]
 
     reasons = [
-        "국면 기준: 매매증감률 26주 평균과 이전 26주 대비 변화",
+        "국면 기준: 매매증감률 최근 26개 주간 관측 평균과 이전 26개 관측 대비 변화",
         f"단기 매매 모멘텀 {price_dir} (최근 8주 평균 {mom:+.2f}%, 직전 대비 {accel:+.2f}%p)",
         f"보조 매수심리(매수우위) {demand_dir}" + (f" — 현재 {bs_now:.0f}" if bs_now is not None else " (자료 없음)"),
     ]
@@ -43,24 +61,24 @@ def current_phase(kb, region: str = "서울") -> dict | None:
         reasons.append(f"전세수급 {jsv:.0f} ({'전세난' if jsv >= 170 else '타이트' if jsv >= 140 else '보통' if jsv >= 100 else '공급우위'})")
 
     return {
-        "region": region, "phase": phase, "reasons": reasons,
+        "region": region, "phase": phase, "status": "ready", "reasons": reasons,
         "price": {"dir": price_dir, "mom": round(mom, 2), "accel": accel},
         "demand": {"dir": demand_dir, "now": round(bs_now) if bs_now is not None else None},
         "jeonse": jsv,
-        "asof": str(sale.index[-1].date()),
+        "asof": asof.isoformat(),
     }
 
 
 def cycle_history(kb, region: str = "서울") -> list[dict]:
     """매매 모멘텀·가속도 기반 국면 밴드. 현재 배지도 이 마지막 밴드를 사용한다.
 
-    가격만으로 산출(지역별 고유) → 지역마다 곡선이 다름. 잡음 방지 위해 26주 평활 + 짧은 밴드 반복 병합.
+    가격만으로 산출(지역별 고유) → 지역마다 곡선이 다름. 잡음 방지 위해 26개 관측 평활 + 짧은 밴드 반복 병합.
     """
     import pandas as pd
     sale = kb.series(region, "sale_change").dropna()
     if len(sale) < 38:
         return []
-    # 매크로 사이클용 평활 — 26주(반년) 모멘텀 방향×가속으로 판정해 상승↔후퇴 잔파동 억제
+    # 매크로 사이클용 평활 — 26개 주간 관측 모멘텀 방향×가속으로 판정해 상승↔후퇴 잔파동 억제
     mom = sale.rolling(26, min_periods=12).mean()
     prev = mom.shift(26)
     seq = []

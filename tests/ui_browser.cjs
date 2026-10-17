@@ -418,6 +418,37 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       window.addEventListener('hashchange',routeFromHash);
     });
     await page.getByText('호가단지',{exact:true}).waitFor();
+    await page.route('**/api/cycle?*',route=>route.fulfill({json:{status:'held',phase:null,
+      observed_phase:'상승기',asof:'2026-10-01',reason:'KB 주간 자료를 다시 확인해야 합니다.'}}));
+    await page.evaluate(()=>{
+      document.getElementById('cycleGraph').innerHTML='<svg></svg>';
+      document.getElementById('cycleInsight').innerHTML='이전 해석';
+      loadCycle();
+    });
+    await page.locator('#cycleNow').getByText('현재 국면 판단 보류').waitFor({state:'attached'});
+    assert.match(await page.locator('#cycleNow').textContent(),/마지막 계산 국면 · 상승기.*과거 참고/);
+    assert.equal(await page.locator('#cycleGraph svg').count(),0);
+    assert.equal(await page.locator('#cycleInsight').textContent(),'');
+    await page.unroute('**/api/cycle?*');
+    await page.route('**/api/cycle?*',async route=>{
+      const region=new URL(route.request().url()).searchParams.get('region');
+      if(region==='서울'){
+        await new Promise(resolve=>setTimeout(resolve,120));
+        return route.fulfill({json:{status:'ready',phase:'상승기',asof:'2026-10-12',reasons:[]}});
+      }
+      return route.fulfill({json:{status:'held',phase:null,observed_phase:'관망',
+        asof:'2026-10-01',reason:'경기 자료 확인 필요'}});
+    });
+    await page.evaluate(async()=>{
+      const selector=document.getElementById('cycleRegion');
+      selector.value='서울'; const first=loadCycle();
+      selector.value='경기'; const second=loadCycle();
+      await Promise.all([first,second]);
+    });
+    assert.match(await page.locator('#cycleNow').textContent(),/경기 자료 확인 필요/);
+    assert.doesNotMatch(await page.locator('#cycleNow').textContent(),/현재 국면.*상승기/);
+    await page.unroute('**/api/cycle?*');
+    await page.evaluate(()=>{document.getElementById('cycleRegion').value='서울';});
     assert.equal(await page.locator('#dashNotify').getByRole('button',{name:'텔레그램 연결'}).count(),0);
     const homeOrder=await page.evaluate(()=>Object.fromEntries(
       ['dashPlanWrap','dashWeeklyWrap','dashCxWrap','dashFavRegionWrap']

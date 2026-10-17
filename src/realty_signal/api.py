@@ -2273,7 +2273,8 @@ def news_summary(topic: str | None = None, days: int = 30):
 def cycle(region: str = "서울"):
     """부동산 경기 사이클 국면(벌집순환 4국면) + 근거. 광역(기본 서울) 주간 시리즈 기반."""
     from realty_signal.signals import cycle as cyc
-    return cyc.current_phase(_kb(), region) or {"phase": None}
+    return cyc.current_phase(_kb(), region) or {"phase": None, "status": "unavailable",
+                                                "reason": "국면을 계산할 주간 매매 자료가 부족합니다."}
 
 
 
