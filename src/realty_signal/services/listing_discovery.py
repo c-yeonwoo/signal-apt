@@ -40,6 +40,7 @@ def alternatives(row: dict, candidates: list[dict], budget: float | None = None)
     src = snapshot(row)
     if not src["asking_manwon"]:
         return []
+    src_price_usable = not (src["stale"] or src["source_conflict"])
     seen = set()
     scored = []
     for candidate in candidates:
@@ -52,12 +53,14 @@ def alternatives(row: dict, candidates: list[dict], budget: float | None = None)
         other = snapshot(candidate)
         if not other["asking_manwon"]:
             continue
+        other_price_usable = not (other["stale"] or other["source_conflict"])
         identity = _same_complex(row, candidate)
         if identity == "conflict":
             continue
         same_area = bool(src["exclusive_m2"] and other["exclusive_m2"] and
                          0.85 <= other["exclusive_m2"] / src["exclusive_m2"] <= 1.15)
-        same_price = 0.8 <= other["asking_manwon"] / src["asking_manwon"] <= 1.2
+        same_price = (src_price_usable and other_price_usable
+                      and 0.8 <= other["asking_manwon"] / src["asking_manwon"] <= 1.2)
         if identity:
             reason = "같은 원천 단지 ID" if identity == "source_id" else "같은 지역·단지명(동일 단지 확인 필요)"
             group = 0
@@ -66,9 +69,12 @@ def alternatives(row: dict, candidates: list[dict], budget: float | None = None)
             group = 1
         else:
             continue
-        scored.append((group, bool(other["stale"]), abs(other["asking_manwon"] - src["asking_manwon"]),
+        price_gap = (abs(other["asking_manwon"] - src["asking_manwon"])
+                     if src_price_usable and other_price_usable else float("inf"))
+        scored.append((group, not other_price_usable, price_gap,
                        {"listing": other, "reason": reason,
-                        "budget_fit": ("within" if other["asking_manwon"] <= budget else "above") if budget else "unknown"}))
+                        "budget_fit": ("within" if other["asking_manwon"] <= budget else "above")
+                        if budget and other_price_usable else "unknown"}))
     scored.sort(key=lambda x: x[:3])
     same = [x[3] for x in scored if x[0] == 0][:3]
     nearby = [x[3] for x in scored if x[0] == 1][:max(0, 6-len(same))]
