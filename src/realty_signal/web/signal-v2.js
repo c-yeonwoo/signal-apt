@@ -207,7 +207,8 @@
       return `<b>내 매수 예산 안에 들어와요</b><p class="lr-budget-gap">상한까지 <strong>${esc(gapMoney(gap))}</strong> 남습니다.</p><p class="v2-muted">저장한 매수력과 호가의 차이입니다. 세금·수리비와 대출 승인은 별도 확인하세요.</p>`;
     if (fit?.status === 'above' && fit.gap_manwon != null && Number.isFinite(gap) && gap < 0)
       return `<b>내 매수 예산을 넘어가요</b><p class="lr-budget-gap">상한보다 <strong>${esc(gapMoney(Math.abs(gap)))}</strong> 높습니다.</p><p class="v2-muted">세금·수리비를 포함해 자금 계획을 다시 확인하세요.</p>`;
-    return `<b>내 자금을 입력하고 비교해 보세요</b><p class="v2-muted">${esc(fit?.reason || '현금과 대출 조건을 확정하면 이 호가가 예산 안에 드는지 비교합니다.')}</p><button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>`;
+    const needsProfile=!fit?.reason_code||['unconfirmed_power','power_changed'].includes(fit.reason_code);
+    return `<b>${needsProfile?'내 자금을 입력하고 비교해 보세요':'예산 비교를 보류합니다'}</b><p class="v2-muted">${esc(fit?.reason || '현금과 대출 조건을 확정하면 이 호가가 예산 안에 드는지 비교합니다.')}</p>${needsProfile?'<button type="button" class="btn" id="v2BudgetSetup">내 자금 확인</button>':''}`;
   }
 
   function showReportDrawer(origin) {
@@ -486,8 +487,10 @@
         ${evidenceSection}
         ${!isAuction ? `<section id="lrBudget" class="v2-report-section lr-budget-section" aria-label="내 예산과 부대비용" tabindex="-1">
           <p class="lr-kicker">02 · 자금</p><h3>내 예산에 맞나요?</h3>
-          <div class="lr-budget-answer">${listingBudgetSummary(item.stale || item.source_conflict
-            ? {status:'unknown',reason:'현재 호가를 확인한 뒤 내 예산과 비교해 주세요.'} : fit, report.partial_failures)}</div>
+          <div class="lr-budget-answer">${listingBudgetSummary(item.source_conflict
+            ? {status:'unknown',reason_code:'source_conflict',reason:'원천 매물 정보가 충돌해 호가와 예산 비교를 보류합니다.'}
+            : item.stale ? {status:'unknown',reason_code:'asking_stale',reason:'지난 수집 호가입니다. 현재 호가를 확인한 뒤 비교해 주세요.'}
+            : fit, report.partial_failures)}</div>
           ${['일반매물','급매','찐매물'].includes(item.kind) ? `<h4 class="lr-data-title">살 때 드는 돈은?</h4><p class="v2-muted">${costEligible
             ? '세금·중개비·이사·수리비까지 펼쳐서 계산해 보세요.'
             : '현재 호가·면적·지역을 먼저 확인해야 해 비용 추정을 보류합니다.'}</p>

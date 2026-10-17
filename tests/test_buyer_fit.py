@@ -51,6 +51,10 @@ def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypat
     listing["region_sido"] = "경기"
     assert property_analysis.buyer_fit(listing, profile)["status"] == "unknown"
     listing["region_sido"] = "서울"
+    listing["source_conflict"] = True
+    conflict = property_analysis.buyer_fit(listing, profile)
+    assert conflict["status"] == "unknown" and conflict["reason_code"] == "source_conflict"
+    listing["source_conflict"] = False
     listing["stale"] = True
     assert property_analysis.buyer_fit(listing, profile)["reason_code"] == "asking_stale"
     listing["stale"] = False
@@ -76,7 +80,9 @@ def test_integrated_list_budget_uses_only_validated_same_region_asking(monkeypat
     rows = [{**_row("일반매물:within", price=ceiling - 1000), "기회도": 50},
             {**_row("일반매물:above", price=ceiling + 1000), "기회도": 50},
             {**_row("일반매물:other", price=ceiling - 1000), "지역코드": "11680", "기회도": 50},
-            {**_row("일반매물:stale", price=ceiling - 1000), "stale": True, "기회도": 50}]
+            {**_row("일반매물:stale", price=ceiling - 1000), "stale": True, "기회도": 50},
+            {**_row("일반매물:conflict", price=ceiling - 1000), "source_conflict": True,
+             "기회도": 50}]
     monkeypatch.setattr(api, "_personal_listings_allowed", lambda **_kwargs: True)
     monkeypatch.setattr(api, "_uid", lambda _request: 7)
     monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: rows)
@@ -90,7 +96,10 @@ def test_integrated_list_budget_uses_only_validated_same_region_asking(monkeypat
     assert result["meta"]["confirmed_budget"] is True
     assert result["meta"]["budget_manwon"] == ceiling
     assert by_key == {"일반매물:within": "within", "일반매물:above": "above",
-                      "일반매물:other": "unknown", "일반매물:stale": "unknown"}
+                      "일반매물:other": "unknown", "일반매물:stale": "unknown",
+                      "일반매물:conflict": "unknown"}
+    conflict = next(row for row in result["listings"] if row["key"] == "일반매물:conflict")
+    assert conflict["budget_fit"]["reason_code"] == "source_conflict"
 
     profile["가용자본"] += 1000
     result = api.listings_all(None, "일반매물")
