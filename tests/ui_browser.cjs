@@ -1154,8 +1154,14 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     const singleSale=page.locator('#laList > .ms-row');
     assert.equal(await groupedSale.count(),1);
     assert.equal(await singleSale.count(),1);
-    assert.match(await groupedSale.textContent(),/통합인증단지.*2건.*호가 5\.0억~8\.0억.*전용 59~84㎡.*서울 테스트구/);
+    assert.match(await groupedSale.textContent(),/통합인증단지.*2건 묶음.*호가 5\.0억~8\.0억.*전용 59~84㎡.*서울 테스트구/);
     assert.match(await singleSale.textContent(),/통합일반단지.*호가 5\.0억.*전용 59㎡.*서울 테스트구 상계동/);
+    assert.match(await page.locator('#laList .ms-viewport-hint').textContent(),/3건 · 1개 묶음/);
+    const partialGroup=await page.evaluate(()=>{
+      const rows=_laData.slice(0,2);
+      return _ms.laMap.opt.groupSummary([rows[0],{...rows[1],총액:null}]).right;
+    });
+    assert.match(partialGroup,/호가 5\.0억.*1\/2건 확인/);
     assert.equal(await groupedSale.getAttribute('aria-expanded'),'false');
     await groupedSale.click();
     assert.equal(await groupedSale.getAttribute('aria-expanded'),'true');
@@ -1167,6 +1173,9 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
     assert(groupedLayout.groupWidth<=groupedLayout.parentWidth && groupedLayout.scrollWidth<=groupedLayout.clientWidth,
       `group summary must fit the list: ${JSON.stringify(groupedLayout)}`);
+    await page.setViewportSize({width:180,height:800});
+    const narrowGroup=await groupedSale.evaluate(el=>({scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
+    assert(narrowGroup.scrollWidth<=narrowGroup.clientWidth,`group summary must reflow at 180px: ${JSON.stringify(narrowGroup)}`);
     await page.evaluate(()=>{_laData=window.__savedLaData;renderAllListings();});
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);

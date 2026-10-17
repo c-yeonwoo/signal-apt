@@ -4479,15 +4479,16 @@ function renderAllListings(){
     groupLabel:group=>`${group[0]['단지명']} · ${group.length}개 매물 · ${[...new Set(group.map(x=>x['평형']).filter(Boolean))].slice(0,3).join(' / ')||'면적 확인 필요'}${group.some(x=>x['평형'])?'평':''}`,
     groupSummary:group=>{
       const first=group[0], prices=group.map(_laAsk).filter(v=>v!=null&&v>0);
-      const amount=prices.length===group.length
+      const amount=prices.length
         ? `호가 ${_eok(Math.min(...prices))}${Math.min(...prices)===Math.max(...prices)?'':`~${_eok(Math.max(...prices))}`}`
-        : '호가 일부 미확인';
+        : '호가 확인 전';
+      const coverage=prices.length&&prices.length<group.length?` · ${prices.length}/${group.length}건 확인`:'';
       const areas=[...new Set(group.map(x=>Number(x.ref?.['전용면적']??x['전용면적']))
         .filter(v=>Number.isFinite(v)&&v>0).map(v=>Math.round(v)))].sort((a,b)=>a-b);
       const area=areas.length===1?`전용 ${areas[0]}㎡`:areas.length>1?`전용 ${areas[0]}~${areas.at(-1)}㎡`:'전용면적 확인 필요';
       const sameSignal=group.every(x=>x['시그널']===first['시그널']);
-      return {nm:`${esc(first['단지명']||'–')} <span class="ms-group-count">${group.length}건</span> ${sameSignal&&first['시그널']&&first['시그널']!=='HELD'?regionSignalBadge(first['시그널']):''}`,
-        right:`<span class="la-price"><b>${amount}</b><span>${area}</span></span>`,
+      return {nm:`${esc(first['단지명']||'–')} <span class="ms-group-count">${group.length}건 묶음</span> ${sameSignal&&first['시그널']&&first['시그널']!=='HELD'?regionSignalBadge(first['시그널']):''}`,
+        right:`<span class="la-price"><b>${amount}</b><span>${area}${coverage}</span></span>`,
         sub:`<span class="la-address">${esc(_laAddress(first))}</span>`};
     },
     label:x=>`<b>${x['단지명']}</b><br>${_SALE_TYPES.includes(x['유형'])?qsAreaLabel(x.ref||{}):x['유형']} · ${_eok(x['총액'])}<br>${esc(_laSourceLabel(x))}`,
@@ -4528,7 +4529,8 @@ function renderMsList(mapId, indices){
   st.openGroupKeys=st.openGroupKeys||new Set();
   listEl.innerHTML='';
   const hint=document.createElement('div'); hint.className='ms-viewport-hint';
-  hint.textContent=`${st.locating?'매물':'지도 영역'} ${indices.length}건${opt.groupKey?` · ${groups.length}개 묶음`:''}${st.locating?' · 위치 표시 중':''}`;
+  const groupedCount=opt.groupKey?groups.filter(group=>group.indices.length>1).length:0;
+  hint.textContent=`${st.locating?'매물':'지도 영역'} ${indices.length}건${groupedCount?` · ${groupedCount}개 묶음`:''}${st.locating?' · 위치 표시 중':''}`;
   listEl.appendChild(hint);
   if(!indices.length){
     const empty=document.createElement('div');
