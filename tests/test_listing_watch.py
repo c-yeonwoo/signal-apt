@@ -56,6 +56,9 @@ def test_unseen_listing_is_not_called_sold_and_presale_dday_is_kept():
     stale = _row("급매:missing", price=40_000)
     stale["stale"] = True
     assert watch.build(saved, [stale])[0]["price_change"] is None
+    conflict = {**_row("급매:missing", price=40_000), "source_conflict": True}
+    assert watch.public_fields(conflict)["source_conflict"] is True
+    assert watch.build(saved, [conflict])[0]["price_change"] is None
     auction = _row("경매:123", kind="경매", price=50_000)
     assert watch.build([{"key": "경매:123", "kind": "경매", "saved_price": 60_000}],
                        [auction])[0]["price_change"] is None
