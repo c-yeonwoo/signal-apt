@@ -51,6 +51,9 @@ test('report budget distinguishes no headroom, excess and profile outage', () =>
   assert.match(ctx.listingBudgetSummary({status:'above',gap_manwon:-2000},[]),/2,000만 원/);
   assert.match(ctx.listingBudgetSummary({status:'within',gap_manwon:null},[]),/내 자금을 입력/);
   assert.match(ctx.listingBudgetSummary({status:'within',gap_manwon:1000},['buyer_profile_unavailable']),/불러오지 못했어요/);
+  const conflict=ctx.listingBudgetSummary({status:'unknown',reason_code:'source_conflict',reason:'원천 충돌'},[]);
+  assert.match(conflict,/예산 비교를 보류합니다.*원천 충돌/);
+  assert.doesNotMatch(conflict,/id="v2BudgetSetup"/);
 });
 
 test('report highlights do not repeat price evidence and escape remaining observations', () => {

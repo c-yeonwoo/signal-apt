@@ -129,6 +129,9 @@ def buyer_fit(listing: dict, profile: dict | None = None, *, confirmed_power=_UN
     if asking is None:
         return {"status": "unknown", "reason_code": "asking_missing",
                 "reason": "호가가 없어 확정 매수력과 비교할 수 없습니다."}
+    if listing.get("source_conflict"):
+        return {"status": "unknown", "reason_code": "source_conflict",
+                "reason": "같은 원천 매물의 정보가 충돌해 이 호가를 확정 매수력과 비교하지 않았습니다."}
     if listing.get("stale"):
         return {"status": "unknown", "reason_code": "asking_stale",
                 "reason": "지난 수집 호가라 현재 예산 적합성을 판단하지 않았습니다."}

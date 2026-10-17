@@ -4470,7 +4470,7 @@ function renderAllListings(){
       const fact=(label,value)=>`<div class="la-detail-fact"><b>${label}</b><span>${esc(value)}</span></div>`;
       const fit=x.budget_fit||{};
       const budget=fit.status==='within'?'호가가 확정 상한 이내':fit.status==='above'?'호가가 확정 상한 초과':
-        ({unconfirmed_power:'매수력 확인 전',asking_missing:'호가 확인 전',asking_stale:'지난 호가 · 재확인 필요',
+        ({unconfirmed_power:'매수력 확인 전',asking_missing:'호가 확인 전',source_conflict:'원천 매물 정보 충돌',asking_stale:'지난 호가 · 재확인 필요',
           power_changed:'매수력 다시 확인',region_mismatch:'확정 지역과 달라 비교 제외'})[fit.reason_code]||'내 조건 확인 전';
       const price=listingPriceLine(x.price_comparison)||x.price_comparison?.['이유']||'같은 면적 실거래 근거 확인 전';
       const market=x['시그널']==='HELD'?`지역 신호 확인 전 · ${_laHoldLabel(x['지역신호보류사유'])}`:
