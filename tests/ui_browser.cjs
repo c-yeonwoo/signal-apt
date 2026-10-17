@@ -532,6 +532,13 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('#sigMapLegend').textContent(),/선택 지역/);
     assert.match(await page.locator('#sigMapLegend').textContent(),/적정가 판정은 아닙니다/);
     await page.locator('#rpcCards').getByText('8.0억').waitFor();
+    assert.equal(await page.evaluate(()=>{
+      const controls=document.getElementById('rpcRegionA').closest('.rpc-controls');
+      const cards=document.getElementById('rpcCards');
+      const map=document.getElementById('sigMapWrap');
+      return Boolean(controls.compareDocumentPosition(cards)&Node.DOCUMENT_POSITION_FOLLOWING)
+        && Boolean(cards.compareDocumentPosition(map)&Node.DOCUMENT_POSITION_FOLLOWING);
+    }),true,'area and price numbers must precede the reference map');
     assert.match(await page.locator('#rpcCards').textContent(),/서울 테스트구[\s\S]*8건.*2026-04~2026-09/);
     assert.equal(await page.locator('#rpcRegionA option[value="kb:2811000000"]').textContent(),'인천 중구');
     await page.locator('#rpcRegionB').selectOption('kb:1115000000');
