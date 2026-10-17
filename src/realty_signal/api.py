@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -3565,8 +3566,18 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
 
 
 _LISTING_CACHEABLE = frozenset({"일반매물", "급매", "찐매물", "경매"})
+_LISTING_KIND_ORDER = {"일반매물": 0, "급매": 0, "찐매물": 0,
+                       "청약": 1, "경매": 2, "재건축": 3}
 _listing_assembly_cache: dict[tuple, tuple[list[dict], int]] = {}
 _listing_assembly_lock = threading.Lock()
+
+
+def _listing_type_timing_key(row: dict) -> tuple[int, float]:
+    """Different listing products do not share a meaningful opportunity score."""
+    score = row.get("기회도")
+    score = score if type(score) in (int, float) and math.isfinite(score) else -1
+    return (_LISTING_KIND_ORDER.get(row.get("유형"), 99),
+            -score)
 
 
 def _listing_file_stamp(path) -> tuple:
@@ -3616,7 +3627,7 @@ def _assemble_listings(types: set[str], include_private: bool) -> tuple[list[dic
         except Exception:  # 호가 표본 보강 실패가 기존 매물 조회를 막지 않도록 한다.
             cohort_rows = collapsed
     out = attach_prices(collapsed, cohort_rows=cohort_rows)
-    out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
+    out.sort(key=_listing_type_timing_key)
     return out, source_record_count
 
 
@@ -3667,7 +3678,7 @@ def listings_all(request: Request, types: str = "경매,급매,청약", view: st
     scores = eng_rank.engagement_scores(uid=uid)
     if scores:
         out = eng_rank.apply_engagement_bonus(out, scores)
-    out.sort(key=lambda x: (x["기회도"] if x["기회도"] is not None else -1), reverse=True)
+    out.sort(key=_listing_type_timing_key)
     # 통합 목록은 가격·예산·지도 필드만 사용한다. 상세 판단/근거 문서는 리포트에서
     # 계산하므로 목록마다 생성·전송하지 않아도 된다. 기존 API 기본 응답은 유지한다.
     if view != "card":
