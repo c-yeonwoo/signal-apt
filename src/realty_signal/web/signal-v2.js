@@ -289,6 +289,26 @@
     }
   }
 
+  function issuedHistoryHtml(result) {
+    if (result.status === 'identity_unverified')
+      return '<p>지역 코드의 출처를 확인할 수 없어 과거 발행 기록을 연결하지 않았습니다.</p>';
+    if (!result.records?.length)
+      return '<p>저장된 발행 기록이 없습니다. 과거 판정을 재계산해 채우지 않습니다.</p>';
+    const changeText = {method_change:'계산 기준 변경',source_revision:'같은 관측일의 원천 수정',
+      safety_change:'같은 관측일의 자료 안전 상태 변경',backfilled_observation:'이전 관측일을 뒤늦게 발행',
+      grade_change:'판정 또는 안전 상태 변경',new_observation:'새 관측일',
+      first_record:'표시 범위의 이전 기록 없음'};
+    return `<p class="v2-muted">최근 ${result.records.length}건의 실제 발행 기록입니다. 과거 판정은 현재 신호나 미래 가격 예측이 아닙니다.</p>
+      <ol class="signal-issued-list">${result.records.map(item=>{
+        const conditions=(item.drivers||[]).map(d=>`${esc(d.label||'조건')} ${d.passing?'충족':'미충족'}`).join(' · ');
+        const cautions=(item.cautions||[]).map(esc).join(' · ');
+        return `<li><div class="signal-issued-head"><b>${esc(item.grade||'판단 보류')}</b><span>${esc(Object.hasOwn(changeText,item.change)?changeText[item.change]:'발행 기록')}</span></div>
+          <p>발행 ${esc(String(item.issued_at||'').replace('T',' ').slice(0,16))} KST · KB ${esc(item.asof||'기준일 미확인')}</p>
+          ${conditions?`<p>${conditions}</p>`:''}${cautions?`<p>반대·주의 근거: ${cautions}</p>`:''}
+          ${item.status==='held'?'<p class="v2-caution">발행 당시에도 판단을 보류했습니다.</p>':''}</li>`;
+      }).join('')}</ol>`;
+  }
+
   async function paintRegion(region, regionId) {
     const generation = ++regionGeneration;
     const target = document.getElementById('haesolPanel');
@@ -372,7 +392,27 @@
             <button type="button" class="btn" id="v2RegionSaved">저장본 보기</button>
             <p id="v2RegionSaveStatus" class="v2-muted" role="status"></p></details>
         </details>
+        <details class="signal-issued-details" id="v2IssuedHistory"><summary>과거 발행 기록 보기</summary>
+          <div id="v2IssuedHistoryBody"></div></details>
       </section>`;
+      const history = target.querySelector('#v2IssuedHistory');
+      history.addEventListener('toggle', async () => {
+        if (!history.open || history.dataset.loaded === 'true' || history.dataset.loading === 'true') return;
+        const body = target.querySelector('#v2IssuedHistoryBody');
+        history.dataset.loading = 'true';
+        body.innerHTML = '<p role="status">발행 기록을 불러오고 있습니다…</p>';
+        try {
+          const result = await json(`/api/v2/regions/${encodeURIComponent(ref)}/issued-history`);
+          if (generation !== regionGeneration || target.dataset.reportRegion !== region) return;
+          body.innerHTML = issuedHistoryHtml(result);
+          history.dataset.loaded = 'true';
+        } catch (_) {
+          if (generation === regionGeneration && target.dataset.reportRegion === region)
+            body.textContent = '발행 기록을 불러오지 못했습니다. 닫았다가 다시 열어 주세요.';
+        } finally {
+          history.dataset.loading = 'false';
+        }
+      });
       target.querySelector('#v2RegionDiscover').onclick = () => openDiscovery(region);
       for (const [id, mode] of [['v2RegionExplain','easy'],['v2RegionCounter','counterevidence']]) {
         const button = target.querySelector(`#${id}`);

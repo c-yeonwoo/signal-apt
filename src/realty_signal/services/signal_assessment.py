@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import math
@@ -17,6 +17,7 @@ from realty_signal.ingest.kb_weekly import KBWeekly
 from realty_signal.signals.engine import SignalConfig
 from realty_signal.signals.freshness import MAX_KB_OBSERVATION_AGE_DAYS
 from realty_signal.time_kst import today_kst
+from realty_signal.time_kst import KST
 
 VERSION = "signal-assessment-v1"
 GUARD_VERSION = "source-and-price-v5"
@@ -266,3 +267,64 @@ def issue_many(assessments: list[dict]) -> int:
         return c.total_changes
     finally:
         c.close()
+
+
+def issued_history(region_id: str, *, limit: int = 6) -> list[dict]:
+    """Read actual issued rows, newest issuance first; never reconstruct past grades."""
+    if not region_id.startswith("kb:") or not 1 <= limit <= 20:
+        return []
+    c = db.conn()
+    try:
+        rows = c.execute(
+            "SELECT asof, issued_at, data FROM signal_assessments WHERE region_id=? "
+            "ORDER BY issued_at DESC, id DESC LIMIT ?", (region_id, limit + 1)
+        ).fetchall()
+    finally:
+        c.close()
+    history = []
+    for asof, issued_at, raw in rows:
+        try:
+            item = json.loads(raw)
+            if item.get("region_id") != region_id or item.get("asof") != asof:
+                continue
+            issued = datetime.fromtimestamp(issued_at / 1_000_000_000, timezone.utc).astimezone(KST)
+        except (TypeError, ValueError, OverflowError, json.JSONDecodeError):
+            continue
+        reasons = item.get("reasons") if isinstance(item.get("reasons"), list) else []
+        rule = item.get("buy_rule") if isinstance(item.get("buy_rule"), dict) else {}
+        flags = item.get("risk_flags") if isinstance(item.get("risk_flags"), list) else []
+        drivers = [reason for reason in reasons
+                   if isinstance(reason, dict) and reason.get("role") == "driver"]
+        cautions = [reason.get("label") for reason in reasons
+                    if isinstance(reason, dict) and reason.get("role") in {"counterevidence", "limitation"}
+                    and isinstance(reason.get("label"), str)]
+        history.append({
+            "asof": asof, "issued_at": issued.isoformat(timespec="minutes"),
+            "grade": (item.get("display_grade") if item.get("assessment_status") == "ready"
+                      else "판단 보류"),
+            "status": item.get("assessment_status"),
+            "passed": rule.get("passed"),
+            "drivers": [{"label": reason.get("label"), "passing": reason.get("passing")}
+                        for reason in drivers[:3]],
+            "cautions": cautions[:2],
+            "risk_flags": flags[:3],
+            "method": f"{item.get('version', '')}:{item.get('config_hash', '')}:{item.get('guard_version', '')}",
+        })
+    for index, entry in enumerate(history[:limit]):
+        previous = history[index + 1] if index + 1 < len(history) else None
+        if previous is None:
+            change = "first_record"
+        elif entry["method"] != previous["method"]:
+            change = "method_change"
+        elif entry["asof"] == previous["asof"]:
+            change = ("safety_change" if entry["status"] != previous["status"]
+                      and entry["drivers"] == previous["drivers"] else "source_revision")
+        elif entry["asof"] < previous["asof"]:
+            change = "backfilled_observation"
+        elif (entry["grade"], entry["status"]) != (previous["grade"], previous["status"]):
+            change = "grade_change"
+        else:
+            change = "new_observation"
+        entry["change"] = change
+        del entry["method"]
+    return history[:limit]

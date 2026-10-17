@@ -44,6 +44,32 @@ def test_region_code_route_rejects_unverified_legacy_cache(monkeypatch):
     assert error.value.status_code == 404
 
 
+def test_region_issued_history_never_links_unverified_identity(monkeypatch):
+    from realty_signal.services import signal_assessment as sa
+
+    monkeypatch.setattr(md, "kb", _kb)
+    assessment = sa.build(_kb(), _row("BUY"), SignalConfig(),
+                          asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    sa.issue_many([assessment])
+    issued = json.loads(reports_v2.region_issued_history("kb:1114000000").body)
+    assert issued["status"] == "ready"
+    assert issued["records"][0]["grade"] == "매수"
+    assert issued["records"][0]["asof"] == "2026-09-28"
+    monkeypatch.setattr(md, "kb", lambda: _kb(identity_verified=False))
+    held = json.loads(reports_v2.region_issued_history("중구").body)
+    assert held["status"] == "identity_unverified"
+    assert held["records"] == []
+    collided = _kb()
+    alias = collided.long[collided.long["region"] == "중구"].copy()
+    alias["region"] = "다른 중구"
+    collided.long = pd.concat([collided.long, alias], ignore_index=True)
+    collided.codes["다른 중구"] = collided.codes["중구"]
+    monkeypatch.setattr(md, "kb", lambda: collided)
+    ambiguous = json.loads(reports_v2.region_issued_history("중구").body)
+    assert ambiguous["status"] == "identity_unverified"
+    assert ambiguous["records"] == []
+
+
 def test_discovery_region_choices_require_verified_current_unique_codes(monkeypatch):
     source = SimpleNamespace(identity_verified=True,
         codes={"중구": "1114000000", "부산 중구": "2611000000",
