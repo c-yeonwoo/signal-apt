@@ -28,6 +28,9 @@ def test_region_report_exposes_failed_conditions_and_cautions(monkeypatch):
     report = json.loads(reports_v2.region_report("중구").body)
     assert report["assessment"]["raw_grade"] == "BUY"
     assert report["assessment"]["display_grade"] == "판단 보류"
+    assert report["assessment"]["buy_rule"] == {"passed": 2, "total": 3,
+                                                "strong_buy_min": 3, "buy_min": 2,
+                                                "expected_grade": "BUY"}
     assert "price_direction_conflict" in report["unknowns"]
     assert any(reason["reason_id"] == "sale_momentum" for reason in report["cautions"])
     by_code = json.loads(reports_v2.region_report("kb:1114000000").body)

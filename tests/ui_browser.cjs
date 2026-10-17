@@ -95,6 +95,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         subject:{region:'테스트구',region_id:'kb:1114000000'},asof:'2026-09-28',
         assessment:{display_grade:'매수',assessment_status:'ready',scope_note:'테스트 권역 자료',
           summary:'지역 신호만 보여 줍니다. 개별 매물의 가격 판단은 별도입니다.',raw_grade:'BUY',
+          buy_rule:{passed:2,total:3,strong_buy_min:3,buy_min:2,expected_grade:'BUY'},
           reasons:[
             {reason_id:'jeonse_pressure',label:'전세수급 압력',value:180,threshold:170,unit:'지수',role:'driver',passing:true,inherited:true,source_region:'강북14개구'},
             {reason_id:'buyer_interest',label:'매수심리 관찰선',value:80,threshold:70,unit:'지수',role:'driver',passing:true,inherited:true,source_region:'강북14개구'},
@@ -1558,6 +1559,7 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(await page.locator('.signal-assessment-highlights').textContent(),/최근 4주 매매 흐름/);
     assert.match(await page.locator('.signal-assessment').textContent(),/강북14개구.*테스트구 자체의 최근 4주 매매 흐름/);
     assert.match(await page.locator('.signal-assessment .v2-report-lead').textContent(),/세 조건 중 2개 충족/);
+    assert.match(await page.locator('.signal-evidence-details').textContent(),/3개를 충족하면 강력매수, 2개를 충족하면 매수/);
     assert.match(await page.locator('.signal-assessment-highlights').textContent(),/이전 66/);
     const mobileCard=await page.locator('.signal-assessment').boundingBox();
     const mobilePanel=await page.locator('#haesolPanel').evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth}));
