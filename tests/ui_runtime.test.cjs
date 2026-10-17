@@ -1128,6 +1128,16 @@ test('report alternatives disclose unusable quote beside price', () => {
   assert.doesNotMatch(render({}),/가격 비교 제외/);
 });
 
+test('comparison table labels an unusable quote as last observed, not current', () => {
+  const ctx=vm.createContext({_eok:x=>String(x)});
+  vm.runInContext(extract('function _listingCompareQuote(', 'async function listingCompareOpen('),ctx);
+  const item={listing:{asking_manwon:50000}};
+  assert.equal(ctx._listingCompareQuote(item),'50000');
+  assert.match(ctx._listingCompareQuote({listing:{...item.listing,stale:true}}),/마지막 확인가 · 현재 호가 미확인/);
+  assert.match(ctx._listingCompareQuote({listing:{...item.listing,source_conflict:true}}),/원천 충돌 · 현재 호가 미확인/);
+  assert.equal(ctx._listingCompareQuote({listing:{asking_manwon:null}}),'호가 미확인');
+});
+
 test('budget quick range is exact, survives renewal and can be cleared without reapplying', () => {
   const elements={};
   const ctx=vm.createContext({document:{getElementById:id=>elements[id]??= {style:{},value:'',textContent:''}},

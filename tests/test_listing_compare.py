@@ -47,6 +47,16 @@ def test_compare_reuses_complex_detail_and_flags_different_area(monkeypatch):
     assert [x["budget_fit"] for x in wrong_region["items"]] == ["within", "unknown"]
 
 
+def test_compare_keeps_last_observed_price_but_holds_per_area_quote():
+    rows = [{**_row("일반매물:stale", 50000, 84), "stale": True},
+            {**_row("일반매물:conflict", 48000, 84), "source_conflict": True}]
+    result = listing_compare.build(rows, lambda *_args: {"identity_status": "missing", "평형별": []})
+    assert [item["listing"]["asking_manwon"] for item in result["items"]] == [50000, 48000]
+    assert [item["asking_per_m2_manwon"] for item in result["items"]] == [None, None]
+    assert [item["budget_fit"] for item in result["items"]] == ["unknown", "unknown"]
+    assert any("㎡당 호가 비교에서 제외" in warning for warning in result["warnings"])
+
+
 def test_compare_endpoint_denies_other_users_and_duplicate_keys(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "compare.db")
     db._migrated[0] = False

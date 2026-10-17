@@ -22,11 +22,12 @@ def build(rows: list[dict], detail_get, profile: dict | None = None) -> dict:
         report = property_analysis.build(row, details.get(identity), profile=profile)
         listing, price = report["listing"], report["price"]
         asking, area = listing["asking_manwon"], listing["exclusive_m2"]
+        quote_usable = not (listing["stale"] or listing["source_conflict"])
         fit = report["buyer_fit"]
         if fit["status"] in {"within", "above"}:
             budget = fit["budget_manwon"]
         items.append({"listing": listing, "price": price,
-                      "asking_per_m2_manwon": round(asking / area, 1) if asking and area else None,
+                      "asking_per_m2_manwon": round(asking / area, 1) if quote_usable and asking and area else None,
                       "budget_fit": fit["status"],
                       "building": report["building"], "evidence": report["evidence"]})
     warnings = []
@@ -36,11 +37,13 @@ def build(rows: list[dict], detail_get, profile: dict | None = None) -> dict:
     dates = {x["listing"]["collected_at"] for x in items}
     if len(dates) > 1 or None in dates:
         warnings.append("매물 수집 시점이 서로 다르거나 확인되지 않았습니다.")
+    if any(x["listing"]["stale"] or x["listing"]["source_conflict"] for x in items):
+        warnings.append("지난 호가·원천 충돌 가격은 현재 호가 및 ㎡당 호가 비교에서 제외했습니다.")
     observed = [x for x in items if x["price"].get("상태") == "관측비교"]
     if len(observed) < len(items):
         warnings.append("일부 매물의 동일 면적 실거래 표본이 부족해 호가 비교를 보류했습니다.")
     if any(x["budget_fit"] == "unknown" for x in items):
         warnings.append("일부 매물은 자금 가정·지역 코드·호가 시점을 확인하지 못해 예산 비교를 보류했습니다.")
     return {"items": items, "budget_manwon": budget, "warnings": warnings,
-            "basis": "현재 서버 수집 매물과 각 단지의 같은 전용면적·층 조건 국토부 실거래. 매물별 수집일·거래 표본을 확인하세요.",
+            "basis": "서버가 마지막 수집한 매물과 각 단지의 같은 전용면적·층 조건 국토부 실거래. 매물별 수집일·거래 표본을 확인하세요.",
             "not_compared": ["동·향·수리 상태", "주차·관리비", "현장 출입구·통학 배정", "세금·대출 승인"]}

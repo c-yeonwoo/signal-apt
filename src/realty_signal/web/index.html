@@ -9521,6 +9521,13 @@ async function listingCompareLocations(){
         return places.length?`마트 ${esc(places[0].name)} · 직선 ${esc(places[0].distance_m??'–')}m`:'마트 접근 미확인'; })}
     </tbody></table></div>`;
 }
+function _listingCompareQuote(x){
+  const l=x.listing||{};
+  if(!l.asking_manwon) return '호가 미확인';
+  const amount=_eok(l.asking_manwon);
+  return l.source_conflict?`${amount}<br><span class="analysis-muted">원천 충돌 · 현재 호가 미확인</span>`
+    :l.stale?`${amount}<br><span class="analysis-muted">마지막 확인가 · 현재 호가 미확인</span>`:amount;
+}
 async function listingCompareOpen(){
   const dlg=document.getElementById('listingCompareDlg'), body=document.getElementById('listingCompareBody');
   if(!dlg.open) dlg.showModal();
@@ -9544,11 +9551,11 @@ async function listingCompareOpen(){
           ${esc(x.listing.name||'단지 미확인')}<div class="analysis-muted">${esc(x.listing.region||'')} · ${esc(x.listing.kind||'')}</div>
           <button type="button" class="btn" data-key="${esc(x.listing.key)}" onclick="listingCompareRemove(this.dataset.key)">빼기</button>
         </th>`).join('')}</tr></thead><tbody>
-        ${row('매물 호가',x=>x.listing.asking_manwon?_eok(x.listing.asking_manwon):'미확인')}
+        ${row('매물 호가',_listingCompareQuote)}
         ${row('전용면적·층',x=>`${x.listing.exclusive_m2?`${esc(x.listing.exclusive_m2)}㎡`:'면적 미확인'} · ${x.listing.floor!=null?`${esc(x.listing.floor)}층`:'층 미확인'}`)}
-        ${row('전용㎡당 호가',x=>x.asking_per_m2_manwon!=null?`${esc(x.asking_per_m2_manwon)}만/㎡`:'미확인')}
+        ${row('전용㎡당 호가',x=>x.asking_per_m2_manwon!=null?`${esc(x.asking_per_m2_manwon)}만/㎡`:'비교 보류')}
         ${row('동일 조건 실거래 대비',price)}
-        ${row('내가 살 수 있는 가격',x=>x.budget_fit==='unknown'?'모름':x.budget_fit==='within'?'예산 안':'예산 초과')}
+        ${row('확정 예산 대비',x=>x.budget_fit==='unknown'?'비교 보류':x.budget_fit==='within'?'예산 안':'예산 초과')}
         ${row('매물 수집일',x=>esc(x.listing.collected_at||'미확인')+(x.listing.stale?' · 지난 결과':''))}
         ${row('사용승인·세대수',x=>`${esc(x.building?.['사용승인일']||'미확인')} · ${x.building?.['세대수']?`${esc(x.building['세대수'])}세대`:'세대수 미확인'}`)}
         </tbody></table></div>
