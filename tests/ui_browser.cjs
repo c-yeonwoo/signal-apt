@@ -1091,18 +1091,23 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       try{
         mapSplit=(listId,_mapId,rows)=>{if(listId==='psList') seen.push(rows.map(row=>row['단지명']));};
         _presaleList=[
-          {단지명:'서울 중구 청약',시도:'서울',지역:'중구',상태:'접수중',시그널:'HELD'},
+          {단지명:'서울 중구 청약',시도:'서울',지역:'중구',상태:'접수예정',시그널:'HELD'},
           {단지명:'인천 중구 청약',시도:'인천',지역:'중구',상태:'접수예정',시그널:'HELD'},
         ];
         _mtGradeSet=new Set(['A','B','C','D','E']); _mtBuyOnly=false; _focusRegion=null;
         delete _mtRegionChoice.psMtFilter;
         renderPresale();
-        const options=[...document.querySelector('#psMtFilter .mt-region').options].map(option=>option.textContent.trim());
-        const select=document.querySelector('#psMtFilter .mt-region');
-        select.value=JSON.stringify(['서울','중구']);
-        select.dispatchEvent(new Event('change'));
+        const options=[...document.querySelectorAll('#psMtFilter .mt-region-option span')].map(option=>option.textContent.trim());
+        const choose=(sido,checked)=>{
+          const input=[...document.querySelectorAll('#psMtFilter .mt-region input')].find(input=>input.value===JSON.stringify([sido,'중구']));
+          input.checked=checked; input.dispatchEvent(new Event('change'));
+        };
+        choose('서울',true);
+        choose('인천',true);
+        choose('서울',false);
         renderPresale();
-        const retained=document.querySelector('#psMtFilter .mt-region').value;
+        const retained=[...document.querySelectorAll('#psMtFilter .mt-region input:checked')].map(input=>input.value);
+        document.querySelector('#psMtFilter .mt-region-reset').click();
         return {options,seen,retained};
       }finally{
         mapSplit=original; _presaleList=oldList; _mtGradeSet=oldGrades;
@@ -1111,13 +1116,65 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
         else delete _mtRegionChoice.psMtFilter;
       }
     });
-    assert.deepEqual(regionFilter.options,['전체 지역','서울 중구','인천 중구']);
+    assert.deepEqual(regionFilter.options,['서울 중구','인천 중구']);
     assert.deepEqual(regionFilter.seen,[
+      ['서울 중구 청약','인천 중구 청약'],
+      ['서울 중구 청약'],
+      ['서울 중구 청약','인천 중구 청약'],
       ['인천 중구 청약'],
-      [],
-      [],
+      ['인천 중구 청약'],
+      ['서울 중구 청약','인천 중구 청약'],
     ]);
-    assert.equal(regionFilter.retained,JSON.stringify(['서울','중구']));
+    assert.deepEqual(regionFilter.retained,[JSON.stringify(['인천','중구'])]);
+    await page.evaluate(()=>{
+      window._multiRegionTest={data:_laData,choice:_mtRegionChoice.laMtFilter,buy:_mtBuyOnly,
+        display:document.getElementById('view-all').style.display,
+        more:document.getElementById('laMoreFilters').className};
+      _laData=[{시도:'서울',지역:'중구'},{시도:'인천',지역:'중구'},{시도:'서울',지역:'강남구'}];
+      _mtRegionChoice.laMtFilter=[]; _mtBuyOnly=false;
+      window._multiRegionTest.initialKey=_laViewKey(_laCurrentTypes);
+      document.getElementById('view-all').style.display='block';
+      document.getElementById('laMoreFilters').classList.add('open');
+      window._multiRegionRender=()=>{
+        renderMtFilter('laMtFilter',window._multiRegionRender);
+        window._multiRegionMatches=_laData.filter(row=>_mtPass('HELD',null,row,'laMtFilter')).map(_mtRegionLabel);
+      };
+      window._multiRegionRender();
+    });
+    await page.locator('#laMtFilter .mt-region > summary').click();
+    await page.locator('#laMtFilter').getByRole('checkbox',{name:'서울 중구',exact:true}).check();
+    assert.equal(await page.locator('#laMtFilter .mt-region').getAttribute('open'),'');
+    assert.equal(await page.locator('#laMtFilter').getByRole('checkbox',{name:'서울 중구',exact:true}).evaluate(el=>el===document.activeElement),true);
+    await page.locator('#laMtFilter').getByRole('checkbox',{name:'인천 중구',exact:true}).check();
+    assert.deepEqual(await page.evaluate(()=>window._multiRegionMatches),['서울 중구','인천 중구']);
+    assert.equal(await page.evaluate(()=>_laViewKey(_laCurrentTypes)!==window._multiRegionTest.initialKey),true,
+      '복수 지역 선택이 바뀌면 매물 캐시 화면 키도 바뀌어야 한다');
+    assert.match(await page.locator('#laMtFilter .mt-region-summary').textContent(),/외 1곳/);
+    for(const width of [180,360,1280]){
+      await page.setViewportSize({width,height:800});
+      await page.evaluate(()=>new Promise(requestAnimationFrame));
+      const bounds=await page.locator('#laMtFilter .mt-region-menu').boundingBox();
+      assert(bounds.x>=0 && bounds.x+bounds.width<=width,`multi-region menu overflows ${width}px: ${JSON.stringify(bounds)}`);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
+        `multi-region filter must not widen the page at ${width}px`);
+    }
+    await page.setViewportSize({width:360,height:800});
+    await page.locator('#laMtFilter').getByRole('checkbox',{name:'인천 중구',exact:true}).focus();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#laMtFilter .mt-region').getAttribute('open'),null);
+    assert.equal(await page.locator('#laMtFilter .mt-region > summary').evaluate(el=>el===document.activeElement),true);
+    await page.locator('#laMtFilter .mt-region > summary').click();
+    await page.locator('#laMtFilter .mt-region-reset').click();
+    assert.deepEqual(await page.evaluate(()=>window._multiRegionMatches),['서울 중구','인천 중구','서울 강남구']);
+    assert.equal(await page.locator('#laMtFilter .mt-region-summary').textContent(),'전체 지역');
+    await page.evaluate(()=>{
+      const old=window._multiRegionTest; _laData=old.data; _mtBuyOnly=old.buy;
+      if(old.choice===undefined) delete _mtRegionChoice.laMtFilter; else _mtRegionChoice.laMtFilter=old.choice;
+      document.getElementById('view-all').style.display=old.display;
+      document.getElementById('laMoreFilters').className=old.more;
+      renderAllListings();
+      delete window._multiRegionTest; delete window._multiRegionRender; delete window._multiRegionMatches;
+    });
     assert.equal(await page.locator('#psShowPast').isChecked(),false);
     assert.equal(await page.locator('#psShowPast').getAttribute('role'),'switch');
     assert.equal(await page.locator('#psShowPast').getAttribute('aria-checked'),'false');

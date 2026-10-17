@@ -470,6 +470,27 @@
   .rpc-controls select { width:100%; min-width:0; min-height:44px; }
   .rpc-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
   .rpc-map-title { margin:22px 0 9px; font-size:14px; line-height:1.4; color:var(--txt); }
+  .mt-region { position:relative; min-width:0; max-width:100%; margin-left:6px; }
+  .mt-region > summary { display:flex; align-items:center; gap:8px; min-height:44px; max-width:min(230px,calc(100vw - 64px));
+    box-sizing:border-box; padding:8px 11px; border:1px solid var(--line); border-radius:8px;
+    background:var(--panel); color:var(--txt); font-size:13px; cursor:pointer; list-style:none; }
+  .mt-region > summary::-webkit-details-marker { display:none; }
+  .mt-region > summary::after { content:'⌄'; flex-shrink:0; color:var(--dim); }
+  .mt-region[open] > summary { border-color:var(--accent); }
+  .mt-region[open] > summary::after { content:'⌃'; }
+  .mt-region-summary { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mt-region-menu { position:absolute; top:calc(100% + 6px); left:0; z-index:1100;
+    width:min(300px,calc(100vw - 24px)); box-sizing:border-box; padding:8px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); }
+  .mt-region-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 4px 5px; font-size:13px; }
+  .mt-region-reset { min-height:44px; padding:5px 8px; border:0; border-radius:6px; background:transparent;
+    color:var(--accent); font:inherit; cursor:pointer; }
+  .mt-region-options { max-height:min(300px,45dvh); overflow:auto; overscroll-behavior:contain; }
+  .mt-region-options .mt-region-option { display:flex; align-items:center; gap:10px; min-height:44px; width:100%; margin:0; padding:0 8px;
+    box-sizing:border-box; border-radius:6px; font-size:14px; color:var(--txt); cursor:pointer; }
+  .mt-region-option:has(input:checked) { background:var(--accent-weak); }
+  .mt-region-option input { flex-shrink:0; width:18px; height:18px; accent-color:var(--accent); }
+  .mt-region-option span { overflow-wrap:anywhere; }
   .rpc-card { min-width:0; border:1px solid var(--line); border-radius:12px; padding:16px; background:var(--panel); overflow-wrap:anywhere; }
   .rpc-card h3 { margin:0 0 10px; font-size:16px; }
   .rpc-median { font-size:25px; font-weight:800; letter-spacing:-.03em; }
@@ -2385,9 +2406,26 @@ function _mtGradeTag(region){ const gd=_mtGradeLabel(region);
   return gd?`<span style="color:${gd.col};font-weight:700">${gd.label}</span>`:''; }
 function _mtMetric(label, valHtml){   // 우측 핵심지표 — 라벨+값 통일
   return `<div style="text-align:right;line-height:1.15"><div style="font-size:9px;color:var(--dim)">${label}</div>${valHtml}</div>`; }
-// 공통 필터 상태(급지·BUY+) — 매물 3탭 공통
+// 공통 급지·매수 필터와 화면별 복수 지역 선택
 let _mtGradeSet=new Set(['A','B','C','D','E']), _mtBuyOnly=false;
 const _mtRegionChoice=Object.create(null);
+function _mtSelectedRegions(hostId){
+  const value=_mtRegionChoice[hostId];
+  return Array.isArray(value)?value:typeof value==='string'&&value?[value]:[];
+}
+function _mtPositionRegionMenu(details){
+  if(!details.open) return;
+  const menu=details.querySelector('.mt-region-menu');
+  menu.style.left='0px';
+  const box=menu.getBoundingClientRect();
+  menu.style.left=`${Math.max(12-box.left,Math.min(0,innerWidth-12-box.right))}px`;
+}
+document.addEventListener('pointerdown',event=>{
+  document.querySelectorAll('.mt-region[open]').forEach(details=>{
+    if(!details.contains(event.target)) details.open=false;
+  });
+});
+window.addEventListener('resize',()=>document.querySelectorAll('.mt-region[open]').forEach(_mtPositionRegionMenu));
 let _auctionFilterRows=[];
 function _mtRegionGrade(region){ const s=(allSignals||[]).find(x=>x.region===region); return s?s['급지']:null; }
 function safeMarketSignal(region){
@@ -2420,32 +2458,65 @@ function _mtPass(signal, grade){
   // 급지 미산정 지역은 급지 선택과 무관하게 계속 노출한다.
   if(grade && _mtGradeSet.size!==5 && !_mtGradeSet.has(grade)) return false;
   if(_mtBuyOnly && !['STRONG_BUY','BUY'].includes(signal)) return false;
-  const selectedRegion=_mtRegionChoice[hostId]||'';
-  if(selectedRegion && _mtRegionKey(row)!==selectedRegion) return false;
+  const selectedRegions=_mtSelectedRegions(hostId);
+  if(selectedRegions.length && !selectedRegions.includes(_mtRegionKey(row))) return false;
   return true;
 }
 function renderMtFilter(hostId, rerender){
   const el=document.getElementById(hostId); if(!el) return;
+  const previous=el.querySelector('.mt-region');
+  const wasOpen=!!previous?.open;
+  const scrollTop=previous?.querySelector('.mt-region-options')?.scrollTop||0;
+  const focused=el.contains(document.activeElement)?document.activeElement:null;
+  const focusedRegion=focused?.matches('.mt-region-option input')?focused.value:null;
+  const focusedReset=focused?.matches('.mt-region-reset');
+  const focusedSummary=focused?.matches('.mt-region > summary');
   const big=!!el.closest('.ps-toolbar');
   const regionOptions=new Map();
   _mtRowsForFilter(hostId).forEach(row=>{
     const key=_mtRegionKey(row), label=_mtRegionLabel(row);
     if(key&&label&&!regionOptions.has(key)) regionOptions.set(key,label);
   });
+  const selectedRegions=_mtSelectedRegions(hostId);
+  selectedRegions.forEach(key=>{
+    if(regionOptions.has(key)) return;
+    let label='선택 지역';
+    try{ const [sido,region]=JSON.parse(key); label=_mtRegionLabel({sido,region})||label; }catch(_){}
+    regionOptions.set(key,label);
+  });
   const regions=[...regionOptions.entries()].sort((a,b)=>a[1].localeCompare(b[1],'ko'));
-  const selectedRegion=_mtRegionChoice[hostId]||'';
+  const selectedLabels=selectedRegions.map(key=>regionOptions.get(key));
+  const regionSummary=selectedLabels.length?selectedLabels[0]+(selectedLabels.length>1?` 외 ${selectedLabels.length-1}곳`:''):'전체 지역';
   const chip=(code,lbl)=>`<span class="chip${_mtGradeSet.has(code)?' on':''}"${big?'':` style="font-size:11px"`} data-g="${code}">${lbl}</span>`;
   const lblStyle=big?'':'style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px"';
   el.innerHTML=`<label ${lblStyle}><input type="checkbox" ${_mtBuyOnly?'checked':''} class="mt-buy"> 매수신호만</label>`
     + `<span class="${big?'mt-label':''}" style="${big?'':'font-size:11px;color:var(--dim);margin-left:6px'}">지역 가격대</span>`
     + [['A','상'],['B','중상'],['C','중'],['D','중하'],['E','하']].map(([c,l])=>chip(c,l)).join('')
-    + `<label style="font-size:12px;color:var(--dim);display:inline-flex;align-items:center;gap:5px;margin-left:6px">지역
-      <select class="mt-region" aria-label="지역·도시 선택" style="width:min(210px,65vw);max-width:100%;min-width:0;box-sizing:border-box;padding:5px 8px">
-        <option value="">전체 지역</option>${selectedRegion&&!regionOptions.has(selectedRegion)?`<option value="${esc(selectedRegion)}" selected>선택 지역</option>`:''}
-        ${regions.map(([key,label])=>`<option value="${esc(key)}"${key===selectedRegion?' selected':''}>${esc(label)}</option>`).join('')}
-      </select></label>`;
+    + `<details class="mt-region"${wasOpen?' open':''}><summary aria-label="지역·도시 선택: ${esc(selectedLabels.join(', ')||'전체 지역')}"><span class="mt-region-summary">${esc(regionSummary)}</span></summary>
+      <div class="mt-region-menu"><div class="mt-region-header"><b>지역 복수 선택</b><button type="button" class="mt-region-reset">전체 지역</button></div>
+      <div class="mt-region-options" role="group" aria-label="지역·도시 복수 선택">
+        ${regions.map(([key,label])=>`<label class="mt-region-option"><input type="checkbox" value="${esc(key)}"${selectedRegions.includes(key)?' checked':''}><span>${esc(label)}</span></label>`).join('')||'<p>선택할 지역이 없습니다.</p>'}
+      </div></div></details>`;
   el.querySelector('.mt-buy').onchange=e=>{ _mtBuyOnly=e.target.checked; rerender(); };
-  el.querySelector('.mt-region').onchange=e=>{ _mtRegionChoice[hostId]=e.target.value; rerender(); };
+  const details=el.querySelector('.mt-region');
+  details.addEventListener('toggle',()=>_mtPositionRegionMenu(details));
+  details.onkeydown=event=>{
+    if(event.key==='Escape'){ event.preventDefault(); event.stopPropagation(); details.open=false; details.querySelector('summary').focus(); }
+  };
+  details.onfocusout=event=>{ if(event.relatedTarget&&!details.contains(event.relatedTarget)) details.open=false; };
+  details.querySelector('.mt-region-reset').onclick=()=>{ _mtRegionChoice[hostId]=[]; rerender(); };
+  details.querySelectorAll('.mt-region-option input').forEach(input=>input.onchange=()=>{
+    const selected=new Set(_mtSelectedRegions(hostId));
+    if(input.checked) selected.add(input.value); else selected.delete(input.value);
+    _mtRegionChoice[hostId]=[...selected].sort(); rerender();
+  });
+  details.querySelector('.mt-region-options').scrollTop=scrollTop;
+  _mtPositionRegionMenu(details);
+  if(focusedRegion!==null){
+    const replacement=[...details.querySelectorAll('input')].find(input=>input.value===focusedRegion);
+    replacement?.focus({preventScroll:true});
+  }else if(focusedReset) details.querySelector('.mt-region-reset').focus({preventScroll:true});
+  else if(focusedSummary) details.querySelector('summary').focus({preventScroll:true});
   el.querySelectorAll('[data-g]').forEach(c=>c.onclick=()=>{ const g=c.dataset.g;
     if(_mtGradeSet.has(g)) _mtGradeSet.delete(g); else _mtGradeSet.add(g);
     renderMtFilter(hostId, rerender); rerender(); });
