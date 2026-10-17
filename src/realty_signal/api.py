@@ -774,6 +774,8 @@ def _advisor_tool(name: str, args: dict, *, uid: int | None = None,
                     for key in comparison_keys]
         except (ValueError, PermissionError, LookupError):
             return {"error": "비교 매물을 현재 수집분에서 확인할 수 없습니다."}
+        if any(row.get("유형") not in analysis.PRIVATE for row in rows):
+            return {"error": "매매 후보끼리만 호가·예산을 비교할 수 있습니다. 경매는 입찰 상한을 따로 계산하세요."}
         return compare.build(rows, complex_detail, db.profile_get(uid) if uid else {})
     if name == "get_user_context":
         from realty_signal.brain import memory as nick_mem

@@ -476,9 +476,10 @@
         <h2>${esc(item.name || '매물')}</h2><p class="lr-address">${esc([item.region_sido, item.region].filter(Boolean).join(' ') || '지역 확인 필요')}</p>
         <div class="lr-heading-price"><div><span>${isAuction ? '최저매각가' : item.stale ? '지난 수집 호가' : item.source_conflict ? '확인 필요한 수집 호가' : '매매 호가'}</span><p class="v2-report-price">${money(item.asking_manwon)}</p></div>
           <div class="lr-property-facts">${item.exclusive_m2 ? `<b>전용 ${esc(item.exclusive_m2)}㎡</b><span>약 ${esc((Number(item.exclusive_m2) / 3.3058).toFixed(1))}평 · 전용 기준</span>` : ''}${item.floor != null ? `<span>${esc(item.floor)}층</span>` : ''}</div></div>
-        <p class="lr-updated">호가 수집 ${esc(item.collected_at || '날짜 확인 필요')}</p>
-        <div class="lr-actions">${watchAction(item)}<button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button>
-          <button type="button" class="btn" id="v2OpenCompare">비교함 열기</button></div></header>
+        <p class="lr-updated">${isAuction ? '자료 수집' : '호가 수집'} ${esc(item.collected_at || '날짜 확인 필요')}</p>
+        <div class="lr-actions">${watchAction(item)}${isAuction
+          ? '<button type="button" class="btn" id="v2AuctionCalc">내 입찰 상한 계산</button>'
+          : '<button type="button" class="btn" id="v2ListingCompare">비교함에 담기</button><button type="button" class="btn" id="v2OpenCompare">비교함 열기</button>'}</div></header>
         ${!isAuction ? `<nav class="lr-nav" aria-label="리포트 항목 바로가기">
           <button type="button" data-report-section="lrPrice">가격 비교</button><button type="button" data-report-section="lrBudget">내 예산</button>
           <button type="button" data-report-section="lrLocation">입지</button><button type="button" data-report-section="lrChecklist">체크리스트</button></nav>` : ''}
@@ -503,7 +504,7 @@
         ${listingFieldLinks(item)}</section>
         <section id="lrChecklist" class="v2-report-section v2-report-checklist" aria-label="${isAuction ? '경매 입찰 전 확인 사항' : '중개사 확인 사항'}" tabindex="-1"><p class="lr-kicker">${isAuction ? '입찰 준비' : '04 · 계약 전'}</p><h3>${isAuction ? '입찰 전에 직접 확인할 것' : '중개사에게 확인할 것'}</h3>
           <ol>${actionItems.map(x => `<li>${esc(x)}</li>`).join('')}</ol>${isAuction ? '<p class="v2-muted">이 목록만으로 권리 안전성이나 입찰 적정성을 판단할 수 없습니다.</p>' : ''}</section>
-        <details class="v2-report-more"><summary>관심 기록·비교·리포트 저장</summary>
+        <details class="v2-report-more"><summary>관심 기록${isAuction ? '' : '·비교'}·리포트 저장</summary>
         <button type="button" class="btn" id="v2ListingNote">관심 이유 기록</button>
         <button type="button" class="btn" id="v2SaveReport">이 리포트 저장</button>
         <button type="button" class="btn" id="v2SavedReports">저장본 보기</button>
@@ -536,10 +537,17 @@
           - body.getBoundingClientRect().top - navHeight - 16,behavior:'instant'});
         section?.focus({preventScroll:true});
       });
-      body.querySelector('#v2ListingCompare').onclick = event => {
+      const auctionCalc = body.querySelector('#v2AuctionCalc');
+      if (auctionCalc) auctionCalc.onclick = () => {
+        dialog.close();
+        window.openCalc?.(key.slice('경매:'.length));
+      };
+      const compareAdd = body.querySelector('#v2ListingCompare');
+      if (compareAdd) compareAdd.onclick = event => {
         event.currentTarget.textContent = addCompare(key);
       };
-      body.querySelector('#v2OpenCompare').onclick = () => {
+      const compareOpen = body.querySelector('#v2OpenCompare');
+      if (compareOpen) compareOpen.onclick = () => {
         dialog.close();
         listingCompareOpen();
       };

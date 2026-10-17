@@ -763,7 +763,11 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     assert.match(auctionReportText,/사건·권리 정보 아님/);
     assert.match(auctionReportText,/경매 최저가·낙찰가와는 다른 자료/);
     assert.doesNotMatch(auctionReportText,/수집 호가와 가격 변화/);
-    await page.locator('#v2ReportDlg').getByRole('button',{name:'리포트 닫기'}).click();
+    assert.equal(await page.locator('#v2ListingCompare').count(),0);
+    assert.equal(await page.locator('#v2OpenCompare').count(),0);
+    await page.locator('#v2ReportDlg').getByRole('button',{name:'내 입찰 상한 계산'}).click();
+    await page.locator('#aucContext').getByText('목록 최저매각가').waitFor();
+    await page.locator('#calcDlg').evaluate(el=>el.close());
     await page.evaluate(()=>switchTab('watch'));
     assert.equal(await page.locator('.watch-card-more').getAttribute('open'),'');
     await page.locator('#view-watch input[type="number"]').fill('47000');

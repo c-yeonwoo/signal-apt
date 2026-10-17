@@ -511,6 +511,8 @@ def listing_compare(request: Request, keys: list[str] = Body(embed=True)):
             raise HTTPException(403, "개인용 외부 매물은 소유 계정에서만 비교할 수 있습니다.") from exc
         except LookupError as exc:
             raise HTTPException(404, "현재 수집 범위에서 매물을 찾지 못했습니다.") from exc
+    if any(row.get("유형") not in analysis.PRIVATE for row in rows):
+        raise HTTPException(422, "매매 후보끼리만 호가·예산을 비교할 수 있습니다. 경매는 입찰 상한을 따로 계산하세요.")
     profile = db.profile_get(deps.uid(request)) or {}
     return JSONResponse(compare.build(rows, app_api.complex_detail, profile),
                         headers={"Cache-Control": "private, no-store"})

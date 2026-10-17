@@ -8,6 +8,8 @@ from realty_signal.services import property_analysis
 def build(rows: list[dict], detail_get, profile: dict | None = None) -> dict:
     if not 2 <= len(rows) <= 3:
         raise ValueError("comparison_requires_two_or_three")
+    if any(row.get("유형") not in property_analysis.PRIVATE for row in rows):
+        raise ValueError("comparison_requires_sale_listings")
     budget = None
     details: dict[tuple[str, str], dict] = {}
     items = []
