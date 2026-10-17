@@ -1116,6 +1116,18 @@ test('saved sale candidate gets a comparison priority only with fresh price and 
   assert.doesNotMatch(ctx._watchRecommendationText({kind:'급매',current:{...ready.current,stale:true}}),/실거래 중앙값보다|확정 예산 안/);
 });
 
+test('report alternatives disclose unusable quote beside price', () => {
+  const ctx=vm.createContext({esc:x=>String(x),_eok:x=>String(x)});
+  vm.runInContext(extract('function _analysisDiscovery(', 'let _listingCompareGen='),ctx);
+  const listing={key:'sale:a',name:'가상단지',kind:'일반매물',asking_manwon:50000,
+    exclusive_m2:84,collected_at:'2026-10-17'};
+  const render=extra=>ctx._analysisDiscovery({listing:{region:'노원구',name:'가상단지'},
+    discovery:{alternatives:[{listing:{...listing,...extra},reason:'같은 단지'}]}});
+  assert.match(render({stale:true}),/50000 · 지난 호가, 가격 비교 제외/);
+  assert.match(render({source_conflict:true}),/50000 · 원천 충돌, 가격 비교 제외/);
+  assert.doesNotMatch(render({}),/가격 비교 제외/);
+});
+
 test('budget quick range is exact, survives renewal and can be cleared without reapplying', () => {
   const elements={};
   const ctx=vm.createContext({document:{getElementById:id=>elements[id]??= {style:{},value:'',textContent:''}},

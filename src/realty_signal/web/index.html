@@ -9455,8 +9455,8 @@ function _analysisDiscovery(d){
     const commuteText=route?.status==='observed'?`저장된 직장 안내시간 ${esc(route.minutes)}분${diff!=null?` · 선택 매물보다 ${diff<0?`${esc(-diff)}분 짧음`:diff>0?`${esc(diff)}분 김`:'같음'}`:''}`
       :route?esc(route.reason||'통근 경로 미확인'):'';
     return `<div style="padding:7px 0;border-bottom:1px solid var(--line)"><b>${esc(l.name||'단지 미확인')}</b> · ${esc(l.kind||'')}
-      <div>${l.asking_manwon?_eok(l.asking_manwon):'호가 미확인'} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'}</div>
-      <div class="analysis-muted">${esc(x.reason)} · 수집 ${esc(l.collected_at||'미확인')}${l.stale?' · 지난 결과':''}</div>
+      <div>${l.asking_manwon?_eok(l.asking_manwon):'호가 미확인'}${l.source_conflict?' · 원천 충돌, 가격 비교 제외':l.stale?' · 지난 호가, 가격 비교 제외':''} · ${l.exclusive_m2?`전용 ${esc(l.exclusive_m2)}㎡`:'면적 미확인'}</div>
+      <div class="analysis-muted">${esc(x.reason)} · 수집 ${esc(l.collected_at||'미확인')}</div>
       ${commuteText?`<div class="analysis-muted">${commuteText}</div>`:''}
       <button type="button" class="btn" data-key="${esc(l.key)}" onclick="SignalV2.openListing(this.dataset.key)">이 매물 분석</button></div>`;
   }).join('');

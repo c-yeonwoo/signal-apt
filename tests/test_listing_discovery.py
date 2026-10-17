@@ -36,6 +36,33 @@ def test_same_named_district_across_provinces_is_not_report_alternative():
     assert listing_discovery.alternatives(base, [other]) == []
 
 
+def test_stale_or_conflicting_quote_cannot_define_similar_price_or_budget_fit():
+    base = _row("일반매물:a", complex_id="cx1")
+    same_complex_stale = {**_row("일반매물:b", price=40000, complex_id="cx1"), "stale": True}
+    same_complex_conflict = {**_row("일반매물:c", price=39000, complex_id="cx1"),
+                             "source_conflict": True}
+    same_complex_fresh = _row("일반매물:d", price=51000, complex_id="cx1")
+    near_stale = {**_row("일반매물:e", name="다른단지", price=48000), "stale": True}
+    near_conflict = {**_row("일반매물:f", name="또다른단지", price=49000),
+                     "source_conflict": True}
+    near_fresh = _row("일반매물:g", name="새단지", price=49500)
+    out = listing_discovery.alternatives(base, [same_complex_stale, same_complex_conflict,
+                                                 same_complex_fresh, near_stale, near_conflict,
+                                                 near_fresh], 50000)
+    assert [x["listing"]["key"] for x in out] == ["일반매물:d", "일반매물:b", "일반매물:c",
+                                                      "일반매물:g"]
+    assert [x["budget_fit"] for x in out] == ["above", "unknown", "unknown", "within"]
+
+
+def test_stale_selected_quote_does_not_create_price_based_alternative():
+    same_complex = _row("일반매물:b", price=51000, complex_id="cx1")
+    near = _row("일반매물:c", name="다른단지", price=50000)
+    for invalid_quote in ({"stale": True}, {"source_conflict": True}):
+        base = {**_row("일반매물:a", complex_id="cx1"), **invalid_quote}
+        out = listing_discovery.alternatives(base, [same_complex, near], 52000)
+        assert [x["listing"]["key"] for x in out] == ["일반매물:b"]
+
+
 def test_headlines_are_candidates_not_project_facts():
     now = datetime(2026, 9, 29, tzinfo=timezone.utc)
     recent = (now-timedelta(days=2)).strftime("%a, %d %b %Y")
