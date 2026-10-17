@@ -602,8 +602,11 @@
   .watch-heading .page-sub { margin:0; font-size:14px; }
   .watch-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:14px 0 8px; }
   .watch-toolbar select { min-height:40px; max-width:100%; }
+  .watch-kind-tabs { display:flex; gap:7px; flex-wrap:wrap; margin:12px 0 4px; }
+  .watch-kind-tabs .chip { min-height:44px; font-size:14px; }
   .watch-table-wrap { overflow:auto; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
   .watch-table { min-width:880px; border-collapse:separate; border-spacing:0; }
+  .watch-table.watch-table-short { min-width:560px; width:100%; }
   .watch-table th { position:sticky; top:0; z-index:1; background:var(--panel); text-align:left; padding:10px 12px; font-size:12px; }
   .watch-table td { text-align:left; vertical-align:middle; white-space:normal; padding:12px; }
   .watch-table tbody tr:hover { background:#f8fafc; }
@@ -617,6 +620,7 @@
   .watch-reason { color:var(--dim); font-size:12px; line-height:1.45; margin-top:4px; }
   @media (max-width:600px) {
     .watch-table, .watch-table tbody { display:block; width:100%; min-width:0; }
+    .watch-table.watch-table-short { min-width:0; }
     .watch-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
     .watch-table tbody tr { display:grid; width:100%; box-sizing:border-box; grid-template-columns:repeat(2,minmax(0,1fr)); padding:8px 0; }
     .watch-table tbody tr.watch-card { padding:8px 0; margin:0; }
@@ -2021,13 +2025,14 @@
 <div id="view-watch" style="display:none">
  <div style="max-width:1120px;margin:0 auto;padding:22px 18px 40px">
   <div class="watch-heading"><h2 class="page-head">내 후보</h2>
-    <p class="page-sub">찜한 매물을 예산·면적·실거래·지역 신호로 비교합니다. 추천순은 확인된 근거가 많은 매물을 먼저 보여줍니다.</p>
+    <p class="page-sub" id="watchIntro">매매·청약·경매는 판단 근거가 다릅니다. 같은 유형의 후보끼리 비교하세요.</p>
   </div>
   <div id="watchStatus" role="status" style="font-size:13px;color:var(--dim);margin:10px 0"></div>
-  <div class="watch-toolbar"><span class="watch-reason">추천순은 예산·실거래 근거를 먼저 보고, 최신 수집 여부와 지역 신호를 함께 반영합니다.</span>
+  <div id="watchKinds" class="watch-kind-tabs" aria-label="찜한 후보 유형"></div>
+  <div class="watch-toolbar"><span id="watchSortNote" class="watch-reason">매매 추천순은 확인된 예산·실거래 근거를 먼저 봅니다.</span>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px">정렬
       <select id="watchSort" class="ctrl" onchange="renderListingWatch()">
-        <option value="recommended">추천순</option><option value="price">호가 낮은순</option>
+        <option value="recommended">추천순</option><option value="price">표시 가격 낮은순</option>
         <option value="budget">예산 여유순</option><option value="area">전용면적 큰순</option>
       </select>
     </label>
@@ -8842,6 +8847,10 @@ let _favRegionKeyByName = new Map();
 let _favComplexIdentity = new Map();
 let _watchKeys = new Set();
 let _watchItems = [];
+let _watchKind = 'sale';
+let _watchKindChosen = false;
+const _watchCategory = item => _SALE_TYPES.includes(item.kind)?'sale':item.kind==='청약'?'presale':'auction';
+const _watchKindLabel = {sale:'매매',presale:'청약',auction:'경매'};
 const _watchPendingKeys = new Set();
 function _watchAliases(btn){
   try{ const keys=JSON.parse(btn.dataset.watchAliases||'[]');
@@ -8926,7 +8935,9 @@ async function loadListingWatch(){
     _watchItems=(await r.json()).items||[]; }
   catch(e){ status.textContent='찜한 후보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'; return; }
   _watchKeys=new Set(_watchItems.map(x=>x.key));
-  status.textContent=`찜한 후보 ${_watchItems.length}건`;
+  if(!_watchKindChosen && !_watchItems.some(item=>_watchCategory(item)===_watchKind) && _watchItems.length){
+    _watchKind=['sale','presale','auction'].find(kind=>_watchItems.some(item=>_watchCategory(item)===kind))||'sale';
+  }
   renderListingWatch();
 }
 function _watchRecommendationKey(w){
@@ -8943,6 +8954,10 @@ function _watchRecommendationKey(w){
 function _watchRecommendationText(w){
   const c=w.current;
   if(!c) return '현재 수집 범위에서 매물을 확인하지 못했어요.';
+  if(_watchCategory(w)!=='sale'){
+    const label=w.kind==='청약'?'청약 자격·공고문':'사건문서·권리·점유';
+    return [c.status,c.dday!=null&&c.dday>=0?`D-${c.dday}`:'',c.stale?'지난 수집 결과':'',`${label} 확인 필요`].filter(Boolean).join(' · ');
+  }
   const reasons=[];
   const fit=c.budget_fit||{};
   if(fit.status==='within') reasons.push('확정 예산 안');
@@ -8958,18 +8973,44 @@ function renderListingWatch(){
   const status=document.getElementById('watchStatus'), body=document.getElementById('watchList');
   if(!body) return;
   const expanded=new Set([...body.querySelectorAll('details.watch-card-more[open]')].map(el=>el.dataset.watchKey));
-  const mode=document.getElementById('watchSort')?.value||'recommended';
-  const items=[..._watchItems].sort((a,b)=>{
+  const counts=Object.fromEntries(['sale','presale','auction'].map(kind=>[kind,_watchItems.filter(item=>_watchCategory(item)===kind).length]));
+  const tabs=document.getElementById('watchKinds');
+  if(tabs){
+    tabs.innerHTML=['sale','presale','auction'].map(kind=>`<button type="button" class="chip${kind===_watchKind?' on':''}"
+      aria-pressed="${kind===_watchKind}" data-watch-kind="${kind}">${_watchKindLabel[kind]} ${counts[kind]}</button>`).join('');
+    tabs.querySelectorAll('[data-watch-kind]').forEach(button=>button.onclick=()=>{
+      _watchKind=button.dataset.watchKind;
+      _watchKindChosen=true;
+      const sort=document.getElementById('watchSort'); if(sort) sort.value='recommended';
+      renderListingWatch();
+    });
+  }
+  const sale=_watchKind==='sale', sort=document.getElementById('watchSort');
+  if(sort){
+    sort.options[0].textContent=sale?'추천순':'일정 가까운순';
+    sort.querySelector('[value="budget"]').disabled=!sale;
+    if(!sale&&sort.value==='budget') sort.value='recommended';
+  }
+  const note=document.getElementById('watchSortNote');
+  if(note) note.textContent=sale?'매매 추천순은 확인된 예산·실거래 근거를 먼저 봅니다.':
+    _watchKind==='presale'?'청약은 접수 일정과 공고·자격을 따로 확인하세요.':'경매는 기일과 사건문서를 확인하세요. 이 순서는 입찰 추천이 아닙니다.';
+  const mode=sort?.value||'recommended';
+  const items=_watchItems.filter(item=>_watchCategory(item)===_watchKind).sort((a,b)=>{
     const ca=a.current||{}, cb=b.current||{};
     if(mode==='price') return (ca.price??Infinity)-(cb.price??Infinity);
     if(mode==='area') return (cb.exclusive_m2??-1)-(ca.exclusive_m2??-1);
     if(mode==='budget') return (cb.budget_fit?.gap_manwon??-Infinity)-(ca.budget_fit?.gap_manwon??-Infinity);
+    if(!sale){
+      const day=c=>Number.isFinite(+c.dday)&&c.dday!=null&&+c.dday>=0?+c.dday:Infinity;
+      const aDay=day(ca),bDay=day(cb);
+      return aDay===bDay?0:aDay-bDay;
+    }
     const ka=_watchRecommendationKey(a), kb=_watchRecommendationKey(b);
     for(let i=0;i<ka.length;i++) if(ka[i]!==kb[i]) return ka[i]<kb[i]?-1:1;
     return 0;
   });
-  status.textContent=`찜한 후보 ${items.length}건 · ${mode==='recommended'?'확인된 근거 기준 추천순':'선택한 조건순'}`;
-  if(!items.length){ body.innerHTML='<div class="sec" style="padding:20px;font-size:16px;line-height:1.6">아직 찜한 매물이 없습니다. ‘매물 찾기’에서 집을 열고 ☆ 를 눌러 두세요.</div>'; return; }
+  status.textContent=`찜한 후보 전체 ${_watchItems.length}건 · ${_watchKindLabel[_watchKind]} ${items.length}건`;
+  if(!items.length){ body.innerHTML=`<div class="sec" style="padding:20px;font-size:16px;line-height:1.6">${_watchKindLabel[_watchKind]} 후보가 없습니다. 매물 찾기에서 찜해 두세요.</div>`; return; }
   const amount=n=>n==null?'가격 미확인':_eok(n);
   const rows=items.map((w,index)=>{
     const c=w.current, change=w.price_change;
@@ -8979,13 +9020,13 @@ function renderListingWatch(){
     const currentPriceLabel=w.kind==='경매'?'최근 표시 최저매각가':w.kind==='청약'?'공고 표시 가격':'최근 수집 호가';
     const savedPriceLabel=w.kind==='경매'?'찜 당시 최저매각가':w.kind==='청약'?'찜 당시 공고 가격':'찜 당시 호가';
     const now=c?[c.status,c.stale?'지난 수집 결과':''].filter(Boolean).join(' · ')||'최근 수집분':'현재 수집 범위에서 확인되지 않음';
-    const update=isAsking?diff:w.kind==='청약'?dday||'청약 일정 확인 필요':c?.status||'진행 상태 확인 필요';
+    const update=isAsking?diff:w.kind==='청약'?dday||'청약 일정 확인 필요':dday||c?.status||'매각기일 확인 필요';
     const cmp=c?.price_comparison||{};
-    const comparison=cmp.상태==='관측비교'&&cmp.호가차이율!=null
+    const comparison=!isAsking?'매매 실거래 비교 대상 아님':cmp.상태==='관측비교'&&cmp.호가차이율!=null
       ? `실거래 중앙값 ${amount(cmp.중앙값)} · ${cmp.호가차이율>0?'+':''}${cmp.호가차이율}% (${cmp.표본수}건)`
       : (cmp.이유||'동일 조건 거래 비교 보류');
     const fit=c?.budget_fit||{};
-    const budget=!isAsking?'매매 예산과 별도 비교':fit.status==='within'?`예산 안 · ${amount(fit.gap_manwon)} 여유`
+    const budget=!isAsking?'매매 예산 비교 제외':fit.status==='within'?`예산 안 · ${amount(fit.gap_manwon)} 여유`
       :fit.status==='above'?`예산 초과 · ${amount(Math.abs(fit.gap_manwon))}`
       :fit.reason||'확정 예산 비교 필요';
     const recommendation=_watchRecommendationText(w);
@@ -8993,12 +9034,12 @@ function renderListingWatch(){
       <span><b>${esc(a.name||'매물')}</b> · ${esc(a.kind)} · ${esc(a.region||'')} ${a.price!=null?'· '+amount(a.price):''}<br><small style="color:var(--dim)">${esc(a.reason)}</small></span>
       <button class="btn" type="button" data-kind="${esc(a.kind)}" onclick="goWatchCandidate(this)">보기</button></div>`).join('');
     return `<tr class="watch-card">
-      <td class="watch-property" data-label="매물·추천 근거"><span class="pill">${esc(w.kind)}</span><strong>${esc(w.name||'단지명 미확인')}</strong><span>${esc([w.region_sido,w.region,w.dong].filter(Boolean).join(' ' )||'지역 미확인')}</span><span class="watch-reason">${index===0&&mode==='recommended'?'추천 1순위 · ':''}${esc(recommendation)}</span></td>
+      <td class="watch-property" data-label="후보·확인 상태"><span class="pill">${esc(w.kind)}</span><strong>${esc(w.name||'단지명 미확인')}</strong><span>${esc([w.region_sido,w.region,w.dong].filter(Boolean).join(' ' )||'지역 미확인')}</span><span class="watch-reason">${sale&&index===0&&mode==='recommended'?'매매 추천 1순위 · ':''}${esc(recommendation)}</span></td>
       <td data-label="전용면적">${c?.exclusive_m2!=null?`${c.exclusive_m2}㎡${c.pyeong!=null?` · ${c.pyeong}평`:''}`:'–'}</td>
-      <td data-label="호가·변화"><span class="watch-price">${c?.price!=null?amount(c.price):'확인 필요'}</span><span class="watch-note">${esc(update)}</span></td>
-      <td data-label="실거래 비교"><span>${esc(comparison)}</span>${cmp.상태==='관측비교'?'<span class="watch-note">같은 단지·전용면적 거래 기준</span>':''}</td>
+      <td data-label="${sale?'호가·변화':w.kind==='경매'?'최저매각가·기일':'분양가·일정'}"><span class="watch-price">${c?.price!=null?amount(c.price):'확인 필요'}</span>${!sale?`<span class="watch-note">${currentPriceLabel}</span>`:''}<span class="watch-note">${esc(update)}</span></td>
+      ${sale?`<td data-label="실거래 비교"><span>${esc(comparison)}</span>${cmp.상태==='관측비교'?'<span class="watch-note">같은 단지·전용면적 거래 기준</span>':''}</td>
       <td data-label="내 예산"><span>${esc(budget)}</span></td>
-      <td data-label="지역 신호">${c?.signal?regionSignalBadge(c.signal):'<span class="watch-note">지역 신호 미확인</span>'}</td>
+      <td data-label="지역 신호">${c?.signal?regionSignalBadge(c.signal):'<span class="watch-note">지역 신호 미확인</span>'}</td>`:''}
       <td data-label="바로가기"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button type="button" class="btn" style="padding:7px 10px;min-height:36px;font-size:12px" aria-label="${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'매물 확인'}" data-watch-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-available="${!!c}" onclick="openWatchItem(this)">${!c?'다시 찾기':w.kind==='청약'?'일정 보기':'리포트'}</button>
         <details class="watch-card-more" data-watch-key="${esc(w.key)}" ${expanded.has(w.key)?'open':''}><summary>알림·찜 관리</summary><div class="watch-detail-content">
@@ -9009,8 +9050,8 @@ function renderListingWatch(){
           <button type="button" class="btn watch-btn" style="margin-top:8px" data-watch-key="${esc(w.key)}" data-watch-context="candidate" aria-pressed="true" onclick="toggleListingWatch(this)">찜 해제</button>
         </div></details></div></td></tr>`;
   }).join('');
-  body.innerHTML=`<div class="watch-table-wrap"><table class="watch-table"><thead><tr>
-    <th class="l">매물·추천 근거</th><th class="l">전용면적</th><th class="l">호가·변화</th><th class="l">실거래 비교</th><th class="l">내 예산</th><th class="l">지역 신호</th><th class="l">바로가기</th>
+  body.innerHTML=`<div class="watch-table-wrap"><table class="watch-table${sale?'':' watch-table-short'}"><thead><tr>
+    <th class="l">후보·확인 상태</th><th class="l">전용면적</th><th class="l">${sale?'호가·변화':_watchKind==='auction'?'최저매각가·기일':'분양가·일정'}</th>${sale?'<th class="l">실거래 비교</th><th class="l">내 예산</th><th class="l">지역 신호</th>':''}<th class="l">바로가기</th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 async function loadFavs(){
