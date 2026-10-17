@@ -469,6 +469,7 @@
   .rpc-controls label { display:flex; flex:1 1 180px; min-width:0; flex-direction:column; gap:5px; font-size:12px; font-weight:700; }
   .rpc-controls select { width:100%; min-width:0; min-height:44px; }
   .rpc-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .rpc-map-title { margin:22px 0 9px; font-size:14px; line-height:1.4; color:var(--txt); }
   .rpc-card { min-width:0; border:1px solid var(--line); border-radius:12px; padding:16px; background:var(--panel); overflow-wrap:anywhere; }
   .rpc-card h3 { margin:0 0 10px; font-size:16px; }
   .rpc-median { font-size:25px; font-weight:800; letter-spacing:-.03em; }
@@ -1378,11 +1379,7 @@
 <div id="view-undervalued" style="display:none">
   <div class="sec">
     <h2 class="page-head">지역 가격 비교</h2>
-    <p class="page-sub">국토교통부 아파트 매매 실거래를 같은 전용면적대에서 비교합니다. 지도에는 선택한 두 지역의 거래 표본만 표시합니다. 적정가나 매수 신호는 아닙니다.</p>
-    <div id="sigMapWrap">
-      <div id="sigMap" role="img" aria-label="선택한 시군구 실거래 비교 지도"></div>
-      <div id="sigMapLegend">선택 지역의 같은 면적 거래 표본을 지도에 표시합니다. 적정가 판정은 아닙니다.</div>
-    </div>
+    <p class="page-sub">같은 전용면적대의 최근 실거래 중앙값부터 비교합니다. 적정가나 매수 신호는 아닙니다.</p>
     <div class="rpc-controls">
       <label>전용면적대 <select id="rpcArea" class="ctrl" onchange="renderRegionPriceComparison()"><option value="84">84㎡ ±5㎡</option><option value="59">59㎡ ±5㎡</option></select></label>
       <label>첫 지역 <select id="rpcRegionA" class="ctrl" onchange="renderRegionPriceComparison()"></select></label>
@@ -1391,6 +1388,11 @@
     <div id="rpcStatus" class="rpc-note" role="status" aria-live="polite">지역을 준비하고 있습니다.</div>
     <div id="rpcCards" class="rpc-grid" style="margin-top:12px"></div>
     <p id="rpcCompare" class="rpc-note" style="margin-top:12px"></p>
+    <h3 class="rpc-map-title">위치 참고 지도</h3>
+    <div id="sigMapWrap">
+      <div id="sigMap" role="img" aria-label="선택한 시군구 실거래 비교 지도"></div>
+      <div id="sigMapLegend">선택 지역의 같은 면적 거래 표본을 지도에 표시합니다. 적정가 판정은 아닙니다.</div>
+    </div>
     <details class="rpc-note" style="margin-top:16px"><summary style="cursor:pointer">이 비교의 범위와 한계</summary>
       <p>직전 완료된 6개월의 실거래 중 선택한 면적 ±5㎡만 셉니다. 거래 취소분은 제외하지만, 단지·층·연식·수리 상태·입지와 거래량 차이는 통제하지 않습니다. 지역별 표본 중앙값을 개별 매물 가격이나 미래 수익률로 해석하지 마세요.</p>
     </details>
