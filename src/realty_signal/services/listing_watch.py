@@ -56,7 +56,8 @@ def public_fields(row: dict) -> dict:
                            ("status", "reason", "budget_manwon", "gap_manwon")},
             "dday": _dday(ref) if row.get("유형") == "청약" else ref.get("Dday"),
             "status": row.get("지표값") if row.get("유형") == "청약" else None,
-            "stale": bool(row.get("stale")), "fetched_at": row.get("fetched_at")}
+            "stale": bool(row.get("stale")), "source_conflict": bool(row.get("source_conflict")),
+            "fetched_at": row.get("fetched_at")}
 
 
 def _same_complex(a: dict, b: dict) -> bool:
@@ -107,7 +108,8 @@ def build(saved: list[dict], current: list[dict]) -> list[dict]:
             continue
         old, now = watch.get("saved_price"), row.get("총액")
         if (watch.get("kind") in PRIVATE and row.get("price_kind") == "asking"
-                and old is not None and now is not None and not row.get("stale")):
+                and old is not None and now is not None
+                and not row.get("stale") and not row.get("source_conflict")):
             item["price_change"] = now - old
         others = [candidate for candidate in current
                   if candidate.get("key") != watch["key"] and candidate.get("key")

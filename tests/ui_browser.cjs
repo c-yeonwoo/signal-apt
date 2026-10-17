@@ -797,12 +797,20 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       result.presale=snapshot();
       document.querySelector('#watchKinds [data-watch-kind="auction"]').click();
       result.auction=snapshot();
+      _watchKind='sale';
+      _watchItems=[{...sale,current:{...sale.current,stale:false,source_conflict:false,
+        budget_fit:{status:'within',gap_manwon:2000},
+        price_comparison:{상태:'관측비교',호가차이율:-5,표본수:4,중앙값:53000}}}];
+      renderListingWatch(); result.verified=snapshot();
       _watchItems=saved;_watchKind='sale';_watchKindChosen=false;renderListingWatch();
       return result;
     });
     assert.match(watchKinds.sale.status,/전체 4건 · 매매 1건/);
     assert.match(watchKinds.sale.tabs,/청약 2.*경매 1/);
-    assert.match(watchKinds.sale.text,/매매 추천 1순위/);
+    assert.doesNotMatch(watchKinds.sale.text,/추천 1순위|비교 우선 후보/);
+    assert.match(watchKinds.sale.note,/근거가 충분한 후보가 없어/);
+    assert.match(watchKinds.verified.text,/비교 우선 후보/);
+    assert.match(watchKinds.verified.note,/지역 신호는 별개/);
     assert.equal(watchKinds.presale.rows,2);
     assert.equal(watchKinds.presale.columns.length,4);
     assert.match(watchKinds.presale.text,/청약후보.*청약 자격·공고문 확인 필요/s);

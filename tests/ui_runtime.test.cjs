@@ -1095,6 +1095,24 @@ test('mixed listing kinds stay in separate groups before any ranking metric', ()
   assert.equal(ctx._laCategory(rows[1]),'매매');
 });
 
+test('saved sale candidate gets a comparison priority only with fresh price and confirmed budget', () => {
+  const ctx=vm.createContext({_watchCategory:()=> 'sale'});
+  vm.runInContext(extract('function _watchRecommendationKey(', 'function renderListingWatch(){'),ctx);
+  const ready={current:{price:50000,stale:false,source_conflict:false,
+    budget_fit:{status:'within'},price_comparison:{상태:'관측비교',호가차이율:-6,표본수:4}}};
+  assert.equal(ctx._watchComparisonReady(ready),true);
+  for(const current of [
+    {...ready.current,stale:true},
+    {...ready.current,source_conflict:true},
+    {...ready.current,budget_fit:{status:'unconfirmed_power'}},
+    {...ready.current,price_comparison:{상태:'관측비교',호가차이율:-6,표본수:2}},
+    {...ready.current,price_comparison:{상태:'보류',호가차이율:null,표본수:4}},
+  ]) assert.equal(ctx._watchComparisonReady({current}),false);
+  assert.equal(ctx._watchRecommendationKey(ready)[0],0);
+  assert.equal(ctx._watchRecommendationKey({current:{...ready.current,stale:true}})[0],1);
+  assert.doesNotMatch(ctx._watchRecommendationText({kind:'급매',current:{...ready.current,stale:true}}),/실거래 중앙값보다|확정 예산 안/);
+});
+
 test('budget quick range is exact, survives renewal and can be cleared without reapplying', () => {
   const elements={};
   const ctx=vm.createContext({document:{getElementById:id=>elements[id]??= {style:{},value:'',textContent:''}},

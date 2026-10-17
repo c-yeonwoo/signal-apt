@@ -2031,10 +2031,10 @@
   </div>
   <div id="watchStatus" role="status" style="font-size:13px;color:var(--dim);margin:10px 0"></div>
   <div id="watchKinds" class="watch-kind-tabs" aria-label="찜한 후보 유형"></div>
-  <div class="watch-toolbar"><span id="watchSortNote" class="watch-reason">매매 추천순은 확인된 예산·실거래 근거를 먼저 봅니다.</span>
+  <div class="watch-toolbar"><span id="watchSortNote" class="watch-reason">매매 후보의 예산·실거래 근거를 확인하고 있습니다.</span>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px">정렬
       <select id="watchSort" class="ctrl" onchange="renderListingWatch()">
-        <option value="recommended">추천순</option><option value="price">표시 가격 낮은순</option>
+        <option value="recommended">비교 우선순</option><option value="price">표시 가격 낮은순</option>
         <option value="budget">예산 여유순</option><option value="area">전용면적 큰순</option>
       </select>
     </label>
@@ -8968,14 +8968,26 @@ async function loadListingWatch(){
 }
 function _watchRecommendationKey(w){
   const c=w.current;
-  if(!c) return [2,3,3,Infinity,9,0];
+  if(!c) return [2,2,3,3,Infinity,9,0];
   const budget=c.budget_fit?.status;
   const budgetRank=budget==='within'?0:budget==='above'?2:1;
-  const price=c.price_comparison||{};
-  const compared=price.상태==='관측비교'&&price.호가차이율!=null&&Number.isFinite(+price.호가차이율);
-  const priceRank=!compared?3:+price.호가차이율<0?0:+price.호가차이율===0?1:2;
+  const evidence=_watchPriceEvidence(c);
+  const priceRank=!evidence?3:evidence.diff<0?0:evidence.diff===0?1:2;
   const signalRank={STRONG_BUY:0,BUY:1,WATCH:2,NEUTRAL:3,SELL_RISK:4,HELD:6}[c.signal]??5;
-  return [c.stale?1:0,budgetRank,priceRank,compared?+price.호가차이율:Infinity,signalRank,-(+c.timing_score||0)];
+  return [_watchComparisonReady(w)?0:1,c.stale?1:0,budgetRank,priceRank,
+    evidence?evidence.diff:Infinity,signalRank,-(+c.timing_score||0)];
+}
+function _watchPriceEvidence(c){
+  if(!c||c.stale||c.source_conflict) return null;
+  const p=c?.price_comparison||{};
+  const diff=Number(p.호가차이율), count=Number(p.표본수);
+  return p.상태==='관측비교'&&p.호가차이율!=null&&Number.isFinite(diff)
+    &&Number.isFinite(count)&&count>=3?{diff,count}:null;
+}
+function _watchComparisonReady(w){
+  const c=w.current;
+  return !!(c&&!c.stale&&!c.source_conflict&&Number(c.price)>0
+    &&c.budget_fit?.status==='within'&&_watchPriceEvidence(c));
 }
 function _watchRecommendationText(w){
   const c=w.current;
@@ -8986,12 +8998,15 @@ function _watchRecommendationText(w){
   }
   const reasons=[];
   const fit=c.budget_fit||{};
-  if(fit.status==='within') reasons.push('확정 예산 안');
-  else if(fit.status==='above') reasons.push('확정 예산 초과');
-  const price=c.price_comparison||{};
-  if(price.상태==='관측비교'&&price.호가차이율!=null&&Number.isFinite(+price.호가차이율))
-    reasons.push(`동일 단지 실거래 중앙값보다 ${Math.abs(+price.호가차이율)}% ${+price.호가차이율<0?'낮은':'높은'} 호가`);
+  if(!c.stale&&!c.source_conflict){
+    if(fit.status==='within') reasons.push('확정 예산 안');
+    else if(fit.status==='above') reasons.push('확정 예산 초과');
+  }
+  const price=c.price_comparison||{}, evidence=_watchPriceEvidence(c);
+  if(evidence)
+    reasons.push(`동일 단지 실거래 중앙값보다 ${Math.abs(evidence.diff)}% ${evidence.diff<0?'낮은':'높은'} 호가`);
   if(c.stale) reasons.push('지난 수집');
+  if(c.source_conflict) reasons.push('원천 매물 정보 충돌');
   if(!reasons.length) reasons.push(price.이유||fit.reason||'비교 근거 부족');
   return reasons.join(' · ');
 }
@@ -9013,12 +9028,15 @@ function renderListingWatch(){
   }
   const sale=_watchKind==='sale', sort=document.getElementById('watchSort');
   if(sort){
-    sort.options[0].textContent=sale?'추천순':'일정 가까운순';
+    sort.options[0].textContent=sale?'비교 우선순':'일정 가까운순';
     sort.querySelector('[value="budget"]').disabled=!sale;
     if(!sale&&sort.value==='budget') sort.value='recommended';
   }
   const note=document.getElementById('watchSortNote');
-  if(note) note.textContent=sale?'매매 추천순은 확인된 예산·실거래 근거를 먼저 봅니다.':
+  const hasComparable=sale&&_watchItems.some(w=>_watchCategory(w)==='sale'&&_watchComparisonReady(w));
+  if(note) note.textContent=sale?(hasComparable
+    ? '확정 예산 안이고 같은 면적 실거래가 확인된 매매 후보를 먼저 봅니다. 지역 신호는 별개입니다.'
+    : '예산·실거래 비교 근거가 충분한 후보가 없어 확인할 순서로만 정렬합니다.'):
     _watchKind==='presale'?'청약은 접수 일정과 공고·자격을 따로 확인하세요.':'경매는 기일과 사건문서를 확인하세요. 이 순서는 입찰 추천이 아닙니다.';
   const mode=sort?.value||'recommended';
   const items=_watchItems.filter(item=>_watchCategory(item)===_watchKind).sort((a,b)=>{
@@ -9048,11 +9066,11 @@ function renderListingWatch(){
     const now=c?[c.status,c.stale?'지난 수집 결과':''].filter(Boolean).join(' · ')||'최근 수집분':'현재 수집 범위에서 확인되지 않음';
     const update=isAsking?diff:w.kind==='청약'?dday||'청약 일정 확인 필요':dday||c?.status||'매각기일 확인 필요';
     const cmp=c?.price_comparison||{};
-    const comparison=!isAsking?'매매 실거래 비교 대상 아님':cmp.상태==='관측비교'&&cmp.호가차이율!=null
+    const comparison=!isAsking?'매매 실거래 비교 대상 아님':c?.source_conflict?'원천 매물 정보 충돌 · 비교 보류':_watchPriceEvidence(c)
       ? `실거래 중앙값 ${amount(cmp.중앙값)} · ${cmp.호가차이율>0?'+':''}${cmp.호가차이율}% (${cmp.표본수}건)`
       : (cmp.이유||'동일 조건 거래 비교 보류');
     const fit=c?.budget_fit||{};
-    const budget=!isAsking?'매매 예산 비교 제외':fit.status==='within'?`예산 안 · ${amount(fit.gap_manwon)} 여유`
+    const budget=!isAsking?'매매 예산 비교 제외':c?.source_conflict?'원천 매물 정보 충돌 · 예산 비교 보류':c?.stale?'지난 호가 · 예산 비교 보류':fit.status==='within'?`예산 안 · ${amount(fit.gap_manwon)} 여유`
       :fit.status==='above'?`예산 초과 · ${amount(Math.abs(fit.gap_manwon))}`
       :fit.reason||'확정 예산 비교 필요';
     const recommendation=_watchRecommendationText(w);
@@ -9060,10 +9078,10 @@ function renderListingWatch(){
       <span><b>${esc(a.name||'매물')}</b> · ${esc(a.kind)} · ${esc(a.region||'')} ${a.price!=null?'· '+amount(a.price):''}<br><small style="color:var(--dim)">${esc(a.reason)}</small></span>
       <button class="btn" type="button" data-kind="${esc(a.kind)}" onclick="goWatchCandidate(this)">보기</button></div>`).join('');
     return `<tr class="watch-card">
-      <td class="watch-property" data-label="후보·확인 상태"><span class="pill">${esc(w.kind)}</span><strong>${esc(w.name||'단지명 미확인')}</strong><span>${esc([w.region_sido,w.region,w.dong].filter(Boolean).join(' ' )||'지역 미확인')}</span><span class="watch-reason">${sale&&index===0&&mode==='recommended'?'매매 추천 1순위 · ':''}${esc(recommendation)}</span></td>
+      <td class="watch-property" data-label="후보·확인 상태"><span class="pill">${esc(w.kind)}</span><strong>${esc(w.name||'단지명 미확인')}</strong><span>${esc([w.region_sido,w.region,w.dong].filter(Boolean).join(' ' )||'지역 미확인')}</span><span class="watch-reason">${sale&&index===0&&mode==='recommended'&&_watchComparisonReady(w)?'비교 우선 후보 · ':''}${esc(recommendation)}</span></td>
       <td data-label="전용면적">${c?.exclusive_m2!=null?`${c.exclusive_m2}㎡${c.pyeong!=null?` · ${c.pyeong}평`:''}`:'–'}</td>
       <td data-label="${sale?'호가·변화':w.kind==='경매'?'최저매각가·기일':'분양가·일정'}"><span class="watch-price">${c?.price!=null?amount(c.price):'확인 필요'}</span>${!sale?`<span class="watch-note">${currentPriceLabel}</span>`:''}<span class="watch-note">${esc(update)}</span></td>
-      ${sale?`<td data-label="실거래 비교"><span>${esc(comparison)}</span>${cmp.상태==='관측비교'?'<span class="watch-note">같은 단지·전용면적 거래 기준</span>':''}</td>
+      ${sale?`<td data-label="실거래 비교"><span>${esc(comparison)}</span>${_watchPriceEvidence(c)?'<span class="watch-note">같은 단지·전용면적 거래 기준</span>':''}</td>
       <td data-label="내 예산"><span>${esc(budget)}</span></td>
       <td data-label="지역 신호">${c?.signal?regionSignalBadge(c.signal):'<span class="watch-note">지역 신호 미확인</span>'}</td>`:''}
       <td data-label="바로가기"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
