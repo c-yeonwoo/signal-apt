@@ -59,6 +59,30 @@ def test_buy_grade_is_held_when_saved_label_disagrees_with_three_conditions():
     assert aligned["assessment_status"] == "ready"
 
 
+def test_market_input_revision_mismatch_holds_cached_grade():
+    kb = _kb()
+    config = SignalConfig()
+    for key, changed in (("전세수급", 170.1), ("매수우위지수", 75.1)):
+        row = _row("BUY")
+        row[key] = changed
+        result = sa.build(kb, row, config,
+                          asof=date(2026, 9, 28), today=date(2026, 9, 28))
+        assert result["raw_grade"] == "BUY"
+        assert result["assessment_status"] == "held"
+        assert result["display_grade"] == "판단 보류"
+        assert "market_inputs_mismatch" in result["risk_flags"]
+        assert "같은 날짜의 KB 원본" in result["summary"]
+
+    # The engine rounds the source to one decimal; harmless source precision
+    # must not turn a valid assessment into a held state.
+    kb.long.loc[(kb.long["region"] == "강북14개구")
+                & (kb.long["metric"] == "jeonse_supply"), "value"] = 180.04
+    aligned = sa.build(kb, _row("BUY"), config,
+                       asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    assert "market_inputs_mismatch" not in aligned["risk_flags"]
+    assert aligned["assessment_status"] == "ready"
+
+
 def test_legacy_jung_gu_identity_is_held_and_issued_history_is_immutable():
     c = SignalConfig()
     old = sa.build(_kb(code="2811000000"), _row(), c,

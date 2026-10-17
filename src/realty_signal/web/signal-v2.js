@@ -12,6 +12,7 @@
     sale_weeks_incomplete:'최근 주간 가격 4주가 이어지지 않습니다',
     market_inputs_missing:'전세수급 또는 매수심리 자료가 없습니다',
     market_inputs_stale:'전세수급 또는 매수심리 기준일이 다릅니다',
+    market_inputs_mismatch:'표시된 수급 수치가 같은 날짜의 원본 자료와 다릅니다',
     region_identity_ambiguous:'동명이 지역의 코드 매핑을 확인해야 합니다',
     region_boundary_obsolete:'행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다',
     source_stale:'KB 관측 기준일이 8일을 넘어서 현재 판정을 보류합니다',

@@ -18,7 +18,7 @@ from realty_signal.signals.engine import SignalConfig
 from realty_signal.time_kst import today_kst
 
 VERSION = "signal-assessment-v1"
-GUARD_VERSION = "source-and-price-v4"
+GUARD_VERSION = "source-and-price-v5"
 MAX_OBSERVATION_AGE_DAYS = 8
 INCHEON_RETIRED_CODES = frozenset({"28110", "28140", "28170", "28260"})
 LABELS = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
@@ -67,6 +67,8 @@ def _held_summary(flags: list[str], asof: date, today: date) -> str:
         return "같은 이름의 다른 지역과 자료 출처를 구분할 수 없어 지역 판정을 보류합니다."
     if "market_inputs_missing" in flags or "market_inputs_stale" in flags:
         return "전세수급·매수심리 자료가 없거나 가격 기준일과 맞지 않아 지역 판정을 보류합니다."
+    if "market_inputs_mismatch" in flags:
+        return "저장된 전세수급·매수심리 수치가 같은 날짜의 KB 원본과 달라 지역 판정을 보류합니다."
     if "sale_weeks_incomplete" in flags:
         return "최근 4주 가격 자료가 이어지지 않아 지역 판정을 보류합니다."
     if "grade_rule_mismatch" in flags:
@@ -95,10 +97,21 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     momentum = round(sum(x["value"] for x in weeks) / 4, 4) if complete else None
     js, bs = _finite(row.get("전세수급")), _finite(row.get("매수우위지수"))
     source = str(row.get("수급출처") or region)
+    source_series = {metric: kb.series(source, metric)
+                     for metric in ("jeonse_supply", "buyer_superiority")}
     input_dates_current = all(
-        not kb.series(source, metric).empty
-        and kb.series(source, metric).index[-1].date() == asof
-        for metric in ("jeonse_supply", "buyer_superiority")
+        not series.empty and series.index[-1].date() == asof
+        for series in source_series.values()
+    )
+    # evaluate() publishes these inputs rounded to one decimal. An older/corrupt
+    # signal row must not be explained using a different revision of the KB cache.
+    source_values = {metric: (_finite(series.iloc[-1]) if not series.empty else None)
+                     for metric, series in source_series.items()}
+    input_values_match = all(
+        value is not None and original is not None
+        and abs(value - round(original, 1)) < 0.000001
+        for value, original in ((js, source_values["jeonse_supply"]),
+                                (bs, source_values["buyer_superiority"]))
     )
     reasons = [
         _metric("jeonse_pressure", "전세수급 압력", js, "지수", config.jeonse_crunch,
@@ -122,6 +135,8 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
         risk_flags.append("market_inputs_missing")
     elif not input_dates_current:
         risk_flags.append("market_inputs_stale")
+    elif not input_values_match:
+        risk_flags.append("market_inputs_mismatch")
     if ambiguous:
         risk_flags.append("region_identity_ambiguous")
     if boundary_obsolete:
