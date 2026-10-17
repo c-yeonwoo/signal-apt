@@ -417,10 +417,15 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
       window.addEventListener('hashchange',routeFromHash);
     });
     await page.getByText('호가단지',{exact:true}).waitFor();
-    await page.locator('#dashNotify').getByRole('button',{name:'텔레그램 연결'}).click();
+    assert.equal(await page.locator('#dashNotify').getByRole('button',{name:'텔레그램 연결'}).count(),0);
+    const homeOrder=await page.evaluate(()=>Object.fromEntries(
+      ['dashPlanWrap','dashWeeklyWrap','dashCxWrap','dashFavRegionWrap']
+        .map(id=>[id,document.getElementById(id).getBoundingClientRect().top])));
+    assert(homeOrder.dashPlanWrap<homeOrder.dashCxWrap);
+    assert(homeOrder.dashWeeklyWrap<homeOrder.dashFavRegionWrap);
+    await page.locator('#alertBtn').click();
     await page.locator('#alertsDlg #tgBox').getByRole('button',{name:'텔레그램 연결'}).waitFor();
     assert.equal(await page.locator('#alertsDlg').evaluate(el=>el.open),true);
-    assert.equal(await page.locator('#alertsDlg #tgBox button').evaluate(el=>el===document.activeElement),true);
     await page.locator('#alertsDlg').getByRole('button',{name:'알림 닫기'}).click();
     assert.match(await page.locator('#dashCxWrap').textContent(),/테스트구/);
     assert.match(await page.locator('#dashCxWrap').textContent(),/새 실거래/);
