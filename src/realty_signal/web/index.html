@@ -64,14 +64,6 @@
   .dash-more[open] > summary::after { content:' ▴'; }
   .dash-more-body { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
   .dash-col > .dash-more > .dash-more-body > * + * { margin-top:12px; }
-  .dash-notify-optin { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 14px;
-    border:1px solid color-mix(in srgb,var(--sig-watch) 28%,var(--line)); border-left:3px solid var(--sig-watch);
-    border-radius:12px; background:var(--panel); }
-  .dash-notify-optin-copy { flex:1 1 240px; min-width:0; }
-  .dash-notify-optin-copy b { font-size:13px; }
-  .dash-notify-optin-copy p { margin:3px 0 0; color:var(--dim); font-size:13px; line-height:1.45; }
-  .dash-notify-optin details { flex-basis:100%; color:var(--dim); font-size:13px; }
-  .dash-notify-optin summary { min-height:36px; display:flex; align-items:center; cursor:pointer; }
   /* Signal APT visual system: quiet surfaces, one clear action, stable reading rhythm. */
   body { line-height:1.55; }
   select, input[type=number], input[type=text], input[type=password], .ctrl,
@@ -1127,6 +1119,16 @@
     #v2ReportBody .v2-fact-grid,#v2ReportBody .v2-field-grid { grid-template-columns:minmax(0,1fr); }
     .lr-actions > .btn:last-child { margin-left:0 !important; }
   }
+  /* Home reads as a weekly decision brief: actions and verified changes before reference lists. */
+  .dash-primary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px;
+    align-items:start; margin-bottom:24px; }
+  .dash-primary > div { min-width:0; }
+  .dash-layout { grid-template-areas:"complex market"; }
+  #dashNotify:not(:empty) { margin-bottom:20px; }
+  @media(max-width:760px) {
+    .dash-primary { grid-template-columns:minmax(0,1fr); gap:14px; margin-bottom:18px; }
+    .dash-layout { grid-template-areas:"complex" "market"; gap:14px; }
+  }
 </style>
 </head>
 <body class="tab-signal">
@@ -1176,7 +1178,7 @@
 </div>
 
 <!-- 대시보드 홈 -->
-<div id="view-dashboard" style="display:none;padding:24px 28px 48px;max-width:1440px;margin:0 auto;height:calc(100vh - var(--hh,70px));overflow:auto;box-sizing:border-box;width:100%">
+<div id="view-dashboard" style="display:none;padding:24px 28px 48px;max-width:1440px;margin:0 auto;height:calc(100dvh - var(--hh,70px));overflow:auto;box-sizing:border-box;width:100%">
   <div id="dashHello" style="font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-bottom:6px"></div>
   <div id="dashSub" class="page-sub" style="margin-bottom:20px">관심 지역과 단지의 이번 주 변화</div>
   <div id="dashBody"></div>
@@ -2691,7 +2693,10 @@ async function loadDashboard(){
     ${link('signal','시그널')}${link('all','매물')}${link('about','과거 비교')}
   </div>`;
   // 내 관심 대상과 검증된 주간 변화를 홈의 첫 화면에 둔다.
-  body.innerHTML=`<div id="dashComeback"></div><div id="dashNotify"></div><div class="dash-layout">
+  body.innerHTML=`<div id="dashComeback"></div><div class="dash-primary">
+    <div id="dashPlanWrap"></div>
+    <div id="dashWeeklyWrap"></div>
+  </div><div id="dashNotify"></div><div class="dash-layout">
     <div class="dash-col dash-col-me">
       <div class="dash-col-label">관심단지</div>
       <div id="dashCxWrap"></div>
@@ -2699,7 +2704,6 @@ async function loadDashboard(){
     <div class="dash-col dash-col-market">
       <div class="dash-col-label">관심 지역과 주간 변화</div>
       <div id="dashFavRegionWrap">${_dashCard(favH)}</div>
-      <div id="dashWeeklyWrap"></div>
       <details class="dash-more" id="dashMarketExtra">
         <summary>시장 근거·이슈 더 보기</summary>
         <div class="dash-more-body">
@@ -2709,10 +2713,6 @@ async function loadDashboard(){
           ${_dashCard(_dashH('바로가기')+moreLinks)}
         </div>
       </details>
-    </div>
-    <div class="dash-actions">
-      <div class="dash-col-label">지금 확인할 일</div>
-      <div id="dashPlanWrap"></div>
     </div>
   </div>`;
   _loadPlan();
@@ -2912,35 +2912,26 @@ async function _loadNotifyStatus(){
   if(!d.blocked || !d.blocked.length){ el.innerHTML=''; return; }
   const optIn=d.blocked.every(c=>c.channel==='telegram'&&c.available&&!c.linked);
 
-  if(optIn){
-    const channel=d.blocked[0];
-    el.innerHTML=`<section class="dash-notify-optin" role="status" aria-label="텔레그램 알림 연결 안내">
-      <div class="dash-notify-optin-copy"><b>브리핑·관심단지·찜한 매물·청약 알림을 받아보세요</b>
-        <p>선택 사항입니다. 연결하면 아침 브리핑과 저장한 항목의 확인된 변화를 보냅니다.</p></div>
-      <button type="button" class="btn" onclick="openTelegramConnect()">텔레그램 연결</button>
-      <details><summary>알림 내용 자세히</summary><p>${esc(channel.reason||'텔레그램이 아직 연결되지 않았습니다.')}
-        ${channel.how?` · ${esc(channel.how)}`:''}</p><p>${esc(d.note||'알림은 원할 때 언제든 끌 수 있습니다.')}</p></details>
-    </section>`;
-    return;
-  }
+  // 선택형 연결은 알림 패널에 둔다. 발송 실패만 홈의 과업으로 올린다.
+  if(optIn){ el.innerHTML=''; return; }
 
   const row = c => `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <b style="font-size:13px">${c.label}</b>
+      <b style="font-size:13px">${esc(c.label||'알림')}</b>
       <span class="pill" style="font-size:10px;color:var(--sig-watch);
         background:color-mix(in srgb,var(--sig-watch) 10%,transparent);
-        border-color:color-mix(in srgb,var(--sig-watch) 22%,transparent)">${optIn?'미연결':'발송 안 됨'}</span>
+        border-color:color-mix(in srgb,var(--sig-watch) 22%,transparent)">발송 안 됨</span>
       ${c.last_days!=null?`<span style="font-size:10.5px;color:var(--dim)">마지막 ${c.last_days}일 전</span>`:''}
     </div>
-    <div style="font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.55">${c.reason||''}
-      ${c.how?`<br><span style="color:var(--accent)">${c.how}</span>`:''}</div>
+    <div style="font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.55">${esc(c.reason||'')}
+      ${c.how?`<br><span style="color:var(--accent)">${esc(c.how)}</span>`:''}</div>
     ${c.channel==='telegram'&&c.available&&!c.linked
       ? `<div style="margin-top:7px"><button type="button" class="btn" onclick="openTelegramConnect()">텔레그램 연결</button></div>` : ''}
   </div>`;
 
   el.innerHTML=_dashCard(
-    _dashH(optIn?'텔레그램 알림 연결하기':'알림 발송을 확인해 주세요')
-    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">${d.note||''}</div>`
+    _dashH('알림 발송을 확인해 주세요')
+    + `<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">${esc(d.note||'')}</div>`
     + d.blocked.map(row).join(''),
     'margin-bottom:14px;border-left:3px solid var(--sig-watch)');
 }
@@ -2984,10 +2975,20 @@ async function _loadWeekly(){
       +(mine.length?`<div style="font-size:13px;color:var(--dim);margin-top:6px">★ 관심 ${mine.length}곳 포함</div>`:'')
       +`</div>`;
   }
-  const currentDetail = _myWeeklyBlock(mine, d.my_movers||[], allMine.length>mine.length)
-    + (rest.length?`<div style="font-size:12px;color:var(--dim);margin:8px 0 4px">다른 지역 변화</div>`
-      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${rest.map(s=>_sigMoveRow(s,false)).join('')}</div>`:'');
+  const previewMine=mine.slice(0,3), previewRest=rest.slice(0,3-previewMine.length);
+  const moreMine=mine.slice(previewMine.length), moreRest=rest.slice(previewRest.length);
+  const currentDetail = _myWeeklyBlock(previewMine, (d.my_movers||[]).slice(0,3), allMine.length>mine.length)
+    + (previewRest.length?`<div style="font-size:12px;color:var(--dim);margin:8px 0 4px">다른 지역 변화</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${previewRest.map(s=>_sigMoveRow(s,false)).join('')}</div>`:'');
   let detail='';
+  if(moreMine.length||moreRest.length){
+    detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">나머지 지역 변화 ${moreMine.length+moreRest.length}곳</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${moreMine.map(s=>_sigMoveRow(s,true)).join('')}${moreRest.map(s=>_sigMoveRow(s,false)).join('')}</div>`;
+  }
+  if((d.my_movers||[]).length>3){
+    detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">관심 지역의 나머지 지표 변화</div>`
+      +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${d.my_movers.slice(3).map(_moverRow).join('')}</div>`;
+  }
   if(movers.length){
     detail+=`<div style="font-size:12px;color:var(--dim);margin:12px 0 4px">KB 지표 변화 · 현재 판정과 별개</div>`
       +`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${movers.slice(0,10).map(_moverRow).join('')}</div>`;
@@ -3004,7 +3005,7 @@ async function _loadWeekly(){
   }
   _renderComeback(d);
   wrap.innerHTML=_dashCard(_dashH(head)+stale+conclusion+currentDetail+_holdBlock(d.holds)
-    +(detail?_dashMore('추가 지표와 과거 기록',detail):''));
+    +(detail?_dashMore('나머지 변화와 근거 보기',detail):''));
   if(d.as_of) _ackWhenVisible(wrap,'/api/weekly-change/seen',{as_of:d.as_of});
 }
 // ===== 다음 할 일 — 텔레그램 브리핑과 같은 판단(briefing.actions) =====
@@ -3021,9 +3022,22 @@ function _planGo(key, tab, region){
 }
 async function _loadPlan(){
   const wrap=document.getElementById('dashPlanWrap'); if(!wrap) return;
-  let d; try{ d=await (await fetch('/api/action-plan')).json(); }catch(e){ wrap.innerHTML=''; return; }
+  let d; try{
+    const response=await fetch('/api/action-plan');
+    if(!response.ok) throw new Error('action plan unavailable');
+    d=await response.json();
+  }catch(e){
+    wrap.innerHTML=_dashCard(_dashH('지금 확인할 일')+'<p role="status" style="font-size:14px;color:var(--dim)">할 일을 불러오지 못했습니다.</p>');
+    return;
+  }
   const acts=(d.actions||[]).slice(0,2);
-  if(!acts.length){ wrap.innerHTML=''; return; }
+  if(!acts.length){
+    wrap.innerHTML=_dashCard(_dashH('지금 확인할 일')
+      +'<p style="font-size:14px;color:var(--dim)">새로 확인할 일이 없습니다.</p>'
+      +'<button type="button" class="btn" id="dashBrowseCandidates">내 후보 보기</button>');
+    wrap.querySelector('#dashBrowseCandidates').onclick=()=>switchTab('mymap');
+    return;
+  }
   const top=acts[0];
   const homeTitle=a=>a.key==='levers'?'예산 조건을 넓혀 매물 다시 찾기':a.title;
   const homeCta=a=>a.key==='levers'?'조건 바꾸기':a.cta;
@@ -3045,7 +3059,7 @@ async function _loadPlan(){
       ${homeRegion(a)}
       <div style="font-size:13px;color:var(--dim);margin-top:4px;line-height:1.5">${esc(a.why||'')}</div></div>
     <button type="button" class="btn" style="padding:7px 12px;white-space:nowrap;align-self:center" data-action-key="${esc(a.key)}" data-action-tab="${esc(a.tab)}" data-action-region="${esc(a.region||'')}">${esc(homeCta(a))}</button></div>`).join('');
-  wrap.innerHTML=_dashCard(_dashH('다음 할 일')+conclusion+(acts.length>1?_dashMore('다른 할 일 보기',detail):''));
+  wrap.innerHTML=_dashCard(_dashH('지금 확인할 일')+conclusion+(acts.length>1?_dashMore('다른 할 일 보기',detail):''));
   wrap.querySelectorAll('[data-action-key]').forEach(button=>button.addEventListener('click',()=>
     _planGo(button.dataset.actionKey,button.dataset.actionTab,button.dataset.actionRegion)));
 }

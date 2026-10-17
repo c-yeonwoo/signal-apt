@@ -1,4 +1,4 @@
-"""홈 첫 화면은 초보 구매자의 다음 행동을 먼저 보여야 한다."""
+"""홈 첫 화면은 할 일과 검증된 주간 변화를 긴 관심 목록보다 먼저 보여야 한다."""
 
 from pathlib import Path
 
@@ -11,16 +11,16 @@ def _dashboard_markup() -> str:
     return HTML[start:HTML.index('// ===== 이번 주 변화', start)]
 
 
-def test_dashboard_prioritizes_favorites_and_market_changes():
+def test_dashboard_prioritizes_actions_and_verified_changes():
     markup = _dashboard_markup()
     complex_watch = markup.index('id="dashCxWrap"')
     favorite_regions = markup.index('id="dashFavRegionWrap"')
     weekly = markup.index('id="dashWeeklyWrap"')
     plan = markup.index('id="dashPlanWrap"')
-    assert favorite_regions < weekly < plan
+    assert plan < weekly < complex_watch < favorite_regions
     assert '관심단지' in markup
     assert '관심 지역과 주간 변화' in markup
-    assert '지금 확인할 일' in markup
+    assert "_dashH('지금 확인할 일')" in HTML
     assert 'id="dashExtra"' not in markup
     assert 'id="dashShortlistWrap"' not in markup
     assert 'id="dashLeversWrap"' not in markup

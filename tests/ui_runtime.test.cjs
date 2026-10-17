@@ -213,20 +213,62 @@ test('comparison map reports unavailable boundaries without claiming unobserved 
   assert.doesNotMatch(html.split('id="view-undervalued"')[1].split('id="view-presale"')[0],/지도 색은 지역 평단가 가격대/);
 });
 
-test('optional Telegram opt-in is compact and keeps notification details expandable', async () => {
+test('optional Telegram opt-in stays in alerts, not ahead of home decisions', async () => {
   const el={innerHTML:''};
+  let blocked=[{channel:'telegram',available:true,linked:false,
+    reason:'연결 전입니다.',how:'알림에서 연결합니다.'}];
   const ctx=vm.createContext({document:{getElementById:id=>id==='dashNotify'?el:null},
-    fetch:async()=>({ok:true,json:async()=>({blocked:[{channel:'telegram',available:true,linked:false,
-      reason:'연결 전입니다.',how:'마이페이지에서 연결합니다.'}],note:'선택 알림입니다.'})}),
-    esc:value=>String(value),switchTab(){},});
+    fetch:async()=>({ok:true,json:async()=>({blocked,note:'알림 상태를 확인해 주세요.'})}),
+    esc:value=>String(value),switchTab(){},
+    _dashCard:content=>`<div class="dash-card">${content}</div>`,_dashH:title=>`<h3>${title}</h3>`});
   vm.runInContext(extract('async function _loadNotifyStatus(){','async function _loadWeekly(){'),ctx);
   await ctx._loadNotifyStatus();
-  assert.match(el.innerHTML,/dash-notify-optin/);
-  assert.match(el.innerHTML,/브리핑·관심단지·찜한 매물·청약 알림을 받아보세요/);
-  assert.match(el.innerHTML,/<details>/);
-  assert.match(el.innerHTML,/openTelegramConnect\(\)/);
-  assert.match(el.innerHTML,/텔레그램 연결/);
-  assert.doesNotMatch(el.innerHTML,/dash-card/);
+  assert.equal(el.innerHTML,'');
+  assert.match(html,/id="tgBox"/);
+  assert.match(html,/async function openTelegramConnect\(\)/);
+  assert.match(html,/아침 브리핑과 관심단지·찜한 매물·청약 일정/);
+  blocked=[{channel:'telegram',label:'텔레그램',available:true,linked:true,reason:'발송 오류'}];
+  await ctx._loadNotifyStatus();
+  assert.match(el.innerHTML,/알림 발송을 확인해 주세요/);
+  assert.match(el.innerHTML,/발송 오류/);
+});
+
+test('home puts actions and weekly changes before long interest lists', () => {
+  const home=extract('body.innerHTML=`<div id="dashComeback"', '  _loadPlan();');
+  assert(home.indexOf('id="dashPlanWrap"')<home.indexOf('id="dashCxWrap"'));
+  assert(home.indexOf('id="dashWeeklyWrap"')<home.indexOf('id="dashFavRegionWrap"'));
+  assert(home.indexOf('id="dashNotify"')>home.indexOf('id="dashWeeklyWrap"'));
+  assert.match(html,/height:calc\(100dvh - var\(--hh,70px\)\)/);
+});
+
+test('home does not call a failed action feed an empty to-do list', async () => {
+  const wrap={innerHTML:''};
+  const ctx=vm.createContext({document:{getElementById:id=>id==='dashPlanWrap'?wrap:null},
+    fetch:async()=>({ok:false,status:503}),_dashCard:content=>content,_dashH:title=>title});
+  vm.runInContext(extract('async function _loadPlan(){','// ===== 이번 주 부동산 이슈'),ctx);
+  await ctx._loadPlan();
+  assert.match(wrap.innerHTML,/할 일을 불러오지 못했습니다/);
+  assert.doesNotMatch(wrap.innerHTML,/새로 확인할 일이 없습니다/);
+});
+
+test('home weekly brief shows at most three verified region changes before the disclosure', async () => {
+  const wrap={innerHTML:''};
+  const row=(region)=>({region,current_verified:true,up:true});
+  const data={ready:true,current_check_ready:true,stale_days:1,mine:[row('관심A'),row('관심B')],
+    rest:[row('그외1'),row('그외2'),row('그외3'),row('그외4')],movers:[],totals:{}};
+  const ctx=vm.createContext({document:{getElementById:id=>id==='dashWeeklyWrap'?wrap:null},
+    fetch:async()=>({ok:true,json:async()=>data}),
+    _dashCard:content=>content,_dashH:title=>title,_staleBanner:()=>'',_weeklyQuiet:()=>'',
+    _myWeeklyBlock:mine=>mine.map(s=>`[${s.region}]`).join(''),
+    _sigMoveRow:s=>`[${s.region}]`,_holdBlock:()=>'',_dashMore:(title,content)=>`<details>${title}${content}</details>`,
+    _renderComeback:()=>{},_ackWhenVisible:()=>{},_moverRow:()=>'',esc:value=>String(value)});
+  vm.runInContext(extract('async function _loadWeekly(){', '// ===== 다음 할 일'),ctx);
+  await ctx._loadWeekly();
+  const [first,rest]=wrap.innerHTML.split('<details>');
+  assert.match(first,/\[관심A\].*\[관심B\].*\[그외1\]/s);
+  assert.doesNotMatch(first,/그외2|그외3|그외4/);
+  assert.match(rest,/나머지 지역 변화 3곳/);
+  assert.match(rest,/그외2.*그외3.*그외4/s);
 });
 
 test('GTX evidence is opt-in, coexists with map overlays, and separates operating from construction', async () => {
