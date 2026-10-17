@@ -1364,8 +1364,8 @@
     <div class="strat" id="strat"></div>
   </div>
   <div class="sec">
-    <h3>관심 매물 — 우선순위순 <span id="aucCoverage" style="font-size:11px;font-weight:400;color:var(--dim)"></span></h3>
-    <p style="color:var(--dim);font-size:12px;margin:-4px 0 8px">후보를 열면 지도에서 위치를 볼 수 있습니다. 입찰 상한 계산은 목적·현금·권리·비용 입력 후에만 시작합니다.</p>
+    <h3>경매 물건 <span id="aucCoverage" style="font-size:11px;font-weight:400;color:var(--dim)"></span></h3>
+    <p style="color:var(--dim);font-size:12px;margin:-4px 0 8px">예정 입찰기일 가까운 순입니다. 추천 순위는 아니며, 기일·권리·현금은 입찰 전 다시 확인해야 합니다.</p>
     <div id="aucMtFilter" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px"></div>
     <div class="mapsplit">
       <div class="ms-list" id="auctionList"></div>
@@ -7761,7 +7761,19 @@ async function loadAuction(){
 }
 function prefillRegion(r){ switchTab('auction'); openAdd(); document.getElementById('f_region').value = r; }
 
-function daysTo(d){ if(!d) return null; return Math.ceil((new Date(d) - new Date())/86400000); }
+const auctionKstDate = new Intl.DateTimeFormat('en-US',
+  {timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
+function auctionTodayKst(now=new Date()){
+  const fields=Object.fromEntries(auctionKstDate.formatToParts(now).map(p=>[p.type,p.value]));
+  return Date.UTC(+fields.year,+fields.month-1,+fields.day);
+}
+function daysTo(d,todayKst=auctionTodayKst()){
+  const m=/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/.exec(String(d||''));
+  if(!m) return null;
+  const target=Date.UTC(+m[1],+m[2]-1,+m[3]);
+  if(!Number.isFinite(target)||new Date(target).toISOString().slice(0,10)!==m[0].slice(0,10)) return null;
+  return Math.round((target-todayKst)/86400000);
+}
 
 function renderAuction(rows){
   _auctionFilterRows=Array.isArray(rows)?rows.slice():[];
@@ -7774,14 +7786,18 @@ function renderAuction(rows){
   if(sz) rows = rows.filter(r=>{const a=r['전용면적']; if(!a) return false; return sz==='s'?a<=60:sz==='m'?(a>60&&a<=85):a>85;});
   if(ag) rows = rows.filter(r=>{ if(!r['건축년도']) return false; const y=2026-r['건축년도'];
     return ag==='new'?y<=10:ag==='mid'?(y>10&&y<=20):y>20;});
+  const todayKst=auctionTodayKst();
+  const dueDays=r=>daysTo(r['입찰기일'],todayKst);
+  const deadlineOrder=r=>{ const d=dueDays(r); return d===null?100000:d<0?200000+Math.abs(d):d; };
+  rows=rows.slice().sort((a,b)=>deadlineOrder(a)-deadlineOrder(b));
   document.getElementById('emptyMsg').textContent = rows.length ? '' :
     '조건에 맞는 경매 물건이 없습니다.';
   mapSplit('auctionList','auctionMap',rows,{
-    summary:r=>{ const dl=daysTo(r['입찰기일']);
+    summary:r=>{ const dl=dueDays(r);
       const hold=r['최저매각가']?`<b>${won(r['최저매각가'])}</b>`:'<b style="color:#d97706">보류</b>';
       return {nm:`${esc(r['단지명']||'–')} ${regionSignalBadge(r['지역시그널']||'HELD')} <span class="pill">자료 확인</span>`,
         right:_mtMetric(r['최저매각가']?'최저가':'가격 미확인',hold),
-        sub:`${esc(r['region']||'')}${r['동']?' '+esc(r['동']):''}${r['지역급지']?' · '+regionGradeBadge(r['지역급지']):''} ${dl!=null?'· '+(dl<0?'기일지남':'D-'+dl):''}`}; },
+        sub:`${esc(r['region']||'')}${r['동']?' '+esc(r['동']):''}${r['지역급지']?' · '+regionGradeBadge(r['지역급지']):''} · ${dl===null?'기일 미확인':dl<0?'기일 지남':'D-'+dl}`}; },
     detail:r=>{
       const hank=r.source==='hank';
       const area=hank
@@ -7808,12 +7824,13 @@ function renderAuction(rows){
     color:r=>'#d97706',
     label:r=>`<b>${esc(r['단지명']||'–')}</b><br>${esc(r['region']||'')} · 입찰 검토 전`,
   });
-  renderStrategy(rows);
+  renderStrategy(rows,todayKst);
 }
-function renderStrategy(rows){
-  const withDate = rows.filter(r=>r['입찰기일'] && daysTo(r['입찰기일'])>=0);
-  const wk = withDate.filter(r=>daysTo(r['입찰기일'])<=7);
-  const wk2 = withDate.filter(r=>{const d=daysTo(r['입찰기일']); return d>7 && d<=14;});
+function renderStrategy(rows,todayKst=auctionTodayKst()){
+  const withDate = rows.map(r=>({row:r,days:daysTo(r['입찰기일'],todayKst)}))
+    .filter(item=>item.days!==null && item.days>=0);
+  const wk = withDate.filter(item=>item.days<=7).map(item=>item.row);
+  const wk2 = withDate.filter(item=>item.days>7 && item.days<=14).map(item=>item.row);
   const rightsPending = rows.filter(r=>!r['권리분석']?.['조사완료'] || r['인수보증금']==null);
   const card = (t, big, sub) => `<div class="scard"><div style="color:var(--dim);font-size:12px">${t}</div>
      <div class="big">${big}</div><div style="color:var(--dim);font-size:12px">${sub}</div></div>`;

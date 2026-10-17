@@ -2314,6 +2314,21 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.evaluate(()=>selectMsRow('auctionMap',0));
     assert.equal(await page.locator('#auctionList .ms-detail button[data-auction-id="hank:1479397"]').count(),1,
       '경매 전용 화면에서도 자동 수집 후보의 계산 진입점이 있어야 한다');
+    assert.deepEqual(await page.evaluate(()=>{
+      const early=auctionTodayKst(new Date('2026-10-16T23:30:00Z'));
+      return [daysTo('2026-10-17',early),daysTo('2026-10-18',early),
+        daysTo('2026-10-16',early),daysTo('2026-02-30',early)];
+    }),[0,1,-1,null],'입찰 D-day는 한국 달력 날짜로 계산해야 한다');
+    const auctionOrder=await page.evaluate(()=>{
+      const today=auctionTodayKst(), iso=offset=>new Date(today+offset*86400000).toISOString().slice(0,10);
+      renderAuction([
+        {id:'undated',단지명:'기일 미확인',region:'수지구',lat:37.3,lng:127.1,입찰기일:''},
+        {id:'past',단지명:'기일 지남',region:'수지구',lat:37.3,lng:127.1,입찰기일:iso(-1)},
+        {id:'soon',단지명:'내일 입찰',region:'수지구',lat:37.3,lng:127.1,입찰기일:iso(1)}]);
+      return _ms.auctionMap.items.map(row=>row.id);
+    });
+    assert.deepEqual(auctionOrder,['soon','undated','past']);
+    assert.match(await page.locator('#view-auction').textContent(),/추천 순위는 아니며/);
     await page.setViewportSize({width:180,height:800});
     const auctionLayout=await page.evaluate(()=>({viewport:innerWidth,
       dialog:document.getElementById('calcDlg').getBoundingClientRect().right,
