@@ -76,6 +76,18 @@ test('region and complex price tiers share one five-step wording with explicit s
   assert.doesNotMatch(html,/id="imjangDlg"|openImjang\(/);
 });
 
+test('stale KB cycle keeps the last calculation separate from the current phase', () => {
+  const ctx=vm.createContext({esc:x=>String(x)});
+  vm.runInContext(extract('function _cycleUnavailableHtml(', '// 순환주기 사인곡선'),ctx);
+  const held=ctx._cycleUnavailableHtml({status:'held',observed_phase:'상승기',asof:'2026-10-01',
+    reason:'KB 자료 확인 필요'});
+  assert.match(held,/현재 국면 판단 보류/);
+  assert.match(held,/마지막 계산 국면 · 상승기.*과거 참고/);
+  assert.doesNotMatch(held,/현재 국면 \(2026-10-01/);
+  assert.match(html,/id="cycleBtn"[^>]*>과거 국면 재구성<\/button>/);
+  assert.match(html,/당시 발행 판정이나 향후 순서 예측이 아닙니다/);
+});
+
 test('Nick chat entry points and free-form question composer are absent while reports remain', () => {
   assert.doesNotMatch(html, /askNick|nickCxBtn|advFab|advChatTab|advInput|advSend|닉에게|Nick에게|닉과 대화|\/api\/advisor\/stream/);
   assert.doesNotMatch(signalV2, /Nick 호출|v2ExplainQuestion|이 리포트에 질문하기/);

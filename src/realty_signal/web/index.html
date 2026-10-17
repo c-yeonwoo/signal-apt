@@ -1232,7 +1232,7 @@
           <div id="ovlMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px;z-index:1200;min-width:210px">
             <div style="font-size:11px;color:var(--dim);margin-bottom:8px">차트에 겹쳐 보기</div>
             <button class="chip" id="histBtn" onclick="toggleHist()" style="white-space:nowrap;display:block;width:100%;text-align:left;margin-bottom:6px">지난 시그널</button>
-            <button class="chip" id="cycleBtn" onclick="toggleCycleOverlay()" style="white-space:nowrap;display:block;width:100%;text-align:left;margin-bottom:6px" title="이 지역이 시기별로 어떤 경기 국면이었는지">경기국면</button>
+            <button class="chip" id="cycleBtn" onclick="toggleCycleOverlay()" style="white-space:nowrap;display:block;width:100%;text-align:left;margin-bottom:6px" title="과거 자료를 현재 규칙으로 다시 계산한 구간입니다">과거 국면 재구성</button>
             <button class="chip" id="zoneBtn" onclick="toggleZoneInfo(event)" style="white-space:nowrap;display:block;width:100%;text-align:left">전세수급 구간</button>
             <div class="zinfo-pop" id="zinfoPop"></div>
           </div>
@@ -1240,7 +1240,7 @@
         </div>
       <div class="haesol-panel" id="histPanel"></div>
       <div id="cycleMini" style="display:none;border-bottom:1px solid var(--line)">
-        <div style="font-size:10px;color:var(--dim);padding:5px 10px 0">경기 사이클 파형 — 침체 저점 → 회복 → 상승 고점 → 후퇴 (곡선 위치 = 국면, 색 = 국면 구간)</div>
+        <div style="font-size:10px;color:var(--dim);padding:5px 10px 0">과거 자료로 재구성한 국면 · 당시 발행 판정이나 향후 순서 예측이 아닙니다.</div>
         <div id="cycleMiniChart" style="height:70px"></div>
       </div>
       <p style="font-size:11px;color:var(--dim);margin:8px 12px 0">지역 가격·수급 추세입니다. 전국 구매력지수는 이 지역의 지표가 아니므로 차트에 겹치지 않으며, 동네 리포트의 거시 항목에서 따로 볼 수 있습니다.</p>
@@ -1557,7 +1557,7 @@
       <span class="btn" style="padding:2px 11px" onclick="document.getElementById('cycleGuideDlg').close()">✕</span>
     </div>
   </div>
-  <p style="color:var(--dim);font-size:13px;margin:0 0 16px">KB 주간 매매증감률의 26주 방향·변화로 지역 흐름을 추정합니다. 현재 표시와 시그널 차트의 국면 밴드는 같은 기준이며, 매수심리는 보조 정보입니다. 보합은 관망으로 표시합니다.</p>
+  <p style="color:var(--dim);font-size:13px;margin:0 0 16px">KB 매매증감률의 최근 26개 주간 관측치와 그 이전 관측치를 비교해 지역 흐름을 분류합니다. 빠진 주가 있으면 달력상 26주보다 긴 기간입니다. 매수심리는 보조 정보입니다.</p>
   <div id="cycleGraph" style="margin-bottom:18px"></div>
   <div id="cycleNow"></div>
   <div id="cyclePhases" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-top:18px"></div>
@@ -3701,12 +3701,24 @@ const _CYCLE=[
   {k:'침체기', ic:'❄️', col:'#dc2626', tag:'가격 약세', 현상:['급매의 실제 계약가 확인','추가 하락 가능성 점검','보유 현금 여력 확인','개별 권리·하자 확인']},
   {k:'관망', ic:'⏸️', col:'#64748b', tag:'방향 불명확', 현상:['가격 변동폭이 작음','사이클 타이밍 단정 어려움','단지별 실거래·호가 확인','자금 여력부터 점검']},
 ];
+let _cycleGuideGeneration=0;
 async function loadCycle(){
+  const generation=++_cycleGuideGeneration;
   const region=document.getElementById('cycleRegion').value;
   const now=document.getElementById('cycleNow'), grid=document.getElementById('cyclePhases');
   now.innerHTML='<div style="color:var(--dim)">국면 분석 중…</div>'; grid.innerHTML='';
-  let d; try{ d=await (await fetch('/api/cycle?region='+encodeURIComponent(region))).json(); }catch(e){ now.innerHTML='<div style="color:#dc2626">불러오기 실패</div>'; return; }
-  if(!d.phase){ now.innerHTML='<div style="color:var(--dim)">데이터가 부족합니다.</div>'; return; }
+  document.getElementById('cycleGraph').innerHTML='';
+  document.getElementById('cycleInsight').innerHTML='';
+  let d; try{
+    const response=await fetch('/api/cycle?region='+encodeURIComponent(region));
+    if(!response.ok) throw new Error('cycle unavailable');
+    d=await response.json();
+  }catch(e){ if(generation===_cycleGuideGeneration) now.innerHTML='<div role="status" style="color:#dc2626">국면 자료를 불러오지 못했습니다.</div>'; return; }
+  if(generation!==_cycleGuideGeneration) return;
+  if(!d.phase){
+    now.innerHTML=_cycleUnavailableHtml(d);
+    return;
+  }
   const cur=_CYCLE.find(c=>c.k===d.phase)||_CYCLE[0];
   now.innerHTML=`<div style="background:${cur.col}12;border:1.5px solid ${cur.col}66;border-radius:14px;padding:18px 20px">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -3722,6 +3734,14 @@ async function loadCycle(){
       ${c.현상.map(x=>`<div style="font-size:11.5px;margin:3px 0;color:${on?'var(--txt)':'var(--dim)'}">· ${x}</div>`).join('')}</div>`;}).join('');
   document.getElementById('cycleGraph').innerHTML = cycleGraph(d.phase, d.asof, cur.col);
   document.getElementById('cycleInsight').innerHTML = cycleInsight(d.phase);
+}
+function _cycleUnavailableHtml(d){
+  if(d?.status==='held') return `<section style="border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel)" role="status">
+    <h3 style="margin:0 0 6px;font-size:17px">현재 국면 판단 보류</h3>
+    <p style="margin:0 0 6px">${esc(d.reason||'최근 KB 주간 자료를 확인하지 못했습니다.')}</p>
+    <p style="margin:0;color:var(--dim)">마지막 계산 국면 · ${esc(d.observed_phase||'미확인')} (${esc(d.asof||'기준일 미확인')} 관측, 과거 참고)</p>
+  </section>`;
+  return `<div role="status" style="color:var(--dim)">${esc(d?.reason||'국면을 계산할 주간 자료가 부족합니다.')}</div>`;
 }
 // 순환주기 사인곡선 + 현재 위치 펄스
 function cycleGraph(phase, asof, col){
@@ -6344,7 +6364,7 @@ function drawChart(region, m, sig){
   // 경기 국면 오버레이 — 시기별 국면(회복/상승/후퇴/침체/관망) 색 밴드
   if(_showCycle && _cycleCache[region]?.length){
     const pc={회복기:'rgba(2,132,199,0.14)', 상승기:'rgba(22,163,74,0.15)', 후퇴기:'rgba(217,119,6,0.15)', 침체기:'rgba(220,38,38,0.13)', 관망:'rgba(100,116,139,0.12)'};
-    series.push({ name:'경기국면', type:'line', data:[], yAxisIndex:0, silent:true,
+    series.push({ name:'과거 재구성 국면', type:'line', data:[], yAxisIndex:0, silent:true,
       markArea:{ data: _cycleCache[region].map(b=>[
         {xAxis:b.start, itemStyle:{color: pc[b.phase]||'rgba(148,163,184,.1)'},
          label:{show:true, position:'insideBottom', fontSize:9, color:'var(--dim)', formatter:b.phase.replace('기','')}},
