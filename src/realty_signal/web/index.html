@@ -7465,9 +7465,26 @@ async function loadFreshness(){
     ? (Date.parse(`${kstToday}T00:00:00Z`)/1000-kbAsOfTs)/86400 : null;
   const kbStatus=kbAgeDays==null || kbAgeDays<0?'unknown':kbAgeDays>8?'stale':'fresh';
   const kbCheck=d.kb_fetch?.observation_check;
+  const listingSource=s=>['quicksale','certified','hanbang'].includes(s.key);
+  const listingAge=s=>s.ts==null?null:Math.max(0,(now-s.ts)/86400);
+  const listingNotice=s=>{
+    if(!listingSource(s)) return '';
+    const age=listingAge(s);
+    if(age!==null && age>7) return s.last_refresh_ok===false?
+      '갱신 실패 · 마지막 수집 7일 초과':'마지막 수집 7일 초과 · 호가 재확인';
+    if(s.last_refresh_ok===false) return '최근 갱신 실패 · 이전 수집분일 수 있음';
+    if(age===null) return '수집 기록 없음';
+    if(s.failed_region_count||s.page_limited_region_count) return '일부 지역만 확인';
+    if(s.last_refresh_ok!==true) return '갱신 결과 미확인';
+    return '최근 수집 확인';
+  };
   const dot=s=>{ const ts=s.key==='signal' ? kbAsOfTs : s.ts;
+    if(listingSource(s) && listingAge(s)>7) return '#dc2626';
+    if(listingSource(s) && s.last_refresh_ok===false) return '#ca8a04';
     if(!ts) return '#94a3b8'; const days=Math.floor((now-ts)/86400);
     if(s.key==='signal') return kbStatus==='fresh'?'#16a34a':kbStatus==='stale'?'#dc2626':'#94a3b8';
+    if(listingSource(s)) return listingAge(s)>7?'#dc2626':
+      (s.last_refresh_ok!==true||s.failed_region_count||s.page_limited_region_count)?'#ca8a04':'#16a34a';
     return days<=8?'#16a34a':days<=31?'#ca8a04':'#dc2626'; };
   const when=s=>{
     if(s.key==='signal'){
@@ -7475,6 +7492,7 @@ async function loadFreshness(){
       const age=kbAgeDays===0?'오늘':kbAgeDays===1?'어제':`${kbAgeDays}일 전`;
       return `<b>관측 ${age}${kbStatus==='stale'?' · 시그널 판단 보류':''}</b>`;
     }
+    if(listingSource(s)) return `<b>${listingNotice(s)}</b>`;
     const r=_relTime(s.ts, now);
     return r?`<b>${r}</b>`:`<span style="color:var(--dim)">${s.cycle||'–'}</span>`;
   };
@@ -7485,8 +7503,8 @@ async function loadFreshness(){
     + d.sources.map(s=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)">
         <span style="width:8px;height:8px;border-radius:50%;background:${dot(s)};margin-top:5px;flex:none"></span>
         <div style="flex:1;min-width:0">
-          <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600">${s.label}</span><span style="white-space:nowrap;font-size:12px">${when(s)}</span></div>
-          <div style="font-size:11px;color:var(--dim);line-height:1.5">${s.key==='signal'?`관측 ${s.asof||'기준일 미확인'} · 최종 수집 ${_relTime(s.ts,now)||'시각 미확인'} · `:''}${s.note||''} <span style="opacity:.8">· 주기: ${s.cycle||'–'}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 8px"><span style="font-weight:600">${s.label}</span><span style="margin-left:auto;text-align:right;font-size:12px">${when(s)}</span></div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.5">${s.key==='signal'?`관측 ${s.asof||'기준일 미확인'} · 최종 수집 ${_relTime(s.ts,now)||'시각 미확인'} · `:''}${listingSource(s)?`마지막 수집 ${_relTime(s.ts,now)||'없음'} · 마지막 갱신 시도 ${_relTime(s.last_attempt_at,now)||'기록 없음'} · `:''}${s.note||''} <span style="opacity:.8">· 주기: ${s.cycle||'–'}</span></div>
         </div></div>`).join('')
     // 색만으로 정보를 전달하지 않는다 — 점 색 + 글자 라벨을 같이 준다(색각 이상 대응)
     + `<div style="font-size:10px;color:var(--dim);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">`

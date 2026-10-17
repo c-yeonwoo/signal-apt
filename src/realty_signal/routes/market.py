@@ -92,6 +92,21 @@ def _file_mtime(p) -> int | None:
         return None
 
 
+def _listing_refresh_summary(path) -> dict:
+    """Expose only the outcome of a private listing scan, never its cache path or raw errors."""
+    from realty_signal import api as app_api
+
+    refresh = app_api._radar_refresh_status(path)
+    attempted = refresh.get("attempted_at")
+    attempted_at = int(attempted) if type(attempted) in (int, float) and isfinite(attempted) and attempted > 0 else None
+    ok = refresh.get("ok") if type(refresh.get("ok")) is bool else None
+    failed = refresh.get("failed_requests")
+    limited = refresh.get("limited_regions")
+    return {"last_attempt_at": attempted_at, "last_refresh_ok": ok,
+            "failed_region_count": failed if type(failed) is int and failed > 0 else 0,
+            "page_limited_region_count": len(limited) if isinstance(limited, list) else 0}
+
+
 @router.post("/api/refresh")
 def refresh(request: Request):
     if err := deps.require_admin(request):
@@ -188,6 +203,11 @@ def freshness(request: Request):
     private = deps.personal_listings_allowed(request)
     if not private:
         sources = [source for source in sources if source["key"] not in {"quicksale", "certified", "hanbang"}]
+    else:
+        private_paths = {"quicksale": qs, "certified": cert, "hanbang": hanbang}
+        for source in sources:
+            if path := private_paths.get(source["key"]):
+                source.update(_listing_refresh_summary(path))
     return {"기준일": last_date, "now": int(__import__("time").time()),
             "sources": sources, "pipeline": pipeline.cache_health(include_private=private),
             "kb_identity": {"verified": kb_data.identity_verified,
