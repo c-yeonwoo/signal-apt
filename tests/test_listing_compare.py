@@ -57,6 +57,15 @@ def test_compare_keeps_last_observed_price_but_holds_per_area_quote():
     assert any("㎡당 호가 비교에서 제외" in warning for warning in result["warnings"])
 
 
+def test_compare_rejects_auction_minimum_bid_as_sale_quote():
+    import pytest
+
+    rows = [_row("일반매물:a", 50000, 84),
+            {**_row("경매:case-1", 40000, 84), "유형": "경매"}]
+    with pytest.raises(ValueError, match="comparison_requires_sale_listings"):
+        listing_compare.build(rows, lambda *_args: {})
+
+
 def test_compare_endpoint_denies_other_users_and_duplicate_keys(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", tmp_path / "compare.db")
     db._migrated[0] = False
@@ -80,10 +89,20 @@ def test_compare_endpoint_denies_other_users_and_duplicate_keys(tmp_path, monkey
     assert response.headers["cache-control"] == "private, no-store"
     assert owner.post(path, json={"keys": ["일반매물:a", "일반매물:a"]}).status_code == 422
     assert owner.post(path, json={"keys": ["일반매물:a", "일반매물:missing"]}).status_code == 404
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: [
+        rows[0], {**_row("경매:case-1", 40000, 84), "유형": "경매"}])
+    assert owner.post(path, json={"keys": ["일반매물:a", "경매:case-1"]}).status_code == 422
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: rows)
     owner_uid = db.user_by_email("compare-owner@example.com")["id"]
     guest_uid = db.user_by_email("compare-guest@example.com")["id"]
     selected = api.advisor_tools(owner_uid, comparison_keys=payload["keys"])("get_selected_listing_comparison", {})
     assert len(selected["items"]) == 2
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: [
+        rows[0], {**_row("경매:case-1", 40000, 84), "유형": "경매"}])
+    invalid = api.advisor_tools(owner_uid, comparison_keys=["일반매물:a", "경매:case-1"])(
+        "get_selected_listing_comparison", {})
+    assert "매매 후보끼리만" in invalid["error"]
+    monkeypatch.setattr(api, "_build_listings", lambda *_args, **_kwargs: rows)
     forbidden = api.advisor_tools(guest_uid, comparison_keys=payload["keys"])("get_selected_listing_comparison", {})
     assert "error" in forbidden
 

@@ -120,6 +120,9 @@ def buyer_fit(listing: dict, profile: dict | None = None, *, confirmed_power=_UN
     """확정 매수력과 호가만 비교한다. 구매 가능성/대출 승인이 아니다."""
     from realty_signal import buying_power
 
+    if listing.get("kind") not in PRIVATE:
+        return {"status": "unknown", "reason_code": "non_sale_price",
+                "reason": "경매 최저매각가는 매매 호가가 아니므로 매수 예산과 직접 비교하지 않습니다."}
     profile = profile or {}
     saved = profile.get("매수력") or {}
     asking = _number(listing.get("asking_manwon"))

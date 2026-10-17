@@ -25,6 +25,13 @@ def test_naver_complex_link_only_uses_validated_provider_number():
     assert property_analysis.snapshot(row)["naver_complex_no"] is None
 
 
+def test_auction_minimum_bid_is_not_sale_budget_fit():
+    listing = property_analysis.snapshot({**_row("경매:case-1"), "유형": "경매"})
+    assert property_analysis.buyer_fit(listing, {"매수력": {"최대매수가": 60000}}) == {
+        "status": "unknown", "reason_code": "non_sale_price",
+        "reason": "경매 최저매각가는 매매 호가가 아니므로 매수 예산과 직접 비교하지 않습니다."}
+
+
 def test_budget_fit_uses_current_confirmed_buying_power_in_same_region(monkeypatch):
     monkeypatch.setattr(md, "kb", lambda: SimpleNamespace(
         codes={"노원구": "1135000000"}, regions=["노원구"], identity_verified=True))
