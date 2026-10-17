@@ -1232,6 +1232,21 @@ const signalV2 = fs.readFileSync(path.join(__dirname, '../src/realty_signal/web/
     await page.setViewportSize({width:180,height:800});
     const narrowGroup=await groupedSale.evaluate(el=>({scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
     assert(narrowGroup.scrollWidth<=narrowGroup.clientWidth,`group summary must reflow at 180px: ${JSON.stringify(narrowGroup)}`);
+    await page.evaluate(()=>{
+      const st=_ms.laMap;
+      st.items=[{유형:'일반매물',단지명:'매매 후보'},
+        {유형:'청약',단지명:'청약 후보'}, {유형:'경매',단지명:'경매 후보'}];
+      st.opt={sectionOf:_laCategory,summary:x=>({nm:x.단지명}),detail:()=>''};
+      st.locating=false;
+      renderMsList('laMap',[0,1,2]);
+    });
+    assert.deepEqual(await page.locator('#laList .ms-section-label').allTextContents(),
+      ['매매 · 1건','청약 · 1건','경매 · 1건']);
+    assert.match(await page.locator('#laList .ms-viewport-hint').textContent(),/유형별로 정렬/);
+    const sectionLayout=await page.locator('#laList .ms-section-label').first().evaluate(el=>({
+      scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
+    assert(sectionLayout.scrollWidth<=sectionLayout.clientWidth,
+      `mixed-type section must reflow at 180px: ${JSON.stringify(sectionLayout)}`);
     await page.evaluate(()=>{_laData=window.__savedLaData;renderAllListings();});
     assert.equal(nickPayloads.length,0);
     assert.equal(explanationPayloads.length,0);

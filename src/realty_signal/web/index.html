@@ -436,6 +436,8 @@
   .ms-gutter:hover::after, .ms-gutter.dragging::after { background:var(--accent); }
   body.ms-resizing { cursor:col-resize; user-select:none; }
   .ms-viewport-hint { font-size:11px; color:var(--dim); padding:8px 13px; border-bottom:1px solid var(--line); background:#f8fafc; }
+  #laList .ms-section-label { padding:10px 14px; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    background:var(--bg); color:var(--txt); font-size:13px; font-weight:700; line-height:1.4; }
   .ms-group-head { display:block; width:100%; border:0; border-bottom:1px solid var(--line); background:#f1f5f9;
     color:var(--txt); text-align:left; padding:12px 15px; font-size:13px; font-weight:700; cursor:pointer; line-height:1.45; }
   .ms-group-head:hover, .ms-group-head:focus-visible { background:var(--accent-weak); outline:2px solid var(--accent); outline-offset:-2px; }
@@ -4414,31 +4416,37 @@ function _laCompareEvidenceOverlap(a,b){
   if(leftMulti&&left.length!==right.length)return right.length-left.length;
   return (b['기회도']??-1)-(a['기회도']??-1);
 }
+function _laCategory(row){ return _SALE_TYPES.includes(row['유형'])?'매매':row['유형']; }
+function _laCompareRows(a,b){
+  // A presale deadline, auction minimum bid and sale asking price are not one
+  // comparable recommendation score. Keep the user's selected kinds separate.
+  const groupA=_LA_TYPES.indexOf(_laCategory(a)), groupB=_LA_TYPES.indexOf(_laCategory(b));
+  if(groupA!==groupB) return (groupA<0?99:groupA)-(groupB<0?99:groupB);
+  const opp=x=>x['기회도']??-1, tot=x=>_laAsk(x);
+  const sr=x=>_SIGRANK[x['시그널']]??9;
+  if(_laSort==='signal') return sr(a)-sr(b) || opp(b)-opp(a);
+  if(_laSort==='trade_low') return _laCompareTradePrice(a,b);
+  if(_laSort==='asking_low') return _laCompareAsking(a,b);
+  if(_laSort==='evidence_overlap') return _laCompareEvidenceOverlap(a,b);
+  if(_laSort==='reduction') return _laComparePriceReduction(a,b);
+  if(_laSort==='price_asc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pa-pb; }
+  if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
+  if(_laSort==='opp') return opp(b)-opp(a);
+  const ta=_laBudgetTier(a), tb=_laBudgetTier(b);
+  if(ta!==tb) return tb-ta;
+  const pa=tot(a), pb=tot(b);
+  if(pa==null&&pb==null) return opp(b)-opp(a);
+  if(pa==null) return 1;
+  if(pb==null) return -1;
+  return pa-pb || opp(b)-opp(a);
+}
 function renderAllListings(){
   syncLaSaleFilter();
   _laRenderedKey=_laViewKey(_laCurrentTypes);
   renderMtFilter('laMtFilter',renderAllListings);
   let rows=_laData.filter(x=> inFocus(x['지역']||'') && _mtPass(x['시그널']||'HELD',x['지역급지']||null,x,'laMtFilter') &&
     _laPricePass(x) && _laSalePass(x));
-  const opp=x=>x['기회도']??-1, tot=x=>_laAsk(x);
-  const sr=x=>_SIGRANK[x['시그널']]??9;
-  rows=rows.slice().sort((a,b)=>{
-    if(_laSort==='signal') return sr(a)-sr(b) || opp(b)-opp(a);
-    if(_laSort==='trade_low') return _laCompareTradePrice(a,b);
-    if(_laSort==='asking_low') return _laCompareAsking(a,b);
-    if(_laSort==='evidence_overlap') return _laCompareEvidenceOverlap(a,b);
-    if(_laSort==='reduction') return _laComparePriceReduction(a,b);
-    if(_laSort==='price_asc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pa-pb; }
-    if(_laSort==='price_desc'){ const pa=tot(a),pb=tot(b); if(pa==null&&pb==null)return opp(b)-opp(a); if(pa==null)return 1; if(pb==null)return -1; return pb-pa; }
-    if(_laSort==='opp') return opp(b)-opp(a);
-    const ta=_laBudgetTier(a), tb=_laBudgetTier(b);
-    if(ta!==tb) return tb-ta;
-    const pa=tot(a), pb=tot(b);
-    if(pa==null&&pb==null) return opp(b)-opp(a);
-    if(pa==null) return 1;
-    if(pb==null) return -1;
-    return pa-pb || opp(b)-opp(a);
-  });
+  rows=rows.slice().sort(_laCompareRows);
   _laRenderHoldSummary(rows);
   document.getElementById('laEmpty').textContent = rows.length?'':_laAccessDenied?
     '일반·급매 매물은 지정된 개인 계정에서만 보입니다. 이 0건은 전체 매물이 없다는 뜻이 아닙니다.':
@@ -4446,6 +4454,7 @@ function renderAllListings(){
   const typeBadge=t=>`<span class="pill" style="background:transparent;color:${_LA_COLOR[t]};border-color:${_LA_COLOR[t]}33;font-size:10px;font-weight:600">${t}</span>`;
   const rowBadge=x=>`${_SALE_TYPES.includes(x['유형'])?'':typeBadge(x['유형'])} ${x['시그널']&&x['시그널']!=='HELD'?regionSignalBadge(x['시그널']):''}`;
   mapSplit('laList','laMap',rows,{
+    sectionOf:_laCategory,
     summary:x=>({nm:`${esc(x['단지명']||'–')} ${rowBadge(x)}`,
       right:_laRowPrice(x),
       sub:`<span class="la-address">${esc(_laAddress(x))}</span>${x['유형']==='경매'&&(x['확인할것']||[])[0]?'<br>'+esc(x['확인할것'][0]):''}${listingPriceLine(x.price_comparison)?'<br>'+esc(listingPriceLine(x.price_comparison)):''}`,
@@ -4532,12 +4541,19 @@ function renderMsList(mapId, indices){
   const items=st.items, opt=st.opt;
   const limit=st.listLimit||60;
   const groups=_msListGroups(items,indices,opt);
+  const sectionOf=opt.sectionOf;
+  const sectionCounts=new Map();
+  if(sectionOf) indices.forEach(i=>{
+    const section=sectionOf(items[i]);
+    if(section) sectionCounts.set(section,(sectionCounts.get(section)||0)+1);
+  });
+  const showSections=sectionCounts.size>1;
   st.listGroups=groups;
   st.openGroupKeys=st.openGroupKeys||new Set();
   listEl.innerHTML='';
   const hint=document.createElement('div'); hint.className='ms-viewport-hint';
   const groupedCount=opt.groupKey?groups.filter(group=>group.indices.length>1).length:0;
-  hint.textContent=`${st.locating?'매물':'지도 영역'} ${indices.length}건${groupedCount?` · ${groupedCount}개 묶음`:''}${st.locating?' · 위치 표시 중':''}`;
+  hint.textContent=`${st.locating?'매물':'지도 영역'} ${indices.length}건${groupedCount?` · ${groupedCount}개 묶음`:''}${showSections?' · 유형별로 정렬':''}${st.locating?' · 위치 표시 중':''}`;
   listEl.appendChild(hint);
   if(!indices.length){
     const empty=document.createElement('div');
@@ -4566,7 +4582,15 @@ function renderMsList(mapId, indices){
     det.onkeydown=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); selectMsRow(mapId,i); } };
     parent.appendChild(row); parent.appendChild(det);
   };
+  let currentSection=null;
   groups.slice(0,limit).forEach(group=>{
+    const section=showSections&&sectionOf(items[group.indices[0]]);
+    if(section&&section!==currentSection){
+      const heading=document.createElement('div'); heading.className='ms-section-label';
+      heading.setAttribute('role','heading'); heading.setAttribute('aria-level','3');
+      heading.textContent=`${section} · ${sectionCounts.get(section)}건`;
+      listEl.appendChild(heading); currentSection=section;
+    }
     if(group.indices.length===1){ appendRow(group.indices[0],listEl); return; }
     const wrap=document.createElement('div'); wrap.className='ms-group';
     const head=document.createElement('button'); head.type='button'; head.className='ms-group-head';

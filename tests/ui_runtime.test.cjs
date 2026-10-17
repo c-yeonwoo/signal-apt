@@ -1073,6 +1073,28 @@ test('listing price filter and budget sort require server-validated buyer fit', 
   assert.match(html, /onclick="switchTab\('signal'\)"[^>]*>시그널</);
 });
 
+test('mixed listing kinds stay in separate groups before any ranking metric', () => {
+  const ctx=vm.createContext({
+    _SALE_TYPES:['일반매물','급매','찐매물'],
+    _LA_TYPES:['매매','청약','경매','재건축'],
+    _SIGRANK:{BUY:1,NEUTRAL:3},
+    _laSort:'opp',
+  });
+  vm.runInContext(extract('function _laAsk(', 'function renderAllListings('),ctx);
+  const rows=[
+    {유형:'경매',총액:1000,기회도:99,시그널:'BUY'},
+    {유형:'급매',총액:50000,기회도:5,시그널:'NEUTRAL'},
+    {유형:'청약',총액:null,기회도:90,시그널:'BUY'},
+    {유형:'일반매물',총액:60000,기회도:25,시그널:'BUY'},
+  ];
+  assert.deepEqual(rows.slice().sort(ctx._laCompareRows).map(x=>x.유형),
+    ['일반매물','급매','청약','경매']);
+  ctx._laSort='price_asc';
+  assert.deepEqual(rows.slice().sort(ctx._laCompareRows).map(x=>x.유형),
+    ['급매','일반매물','청약','경매']);
+  assert.equal(ctx._laCategory(rows[1]),'매매');
+});
+
 test('budget quick range is exact, survives renewal and can be cleared without reapplying', () => {
   const elements={};
   const ctx=vm.createContext({document:{getElementById:id=>elements[id]??= {style:{},value:'',textContent:''}},

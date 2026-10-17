@@ -91,6 +91,20 @@ def test_card_view_skips_unused_decision_envelope_without_changing_default(monke
     assert full["decision"]["id"] == "detail"
 
 
+def test_unified_listing_api_does_not_rank_auction_against_sale_or_presale(monkeypatch):
+    from realty_signal.services import listing_refresh
+
+    _quiet(monkeypatch, lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(listing_refresh, "schedule", lambda *_args, **_kwargs: None)
+    rows = [{**_row(), "유형": kind, "key": f"{kind}:{score}", "기회도": score}
+            for kind, score in (("경매", 99), ("급매", 5), ("청약", 85),
+                                ("일반매물", 25), ("재건축", 90))]
+    monkeypatch.setattr(api, "_assembled_listings", lambda *_args: (rows, len(rows)))
+    out = api.listings_all(None, "경매,급매,청약,일반매물,재건축", view="card")
+    assert [row["유형"] for row in out["listings"]] == [
+        "일반매물", "급매", "청약", "경매", "재건축"]
+
+
 def test_hank_refresh_stays_off_the_listing_response(monkeypatch):
     called = []
     monkeypatch.setattr(external, "hank_due", lambda path=None: True)
