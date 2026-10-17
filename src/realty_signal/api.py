@@ -3445,7 +3445,8 @@ def _build_listings(want: set[str], *, include_private: bool = False) -> list[di
                            next((flag for flag in (
                                "region_boundary_obsolete", "source_stale",
                                "region_identity_ambiguous", "market_inputs_missing",
-                               "market_inputs_stale", "sale_weeks_incomplete",
+                               "market_inputs_stale", "market_inputs_mismatch",
+                               "sale_weeks_incomplete", "grade_rule_mismatch",
                                "price_direction_conflict") if flag in flags),
                                 "assessment_unavailable"))
         safe_grade = grade.get(region) if identity_ok else None
