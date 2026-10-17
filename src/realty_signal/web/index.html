@@ -4060,7 +4060,9 @@ const _LA_HOLD_REASONS={
   region_identity_unverified:'지역 식별 미확인', region_identity_ambiguous:'동명 지역 구분 불가',
   region_boundary_obsolete:'행정구역 개편 전 자료', source_stale:'KB 관측 지연',
   market_inputs_missing:'수급 자료 없음', market_inputs_stale:'수급 기준일 불일치',
-  sale_weeks_incomplete:'최근 4주 가격 자료 부족', price_direction_conflict:'가격 방향과 매수 신호 충돌',
+  market_inputs_mismatch:'수급 수치와 KB 원본 불일치',
+  sale_weeks_incomplete:'최근 4주 가격 자료 부족', grade_rule_mismatch:'매수 등급과 판정 조건 불일치',
+  price_direction_conflict:'가격 방향과 매수 신호 충돌',
   assessment_unavailable:'판정 자료 확인 불가'
 };
 function _laHoldLabel(code){ return _LA_HOLD_REASONS[code]||_LA_HOLD_REASONS.assessment_unavailable; }

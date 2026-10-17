@@ -159,6 +159,22 @@ def test_listing_cards_and_timing_use_guarded_region_signal(monkeypatch):
     assert rows["확인구"]["기회도"] > rows["보류구"]["기회도"]
 
 
+def test_listing_card_keeps_specific_assessment_hold_reason(monkeypatch):
+    monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
+    monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-04")
+    monkeypatch.setattr(api, "_presale", lambda: [
+        {"단지명": "보류 단지", "지역": "중구", "시도": "서울", "_signal_region": "중구",
+         "시그널": "BUY", "상태": "접수예정", "관리번호": "1"}])
+    monkeypatch.setattr(api, "_listing_region_matches_kb", lambda *_args: True)
+    for reason in ("market_inputs_mismatch", "grade_rule_mismatch"):
+        monkeypatch.setattr(md, "assessed_signal_labels", lambda _today: {
+            "중구": {"display_signal": "HELD", "assessment_status": "held",
+                     "risk_flags": [reason]}})
+        row = api._build_listings({"청약"})[0]
+        assert row["시그널"] == "HELD"
+        assert row["지역신호보류사유"] == reason
+
+
 def test_listing_signal_assessment_failure_fails_closed(monkeypatch):
     monkeypatch.setattr(api, "_regime", lambda: {"regions": {}})
     monkeypatch.setattr(api, "_timing_asof", lambda: "2026-10-03")

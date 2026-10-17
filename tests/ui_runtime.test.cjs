@@ -100,6 +100,13 @@ test('market charts do not label the ungraded buyer-demand ladder as an actionab
   assert.doesNotMatch(html, /buyer_demand_buy, name:'매수신호'/);
 });
 
+test('listing cards name source and grade inconsistencies instead of a generic outage', () => {
+  const ctx=vm.createContext({});
+  vm.runInContext(extract('const _LA_HOLD_REASONS=', 'function _laRenderHoldSummary('),ctx);
+  assert.equal(ctx._laHoldLabel('market_inputs_mismatch'),'수급 수치와 KB 원본 불일치');
+  assert.equal(ctx._laHoldLabel('grade_rule_mismatch'),'매수 등급과 판정 조건 불일치');
+});
+
 test('KB national affordability is not presented as the opposite HF burden index or a district metric', () => {
   assert.match(html, /전국 아파트 주택구매력지수/);
   assert.match(html, /전국 구매력지수/);
