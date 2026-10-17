@@ -39,6 +39,26 @@ def test_missing_price_and_negative_price_hold_a_raw_buy():
     assert falling["reasons"][2]["unit"] == "%/주"
 
 
+def test_buy_grade_is_held_when_saved_label_disagrees_with_three_conditions():
+    config = SignalConfig()
+    strong_with_two = sa.build(_kb(), _row("STRONG_BUY"), config,
+                               asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    assert strong_with_two["buy_rule"] == {"passed": 2, "total": 3,
+                                           "strong_buy_min": 3, "buy_min": 2,
+                                           "expected_grade": "BUY"}
+    assert strong_with_two["assessment_status"] == "held"
+    assert "grade_rule_mismatch" in strong_with_two["risk_flags"]
+    assert "세 조건" in strong_with_two["summary"]
+
+    buy_with_three = sa.build(_kb((0.2,) * 4), _row("BUY"), config,
+                              asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    assert buy_with_three["buy_rule"]["expected_grade"] == "STRONG_BUY"
+    assert "grade_rule_mismatch" in buy_with_three["risk_flags"]
+    aligned = sa.build(_kb((0.2,) * 4), _row("STRONG_BUY"), config,
+                       asof=date(2026, 9, 28), today=date(2026, 9, 28))
+    assert aligned["assessment_status"] == "ready"
+
+
 def test_legacy_jung_gu_identity_is_held_and_issued_history_is_immutable():
     c = SignalConfig()
     old = sa.build(_kb(code="2811000000"), _row(), c,
@@ -124,7 +144,7 @@ def test_previous_issuance_explains_same_date_revision_without_mutating_original
     previous = sa.build(_kb(), _row("BUY"), SignalConfig(),
                         asof=date(2026, 9, 28), today=date(2026, 9, 28))
     assert sa.issue_many([previous]) == 1
-    current = sa.build(_kb((0.1, 0.1, 0.1, 0.2)), _row("STRONG_BUY"), SignalConfig(),
+    current = sa.build(_kb((0.1, 0.1, 0.1, 0.5)), _row("STRONG_BUY"), SignalConfig(),
                        asof=date(2026, 9, 28), today=date(2026, 9, 28))
     comparison = sa.with_previous(current)
     assert comparison["change"]["type"] == "source_revision"
@@ -147,7 +167,7 @@ def test_same_market_data_can_become_held_when_source_ages():
 
 def test_twelve_day_old_kb_observation_cannot_display_strong_buy():
     asof = date(2026, 9, 28)
-    current = sa.build(_kb(), _row("STRONG_BUY"), SignalConfig(),
+    current = sa.build(_kb((0.2,) * 4), _row("STRONG_BUY"), SignalConfig(),
                        asof=asof, today=date(2026, 10, 10))
     assert current["raw_grade"] == "STRONG_BUY"
     assert current["assessment_status"] == "held"
@@ -155,7 +175,7 @@ def test_twelve_day_old_kb_observation_cannot_display_strong_buy():
     assert "source_stale" in current["risk_flags"]
     assert "12일" in current["summary"]
     assert "과거 매수·매도 등급" in current["summary"]
-    at_limit = sa.build(_kb(), _row("STRONG_BUY"), SignalConfig(),
+    at_limit = sa.build(_kb((0.2,) * 4), _row("STRONG_BUY"), SignalConfig(),
                         asof=asof, today=date(2026, 10, 6))
     assert at_limit["assessment_status"] == "ready"
 

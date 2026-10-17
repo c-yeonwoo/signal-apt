@@ -18,7 +18,7 @@ from realty_signal.signals.engine import SignalConfig
 from realty_signal.time_kst import today_kst
 
 VERSION = "signal-assessment-v1"
-GUARD_VERSION = "source-and-price-v3"
+GUARD_VERSION = "source-and-price-v4"
 MAX_OBSERVATION_AGE_DAYS = 8
 INCHEON_RETIRED_CODES = frozenset({"28110", "28140", "28170", "28260"})
 LABELS = {"STRONG_BUY": "강력매수", "BUY": "매수", "WATCH": "관망",
@@ -69,6 +69,8 @@ def _held_summary(flags: list[str], asof: date, today: date) -> str:
         return "전세수급·매수심리 자료가 없거나 가격 기준일과 맞지 않아 지역 판정을 보류합니다."
     if "sale_weeks_incomplete" in flags:
         return "최근 4주 가격 자료가 이어지지 않아 지역 판정을 보류합니다."
+    if "grade_rule_mismatch" in flags:
+        return "저장된 매수 등급과 전세수급·매수심리·최근 4주 가격의 세 조건이 맞지 않아 지역 판정을 보류합니다."
     if "price_direction_conflict" in flags:
         return "기존 매수 규칙과 최근 가격 하락이 충돌해 지역 판정을 보류합니다."
     return "자료 또는 가격 방향을 확인한 뒤 판단합니다."
@@ -127,6 +129,11 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     if (today - asof).days > MAX_OBSERVATION_AGE_DAYS:
         risk_flags.append("source_stale")
     raw = str(row.get("signal") or "NEUTRAL")
+    driver_met = sum(bool(reason["passing"]) for reason in reasons[:3])
+    expected_buy_grade = "STRONG_BUY" if driver_met == 3 else "BUY" if driver_met == 2 else None
+    if raw in {"BUY", "STRONG_BUY"} and complete and js is not None and bs is not None:
+        if raw != expected_buy_grade:
+            risk_flags.append("grade_rule_mismatch")
     if raw in {"BUY", "STRONG_BUY"} and momentum is not None and momentum < 0:
         risk_flags.append("price_direction_conflict")
     if momentum is not None and momentum < 0:
@@ -156,6 +163,9 @@ def build(kb: KBWeekly, row: dict, config: SignalConfig, *,
     config_hash = _hash(asdict(config))
     basis = {"version": VERSION, "guard_version": GUARD_VERSION, "region_id": region_id,
              "asof": asof.isoformat(), "config_hash": config_hash, "raw_grade": raw,
+             "buy_rule": {"passed": driver_met, "total": 3,
+                          "strong_buy_min": 3, "buy_min": 2,
+                          "expected_grade": expected_buy_grade},
              "reasons": reasons, "price_weeks": weeks, "risk_flags": risk_flags}
     if raw == "SELL_RISK" and isinstance(overlay, dict) and overlay.get("applied"):
         basis["sell_overlay"] = {"score": overlay.get("score"),

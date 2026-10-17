@@ -32,6 +32,20 @@ def test_primary_signal_api_keeps_raw_for_audit_but_displays_held(monkeypatch):
     assert market.signals(only="HELD")[0]["signal"] == "BUY"
 
 
+def test_primary_signal_api_holds_strong_buy_when_only_two_drivers_pass(monkeypatch):
+    monkeypatch.setattr(md, "kb", _kb)
+    monkeypatch.setattr(md, "signals_df", lambda: pd.DataFrame([_row("STRONG_BUY")]))
+    monkeypatch.setattr(md, "signal_config", SignalConfig)
+    md.assessed_signal_labels.cache_clear()
+    labels = md.assessed_signal_labels(date(2026, 9, 28).isoformat())
+    assert labels["중구"]["display_signal"] == "HELD"
+    assert "grade_rule_mismatch" in labels["중구"]["risk_flags"]
+    result = market.signals()
+    assert result[0]["signal"] == "STRONG_BUY"
+    assert result[0]["display_signal"] == "HELD"
+    assert market.signals(only="STRONG_BUY") == []
+
+
 def test_signal_api_assessment_failure_still_returns_held_rows(monkeypatch):
     monkeypatch.setattr(md, "kb", lambda: _kb((-0.15,) * 4))
     monkeypatch.setattr(md, "signals_df", lambda: pd.DataFrame([_row("STRONG_BUY")]))

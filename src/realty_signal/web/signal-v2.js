@@ -16,6 +16,7 @@
     region_boundary_obsolete:'행정구역 개편 전 자료라 현재 지역의 매수·매도 판정에 사용할 수 없습니다',
     source_stale:'KB 관측 기준일이 8일을 넘어서 현재 판정을 보류합니다',
     price_direction_conflict:'매수 신호와 최근 가격 하락이 충돌합니다',
+    grade_rule_mismatch:'저장된 매수 등급과 세 조건의 충족 개수가 맞지 않습니다',
   };
   const historicalGrades = {
     STRONG_BUY:'강력매수', BUY:'매수', WATCH:'관망', NEUTRAL:'중립',
@@ -319,8 +320,13 @@
           (report.unknowns.length > 2 ? ` · 그 밖의 사유 ${report.unknowns.length - 2}건` : '')
         : '자료와 지역 기준을 확인하기 전까지 판정을 보류합니다.';
       const drivers=(a.reasons||[]).filter(item=>item.role==='driver');
-      const met=drivers.filter(item=>item.passing).length;
-      const gradedBuy=!held&&['BUY','STRONG_BUY'].includes(a.raw_grade)&&drivers.length===3;
+      const rule=a.buy_rule||{};
+      const met=Number(rule.passed);
+      const gradedBuy=!held&&['BUY','STRONG_BUY'].includes(a.raw_grade)&&drivers.length===3
+        &&Number(rule.total)===3&&rule.expected_grade===a.raw_grade;
+      const ruleText=['BUY','STRONG_BUY'].includes(a.raw_grade)
+        &&Number(rule.total)===3&&Number(rule.strong_buy_min)===3&&Number(rule.buy_min)===2
+        ? '세 조건 중 3개를 충족하면 강력매수, 2개를 충족하면 매수로 계산합니다. 자료 안전성 검증을 통과해야 현재 판정으로 표시합니다.' : '';
       const inherited=drivers.find(item=>item.reason_id==='jeonse_pressure')?.inherited;
       const priceDriver=drivers.find(item=>item.reason_id==='sale_momentum');
       const commonMet=drivers.filter(item=>item.reason_id!=='sale_momentum').every(item=>item.passing);
@@ -345,7 +351,7 @@
           </section>
         </div>
         <details class="signal-evidence-details"><summary>세 조건의 뜻과 판단 한계</summary>
-          <h3>${held ? '기본 규칙의 세 조건 · 현재 판정 아님' : '세 조건을 어떻게 읽나요?'}</h3>${drivers.length ? drivers.map(driverDetail).join('') :
+          <h3>${held ? '기본 규칙의 세 조건 · 현재 판정 아님' : '세 조건을 어떻게 읽나요?'}</h3>${ruleText?`<p>${ruleText}</p>`:''}${drivers.length ? drivers.map(driverDetail).join('') :
             '<p>조건 자료를 확인할 수 없습니다.</p>'}
           <h3>같이 볼 위험과 한계</h3>${limits.length ? limits.map(reason).join('') :
             '<p>현재 연결된 지표에서 별도 반대 근거를 확인하지 못했습니다. 위험이 없다는 뜻은 아닙니다.</p>'}
